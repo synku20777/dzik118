@@ -1,6 +1,9 @@
 {
   "name": "property-billing",
   "compatibility_date": "2026-09-10",
+  // Required for node-postgres (the "pg" package, spec Section 3.2) to run at
+  // all in the Workers runtime -- without this it fails on node:net/node:tls.
+  "compatibility_flags": ["nodejs_compat"],
 
   "hyperdrive": [
     {

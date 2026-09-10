@@ -1,0 +1,4 @@
+external_transaction_id,booking_date,amount,currency,payer_name,payer_account,reference
+TXN-3001,2026-09-09,25.00,EUR,I. Krumins
+TXN-3002,2026-09-09,not-a-number,EUR,I. Krumins,LV12BANK0000123456200,Non-numeric amount
+TXN-3003,09/31/2026,25.00,EUR,I. Krumins,LV12BANK0000123456200,Malformed date

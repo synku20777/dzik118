@@ -17,9 +17,9 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "deploy": "node -e \"console.error('Error: deploy is implemented in Phase N (Final integration & deployment).'); process.exit(1);\"",
-    "db:migrate": "node -e \"console.error('Error: db:migrate is implemented in Phase B (Database).'); process.exit(1);\"",
-    "db:seed": "node -e \"console.error('Error: db:seed is implemented in Phase B (Database).'); process.exit(1);\"",
-    "db:migrate:fresh": "node -e \"console.error('Error: db:migrate:fresh is implemented in Phase B (Database).'); process.exit(1);\"",
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "vite-node scripts/seed.ts",
+    "db:migrate:fresh": "vite-node scripts/db-migrate-fresh.ts",
     "test:integration": "node -e \"console.error('Error: test:integration is implemented in Phase C/D.'); process.exit(1);\"",
     "test:e2e": "playwright test"
   },
@@ -29,6 +29,7 @@
     "@tailwindcss/vite": "^4.0.0",
     "astro": "^7.3.2",
     "drizzle-orm": "^0.45.2",
+    "pg": "^8.23.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwindcss": "^4.0.0"
@@ -38,6 +39,7 @@
     "@eslint/js": "^9.20.0",
     "@playwright/test": "^1.50.0",
     "@types/node": "^22.13.0",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "drizzle-kit": "^0.31.10",

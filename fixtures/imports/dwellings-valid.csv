@@ -1,0 +1,4 @@
+number,type,display_name,occupant_name,billing_name,billing_email,billing_address,area_m2,resident_count,cold_water_meter_serial,hot_water_meter_serial
+13,APARTMENT,Apt 13,J. Vitolins,J. Vitolins,resident13@example.com,Brivibas iela 118-13,58.40,2,CW-013,HW-013
+14,APARTMENT,Apt 14,S. Ancane,S. Ancane,resident14@example.com,Brivibas iela 118-14,63.10,3,CW-014,HW-014
+15,COMMERCIAL_UNIT,Shop 15,,Riga Retail SIA,shop15@example.com,Brivibas iela 118-15,90.00,0,,

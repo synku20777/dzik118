@@ -1,0 +1,3 @@
+external_transaction_id,booking_date,amount,currency,payer_name,payer_account,reference
+TXN-1001,2026-09-05,71.07,EUR,J. Berzins,LV12BANK0000123456001,Payment for INV-202609-00003
+TXN-1002,2026-09-06,72.43,EUR,A. Ozola,LV12BANK0000123456002,Payment for INV-202609-00004
