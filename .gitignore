@@ -1,6 +1,8 @@
 # build output
 dist/
 .wrangler/
+test-results/
+playwright-report/
 # generated types
 .astro/
 
@@ -17,6 +19,8 @@ pnpm-debug.log*
 # environment variables
 .env
 .env.production
+.env.local
+.env.*.local
 
 # macOS-specific files
 .DS_Store

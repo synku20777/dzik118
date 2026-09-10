@@ -17,8 +17,13 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run preview",
+    // `npm run preview` (astro preview) daemonizes itself under the Cloudflare
+    // adapter and its wrapper process exits immediately, which Playwright's
+    // webServer supervisor mistakes for a crash. `wrangler dev` runs in the
+    // foreground instead, so Playwright can supervise it directly.
+    command: "npm run build && npx wrangler dev --port 4321",
     url: "http://localhost:4321",
     reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
   },
 });

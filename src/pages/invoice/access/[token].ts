@@ -1,4 +1,4 @@
-// TODO: Phase E (Delivery) - Tokenized invoice access endpoint
+// TODO: Phase G (Invoices/delivery) - Tokenized invoice access endpoint
 import type { APIRoute } from "astro";
 
 export const GET: APIRoute = async ({ params }) => {

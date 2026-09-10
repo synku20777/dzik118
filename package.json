@@ -21,7 +21,7 @@
     "db:seed": "node -e \"console.error('Error: db:seed is implemented in Phase B (Database).'); process.exit(1);\"",
     "db:migrate:fresh": "node -e \"console.error('Error: db:migrate:fresh is implemented in Phase B (Database).'); process.exit(1);\"",
     "test:integration": "node -e \"console.error('Error: test:integration is implemented in Phase C/D.'); process.exit(1);\"",
-    "test:e2e": "node -e \"console.error('Error: test:e2e is implemented in Phase M (QA/security). Playwright configuration initialized in playwright.config.ts.'); process.exit(1);\""
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.1",
