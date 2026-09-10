@@ -10,8 +10,8 @@ import {
   SUPABASE_PUBLISHABLE_KEY,
   SUPABASE_URL,
 } from "astro:env/server";
-import { createDb } from "../../../../db/client";
 import { appUsers } from "../../../../db/schema/auth";
+import { withRequestDb } from "../../../../lib/db-request";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const NEUTRAL_REDIRECT = "/login?sent=1";
@@ -30,8 +30,7 @@ export const POST: APIRoute = async ({ request, redirect }) => {
     if (EMAIL_PATTERN.test(email)) {
       const { success } = await env.AUTH_RATE_LIMITER.limit({ key: email });
       if (success) {
-        const db = await createDb(env.HYPERDRIVE.connectionString);
-        try {
+        await withRequestDb(async (db) => {
           const [existing] = await db
             .select({ role: appUsers.role })
             .from(appUsers)
@@ -59,9 +58,7 @@ export const POST: APIRoute = async ({ request, redirect }) => {
               },
             });
           }
-        } finally {
-          await db.$client.end();
-        }
+        });
       }
     }
   } catch {

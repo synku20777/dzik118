@@ -8,16 +8,10 @@ import Papa from "papaparse";
 import { and, eq } from "drizzle-orm";
 import { z } from "astro/zod";
 import type { Db } from "../../db/client";
-import { dwellings, meters } from "../../db/schema/dwellings";
+import { dwellingTypeEnum, dwellings, meters } from "../../db/schema/dwellings";
 import { recordAuditEvent } from "../../lib/logging/audit";
 
-const DWELLING_TYPES = new Set([
-  "APARTMENT",
-  "COMMERCIAL_UNIT",
-  "PARKING",
-  "STORAGE",
-  "OTHER",
-]);
+const DWELLING_TYPES = new Set<string>(dwellingTypeEnum.enumValues);
 
 // The only error importDwellingsCsv throws with a message safe to show an
 // admin verbatim (no SQL/PII); anything else must be shown as a generic
@@ -206,8 +200,7 @@ export async function importDwellingsCsv(
       if (row.status === "ERROR") continue;
 
       const values = {
-        type: row.type as
-          "APARTMENT" | "COMMERCIAL_UNIT" | "PARKING" | "STORAGE" | "OTHER",
+        type: row.type as (typeof dwellingTypeEnum.enumValues)[number],
         displayName: row.displayName || null,
         occupantName: row.occupantName || null,
         billingName: row.billingName || null,

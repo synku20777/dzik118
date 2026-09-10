@@ -15,10 +15,6 @@
     },
   ],
 
-  "triggers": {
-    "crons": ["15 2 * * *"],
-  },
-
   // Native platform rate limiting (spec Section 15.1: "endpoint
   // rate-limited") for POST /api/v1/auth/request-link. namespace_id is an
   // arbitrary string for local simulation; a real one isn't needed until

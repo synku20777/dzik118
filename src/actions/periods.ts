@@ -4,7 +4,7 @@ import { z } from "astro/zod";
 import { requireOrganizationAccess } from "../domain/authorization/guards";
 import { createPeriod, lockPeriod } from "../domain/periods/periods";
 import { safeHandler } from "./_errors";
-import { withDb } from "./_db";
+import { withRequestDb as withDb } from "../lib/db-request";
 
 export const periods = {
   // PER-001

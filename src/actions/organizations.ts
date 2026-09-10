@@ -15,7 +15,7 @@ import {
   updateOrganization,
 } from "../domain/organizations/organizations";
 import { safeHandler } from "./_errors";
-import { withDb } from "./_db";
+import { withRequestDb as withDb } from "../lib/db-request";
 import { getSupabaseAdmin } from "./_supabase_admin";
 
 const organizationFields = {

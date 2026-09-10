@@ -5,7 +5,11 @@
 import { and, asc, eq, ilike, isNull, or } from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
 import { appUsers } from "../../db/schema/auth";
-import { dwellingAccess, dwellings } from "../../db/schema/dwellings";
+import {
+  dwellingAccess,
+  dwellingTypeEnum,
+  dwellings,
+} from "../../db/schema/dwellings";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import {
   findOrCreateSupabaseUser,
@@ -15,11 +19,12 @@ import { isUniqueViolation } from "../../lib/db-errors";
 import { ConflictError, NotFoundError } from "./organizations";
 
 type SupabaseAdmin = ReturnType<typeof createSupabaseAdminClient>;
+type DwellingType = (typeof dwellingTypeEnum.enumValues)[number];
 
 export { ConflictError, NotFoundError };
 
 export interface CreateDwellingInput {
-  type?: "APARTMENT" | "COMMERCIAL_UNIT" | "PARKING" | "STORAGE" | "OTHER";
+  type?: DwellingType;
   number: string;
   displayName?: string;
   occupantName?: string;
@@ -140,7 +145,7 @@ export async function listDwellings(
 }
 
 export interface UpdateDwellingInput {
-  type?: "APARTMENT" | "COMMERCIAL_UNIT" | "PARKING" | "STORAGE" | "OTHER";
+  type?: DwellingType;
   displayName?: string | null;
   occupantName?: string | null;
   billingName?: string | null;

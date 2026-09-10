@@ -5,6 +5,7 @@
 // validateDwellingsCsv/importDwellingsCsv directly instead.
 import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
+import { dwellingTypeEnum } from "../db/schema/dwellings";
 import { requireOrganizationAccess } from "../domain/authorization/guards";
 import {
   archiveDwelling,
@@ -14,16 +15,10 @@ import {
   updateDwelling,
 } from "../domain/organizations/dwellings";
 import { safeHandler } from "./_errors";
-import { withDb } from "./_db";
+import { withRequestDb as withDb } from "../lib/db-request";
 import { getSupabaseAdmin } from "./_supabase_admin";
 
-const dwellingType = z.enum([
-  "APARTMENT",
-  "COMMERCIAL_UNIT",
-  "PARKING",
-  "STORAGE",
-  "OTHER",
-]);
+const dwellingType = z.enum(dwellingTypeEnum.enumValues);
 
 export const dwellings = {
   // DWL-001

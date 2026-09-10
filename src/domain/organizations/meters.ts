@@ -3,7 +3,7 @@
 // same convention as organizations.ts/dwellings.ts (spec Section 14).
 import { and, eq } from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
-import { meters } from "../../db/schema/dwellings";
+import { meterTypeEnum, meters } from "../../db/schema/dwellings";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { recalculateCaseReadinessForOpenPeriods } from "../periods/case-readiness";
 import { getDwelling, NotFoundError } from "./dwellings";
@@ -11,7 +11,7 @@ import { getDwelling, NotFoundError } from "./dwellings";
 export { NotFoundError };
 
 export interface CreateMeterInput {
-  type: "COLD_WATER" | "HOT_WATER" | "ELECTRICITY" | "GAS" | "HEAT" | "OTHER";
+  type: (typeof meterTypeEnum.enumValues)[number];
   serialNumber?: string;
   unit: string;
   label?: string;
@@ -51,22 +51,6 @@ export async function createMeter(
   });
 }
 
-export async function getMeter(
-  db: DbOrTx,
-  organizationId: string,
-  meterId: string
-) {
-  const [meter] = await db
-    .select()
-    .from(meters)
-    .where(
-      and(eq(meters.id, meterId), eq(meters.organizationId, organizationId))
-    )
-    .limit(1);
-  if (!meter) throw new NotFoundError("Meter not found");
-  return meter;
-}
-
 export async function listMeters(
   db: DbOrTx,
   organizationId: string,
@@ -82,45 +66,6 @@ export async function listMeters(
       )
     )
     .orderBy(meters.createdAt);
-}
-
-export interface UpdateMeterInput {
-  serialNumber?: string | null;
-  unit?: string;
-  label?: string | null;
-  installedAt?: string | null;
-}
-
-// Deliberately does not accept `type` or `dwellingId`: changing what a
-// meter measures or which dwelling it belongs to would misattribute every
-// past reading recorded against it. Archive and create a new one instead.
-export async function updateMeter(
-  db: Db,
-  organizationId: string,
-  meterId: string,
-  input: UpdateMeterInput,
-  actorUserId: string
-) {
-  return db.transaction(async (tx) => {
-    const before = await getMeter(tx, organizationId, meterId);
-    const [after] = await tx
-      .update(meters)
-      .set(input)
-      .where(
-        and(eq(meters.id, meterId), eq(meters.organizationId, organizationId))
-      )
-      .returning();
-    await recordAuditEvent(tx, {
-      organizationId,
-      actorUserId,
-      action: "METER_UPDATED",
-      entityType: "meter",
-      entityId: meterId,
-      beforeData: before,
-      afterData: after,
-    });
-    return after;
-  });
 }
 
 // MTR-001: archived meter retained historically -- soft-delete only, same

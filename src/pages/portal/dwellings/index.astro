@@ -1,5 +1,5 @@
 ---
-import "../../../styles/global.css";
+import ResidentLayout from "../../../layouts/ResidentLayout.astro";
 import {
   ForbiddenError,
   requireResidentRole,
@@ -20,55 +20,47 @@ const dwellings = await withRequestDb((db) =>
 );
 ---
 
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Your Dwellings - Property Billing</title>
-  </head>
-  <body class="min-h-screen bg-neutral-50 text-neutral-900 antialiased">
-    <div class="mx-auto max-w-2xl p-6">
-      <div class="space-y-8">
-        <section>
-          <div class="flex items-center justify-between">
-            <h1 class="text-xl font-bold text-neutral-900">Your dwellings</h1>
-            <a
-              href="/logout"
-              class="text-sm text-neutral-600 hover:text-neutral-900 hover:underline"
-            >
-              Sign out
-            </a>
-          </div>
-          {
-            dwellings.length === 0 ? (
-              <p class="mt-2 text-sm text-neutral-600">
-                You don't have access to any dwellings.
-              </p>
-            ) : (
-              <ul class="mt-4 divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white">
-                {dwellings.map((dwelling) => (
-                  <li>
-                    <a
-                      href={`/portal/dwellings/${dwelling.id}`}
-                      class="flex items-center justify-between px-4 py-3 hover:bg-neutral-50"
-                    >
-                      <span class="font-medium text-neutral-900">
-                        {dwelling.number}
+<ResidentLayout title="Your Dwellings - Property Billing">
+  <div class="mx-auto max-w-2xl p-6">
+    <div class="space-y-8">
+      <section>
+        <div class="flex items-center justify-between">
+          <h1 class="text-xl font-bold text-neutral-900">Your dwellings</h1>
+          <a
+            href="/logout"
+            class="text-sm text-neutral-600 hover:text-neutral-900 hover:underline"
+          >
+            Sign out
+          </a>
+        </div>
+        {
+          dwellings.length === 0 ? (
+            <p class="mt-2 text-sm text-neutral-600">
+              You don't have access to any dwellings.
+            </p>
+          ) : (
+            <ul class="mt-4 divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white">
+              {dwellings.map((dwelling) => (
+                <li>
+                  <a
+                    href={`/portal/dwellings/${dwelling.id}`}
+                    class="flex items-center justify-between px-4 py-3 hover:bg-neutral-50"
+                  >
+                    <span class="font-medium text-neutral-900">
+                      {dwelling.number}
+                    </span>
+                    {dwelling.displayName && (
+                      <span class="text-sm text-neutral-500">
+                        {dwelling.displayName}
                       </span>
-                      {dwelling.displayName && (
-                        <span class="text-sm text-neutral-500">
-                          {dwelling.displayName}
-                        </span>
-                      )}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            )
-          }
-        </section>
-      </div>
+                    )}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </section>
     </div>
-  </body>
-</html>
+  </div>
+</ResidentLayout>

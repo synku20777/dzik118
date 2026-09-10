@@ -1,5 +1,5 @@
 ---
-import "../../../../styles/global.css";
+import ResidentLayout from "../../../../layouts/ResidentLayout.astro";
 import { actions } from "astro:actions";
 import {
   ForbiddenError,
@@ -45,122 +45,114 @@ const meters = period
 const submitResult = Astro.getActionResult(actions.readings.residentSubmit);
 ---
 
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dwelling {dwelling.number} - Property Billing</title>
-  </head>
-  <body class="min-h-screen bg-neutral-50 text-neutral-900 antialiased">
-    <div class="mx-auto max-w-2xl p-6">
-      <div class="space-y-6">
-        <div class="flex items-center justify-between">
-          <a
-            href="/portal/dwellings"
-            class="text-sm text-neutral-600 hover:underline"
-          >
-            ← Dwellings
-          </a>
-          <a
-            href="/logout"
-            class="text-sm text-neutral-600 hover:text-neutral-900 hover:underline"
-          >
-            Sign out
-          </a>
-        </div>
+<ResidentLayout title={`Dwelling ${dwelling.number} - Property Billing`}>
+  <div class="mx-auto max-w-2xl p-6">
+    <div class="space-y-6">
+      <div class="flex items-center justify-between">
+        <a
+          href="/portal/dwellings"
+          class="text-sm text-neutral-600 hover:underline"
+        >
+          ← Dwellings
+        </a>
+        <a
+          href="/logout"
+          class="text-sm text-neutral-600 hover:text-neutral-900 hover:underline"
+        >
+          Sign out
+        </a>
+      </div>
 
-        <h1 class="text-xl font-bold text-neutral-900">
-          Dwelling {dwelling.number}
-        </h1>
+      <h1 class="text-xl font-bold text-neutral-900">
+        Dwelling {dwelling.number}
+      </h1>
 
-        {
-          !period ? (
-            <p class="text-sm text-neutral-600">
-              No open billing period right now.
-            </p>
-          ) : (
-            <div>
-              <h2 class="text-base font-semibold text-neutral-800">
-                Period {period.year}-{String(period.month).padStart(2, "0")}
-              </h2>
+      {
+        !period ? (
+          <p class="text-sm text-neutral-600">
+            No open billing period right now.
+          </p>
+        ) : (
+          <div>
+            <h2 class="text-base font-semibold text-neutral-800">
+              Period {period.year}-{String(period.month).padStart(2, "0")}
+            </h2>
 
-              {submitResult?.error && (
-                <p class="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-800">
-                  {submitResult.error.message}
+            {submitResult?.error && (
+              <p class="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-800">
+                {submitResult.error.message}
+              </p>
+            )}
+
+            <div class="mt-4 space-y-4">
+              {meters
+                .filter((meter) => !meter.archivedAt)
+                .map((meter) => (
+                  <section class="rounded-xl border border-neutral-200 bg-white p-4">
+                    <div class="font-medium text-neutral-900">
+                      {meter.label || meter.type}
+                      {meter.serialNumber && (
+                        <span class="text-sm font-normal text-neutral-500">
+                          {" "}
+                          · {meter.serialNumber}
+                        </span>
+                      )}
+                    </div>
+
+                    {meter.currentValue !== null ? (
+                      <p class="mt-2 text-sm text-neutral-600">
+                        Reading: {meter.currentValue} ({meter.source})
+                      </p>
+                    ) : (
+                      <form
+                        method="POST"
+                        action={actions.readings.residentSubmit}
+                        class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center"
+                      >
+                        <input
+                          type="hidden"
+                          name="dwellingId"
+                          value={dwellingId}
+                        />
+                        <input
+                          type="hidden"
+                          name="periodId"
+                          value={period.id}
+                        />
+                        <input
+                          type="hidden"
+                          name="meterId"
+                          value={meter.meterId}
+                        />
+                        <input
+                          name="currentValue"
+                          type="text"
+                          inputmode="decimal"
+                          pattern="\d+(\.\d{1,3})?"
+                          required
+                          placeholder="0.000"
+                          class="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm sm:w-40"
+                        />
+                        <button
+                          type="submit"
+                          class="w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white sm:w-auto"
+                        >
+                          Submit reading
+                        </button>
+                      </form>
+                    )}
+                  </section>
+                ))}
+
+              {meters.filter((meter) => !meter.archivedAt).length === 0 && (
+                <p class="text-sm text-neutral-500">
+                  No active meters for this dwelling.
                 </p>
               )}
-
-              <div class="mt-4 space-y-4">
-                {meters
-                  .filter((meter) => !meter.archivedAt)
-                  .map((meter) => (
-                    <section class="rounded-xl border border-neutral-200 bg-white p-4">
-                      <div class="font-medium text-neutral-900">
-                        {meter.label || meter.type}
-                        {meter.serialNumber && (
-                          <span class="text-sm font-normal text-neutral-500">
-                            {" "}
-                            · {meter.serialNumber}
-                          </span>
-                        )}
-                      </div>
-
-                      {meter.currentValue !== null ? (
-                        <p class="mt-2 text-sm text-neutral-600">
-                          Reading: {meter.currentValue} ({meter.source})
-                        </p>
-                      ) : (
-                        <form
-                          method="POST"
-                          action={actions.readings.residentSubmit}
-                          class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center"
-                        >
-                          <input
-                            type="hidden"
-                            name="dwellingId"
-                            value={dwellingId}
-                          />
-                          <input
-                            type="hidden"
-                            name="periodId"
-                            value={period.id}
-                          />
-                          <input
-                            type="hidden"
-                            name="meterId"
-                            value={meter.meterId}
-                          />
-                          <input
-                            name="currentValue"
-                            type="text"
-                            inputmode="decimal"
-                            pattern="\d+(\.\d{1,3})?"
-                            required
-                            placeholder="0.000"
-                            class="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm sm:w-40"
-                          />
-                          <button
-                            type="submit"
-                            class="w-full rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white sm:w-auto"
-                          >
-                            Submit reading
-                          </button>
-                        </form>
-                      )}
-                    </section>
-                  ))}
-
-                {meters.filter((meter) => !meter.archivedAt).length === 0 && (
-                  <p class="text-sm text-neutral-500">
-                    No active meters for this dwelling.
-                  </p>
-                )}
-              </div>
             </div>
-          )
-        }
-      </div>
+          </div>
+        )
+      }
     </div>
-  </body>
-</html>
+  </div>
+</ResidentLayout>

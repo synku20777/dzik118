@@ -12,7 +12,7 @@ import {
 } from "../domain/periods/readings";
 import { DECIMAL3_PATTERN } from "../lib/decimal3";
 import { safeHandler } from "./_errors";
-import { withDb } from "./_db";
+import { withRequestDb as withDb } from "../lib/db-request";
 
 // Kept as a string end to end (spec Section 17: no JS binary floating
 // point for persisted calculations), validated the same way the domain
