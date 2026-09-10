@@ -1,0 +1,214 @@
+---
+// Phase D (Organizations/dwellings) - dwelling detail (spec Section 9.2, 27
+// "Dwellings: Detail"). Meters/billing history/messages/audit sections are
+// later phases' data (E/F/G/L) -- stubbed here, not built.
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import { actions } from "astro:actions";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import {
+  getDwelling,
+  listDwellingResidents,
+} from "../../../../../domain/organizations/dwellings";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const organizationId = Astro.params.orgId!;
+const dwellingId = Astro.params.dwellingId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const updateResult = Astro.getActionResult(actions.dwellings.update);
+const assignResult = Astro.getActionResult(actions.dwellings.assignResident);
+const removeResult = Astro.getActionResult(actions.dwellings.removeResident);
+
+let organization, dwelling, residents;
+try {
+  ({ organization, dwelling, residents } = await withRequestDb(async (db) => ({
+    organization: await getOrganization(db, organizationId),
+    dwelling: await getDwelling(db, organizationId, dwellingId),
+    residents: await listDwellingResidents(db, dwellingId),
+  })));
+} catch {
+  return Astro.redirect(`/admin/o/${organizationId}/dwellings`);
+}
+---
+
+<AdminLayout
+  title={`Dwelling ${dwelling.number} - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="space-y-6">
+    <a
+      href={`/admin/o/${organizationId}/dwellings`}
+      class="text-sm text-neutral-600 hover:underline"
+    >
+      ← Dwellings
+    </a>
+    <h1 class="text-xl font-bold text-neutral-900">
+      Dwelling {dwelling.number}
+      {
+        dwelling.archivedAt && (
+          <span class="text-sm font-normal text-red-700">(archived)</span>
+        )
+      }
+    </h1>
+
+    <section class="rounded-xl border border-neutral-200 bg-white p-6">
+      <h2 class="text-lg font-bold text-neutral-900">Overview</h2>
+      {
+        updateResult?.error && (
+          <p class="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-800">
+            {updateResult.error.message}
+          </p>
+        )
+      }
+      <form
+        method="POST"
+        action={actions.dwellings.update}
+        class="mt-4 grid grid-cols-2 gap-3"
+      >
+        <input type="hidden" name="organizationId" value={organizationId} />
+        <input type="hidden" name="dwellingId" value={dwellingId} />
+        <div>
+          <label
+            class="block text-sm font-medium text-neutral-700"
+            for="occupantName">Occupant name</label
+          >
+          <input
+            id="occupantName"
+            name="occupantName"
+            value={dwelling.occupantName ?? ""}
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-neutral-700" for="areaM2"
+            >Area (m²)</label
+          >
+          <input
+            id="areaM2"
+            name="areaM2"
+            type="number"
+            step="0.01"
+            min="0"
+            value={dwelling.areaM2}
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label
+            class="block text-sm font-medium text-neutral-700"
+            for="residentCount">Resident count</label
+          >
+          <input
+            id="residentCount"
+            name="residentCount"
+            type="number"
+            min="0"
+            value={dwelling.residentCount}
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label
+            class="block text-sm font-medium text-neutral-700"
+            for="billingEmail">Billing email</label
+          >
+          <input
+            id="billingEmail"
+            name="billingEmail"
+            type="email"
+            value={dwelling.billingEmail ?? ""}
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div class="col-span-2">
+          <button
+            type="submit"
+            class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            Save
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <section class="rounded-xl border border-neutral-200 bg-white p-6">
+      <h2 class="text-lg font-bold text-neutral-900">Resident access</h2>
+      {
+        (assignResult?.error || removeResult?.error) && (
+          <p class="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-800">
+            {assignResult?.error?.message ?? removeResult?.error?.message}
+          </p>
+        )
+      }
+      <ul class="mt-4 divide-y divide-neutral-100">
+        {
+          residents.map((r) => (
+            <li class="flex items-center justify-between py-2 text-sm">
+              <span>
+                {r.displayName ?? r.email}{" "}
+                <span class="text-neutral-500">({r.email})</span>
+              </span>
+              <form method="POST" action={actions.dwellings.removeResident}>
+                <input
+                  type="hidden"
+                  name="organizationId"
+                  value={organizationId}
+                />
+                <input type="hidden" name="dwellingId" value={dwellingId} />
+                <input type="hidden" name="userId" value={r.userId} />
+                <button type="submit" class="text-red-700 hover:underline">
+                  Remove
+                </button>
+              </form>
+            </li>
+          ))
+        }
+        {
+          residents.length === 0 && (
+            <li class="py-2 text-sm text-neutral-500">
+              No residents assigned.
+            </li>
+          )
+        }
+      </ul>
+      <form
+        method="POST"
+        action={actions.dwellings.assignResident}
+        class="mt-4 flex gap-2"
+      >
+        <input type="hidden" name="organizationId" value={organizationId} />
+        <input type="hidden" name="dwellingId" value={dwellingId} />
+        <input
+          name="email"
+          type="email"
+          required
+          placeholder="resident@example.com"
+          class="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+        <button
+          type="submit"
+          class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+        >
+          Assign
+        </button>
+      </form>
+    </section>
+
+    <section
+      class="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-6 text-sm text-neutral-500"
+    >
+      Meters, billing history, messages, and audit history for this dwelling
+      become available in later phases.
+    </section>
+  </div>
+</AdminLayout>

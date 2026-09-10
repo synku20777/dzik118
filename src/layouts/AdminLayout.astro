@@ -1,11 +1,26 @@
 ---
+// Phase D (Organizations/dwellings). Full admin chrome/nav polish is Phase
+// H; this is the minimal shell later phases' pages can rely on.
 import "../styles/global.css";
 
 interface Props {
   title?: string;
+  organizationId?: string;
+  organizationName?: string;
 }
 
-const { title = "Admin - Property Billing" } = Astro.props;
+const {
+  title = "Admin - Property Billing",
+  organizationId,
+  organizationName,
+} = Astro.props;
+
+const navLinks = organizationId
+  ? [
+      { href: `/admin/o/${organizationId}/dwellings`, label: "Dwellings" },
+      { href: `/admin/o/${organizationId}/settings`, label: "Settings" },
+    ]
+  : [];
 ---
 
 <!doctype html>
@@ -16,8 +31,39 @@ const { title = "Admin - Property Billing" } = Astro.props;
     <title>{title}</title>
   </head>
   <body class="min-h-screen bg-neutral-50 text-neutral-900 antialiased">
-    <!-- TODO: Phase H (Admin UX) - Admin layout shell -->
-    <main>
+    <header class="border-b border-neutral-200 bg-white">
+      <div
+        class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3"
+      >
+        <div class="flex items-center gap-6">
+          <a href="/admin/organizations" class="font-bold text-neutral-900"
+            >Property Billing</a
+          >
+          {
+            organizationName && (
+              <span class="text-sm text-neutral-500">{organizationName}</span>
+            )
+          }
+          <nav class="flex gap-4 text-sm">
+            {
+              navLinks.map((link) => (
+                <a
+                  href={link.href}
+                  class="text-neutral-600 hover:text-neutral-900"
+                >
+                  {link.label}
+                </a>
+              ))
+            }
+          </nav>
+        </div>
+        <a
+          href="/logout"
+          class="text-sm text-neutral-600 hover:text-neutral-900">Sign out</a
+        >
+      </div>
+    </header>
+    <main class="mx-auto max-w-6xl px-4 py-8">
       <slot />
     </main>
   </body>

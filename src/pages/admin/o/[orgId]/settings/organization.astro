@@ -1,0 +1,167 @@
+---
+// Phase D (Organizations/dwellings) - legal/bank/contact settings (spec
+// Section 9.2, 27, ORG-002).
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import { actions } from "astro:actions";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const updateResult = Astro.getActionResult(actions.organizations.update);
+const organization = await withRequestDb((db) =>
+  getOrganization(db, organizationId)
+);
+---
+
+<AdminLayout
+  title={`Organization settings - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="max-w-2xl space-y-6">
+    <a
+      href={`/admin/o/${organizationId}/settings`}
+      class="text-sm text-neutral-600 hover:underline"
+    >
+      ← Settings
+    </a>
+    <h1 class="text-xl font-bold text-neutral-900">Organization</h1>
+    {
+      updateResult?.error && (
+        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+          {updateResult.error.message}
+        </p>
+      )
+    }
+    <form
+      method="POST"
+      action={actions.organizations.update}
+      class="grid grid-cols-2 gap-4 rounded-xl border border-neutral-200 bg-white p-6"
+    >
+      <input type="hidden" name="organizationId" value={organizationId} />
+      <div class="col-span-2">
+        <label class="block text-sm font-medium text-neutral-700" for="name"
+          >Name</label
+        >
+        <input
+          id="name"
+          name="name"
+          value={organization.name}
+          required
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div class="col-span-2">
+        <label
+          class="block text-sm font-medium text-neutral-700"
+          for="addressLine1">Address</label
+        >
+        <input
+          id="addressLine1"
+          name="addressLine1"
+          value={organization.addressLine1}
+          required
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-neutral-700" for="city"
+          >City</label
+        >
+        <input
+          id="city"
+          name="city"
+          value={organization.city ?? ""}
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label
+          class="block text-sm font-medium text-neutral-700"
+          for="postalCode">Postal code</label
+        >
+        <input
+          id="postalCode"
+          name="postalCode"
+          value={organization.postalCode ?? ""}
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-neutral-700" for="email"
+          >Email</label
+        >
+        <input
+          id="email"
+          name="email"
+          type="email"
+          value={organization.email ?? ""}
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-neutral-700" for="phone"
+          >Phone</label
+        >
+        <input
+          id="phone"
+          name="phone"
+          value={organization.phone ?? ""}
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-neutral-700" for="bankName"
+          >Bank name</label
+        >
+        <input
+          id="bankName"
+          name="bankName"
+          value={organization.bankName ?? ""}
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-neutral-700" for="iban"
+          >IBAN</label
+        >
+        <input
+          id="iban"
+          name="iban"
+          value={organization.iban ?? ""}
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-neutral-700" for="bic"
+          >BIC</label
+        >
+        <input
+          id="bic"
+          name="bic"
+          value={organization.bic ?? ""}
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div class="col-span-2">
+        <button
+          type="submit"
+          class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+        >
+          Save
+        </button>
+      </div>
+    </form>
+  </div>
+</AdminLayout>

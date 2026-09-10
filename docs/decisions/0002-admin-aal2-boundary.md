@@ -21,7 +21,10 @@ doesn't exist yet).
 ## Decision
 
 - `src/middleware.ts` calls `supabase.auth.mfa.getAuthenticatorAssuranceLevel()`
-  and enforces `currentLevel === "aal2"` for `/admin/**` only when the
+  and enforces `currentLevel === "aal2"` for an authenticated ADMIN hitting
+  `/admin/**`, `/_actions/**`, or `/api/v1/admin/**` (Astro Actions and the
+  admin API are reachable independently of the page routes, so the boundary
+  has to cover them too, not just `/admin/**` literally) when the
   `ADMIN_REQUIRE_AAL2` env var (`astro:env`, boolean, default `false`) is
   true; the check is skipped entirely while the flag is off.
 - Default is `false` (AAL1 permitted) so `/admin` is reachable in local dev

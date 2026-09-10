@@ -1,0 +1,28 @@
+---
+// TODO: Phase G (Invoices/delivery) - invoice template/appearance settings
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+---
+
+<AdminLayout title="Invoice template" organizationId={organizationId}>
+  <a
+    href={`/admin/o/${organizationId}/settings`}
+    class="text-sm text-neutral-600 hover:underline"
+  >
+    ← Settings
+  </a>
+  <p class="mt-4 text-sm text-neutral-600">
+    Invoice template/appearance settings arrive in Phase G.
+  </p>
+</AdminLayout>

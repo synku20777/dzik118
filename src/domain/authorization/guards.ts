@@ -14,6 +14,17 @@ export class ForbiddenError extends Error {
   }
 }
 
+// For actions with no target organizationId yet (e.g. creating a new
+// organization) -- just proves "an authenticated admin", nothing tenant-
+// scoped. Prefer requireOrganizationAccess whenever a target org exists.
+export function requireAdminRole(
+  auth: AuthContext | null
+): asserts auth is AdminAuthContext {
+  if (!auth || auth.role !== "ADMIN") {
+    throw new ForbiddenError();
+  }
+}
+
 export function requireOrganizationAccess(
   auth: AuthContext | null,
   organizationId: string

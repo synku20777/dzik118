@@ -1,0 +1,254 @@
+---
+// Phase D (Organizations/dwellings) - CSV dwelling import (spec Section 26,
+// DWL-004). Calls the domain functions directly rather than through
+// astro:actions: this needs a raw multipart file upload, which doesn't fit
+// the JSON/form-field action input shape used elsewhere on this page set.
+// Never writes on file selection -- only the second (confirm) submission
+// persists anything (spec Section 25's principle, applied here too).
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import {
+  ImportHeaderError,
+  importDwellingsCsv,
+  validateDwellingsCsv,
+  type DwellingImportMode,
+  type DwellingImportRow,
+} from "../../../../../domain/organizations/csv-import";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+// Matches the max csvText size actions elsewhere in this app accept; this
+// page reads the file directly (raw multipart upload doesn't fit an
+// action's input shape) so it has to enforce its own limit.
+const MAX_CSV_BYTES = 2_000_000;
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const organization = await withRequestDb((db) =>
+  getOrganization(db, organizationId)
+);
+
+let step: "upload" | "preview" | "result" = "upload";
+let rows: DwellingImportRow[] = [];
+let headerError: string | null = null;
+let csvText = "";
+let mode: DwellingImportMode = "create";
+let result: { created: number; updated: number; errored: number } | null = null;
+let confirmError: string | null = null;
+
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+  mode = formData.get("mode") === "update" ? "update" : "create";
+
+  if (formData.get("confirm") === "1") {
+    csvText = String(formData.get("csvText") ?? "");
+    try {
+      const imported = await withRequestDb((db) =>
+        importDwellingsCsv(
+          db,
+          organizationId,
+          csvText,
+          mode,
+          Astro.locals.auth!.userId
+        )
+      );
+      result = imported;
+      step = "result";
+    } catch (err) {
+      // Only ImportHeaderError's message is ours to show verbatim -- any
+      // other error (e.g. a raw DB error) must not leak SQL/PII to the page.
+      confirmError =
+        err instanceof ImportHeaderError
+          ? err.message
+          : "Import failed. Please check your file and try again.";
+      const preview = await withRequestDb((db) =>
+        validateDwellingsCsv(db, organizationId, csvText, mode)
+      );
+      rows = preview.rows;
+      step = "preview";
+    }
+  } else {
+    const file = formData.get("file");
+    if (file instanceof File) {
+      if (file.size > MAX_CSV_BYTES) {
+        headerError = `File is too large (max ${MAX_CSV_BYTES / 1_000_000}MB).`;
+        step = "preview";
+      } else {
+        csvText = await file.text();
+        const preview = await withRequestDb((db) =>
+          validateDwellingsCsv(db, organizationId, csvText, mode)
+        );
+        rows = preview.rows;
+        headerError = preview.headerError;
+        step = "preview";
+      }
+    }
+  }
+}
+---
+
+<AdminLayout
+  title={`Import dwellings - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="space-y-6">
+    <a
+      href={`/admin/o/${organizationId}/dwellings`}
+      class="text-sm text-neutral-600 hover:underline"
+    >
+      ← Dwellings
+    </a>
+    <h1 class="text-xl font-bold text-neutral-900">Import dwellings</h1>
+
+    {
+      step === "upload" && (
+        <form
+          method="POST"
+          enctype="multipart/form-data"
+          class="max-w-lg space-y-3 rounded-xl border border-neutral-200 bg-white p-6"
+        >
+          <div>
+            <label
+              class="block text-sm font-medium text-neutral-700"
+              for="file"
+            >
+              CSV file
+            </label>
+            <input
+              id="file"
+              name="file"
+              type="file"
+              accept=".csv,text/csv"
+              required
+              class="mt-1 w-full text-sm"
+            />
+          </div>
+          <div>
+            <label
+              class="block text-sm font-medium text-neutral-700"
+              for="mode"
+            >
+              Mode
+            </label>
+            <select
+              id="mode"
+              name="mode"
+              class="mt-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            >
+              <option value="create">
+                Create only (default) -- existing numbers become errors
+              </option>
+              <option value="update">
+                Update -- existing numbers are updated
+              </option>
+            </select>
+          </div>
+          <button
+            type="submit"
+            class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            Preview
+          </button>
+        </form>
+      )
+    }
+
+    {
+      step === "preview" && headerError && (
+        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+          {headerError}
+        </p>
+      )
+    }
+
+    {
+      step === "preview" && !headerError && (
+        <div class="space-y-4">
+          <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+            <table class="w-full text-left text-sm">
+              <thead class="border-b border-neutral-200 bg-neutral-50 text-neutral-600">
+                <tr>
+                  <th class="px-4 py-2">Row</th>
+                  <th class="px-4 py-2">Number</th>
+                  <th class="px-4 py-2">Status</th>
+                  <th class="px-4 py-2">Errors</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-neutral-100">
+                {rows.map((row) => (
+                  <tr>
+                    <td class="px-4 py-2">{row.rowNumber}</td>
+                    <td class="px-4 py-2">{row.number || "—"}</td>
+                    <td class="px-4 py-2">
+                      <span
+                        class:list={{
+                          "text-green-700": row.status === "CREATE",
+                          "text-blue-700": row.status === "UPDATE",
+                          "text-red-700": row.status === "ERROR",
+                        }}
+                      >
+                        {row.status}
+                      </span>
+                    </td>
+                    <td class="px-4 py-2 text-red-700">
+                      {row.errors.join("; ")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p class="text-sm text-neutral-600">
+            {rows.filter((r) => r.status === "CREATE").length} to create,{" "}
+            {rows.filter((r) => r.status === "UPDATE").length} to update,{" "}
+            {rows.filter((r) => r.status === "ERROR").length} with errors
+            (skipped on import).
+          </p>
+          {confirmError && (
+            <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+              {confirmError}
+            </p>
+          )}
+          <form method="POST">
+            <input type="hidden" name="confirm" value="1" />
+            <input type="hidden" name="mode" value={mode} />
+            <input type="hidden" name="csvText" value={csvText} />
+            <button
+              type="submit"
+              class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+            >
+              Confirm import
+            </button>
+          </form>
+        </div>
+      )
+    }
+
+    {
+      step === "result" && result && (
+        <div class="rounded-xl border border-neutral-200 bg-white p-6">
+          <p class="text-sm text-neutral-900">
+            Created {result.created}, updated {result.updated}, skipped{" "}
+            {result.errored} row(s) with errors.
+          </p>
+          <a
+            href={`/admin/o/${organizationId}/dwellings`}
+            class="mt-4 inline-block rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            Back to dwellings
+          </a>
+        </div>
+      )
+    }
+  </div>
+</AdminLayout>

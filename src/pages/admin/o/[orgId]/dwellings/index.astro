@@ -1,0 +1,253 @@
+---
+// Phase D (Organizations/dwellings) - dwelling list/import (spec Section
+// 9.2, 27 "Dwellings: List"). Every route performs independent server
+// authorization (spec Section 9.2's closing line) -- this doesn't rely on
+// middleware alone.
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import { actions } from "astro:actions";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { listDwellings } from "../../../../../domain/organizations/dwellings";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const createResult = Astro.getActionResult(actions.dwellings.create);
+const archiveResult = Astro.getActionResult(actions.dwellings.archive);
+
+const search = Astro.url.searchParams.get("search") ?? "";
+const includeArchived = Astro.url.searchParams.get("includeArchived") === "1";
+const page = Math.max(
+  1,
+  Number(Astro.url.searchParams.get("page") ?? "1") || 1
+);
+const pageSize = 25;
+
+const { organization, dwellings } = await withRequestDb(async (db) => ({
+  organization: await getOrganization(db, organizationId),
+  dwellings: await listDwellings(db, organizationId, {
+    search: search || undefined,
+    includeArchived,
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+  }),
+}));
+---
+
+<AdminLayout
+  title={`Dwellings - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <h1 class="text-xl font-bold text-neutral-900">Dwellings</h1>
+      <div class="flex gap-3 text-sm">
+        <a
+          href={`/api/v1/admin/o/${organizationId}/dwellings/export`}
+          class="rounded-md border border-neutral-300 px-3 py-1.5 text-neutral-700 hover:bg-neutral-50"
+        >
+          Export CSV
+        </a>
+        <a
+          href={`/admin/o/${organizationId}/dwellings/import`}
+          class="rounded-md border border-neutral-300 px-3 py-1.5 text-neutral-700 hover:bg-neutral-50"
+        >
+          Import CSV
+        </a>
+      </div>
+    </div>
+
+    <form method="GET" class="flex flex-wrap items-end gap-3">
+      <div>
+        <label class="block text-sm font-medium text-neutral-700" for="search"
+          >Search</label
+        >
+        <input
+          id="search"
+          name="search"
+          value={search}
+          placeholder="Number, name, occupant..."
+          class="mt-1 rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+        />
+      </div>
+      <label class="flex items-center gap-2 pb-2 text-sm text-neutral-700">
+        <input
+          type="checkbox"
+          name="includeArchived"
+          value="1"
+          checked={includeArchived}
+        />
+        Show archived
+      </label>
+      <button
+        type="submit"
+        class="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white"
+      >
+        Filter
+      </button>
+    </form>
+
+    {
+      (createResult?.error || archiveResult?.error) && (
+        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+          {createResult?.error?.message ?? archiveResult?.error?.message}
+        </p>
+      )
+    }
+
+    <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+      <table class="w-full text-left text-sm">
+        <thead
+          class="border-b border-neutral-200 bg-neutral-50 text-neutral-600"
+        >
+          <tr>
+            <th class="px-4 py-2">Number</th>
+            <th class="px-4 py-2">Type</th>
+            <th class="px-4 py-2">Occupant</th>
+            <th class="px-4 py-2">Area (m²)</th>
+            <th class="px-4 py-2">Residents</th>
+            <th class="px-4 py-2">Status</th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-100">
+          {
+            dwellings.map((d) => (
+              <tr>
+                <td class="px-4 py-2 font-medium">
+                  <a
+                    href={`/admin/o/${organizationId}/dwellings/${d.id}`}
+                    class="hover:underline"
+                  >
+                    {d.number}
+                  </a>
+                </td>
+                <td class="px-4 py-2">{d.type}</td>
+                <td class="px-4 py-2">{d.occupantName ?? "—"}</td>
+                <td class="px-4 py-2">{d.areaM2}</td>
+                <td class="px-4 py-2">{d.residentCount}</td>
+                <td class="px-4 py-2">
+                  {d.archivedAt ? "Archived" : "Active"}
+                </td>
+                <td class="px-4 py-2 text-right">
+                  {!d.archivedAt && (
+                    <form method="POST" action={actions.dwellings.archive}>
+                      <input
+                        type="hidden"
+                        name="organizationId"
+                        value={organizationId}
+                      />
+                      <input type="hidden" name="dwellingId" value={d.id} />
+                      <button
+                        type="submit"
+                        class="text-red-700 hover:underline"
+                      >
+                        Archive
+                      </button>
+                    </form>
+                  )}
+                </td>
+              </tr>
+            ))
+          }
+          {
+            dwellings.length === 0 && (
+              <tr>
+                <td colspan="7" class="px-4 py-8 text-center text-neutral-500">
+                  No dwellings match this filter.
+                </td>
+              </tr>
+            )
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flex justify-between text-sm text-neutral-600">
+      <a
+        href={`?search=${encodeURIComponent(search)}&includeArchived=${includeArchived ? "1" : "0"}&page=${Math.max(1, page - 1)}`}
+        class:list={{ "pointer-events-none opacity-40": page <= 1 }}
+      >
+        ← Previous
+      </a>
+      <span>Page {page}</span>
+      <a
+        href={`?search=${encodeURIComponent(search)}&includeArchived=${includeArchived ? "1" : "0"}&page=${page + 1}`}
+        class:list={{
+          "pointer-events-none opacity-40": dwellings.length < pageSize,
+        }}
+      >
+        Next →
+      </a>
+    </div>
+
+    <section class="max-w-lg rounded-xl border border-neutral-200 bg-white p-6">
+      <h2 class="text-lg font-bold text-neutral-900">Add dwelling</h2>
+      <form
+        method="POST"
+        action={actions.dwellings.create}
+        class="mt-4 grid grid-cols-2 gap-3"
+      >
+        <input type="hidden" name="organizationId" value={organizationId} />
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-neutral-700" for="number"
+            >Number</label
+          >
+          <input
+            id="number"
+            name="number"
+            required
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-neutral-700" for="type"
+            >Type</label
+          >
+          <select
+            id="type"
+            name="type"
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          >
+            <option value="APARTMENT">Apartment</option>
+            <option value="COMMERCIAL_UNIT">Commercial unit</option>
+            <option value="PARKING">Parking</option>
+            <option value="STORAGE">Storage</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-neutral-700" for="areaM2"
+            >Area (m²)</label
+          >
+          <input
+            id="areaM2"
+            name="areaM2"
+            type="number"
+            step="0.01"
+            min="0"
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div class="col-span-2">
+          <button
+            type="submit"
+            class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            Create
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+</AdminLayout>

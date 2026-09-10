@@ -1,0 +1,23 @@
+---
+// Phase D (Organizations/dwellings) - organization redirect/selector (spec
+// Section 9.2). Redirects to /admin/o/[orgId]/dwellings rather than a
+// dashboard: the dashboard (spec Section 27) shows period/invoice data that
+// doesn't exist until Phase F/G.
+import {
+  ForbiddenError,
+  requireAdminRole,
+} from "../../domain/authorization/guards";
+
+const auth = Astro.locals.auth;
+try {
+  requireAdminRole(auth);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+if (auth.organizationIds.length === 1) {
+  return Astro.redirect(`/admin/o/${auth.organizationIds[0]}/dwellings`);
+}
+return Astro.redirect("/admin/organizations");
+---

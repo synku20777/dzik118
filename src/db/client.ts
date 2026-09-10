@@ -21,3 +21,12 @@ export async function createDb(connectionString: string) {
 }
 
 export type Db = Awaited<ReturnType<typeof createDb>>;
+
+// The handle passed into a db.transaction(async (tx) => ...) callback has
+// no $client (you can't end the connection mid-transaction) and so isn't
+// structurally assignable to Db. Domain functions that get called with
+// either the top-level db or a tx (nearly all of them, since audit writes
+// must land in the same transaction as the mutation they describe, spec
+// Section 31) should take DbOrTx instead of Db.
+export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+export type DbOrTx = Db | Tx;

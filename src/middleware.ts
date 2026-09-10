@@ -48,8 +48,21 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
-  // See docs/decisions/0002-admin-aal2-boundary.md.
-  if (isAdminPath && ADMIN_REQUIRE_AAL2) {
+  // See docs/decisions/0002-admin-aal2-boundary.md. Also covers /_actions/**
+  // and /api/v1/admin/** -- Astro Actions and the admin API are reachable
+  // independently of the /admin/** page routes (same reasoning as every
+  // action handler re-checking role/org access itself), so gating on
+  // isAdminPath alone would let an AAL1 admin session bypass MFA by calling
+  // an action or admin API route directly instead of through a page.
+  const isAdminSensitivePath =
+    isAdminPath ||
+    url.pathname.startsWith("/_actions") ||
+    url.pathname.startsWith("/api/v1/admin");
+  if (
+    isAdminSensitivePath &&
+    ADMIN_REQUIRE_AAL2 &&
+    locals.auth?.role === "ADMIN"
+  ) {
     const { data: aal } =
       await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
     if (aal?.currentLevel !== "aal2") {

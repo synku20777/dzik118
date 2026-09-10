@@ -1,0 +1,28 @@
+---
+// TODO: Phase F (Billing) - billing automation settings
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+---
+
+<AdminLayout title="Billing settings" organizationId={organizationId}>
+  <a
+    href={`/admin/o/${organizationId}/settings`}
+    class="text-sm text-neutral-600 hover:underline"
+  >
+    ← Settings
+  </a>
+  <p class="mt-4 text-sm text-neutral-600">
+    Billing automation settings arrive in Phase F.
+  </p>
+</AdminLayout>
