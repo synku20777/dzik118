@@ -1,0 +1,162 @@
+---
+import ResidentLayout from "../../../layouts/ResidentLayout.astro";
+import {
+  ForbiddenError,
+  requireDwellingAccess,
+} from "../../../domain/authorization/guards";
+import { getInvoiceForResident } from "../../../domain/billing/generation";
+import { withRequestDb } from "../../../lib/db-request";
+
+const invoiceId = Astro.params.invoiceId!;
+const dwellingId = Astro.url.searchParams.get("dwellingId");
+if (!dwellingId) {
+  return Astro.redirect("/portal/dwellings");
+}
+
+try {
+  requireDwellingAccess(Astro.locals.auth, dwellingId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+let invoice: Awaited<ReturnType<typeof getInvoiceForResident>>["invoice"];
+let lines: Awaited<ReturnType<typeof getInvoiceForResident>>["lines"];
+let caseStatus: Awaited<ReturnType<typeof getInvoiceForResident>>["caseStatus"];
+try {
+  ({ invoice, lines, caseStatus } = await withRequestDb((db) =>
+    getInvoiceForResident(db, invoiceId, dwellingId)
+  ));
+} catch {
+  return Astro.redirect(`/portal/dwellings/${dwellingId}/invoices`);
+}
+
+const issuer = invoice.issuerSnapshot as Record<string, string | null>;
+const recipient = invoice.recipientSnapshot as Record<string, string | null>;
+const payment = invoice.paymentSnapshot as Record<string, string | null>;
+---
+
+<ResidentLayout title={invoice.invoiceNumber}>
+  <div class="mx-auto max-w-3xl p-6">
+    <div class="space-y-6">
+      <div class="flex items-center justify-between">
+        <a
+          href={`/portal/dwellings/${dwellingId}/invoices`}
+          class="text-sm text-neutral-600 hover:underline"
+        >
+          ← Invoices
+        </a>
+        <a
+          href="/logout"
+          class="text-sm text-neutral-600 hover:text-neutral-900 hover:underline"
+        >
+          Sign out
+        </a>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <h1 class="text-xl font-bold text-neutral-900">
+          {invoice.invoiceNumber}
+          <span class="ml-2 text-sm font-normal text-neutral-500">
+            ({caseStatus})
+          </span>
+        </h1>
+        {
+          invoice.pdfObjectKey && (
+            <a
+              href={`/api/v1/portal/invoices/${invoiceId}/pdf?dwellingId=${dwellingId}`}
+              target="_blank"
+              class="rounded-md border border-neutral-300 px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+            >
+              Download PDF
+            </a>
+          )
+        }
+      </div>
+
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <section class="rounded-xl border border-neutral-200 bg-white p-4">
+          <h2 class="text-sm font-bold text-neutral-900">Issuer</h2>
+          <p class="mt-2 text-sm text-neutral-700">
+            {issuer.name}
+            <br />
+            {issuer.addressLine1}
+            {issuer.city && <>, {issuer.city}</>}
+          </p>
+        </section>
+        <section class="rounded-xl border border-neutral-200 bg-white p-4">
+          <h2 class="text-sm font-bold text-neutral-900">Recipient</h2>
+          <p class="mt-2 text-sm text-neutral-700">
+            Dwelling {recipient.dwellingNumber}
+            <br />
+            {recipient.billingName ?? recipient.occupantName ?? "—"}
+            <br />
+            {recipient.billingEmail ?? "—"}
+          </p>
+        </section>
+        <section class="rounded-xl border border-neutral-200 bg-white p-4">
+          <h2 class="text-sm font-bold text-neutral-900">Payment</h2>
+          <p class="mt-2 text-sm text-neutral-700">
+            {payment.bankName ?? "—"}
+            <br />
+            {payment.iban ?? "—"}
+          </p>
+        </section>
+        <section class="rounded-xl border border-neutral-200 bg-white p-4">
+          <h2 class="text-sm font-bold text-neutral-900">Dates</h2>
+          <p class="mt-2 text-sm text-neutral-700">
+            Issued {invoice.issueDate}
+            <br />
+            Due {invoice.dueDate}
+          </p>
+        </section>
+      </div>
+
+      <div
+        class="overflow-x-auto rounded-lg border border-neutral-200 bg-white"
+      >
+        <table class="w-full text-left text-sm">
+          <thead
+            class="border-b border-neutral-200 bg-neutral-50 text-neutral-600"
+          >
+            <tr>
+              <th class="px-4 py-2">Description</th>
+              <th class="px-4 py-2">Quantity</th>
+              <th class="px-4 py-2">Unit price</th>
+              <th class="px-4 py-2">Net</th>
+              <th class="px-4 py-2">VAT</th>
+              <th class="px-4 py-2">Gross</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-neutral-100">
+            {
+              lines.map((line) => (
+                <tr>
+                  <td class="px-4 py-2">{line.description}</td>
+                  <td class="px-4 py-2">
+                    {line.quantity} {line.unit}
+                  </td>
+                  <td class="px-4 py-2">{line.unitPrice ?? "—"}</td>
+                  <td class="px-4 py-2">{line.netAmount}</td>
+                  <td class="px-4 py-2">{line.vatAmount}</td>
+                  <td class="px-4 py-2 font-medium">{line.grossAmount}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+          <tfoot class="border-t border-neutral-200 font-medium">
+            <tr>
+              <td colspan="3" class="px-4 py-2 text-right"> Totals </td>
+              <td class="px-4 py-2">{invoice.subtotal}</td>
+              <td class="px-4 py-2">{invoice.vatTotal}</td>
+              <td class="px-4 py-2">
+                {invoice.total}
+                {invoice.currency}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</ResidentLayout>

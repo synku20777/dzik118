@@ -1,0 +1,99 @@
+---
+import ResidentLayout from "../../../../../layouts/ResidentLayout.astro";
+import {
+  ForbiddenError,
+  requireDwellingAccess,
+} from "../../../../../domain/authorization/guards";
+import { getDwellingForResident } from "../../../../../domain/organizations/dwellings";
+import { listInvoicesForDwelling } from "../../../../../domain/billing/generation";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const dwellingId = Astro.params.dwellingId!;
+try {
+  requireDwellingAccess(Astro.locals.auth, dwellingId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+let dwelling: Awaited<ReturnType<typeof getDwellingForResident>>;
+try {
+  dwelling = await withRequestDb((db) =>
+    getDwellingForResident(db, dwellingId)
+  );
+} catch {
+  return Astro.redirect("/portal/dwellings");
+}
+
+const rawInvoices = await withRequestDb((db) =>
+  listInvoicesForDwelling(db, dwellingId)
+);
+const invoiceList = [...rawInvoices].sort((a, b) =>
+  b.issueDate.localeCompare(a.issueDate)
+);
+---
+
+<ResidentLayout title={`Invoices - Dwelling ${dwelling.number}`}>
+  <div class="mx-auto max-w-2xl p-6">
+    <div class="space-y-6">
+      <div class="flex items-center justify-between">
+        <a
+          href={`/portal/dwellings/${dwellingId}`}
+          class="text-sm text-neutral-600 hover:underline"
+        >
+          ← Dashboard
+        </a>
+        <a
+          href="/logout"
+          class="text-sm text-neutral-600 hover:text-neutral-900 hover:underline"
+        >
+          Sign out
+        </a>
+      </div>
+
+      <h1 class="text-xl font-bold text-neutral-900">
+        Invoices for dwelling {dwelling.number}
+      </h1>
+
+      {
+        invoiceList.length === 0 ? (
+          <p class="text-sm text-neutral-600">No invoices yet.</p>
+        ) : (
+          <div class="space-y-4">
+            {invoiceList.map((invoice) => (
+              <a
+                href={`/portal/invoices/${invoice.id}?dwellingId=${dwellingId}`}
+                class="block rounded-xl border border-neutral-200 bg-white p-4 hover:border-neutral-300 hover:bg-neutral-50"
+              >
+                <div class="flex items-center justify-between">
+                  <span class="font-medium text-neutral-900">
+                    {invoice.invoiceNumber}
+                  </span>
+                  {invoice.paidAt ? (
+                    <span class="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                      Paid
+                    </span>
+                  ) : invoice.sentAt ? (
+                    <span class="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                      Sent
+                    </span>
+                  ) : (
+                    <span class="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-medium text-neutral-600">
+                      Pending
+                    </span>
+                  )}
+                </div>
+                <div class="mt-2 flex items-center justify-between text-sm text-neutral-600">
+                  <span>Due {invoice.dueDate}</span>
+                  <span class="font-semibold text-neutral-900">
+                    {invoice.total} {invoice.currency}
+                  </span>
+                </div>
+              </a>
+            ))}
+          </div>
+        )
+      }
+    </div>
+  </div>
+</ResidentLayout>

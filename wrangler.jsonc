@@ -5,6 +5,21 @@
   // all in the Workers runtime -- without this it fails on node:net/node:tls.
   "compatibility_flags": ["nodejs_compat"],
 
+  // Cloudflare Browser Rendering for invoice PDF generation (spec Section
+  // 3.4/3.5/22). Unlike Hyperdrive, this has no localConnectionString-style
+  // passthrough -- verify separately whether `wrangler dev` (no --remote)
+  // actually renders locally or needs a real account.
+  // Cloudflare Browser Rendering for invoice PDF generation (spec Section
+  // 3.4/3.5/22). Unlike Hyperdrive, this has no localConnectionString-style
+  // passthrough. Confirmed empirically: merely declaring this binding makes
+  // EVERY request to `wrangler dev` hang indefinitely in this sandbox (not
+  // just requests that call renderPdf) -- see src/lib/pdf/render.ts for the
+  // full diagnosis. Real Cloudflare deploys are unaffected; this is a local
+  // sandbox limitation only.
+  "browser": {
+    "binding": "BROWSER",
+  },
+
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
@@ -24,6 +39,14 @@
       "name": "AUTH_RATE_LIMITER",
       "namespace_id": "1001",
       "simple": { "limit": 5, "period": 60 },
+    },
+    // Spec Section 33: "auth/public token rate limiting" -- the public,
+    // unauthenticated /invoice/access/[token] routes need the same
+    // protection as the auth magic-link endpoint, keyed by client IP.
+    {
+      "name": "INVOICE_TOKEN_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 30, "period": 60 },
     },
   ],
 }

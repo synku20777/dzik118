@@ -307,6 +307,11 @@ export async function generateInvoice(
           issueDate: period.invoiceIssueDate,
           dueDate: period.invoiceDueDate,
           version: existingInvoice.version + 1,
+          // Clear any canonical PDF from the prior version -- otherwise a
+          // future send would see pdfObjectKey/pdfSha256 already set and
+          // skip regenerating, emailing a PDF for stale line/total data.
+          pdfObjectKey: null,
+          pdfSha256: null,
           updatedAt: new Date(),
         })
         .where(eq(invoices.id, existingInvoice.id))
@@ -425,6 +430,23 @@ export async function bulkGenerateInvoices(
   return result;
 }
 
+async function loadInvoiceAndLines(
+  db: Db,
+  invoice: typeof invoices.$inferSelect
+) {
+  const lines = await db
+    .select()
+    .from(invoiceLines)
+    .where(eq(invoiceLines.invoiceId, invoice.id))
+    .orderBy(invoiceLines.sortOrder);
+  const [billingCase] = await db
+    .select({ id: billingCases.id, status: billingCases.status })
+    .from(billingCases)
+    .where(eq(billingCases.id, invoice.billingCaseId))
+    .limit(1);
+  return { invoice, lines, caseStatus: billingCase?.status ?? null };
+}
+
 export async function getInvoice(
   db: Db,
   organizationId: string,
@@ -441,17 +463,34 @@ export async function getInvoice(
     )
     .limit(1);
   if (!invoice) throw new NotFoundError("Invoice not found");
-  const lines = await db
+  return loadInvoiceAndLines(db, invoice);
+}
+
+// Resident-facing: dwellingId is the resident's already-access-checked
+// dwelling (requireDwellingAccess ran in the caller), same convention as
+// getDwellingForResident (Phase E). A valid invoice id for a *different*
+// dwelling is rejected as not found, not forbidden, so a resident can't
+// probe which invoice ids exist elsewhere.
+export async function getInvoiceForResident(
+  db: Db,
+  invoiceId: string,
+  dwellingId: string
+) {
+  const [invoice] = await db
     .select()
-    .from(invoiceLines)
-    .where(eq(invoiceLines.invoiceId, invoiceId))
-    .orderBy(invoiceLines.sortOrder);
-  const [billingCase] = await db
-    .select({ id: billingCases.id, status: billingCases.status })
-    .from(billingCases)
-    .where(eq(billingCases.id, invoice.billingCaseId))
+    .from(invoices)
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.dwellingId, dwellingId)))
     .limit(1);
-  return { invoice, lines, caseStatus: billingCase?.status ?? null };
+  if (!invoice) throw new NotFoundError("Invoice not found");
+  return loadInvoiceAndLines(db, invoice);
+}
+
+export async function listInvoicesForDwelling(db: Db, dwellingId: string) {
+  return db
+    .select()
+    .from(invoices)
+    .where(eq(invoices.dwellingId, dwellingId))
+    .orderBy(invoices.issueDate);
 }
 
 // INV-004: normal transition only from DRAFT.

@@ -47,6 +47,40 @@ export default defineConfig({
         access: "public",
         default: false,
       }),
+      // Phase G (Invoices/delivery, spec Section 3.6/6/23). Empty/unset in
+      // local dev (.dev.vars never sets a real AWS key) selects the local
+      // SMTP-to-Mailpit fallback instead of Amazon SES -- see
+      // src/lib/email/index.ts. Defaults keep `npm run build`/CI working
+      // without real secrets configured, matching the SUPABASE_* pattern.
+      AWS_SES_ACCESS_KEY_ID: envField.string({
+        context: "server",
+        access: "secret",
+        default: "",
+      }),
+      AWS_SES_SECRET_ACCESS_KEY: envField.string({
+        context: "server",
+        access: "secret",
+        default: "",
+      }),
+      AWS_SES_REGION: envField.string({
+        context: "server",
+        access: "secret",
+        default: "eu-central-1",
+      }),
+      EMAIL_FROM: envField.string({
+        context: "server",
+        access: "secret",
+        default: "invoices@example.com",
+      }),
+      // Pepper for invoice access token hashes (spec Section 6/24): stored
+      // hash is HMAC-SHA256(this secret, rawToken), not plain SHA-256, so a
+      // leaked database alone can't be used to precompute/verify guesses
+      // offline against a known token format.
+      INVOICE_TOKEN_SECRET: envField.string({
+        context: "server",
+        access: "secret",
+        default: "dev-only-insecure-default-change-in-production",
+      }),
     },
   },
 });

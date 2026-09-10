@@ -12,6 +12,7 @@ import {
 import { getOrganization } from "../../../../../../../domain/organizations/organizations";
 import { getPeriod } from "../../../../../../../domain/periods/periods";
 import { getInvoice } from "../../../../../../../domain/billing/generation";
+import { listDeliveries } from "../../../../../../../domain/billing/sending";
 import { withRequestDb } from "../../../../../../../lib/db-request";
 
 const organizationId = Astro.params.orgId!;
@@ -25,11 +26,14 @@ try {
 }
 
 const prepareResult = Astro.getActionResult(actions.billing.prepare);
+const sendResult = Astro.getActionResult(actions.invoices.send);
+const resendResult = Astro.getActionResult(actions.invoices.resend);
+const revokeResult = Astro.getActionResult(actions.invoices.revokeAccess);
 
-let organization, period, invoice, lines, caseStatus;
+let organization, period, invoice, lines, caseStatus, deliveries;
 try {
-  ({ organization, period, invoice, lines, caseStatus } = await withRequestDb(
-    async (db) => {
+  ({ organization, period, invoice, lines, caseStatus, deliveries } =
+    await withRequestDb(async (db) => {
       const { invoice, lines, caseStatus } = await getInvoice(
         db,
         organizationId,
@@ -41,9 +45,9 @@ try {
         invoice,
         lines,
         caseStatus,
+        deliveries: await listDeliveries(db, organizationId, invoiceId),
       };
-    }
-  ));
+    }));
 } catch {
   return Astro.redirect(`/admin/o/${organizationId}/periods/${periodId}`);
 }
@@ -73,25 +77,102 @@ const payment = invoice.paymentSnapshot as Record<string, string | null>;
           ({caseStatus})
         </span>
       </h1>
-      {
-        caseStatus === "DRAFT" && (
-          <form method="POST" action={actions.billing.prepare}>
-            <input type="hidden" name="organizationId" value={organizationId} />
-            <input type="hidden" name="invoiceId" value={invoice.id} />
-            <button
-              type="submit"
-              class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+      <div class="flex gap-2">
+        {
+          invoice.pdfObjectKey && (
+            <a
+              href={`/api/v1/admin/o/${organizationId}/invoices/${invoice.id}/pdf`}
+              target="_blank"
+              class="rounded-md border border-neutral-300 px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
             >
-              Prepare
-            </button>
-          </form>
-        )
-      }
+              Download PDF
+            </a>
+          )
+        }
+        {
+          caseStatus === "DRAFT" && (
+            <form method="POST" action={actions.billing.prepare}>
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <button
+                type="submit"
+                class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+              >
+                Prepare
+              </button>
+            </form>
+          )
+        }
+        {
+          caseStatus === "PREPARED" && !invoice.sentAt && (
+            <form method="POST" action={actions.invoices.send}>
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <button
+                type="submit"
+                class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+              >
+                Send
+              </button>
+            </form>
+          )
+        }
+        {
+          invoice.sentAt && (
+            <form method="POST" action={actions.invoices.resend}>
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <button
+                type="submit"
+                class="rounded-md border border-neutral-300 px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+              >
+                Resend
+              </button>
+            </form>
+          )
+        }
+        {
+          invoice.sentAt && (
+            <form method="POST" action={actions.invoices.revokeAccess}>
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <button
+                type="submit"
+                class="rounded-md border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+              >
+                Revoke access link
+              </button>
+            </form>
+          )
+        }
+      </div>
     </div>
     {
-      prepareResult?.error && (
+      (prepareResult?.error ||
+        sendResult?.error ||
+        resendResult?.error ||
+        revokeResult?.error) && (
         <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
-          {prepareResult.error.message}
+          {prepareResult?.error?.message ??
+            sendResult?.error?.message ??
+            resendResult?.error?.message ??
+            revokeResult?.error?.message}
         </p>
       )
     }
@@ -177,5 +258,40 @@ const payment = invoice.paymentSnapshot as Record<string, string | null>;
         </tfoot>
       </table>
     </div>
+
+    {
+      deliveries.length > 0 && (
+        <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+          <table class="w-full text-left text-sm">
+            <thead class="border-b border-neutral-200 bg-neutral-50 text-neutral-600">
+              <tr>
+                <th class="px-4 py-2">When</th>
+                <th class="px-4 py-2">To</th>
+                <th class="px-4 py-2">Status</th>
+                <th class="px-4 py-2">Error</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-neutral-100">
+              {deliveries.map((d) => (
+                <tr>
+                  <td class="px-4 py-2">{d.createdAt.toISOString()}</td>
+                  <td class="px-4 py-2">{d.destinationEmail}</td>
+                  <td class="px-4 py-2">
+                    {d.status === "SENT" ? (
+                      <span class="text-green-700">Sent</span>
+                    ) : (
+                      <span class="text-red-700">Failed</span>
+                    )}
+                  </td>
+                  <td class="px-4 py-2 text-neutral-500">
+                    {d.errorCode ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
   </div>
 </AdminLayout>
