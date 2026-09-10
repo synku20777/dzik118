@@ -7,6 +7,8 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "postinstall": "wrangler types",
+    "cf-typegen": "wrangler types",
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
@@ -20,12 +22,14 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "vite-node scripts/seed.ts",
     "db:migrate:fresh": "vite-node scripts/db-migrate-fresh.ts",
-    "test:integration": "node -e \"console.error('Error: test:integration is implemented in Phase C/D.'); process.exit(1);\"",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.1",
     "@astrojs/react": "^6.0.5",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.116.0",
     "@tailwindcss/vite": "^4.0.0",
     "astro": "^7.3.2",
     "drizzle-orm": "^0.45.2",

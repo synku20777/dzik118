@@ -11,6 +11,7 @@ export default [
       ".github/",
       "drizzle/migrations/",
       "docs/",
+      "worker-configuration.d.ts",
     ],
   },
   js.configs.recommended,

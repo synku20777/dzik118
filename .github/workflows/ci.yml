@@ -10,6 +10,13 @@ jobs:
   quality-gates:
     name: Quality Gates
     runs-on: ubuntu-latest
+    env:
+      # Client-context env vars (astro:env) are inlined into the browser
+      # bundle at build time, so `astro build`/`astro check` need *some*
+      # value even though CI never talks to a real Supabase project.
+      # Deployments must set real values via Cloudflare Worker secrets.
+      PUBLIC_SUPABASE_URL: "https://ci-placeholder.supabase.co"
+      PUBLIC_SUPABASE_PUBLISHABLE_KEY: "ci-placeholder-key"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
