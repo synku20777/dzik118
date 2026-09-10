@@ -1,0 +1,55 @@
+{
+  "name": "property-billing",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro:check": "astro check",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "deploy": "node -e \"console.error('Error: deploy is implemented in Phase N (Final integration & deployment).'); process.exit(1);\"",
+    "db:migrate": "node -e \"console.error('Error: db:migrate is implemented in Phase B (Database).'); process.exit(1);\"",
+    "db:seed": "node -e \"console.error('Error: db:seed is implemented in Phase B (Database).'); process.exit(1);\"",
+    "db:migrate:fresh": "node -e \"console.error('Error: db:migrate:fresh is implemented in Phase B (Database).'); process.exit(1);\"",
+    "test:integration": "node -e \"console.error('Error: test:integration is implemented in Phase C/D.'); process.exit(1);\"",
+    "test:e2e": "node -e \"console.error('Error: test:e2e is implemented in Phase M (QA/security). Playwright configuration initialized in playwright.config.ts.'); process.exit(1);\""
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.3.1",
+    "@astrojs/react": "^6.0.5",
+    "@tailwindcss/vite": "^4.0.0",
+    "astro": "^7.3.2",
+    "drizzle-orm": "^0.45.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwindcss": "^4.0.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@eslint/js": "^9.20.0",
+    "@playwright/test": "^1.50.0",
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9.20.0",
+    "eslint-plugin-astro": "^1.3.1",
+    "eslint-plugin-react": "^7.37.4",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "prettier": "^3.5.1",
+    "prettier-plugin-astro": "^0.14.1",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.24.0",
+    "vitest": "^3.0.5",
+    "wrangler": "^4.125.0"
+  }
+}
