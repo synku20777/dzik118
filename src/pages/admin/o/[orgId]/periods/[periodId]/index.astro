@@ -1,0 +1,134 @@
+---
+// Phase E (Periods/meters/readings) - monthly billing workbench (spec
+// Section 9.2, 27 "Periods: Workbench", PER-002). Invoice generation
+// (INV-001+) is Phase F -- this page only covers case status/readings.
+import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
+import { actions } from "astro:actions";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../../domain/organizations/organizations";
+import { getPeriod } from "../../../../../../domain/periods/periods";
+import { listCasesForPeriod } from "../../../../../../domain/periods/cases";
+import { withRequestDb } from "../../../../../../lib/db-request";
+
+const organizationId = Astro.params.orgId!;
+const periodId = Astro.params.periodId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const lockResult = Astro.getActionResult(actions.periods.lock);
+
+let organization, period, cases;
+try {
+  ({ organization, period, cases } = await withRequestDb(async (db) => ({
+    organization: await getOrganization(db, organizationId),
+    period: await getPeriod(db, organizationId, periodId),
+    cases: await listCasesForPeriod(db, organizationId, periodId),
+  })));
+} catch {
+  return Astro.redirect(`/admin/o/${organizationId}/periods`);
+}
+---
+
+<AdminLayout
+  title={`${period.year}-${String(period.month).padStart(2, "0")} - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="space-y-6">
+    <a
+      href={`/admin/o/${organizationId}/periods`}
+      class="text-sm text-neutral-600 hover:underline"
+    >
+      ← Periods
+    </a>
+    <div class="flex items-center justify-between">
+      <h1 class="text-xl font-bold text-neutral-900">
+        Period {period.year}-{String(period.month).padStart(2, "0")}
+        <span class="ml-2 text-sm font-normal text-neutral-500">
+          ({period.status === "LOCKED" ? "Locked" : "Open"})
+        </span>
+      </h1>
+      {
+        period.status === "OPEN" && (
+          <form method="POST" action={actions.periods.lock}>
+            <input type="hidden" name="organizationId" value={organizationId} />
+            <input type="hidden" name="periodId" value={periodId} />
+            <button
+              type="submit"
+              class="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
+            >
+              Lock period
+            </button>
+          </form>
+        )
+      }
+    </div>
+    {
+      lockResult?.error && (
+        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+          {lockResult.error.message}
+        </p>
+      )
+    }
+
+    <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+      <table class="w-full text-left text-sm">
+        <thead
+          class="border-b border-neutral-200 bg-neutral-50 text-neutral-600"
+        >
+          <tr>
+            <th class="px-4 py-2">Dwelling</th>
+            <th class="px-4 py-2">Status</th>
+            <th class="px-4 py-2">Missing readings</th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-100">
+          {
+            cases.map((c) => {
+              const missing = c.missingData as {
+                label: string | null;
+                meterType: string;
+              }[];
+              return (
+                <tr>
+                  <td class="px-4 py-2 font-medium">{c.dwellingNumber}</td>
+                  <td class="px-4 py-2">{c.status}</td>
+                  <td class="px-4 py-2">
+                    {missing.length === 0
+                      ? "None"
+                      : missing.map((m) => m.label ?? m.meterType).join(", ")}
+                  </td>
+                  <td class="px-4 py-2 text-right">
+                    <a
+                      href={`/admin/o/${organizationId}/periods/${periodId}/dwellings/${c.dwellingId}`}
+                      class="text-neutral-700 hover:underline"
+                    >
+                      Enter readings
+                    </a>
+                  </td>
+                </tr>
+              );
+            })
+          }
+          {
+            cases.length === 0 && (
+              <tr>
+                <td colspan="4" class="px-4 py-8 text-center text-neutral-500">
+                  No billing cases for this period.
+                </td>
+              </tr>
+            )
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</AdminLayout>

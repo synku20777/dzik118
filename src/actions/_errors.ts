@@ -5,12 +5,26 @@
 // and bound parameters (emails, addresses, bank details), so an unexpected
 // DB error must never reach the client verbatim.
 import { ActionError } from "astro:actions";
-import { ConflictError } from "../domain/organizations/organizations";
+import { ForbiddenError } from "../domain/authorization/guards";
+import {
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+} from "../domain/errors";
 
 export function toActionError(err: unknown): ActionError {
   if (err instanceof ActionError) return err;
+  if (err instanceof ForbiddenError) {
+    return new ActionError({ code: "FORBIDDEN", message: err.message });
+  }
   if (err instanceof ConflictError) {
     return new ActionError({ code: "CONFLICT", message: err.message });
+  }
+  if (err instanceof NotFoundError) {
+    return new ActionError({ code: "NOT_FOUND", message: err.message });
+  }
+  if (err instanceof ValidationError) {
+    return new ActionError({ code: "BAD_REQUEST", message: err.message });
   }
   console.error(err);
   return new ActionError({

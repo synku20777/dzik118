@@ -38,6 +38,17 @@ export function requireOrganizationAccess(
   }
 }
 
+// For resident pages with no target dwellingId yet (e.g. the dwelling
+// selector) -- just proves "an authenticated resident", nothing dwelling-
+// scoped. Prefer requireDwellingAccess whenever a target dwelling exists.
+export function requireResidentRole(
+  auth: AuthContext | null
+): asserts auth is ResidentAuthContext {
+  if (!auth || auth.role !== "RESIDENT") {
+    throw new ForbiddenError();
+  }
+}
+
 export function requireDwellingAccess(
   auth: AuthContext | null,
   dwellingId: string

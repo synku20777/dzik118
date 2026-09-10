@@ -11,6 +11,7 @@ import {
   findOrCreateSupabaseUser,
   type createSupabaseAdminClient,
 } from "../../lib/supabase/admin";
+import { isUniqueViolation } from "../../lib/db-errors";
 import { ConflictError, NotFoundError } from "./organizations";
 
 type SupabaseAdmin = ReturnType<typeof createSupabaseAdminClient>;
@@ -78,6 +79,20 @@ export async function getDwelling(
         eq(dwellings.organizationId, organizationId)
       )
     )
+    .limit(1);
+  if (!dwelling) throw new NotFoundError("Dwelling not found");
+  return dwelling;
+}
+
+// Resident-facing reads take no organizationId: the caller already proved
+// access via requireDwellingAccess(auth, dwellingId) against the resident's
+// own dwellingIds (spec Section 8), so there's no separate org to check
+// against here (unlike the admin path, which always has an asserted org).
+export async function getDwellingForResident(db: DbOrTx, dwellingId: string) {
+  const [dwelling] = await db
+    .select()
+    .from(dwellings)
+    .where(eq(dwellings.id, dwellingId))
     .limit(1);
   if (!dwelling) throw new NotFoundError("Dwelling not found");
   return dwelling;
@@ -305,17 +320,4 @@ export async function removeResidentAccess(
       beforeData: { userId },
     });
   });
-}
-
-// Drizzle wraps the driver error in a DrizzleQueryError; the real Postgres
-// error (with the .code Postgres actually sets) is nested under .cause, not
-// on the top-level error.
-function isUniqueViolation(err: unknown): boolean {
-  const pgError = err instanceof Error ? (err.cause ?? err) : err;
-  return (
-    typeof pgError === "object" &&
-    pgError !== null &&
-    "code" in pgError &&
-    (pgError as { code: unknown }).code === "23505"
-  );
 }

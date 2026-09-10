@@ -1,0 +1,19 @@
+---
+import {
+  ForbiddenError,
+  requireResidentRole,
+} from "../../domain/authorization/guards";
+
+const auth = Astro.locals.auth;
+try {
+  requireResidentRole(auth);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+if (auth.dwellingIds.length === 1) {
+  return Astro.redirect(`/portal/dwellings/${auth.dwellingIds[0]}`);
+}
+return Astro.redirect("/portal/dwellings");
+---

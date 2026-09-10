@@ -10,16 +10,16 @@ import {
   organizationMemberships,
   organizations,
 } from "../../db/schema/organizations";
+import { ConflictError, NotFoundError } from "../errors";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import {
   findOrCreateSupabaseUser,
   type createSupabaseAdminClient,
 } from "../../lib/supabase/admin";
 
-type SupabaseAdmin = ReturnType<typeof createSupabaseAdminClient>;
+export { ConflictError, NotFoundError };
 
-export class NotFoundError extends Error {}
-export class ConflictError extends Error {}
+type SupabaseAdmin = ReturnType<typeof createSupabaseAdminClient>;
 
 export interface CreateOrganizationInput {
   name: string;
