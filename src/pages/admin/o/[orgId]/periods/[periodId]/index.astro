@@ -1,7 +1,6 @@
 ---
-// Phase E (Periods/meters/readings) - monthly billing workbench (spec
-// Section 9.2, 27 "Periods: Workbench", PER-002). Invoice generation
-// (INV-001+) is Phase F -- this page only covers case status/readings.
+// Phase E (Periods/meters/readings) / Phase F (Billing) - monthly billing
+// workbench (spec Section 9.2, 27 "Periods: Workbench", PER-002, INV-001/002).
 import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
 import {
@@ -23,6 +22,8 @@ try {
 }
 
 const lockResult = Astro.getActionResult(actions.periods.lock);
+const generateResult = Astro.getActionResult(actions.billing.generate);
+const bulkGenerateResult = Astro.getActionResult(actions.billing.bulkGenerate);
 
 let organization, period, cases;
 try {
@@ -55,25 +56,62 @@ try {
           ({period.status === "LOCKED" ? "Locked" : "Open"})
         </span>
       </h1>
-      {
-        period.status === "OPEN" && (
-          <form method="POST" action={actions.periods.lock}>
-            <input type="hidden" name="organizationId" value={organizationId} />
-            <input type="hidden" name="periodId" value={periodId} />
-            <button
-              type="submit"
-              class="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
-            >
-              Lock period
-            </button>
-          </form>
-        )
-      }
+      <div class="flex gap-3">
+        <form method="POST" action={actions.billing.bulkGenerate}>
+          <input type="hidden" name="organizationId" value={organizationId} />
+          <input type="hidden" name="periodId" value={periodId} />
+          <button
+            type="submit"
+            class="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
+          >
+            Generate all eligible
+          </button>
+        </form>
+        {
+          period.status === "OPEN" && (
+            <form method="POST" action={actions.periods.lock}>
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="periodId" value={periodId} />
+              <button
+                type="submit"
+                class="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
+              >
+                Lock period
+              </button>
+            </form>
+          )
+        }
+      </div>
     </div>
     {
-      lockResult?.error && (
+      (lockResult?.error || generateResult?.error) && (
         <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
-          {lockResult.error.message}
+          {lockResult?.error?.message ?? generateResult?.error?.message}
+        </p>
+      )
+    }
+    {
+      bulkGenerateResult?.data && (
+        <p class="rounded-md bg-neutral-100 p-3 text-sm text-neutral-700">
+          Generated {bulkGenerateResult.data.generated.length} invoice(s).
+          {bulkGenerateResult.data.skipped.length > 0 && (
+            <>
+              {" "}
+              Skipped {bulkGenerateResult.data.skipped.length}:{" "}
+              {bulkGenerateResult.data.skipped.map((s) => s.reason).join("; ")}
+            </>
+          )}
+        </p>
+      )
+    }
+    {
+      bulkGenerateResult?.error && (
+        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+          {bulkGenerateResult.error.message}
         </p>
       )
     }
@@ -87,6 +125,7 @@ try {
             <th class="px-4 py-2">Dwelling</th>
             <th class="px-4 py-2">Status</th>
             <th class="px-4 py-2">Missing readings</th>
+            <th class="px-4 py-2">Invoice</th>
             <th class="px-4 py-2"></th>
           </tr>
         </thead>
@@ -106,13 +145,55 @@ try {
                       ? "None"
                       : missing.map((m) => m.label ?? m.meterType).join(", ")}
                   </td>
-                  <td class="px-4 py-2 text-right">
+                  <td class="px-4 py-2">
+                    {c.invoiceId ? (
+                      <a
+                        href={`/admin/o/${organizationId}/periods/${periodId}/invoices/${c.invoiceId}`}
+                        class="hover:underline"
+                      >
+                        {c.invoiceNumber} ({c.invoiceTotal})
+                      </a>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td class="px-4 py-2 text-right whitespace-nowrap">
                     <a
                       href={`/admin/o/${organizationId}/periods/${periodId}/dwellings/${c.dwellingId}`}
                       class="text-neutral-700 hover:underline"
                     >
                       Enter readings
                     </a>
+                    {missing.length === 0 &&
+                      (c.status === "MISSING_DATA" || c.status === "DRAFT") && (
+                        <form
+                          method="POST"
+                          action={actions.billing.generate}
+                          class="ml-3 inline"
+                        >
+                          <input
+                            type="hidden"
+                            name="organizationId"
+                            value={organizationId}
+                          />
+                          <input
+                            type="hidden"
+                            name="periodId"
+                            value={periodId}
+                          />
+                          <input
+                            type="hidden"
+                            name="dwellingId"
+                            value={c.dwellingId}
+                          />
+                          <button
+                            type="submit"
+                            class="text-neutral-700 hover:underline"
+                          >
+                            {c.invoiceId ? "Regenerate" : "Generate"}
+                          </button>
+                        </form>
+                      )}
                   </td>
                 </tr>
               );
@@ -121,7 +202,7 @@ try {
           {
             cases.length === 0 && (
               <tr>
-                <td colspan="4" class="px-4 py-8 text-center text-neutral-500">
+                <td colspan="5" class="px-4 py-8 text-center text-neutral-500">
                   No billing cases for this period.
                 </td>
               </tr>

@@ -1,5 +1,4 @@
 ---
-// TODO: Phase F (Billing) - tariffs/rules settings
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import {
   ForbiddenError,
@@ -13,16 +12,388 @@ try {
   if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
   throw err;
 }
+
+import { actions } from "astro:actions";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { listRules } from "../../../../../domain/billing/rules";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const createResult = Astro.getActionResult(actions.billing.createRule);
+const updateResult = Astro.getActionResult(actions.billing.updateRule);
+const archiveResult = Astro.getActionResult(actions.billing.archiveRule);
+
+const includeArchived = Astro.url.searchParams.get("includeArchived") === "1";
+
+const { organization, rules } = await withRequestDb(async (db) => ({
+  organization: await getOrganization(db, organizationId),
+  rules: await listRules(db, organizationId, { includeArchived }),
+}));
 ---
 
-<AdminLayout title="Tariffs & rules" organizationId={organizationId}>
-  <a
-    href={`/admin/o/${organizationId}/settings`}
-    class="text-sm text-neutral-600 hover:underline"
-  >
-    ← Settings
-  </a>
-  <p class="mt-4 text-sm text-neutral-600">
-    Tariffs and billing rules arrive in Phase F.
-  </p>
+<AdminLayout
+  title="Tariffs & rules"
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="space-y-6">
+    <a
+      href={`/admin/o/${organizationId}/settings`}
+      class="text-sm text-neutral-600 hover:underline"
+    >
+      ← Settings
+    </a>
+
+    <h1 class="text-xl font-bold text-neutral-900">Tariffs and rules</h1>
+
+    <form method="GET" class="flex flex-wrap items-end gap-3">
+      <label class="flex items-center gap-2 pb-2 text-sm text-neutral-700">
+        <input
+          type="checkbox"
+          name="includeArchived"
+          value="1"
+          checked={includeArchived}
+        />
+        Show archived
+      </label>
+      <button
+        type="submit"
+        class="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white"
+      >
+        Filter
+      </button>
+    </form>
+
+    {
+      (createResult?.error || updateResult?.error || archiveResult?.error) && (
+        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+          {createResult?.error?.message ??
+            updateResult?.error?.message ??
+            archiveResult?.error?.message}
+        </p>
+      )
+    }
+
+    <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+      <table class="w-full text-left text-sm">
+        <thead
+          class="border-b border-neutral-200 bg-neutral-50 text-neutral-600"
+        >
+          <tr>
+            <th class="px-4 py-2">Name</th>
+            <th class="px-4 py-2">Type</th>
+            <th class="px-4 py-2">Unit price</th>
+            <th class="px-4 py-2">VAT %</th>
+            <th class="px-4 py-2">Effective</th>
+            <th class="px-4 py-2">Status</th>
+            <th class="px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-100">
+          {
+            rules.map((rule) => (
+              <tr>
+                <td class="px-4 py-2">
+                  <span class="font-medium text-neutral-900">{rule.name}</span>
+                  <span class="block text-xs text-neutral-500">
+                    {rule.code}
+                  </span>
+                </td>
+                <td class="px-4 py-2">
+                  <span>{rule.calculationType}</span>
+                  {rule.meterType && (
+                    <span class="block text-xs text-neutral-500">
+                      {rule.meterType}
+                    </span>
+                  )}
+                </td>
+                <td class="px-4 py-2">{rule.unitPrice ?? "—"}</td>
+                <td class="px-4 py-2">{rule.vatRate}</td>
+                <td class="px-4 py-2">
+                  {rule.effectiveFrom} → {rule.effectiveUntil ?? "ongoing"}
+                </td>
+                <td class="px-4 py-2">
+                  {rule.archivedAt ? (
+                    <span class="text-red-700">Archived</span>
+                  ) : rule.enabled ? (
+                    <span class="text-green-700">Enabled</span>
+                  ) : (
+                    <span class="text-neutral-500">Disabled</span>
+                  )}
+                </td>
+                <td class="px-4 py-2">
+                  {!rule.archivedAt && (
+                    <div>
+                      <details class="text-left">
+                        <summary class="cursor-pointer text-sm font-medium text-neutral-700 hover:underline">
+                          Edit
+                        </summary>
+                        <form
+                          method="POST"
+                          action={actions.billing.updateRule}
+                          class="mt-2 space-y-2 rounded-md border border-neutral-200 bg-neutral-50 p-3"
+                        >
+                          <input
+                            type="hidden"
+                            name="organizationId"
+                            value={organizationId}
+                          />
+                          <input type="hidden" name="ruleId" value={rule.id} />
+                          <div>
+                            <label
+                              class="block text-xs font-medium text-neutral-700"
+                              for={`unitPrice-${rule.id}`}
+                            >
+                              Unit price
+                            </label>
+                            <input
+                              id={`unitPrice-${rule.id}`}
+                              type="text"
+                              name="unitPrice"
+                              value={rule.unitPrice ?? ""}
+                              class="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1 text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label
+                              class="block text-xs font-medium text-neutral-700"
+                              for={`vatRate-${rule.id}`}
+                            >
+                              VAT %
+                            </label>
+                            <input
+                              id={`vatRate-${rule.id}`}
+                              type="text"
+                              name="vatRate"
+                              value={rule.vatRate}
+                              class="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1 text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label
+                              class="block text-xs font-medium text-neutral-700"
+                              for={`effectiveUntil-${rule.id}`}
+                            >
+                              Effective until
+                            </label>
+                            <input
+                              id={`effectiveUntil-${rule.id}`}
+                              type="date"
+                              name="effectiveUntil"
+                              value={rule.effectiveUntil ?? ""}
+                              class="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1 text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label class="flex items-center gap-2 text-xs text-neutral-700">
+                              <input
+                                type="checkbox"
+                                name="enabled"
+                                value="1"
+                                checked={rule.enabled}
+                              />
+                              Enabled
+                            </label>
+                          </div>
+                          <button
+                            type="submit"
+                            class="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white"
+                          >
+                            Save
+                          </button>
+                        </form>
+                      </details>
+                      <form
+                        method="POST"
+                        action={actions.billing.archiveRule}
+                        class="mt-1"
+                      >
+                        <input
+                          type="hidden"
+                          name="organizationId"
+                          value={organizationId}
+                        />
+                        <input type="hidden" name="ruleId" value={rule.id} />
+                        <button
+                          type="submit"
+                          class="text-red-700 hover:underline"
+                        >
+                          Archive
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))
+          }
+          {
+            rules.length === 0 && (
+              <tr>
+                <td colspan="7" class="px-4 py-8 text-center text-neutral-500">
+                  No billing rules yet.
+                </td>
+              </tr>
+            )
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <section
+      class="max-w-2xl rounded-xl border border-neutral-200 bg-white p-6"
+    >
+      <h2 class="text-lg font-bold text-neutral-900">Create rule</h2>
+      <form
+        method="POST"
+        action={actions.billing.createRule}
+        class="mt-4 grid grid-cols-2 gap-3"
+      >
+        <input type="hidden" name="organizationId" value={organizationId} />
+        <div class="col-span-2">
+          <label class="block text-sm font-medium text-neutral-700" for="name">
+            Name
+          </label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            required
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-neutral-700" for="code">
+            Code (unique identifier, e.g. cold_water)
+          </label>
+          <input
+            id="code"
+            name="code"
+            type="text"
+            required
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-neutral-700" for="unit">
+            Unit (e.g. m3, month, person)
+          </label>
+          <input
+            id="unit"
+            name="unit"
+            type="text"
+            required
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label
+            class="block text-sm font-medium text-neutral-700"
+            for="calculationType"
+          >
+            Type
+          </label>
+          <select
+            id="calculationType"
+            name="calculationType"
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          >
+            <option value="FIXED">Fixed</option>
+            <option value="AREA">Area (m2)</option>
+            <option value="RESIDENT_COUNT">Resident count</option>
+            <option value="METER_CONSUMPTION">Meter consumption</option>
+            <option value="MANUAL_QUANTITY">Manual quantity</option>
+            <option value="MANUAL_AMOUNT">Manual amount</option>
+          </select>
+        </div>
+        <div>
+          <label
+            class="block text-sm font-medium text-neutral-700"
+            for="meterType"
+          >
+            Meter type (only for meter consumption rules)
+          </label>
+          <select
+            id="meterType"
+            name="meterType"
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          >
+            <option value="">-- none --</option>
+            <option value="COLD_WATER">Cold water</option>
+            <option value="HOT_WATER">Hot water</option>
+            <option value="ELECTRICITY">Electricity</option>
+            <option value="GAS">Gas</option>
+            <option value="HEAT">Heat</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </div>
+        <div>
+          <label
+            class="block text-sm font-medium text-neutral-700"
+            for="unitPrice"
+          >
+            Unit price
+          </label>
+          <input
+            id="unitPrice"
+            name="unitPrice"
+            type="text"
+            placeholder="0.0000"
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label
+            class="block text-sm font-medium text-neutral-700"
+            for="vatRate"
+          >
+            VAT %
+          </label>
+          <input
+            id="vatRate"
+            name="vatRate"
+            type="text"
+            placeholder="21.0000"
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label
+            class="block text-sm font-medium text-neutral-700"
+            for="effectiveFrom"
+          >
+            Effective from
+          </label>
+          <input
+            id="effectiveFrom"
+            name="effectiveFrom"
+            type="date"
+            required
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label
+            class="block text-sm font-medium text-neutral-700"
+            for="effectiveUntil"
+          >
+            Effective until (optional)
+          </label>
+          <input
+            id="effectiveUntil"
+            name="effectiveUntil"
+            type="date"
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div class="col-span-2">
+          <button
+            type="submit"
+            class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            Create rule
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
 </AdminLayout>

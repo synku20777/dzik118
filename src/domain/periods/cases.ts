@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import { billingCases, meterReadings } from "../../db/schema/billing";
 import { dwellings, meters } from "../../db/schema/dwellings";
+import { invoices } from "../../db/schema/invoices";
 
 export async function listCasesForPeriod(
   db: Db,
@@ -18,9 +19,13 @@ export async function listCasesForPeriod(
       dwellingNumber: dwellings.number,
       status: billingCases.status,
       missingData: billingCases.missingData,
+      invoiceId: invoices.id,
+      invoiceNumber: invoices.invoiceNumber,
+      invoiceTotal: invoices.total,
     })
     .from(billingCases)
     .innerJoin(dwellings, eq(dwellings.id, billingCases.dwellingId))
+    .leftJoin(invoices, eq(invoices.billingCaseId, billingCases.id))
     .where(
       and(
         eq(billingCases.periodId, periodId),
