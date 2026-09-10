@@ -1,6 +1,7 @@
 ---
-// Phase D (Organizations/dwellings). Full admin chrome/nav polish is Phase
-// H; this is the minimal shell later phases' pages can rely on.
+// Phase D (Organizations/dwellings) / Phase H (Admin UX, spec Section 27
+// nav). Payments and Messages links join this nav in Phases J/K once those
+// routes exist.
 import "../styles/global.css";
 
 interface Props {
@@ -17,6 +18,7 @@ const {
 
 const navLinks = organizationId
   ? [
+      { href: `/admin/o/${organizationId}/dashboard`, label: "Dashboard" },
       { href: `/admin/o/${organizationId}/dwellings`, label: "Dwellings" },
       { href: `/admin/o/${organizationId}/periods`, label: "Periods" },
       { href: `/admin/o/${organizationId}/settings`, label: "Settings" },

@@ -5,7 +5,11 @@ import { z } from "astro/zod";
 import { env } from "cloudflare:workers";
 import { APP_BASE_URL, INVOICE_TOKEN_SECRET } from "astro:env/server";
 import { requireOrganizationAccess } from "../domain/authorization/guards";
-import { resendInvoice, sendInvoice } from "../domain/billing/sending";
+import {
+  bulkSendInvoices,
+  resendInvoice,
+  sendInvoice,
+} from "../domain/billing/sending";
 import { revokeInvoiceAccessTokens } from "../domain/billing/invoice-tokens";
 import { renderPdf } from "../lib/pdf/render";
 import { safeHandler } from "./_errors";
@@ -57,6 +61,27 @@ export const invoices = {
           db,
           organizationId,
           invoiceId,
+          sendDeps(),
+          locals.auth!.userId
+        )
+      );
+    }),
+  }),
+
+  // spec Section 27: workbench bulk selection.
+  bulkSend: defineAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      invoiceIds: z.array(z.uuid()).min(1),
+    }),
+    handler: safeHandler(async ({ organizationId, invoiceIds }, { locals }) => {
+      requireOrganizationAccess(locals.auth, organizationId);
+      return withDb((db) =>
+        bulkSendInvoices(
+          db,
+          organizationId,
+          invoiceIds,
           sendDeps(),
           locals.auth!.userId
         )

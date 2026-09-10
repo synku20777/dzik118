@@ -42,7 +42,7 @@ const organizations = await withRequestDb((db) =>
             {organizations.map((org) => (
               <li>
                 <a
-                  href={`/admin/o/${org.id}/dwellings`}
+                  href={`/admin/o/${org.id}/dashboard`}
                   class="flex items-center justify-between px-4 py-3 hover:bg-neutral-50"
                 >
                   <span class="font-medium text-neutral-900">{org.name}</span>

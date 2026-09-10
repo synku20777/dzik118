@@ -1,0 +1,246 @@
+---
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import {
+  getCurrentOpenPeriod,
+  listPeriods,
+} from "../../../../../domain/periods/periods";
+import {
+  getDashboardSummary,
+  type DashboardSummary,
+} from "../../../../../domain/periods/dashboard";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const requestedPeriodId = Astro.url.searchParams.get("periodId");
+
+let organization: Awaited<ReturnType<typeof getOrganization>>;
+let allPeriods: Awaited<ReturnType<typeof listPeriods>>;
+let summary: DashboardSummary | null = null;
+try {
+  ({ organization, allPeriods, summary } = await withRequestDb(async (db) => {
+    const org = await getOrganization(db, organizationId);
+    const periods = await listPeriods(db, organizationId);
+
+    let periodId: string | undefined = requestedPeriodId || undefined;
+    if (!periodId) {
+      const openPeriod = await getCurrentOpenPeriod(db, organizationId);
+      if (openPeriod) {
+        periodId = openPeriod.id;
+      } else if (periods.length > 0) {
+        periodId = periods[0].id;
+      }
+    }
+
+    const summary = periodId
+      ? await getDashboardSummary(db, organizationId, periodId)
+      : null;
+
+    return { organization: org, allPeriods: periods, summary };
+  }));
+} catch {
+  return Astro.redirect(`/admin/o/${organizationId}/periods`);
+}
+
+const currentIndex = summary
+  ? allPeriods.findIndex((p) => p.id === summary.period.id)
+  : -1;
+const previousPeriod =
+  currentIndex >= 0 && currentIndex < allPeriods.length - 1
+    ? allPeriods[currentIndex + 1]
+    : null;
+const nextPeriod = currentIndex > 0 ? allPeriods[currentIndex - 1] : null;
+
+const CASE_STATUSES = [
+  {
+    key: "MISSING_DATA",
+    label: "Missing data",
+    className: "bg-red-50 text-red-700",
+  },
+  {
+    key: "DRAFT",
+    label: "Draft",
+    className: "bg-neutral-100 text-neutral-600",
+  },
+  {
+    key: "PREPARED",
+    label: "Prepared",
+    className: "bg-blue-50 text-blue-700",
+  },
+  {
+    key: "OVERDUE",
+    label: "Overdue",
+    className: "bg-amber-50 text-amber-700",
+  },
+  {
+    key: "SENT",
+    label: "Sent",
+    className: "bg-indigo-50 text-indigo-700",
+  },
+  {
+    key: "PAID",
+    label: "Paid",
+    className: "bg-green-50 text-green-700",
+  },
+] as const;
+---
+
+<AdminLayout
+  title={`Dashboard - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="space-y-6">
+    {
+      allPeriods.length === 0 || !summary ? (
+        <div class="rounded-xl border border-neutral-200 bg-white p-8 text-center">
+          <p class="text-neutral-500">No billing periods yet.</p>
+          <div class="mt-4">
+            <a
+              href={`/admin/o/${organizationId}/periods`}
+              class="inline-block rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+            >
+              Go to periods
+            </a>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div class="flex items-center justify-between">
+            <h1 class="text-xl font-bold text-neutral-900">
+              Dashboard
+              <span class="ml-2 text-sm font-normal text-neutral-500">
+                ({summary.period.year}-
+                {String(summary.period.month).padStart(2, "0")},{" "}
+                {summary.period.status === "LOCKED" ? "Locked" : "Open"})
+              </span>
+            </h1>
+            <a
+              href={`/admin/o/${organizationId}/periods/${summary.period.id}`}
+              class="text-sm text-neutral-600 hover:underline"
+            >
+              Open workbench →
+            </a>
+          </div>
+
+          <div class="flex items-center gap-4 text-sm">
+            {previousPeriod ? (
+              <a
+                href={`/admin/o/${organizationId}/dashboard?periodId=${previousPeriod.id}`}
+                class="text-neutral-600 hover:underline"
+              >
+                ← Previous period
+              </a>
+            ) : (
+              <span class="text-neutral-300">← Previous period</span>
+            )}
+            {nextPeriod ? (
+              <a
+                href={`/admin/o/${organizationId}/dashboard?periodId=${nextPeriod.id}`}
+                class="text-neutral-600 hover:underline"
+              >
+                Next period →
+              </a>
+            ) : (
+              <span class="text-neutral-300">Next period →</span>
+            )}
+          </div>
+
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <section class="rounded-xl border border-neutral-200 bg-white p-4">
+              <h2 class="text-sm font-bold text-neutral-900">Total invoiced</h2>
+              <p class="mt-2 text-xl font-semibold text-neutral-900">
+                {summary.totalInvoiced} {organization.currency}
+              </p>
+            </section>
+            <section class="rounded-xl border border-neutral-200 bg-white p-4">
+              <h2 class="text-sm font-bold text-neutral-900">Paid</h2>
+              <p class="mt-2 text-xl font-semibold text-neutral-900">
+                {summary.totalPaid} {organization.currency}
+              </p>
+            </section>
+            <section class="rounded-xl border border-neutral-200 bg-white p-4">
+              <h2 class="text-sm font-bold text-neutral-900">Outstanding</h2>
+              <p class="mt-2 text-xl font-semibold text-neutral-900">
+                {summary.totalOutstanding} {organization.currency}
+              </p>
+            </section>
+            <section class="rounded-xl border border-neutral-200 bg-white p-4">
+              <h2 class="text-sm font-bold text-neutral-900">Cold water</h2>
+              <p class="mt-2 text-xl font-semibold text-neutral-900">
+                {summary.coldWaterConsumption} m3
+              </p>
+            </section>
+            <section class="rounded-xl border border-neutral-200 bg-white p-4">
+              <h2 class="text-sm font-bold text-neutral-900">Hot water</h2>
+              <p class="mt-2 text-xl font-semibold text-neutral-900">
+                {summary.hotWaterConsumption} m3
+              </p>
+            </section>
+          </div>
+
+          <section class="space-y-3">
+            <h2 class="text-base font-bold text-neutral-900">Case status</h2>
+            <div class="flex flex-wrap gap-2">
+              {CASE_STATUSES.map((item) => (
+                <span
+                  class={`rounded-full px-3 py-1 text-sm font-medium ${item.className}`}
+                >
+                  {item.label}: {summary.caseStatusCounts[item.key]}
+                </span>
+              ))}
+            </div>
+          </section>
+
+          <section class="space-y-3">
+            <h2 class="text-base font-bold text-neutral-900">
+              Needs attention
+            </h2>
+            {summary.needsAttention.length === 0 ? (
+              <p class="text-sm text-neutral-500">
+                Nothing needs attention right now.
+              </p>
+            ) : (
+              <div class="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                {summary.needsAttention.map((item) => {
+                  const badgeClass =
+                    item.status === "MISSING_DATA"
+                      ? "bg-red-50 text-red-700"
+                      : "bg-amber-50 text-amber-700";
+                  const badgeLabel =
+                    item.status === "MISSING_DATA" ? "Missing data" : "Overdue";
+                  return (
+                    <a
+                      href={`/admin/o/${organizationId}/periods/${summary.period.id}/dwellings/${item.dwellingId}`}
+                      class="flex items-center justify-between px-4 py-3 text-sm hover:bg-neutral-50"
+                    >
+                      <span class="font-medium text-neutral-900">
+                        Dwelling {item.dwellingNumber}
+                      </span>
+                      <span
+                        class={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass}`}
+                      >
+                        {badgeLabel}
+                      </span>
+                    </a>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </>
+      )
+    }
+  </div>
+</AdminLayout>

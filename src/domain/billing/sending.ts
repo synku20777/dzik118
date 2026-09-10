@@ -19,7 +19,7 @@ import {
 } from "../../lib/storage/invoices";
 import { sha256Hex } from "../../lib/hash";
 import { recordAuditEvent } from "../../lib/logging/audit";
-import { ConflictError, NotFoundError } from "../errors";
+import { ConflictError, NotFoundError, toSafeSkipReason } from "../errors";
 import { renderInvoiceHtml } from "./invoice-html";
 import { createInvoiceAccessToken } from "./invoice-tokens";
 import { getInvoice } from "./generation";
@@ -258,6 +258,61 @@ export async function sendInvoice(
       .where(eq(invoices.id, invoiceId));
     throw err;
   }
+}
+
+export interface BulkSendResult {
+  sent: string[];
+  skipped: { invoiceId: string; reason: string }[];
+}
+
+// Spec Section 27: workbench "bulk selection" -- sends whichever
+// admin-selected invoices are eligible (PREPARED and not yet sent), same
+// one-failure-does-not-block-the-rest pattern as bulkGenerateInvoices.
+// Reuses sendInvoice, so a failed provider delivery for one invoice still
+// leaves it PREPARED/retryable rather than aborting the rest of the batch.
+export async function bulkSendInvoices(
+  db: Db,
+  organizationId: string,
+  invoiceIds: string[],
+  deps: SendInvoiceDeps,
+  actorUserId: string
+): Promise<BulkSendResult> {
+  const result: BulkSendResult = { sent: [], skipped: [] };
+  for (const invoiceId of invoiceIds) {
+    try {
+      // sendInvoice is idempotent (a no-op returning the already-sent
+      // invoice) -- checked here first so an already-sent/paid invoice in
+      // the selection is reported as skipped, not double-counted as a
+      // fresh send.
+      const { invoice: before } = await getInvoice(
+        db,
+        organizationId,
+        invoiceId
+      );
+      if (before.sentAt) {
+        result.skipped.push({ invoiceId, reason: "Already sent" });
+        continue;
+      }
+      const sent = await sendInvoice(
+        db,
+        organizationId,
+        invoiceId,
+        deps,
+        actorUserId
+      );
+      if (sent.sentAt) {
+        result.sent.push(invoiceId);
+      } else {
+        result.skipped.push({ invoiceId, reason: "Delivery failed" });
+      }
+    } catch (err) {
+      result.skipped.push({
+        invoiceId,
+        reason: toSafeSkipReason(err),
+      });
+    }
+  }
+  return result;
 }
 
 // Spec Section 23: "explicit resend creates a new delivery attempt" --

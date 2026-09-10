@@ -8,9 +8,16 @@ import {
   requireOrganizationAccess,
 } from "../../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../../domain/organizations/organizations";
-import { getPeriod } from "../../../../../../domain/periods/periods";
+import {
+  getPeriod,
+  listPeriods,
+} from "../../../../../../domain/periods/periods";
 import { listCasesForPeriod } from "../../../../../../domain/periods/cases";
+import { getDashboardSummary } from "../../../../../../domain/periods/dashboard";
+import { billingCaseStatusEnum } from "../../../../../../db/schema/billing";
 import { withRequestDb } from "../../../../../../lib/db-request";
+
+type CaseStatus = (typeof billingCaseStatusEnum.enumValues)[number];
 
 const organizationId = Astro.params.orgId!;
 const periodId = Astro.params.periodId!;
@@ -24,17 +31,41 @@ try {
 const lockResult = Astro.getActionResult(actions.periods.lock);
 const generateResult = Astro.getActionResult(actions.billing.generate);
 const bulkGenerateResult = Astro.getActionResult(actions.billing.bulkGenerate);
+const bulkPrepareResult = Astro.getActionResult(actions.billing.bulkPrepare);
+const bulkSendResult = Astro.getActionResult(actions.invoices.bulkSend);
 
-let organization, period, cases;
+const search = Astro.url.searchParams.get("search") ?? undefined;
+const rawStatus = Astro.url.searchParams.get("status");
+const statusFilter = (
+  billingCaseStatusEnum.enumValues as readonly string[]
+).includes(rawStatus ?? "")
+  ? (rawStatus as CaseStatus)
+  : undefined;
+
+let organization, period, cases, allPeriods, summary;
 try {
-  ({ organization, period, cases } = await withRequestDb(async (db) => ({
-    organization: await getOrganization(db, organizationId),
-    period: await getPeriod(db, organizationId, periodId),
-    cases: await listCasesForPeriod(db, organizationId, periodId),
-  })));
+  ({ organization, period, cases, allPeriods, summary } = await withRequestDb(
+    async (db) => ({
+      organization: await getOrganization(db, organizationId),
+      period: await getPeriod(db, organizationId, periodId),
+      cases: await listCasesForPeriod(db, organizationId, periodId, {
+        search,
+        statusFilter,
+      }),
+      allPeriods: await listPeriods(db, organizationId),
+      summary: await getDashboardSummary(db, organizationId, periodId),
+    })
+  ));
 } catch {
   return Astro.redirect(`/admin/o/${organizationId}/periods`);
 }
+
+const currentIndex = allPeriods.findIndex((p) => p.id === periodId);
+const previousPeriod =
+  currentIndex >= 0 && currentIndex < allPeriods.length - 1
+    ? allPeriods[currentIndex + 1]
+    : null;
+const nextPeriod = currentIndex > 0 ? allPeriods[currentIndex - 1] : null;
 ---
 
 <AdminLayout
@@ -87,6 +118,127 @@ try {
         }
       </div>
     </div>
+
+    <div class="flex items-center gap-4 text-sm">
+      {
+        previousPeriod ? (
+          <a
+            href={`/admin/o/${organizationId}/periods/${previousPeriod.id}`}
+            class="text-neutral-600 hover:underline"
+          >
+            ← Previous period
+          </a>
+        ) : (
+          <span class="text-neutral-300">← Previous period</span>
+        )
+      }
+      {
+        nextPeriod ? (
+          <a
+            href={`/admin/o/${organizationId}/periods/${nextPeriod.id}`}
+            class="text-neutral-600 hover:underline"
+          >
+            Next period →
+          </a>
+        ) : (
+          <span class="text-neutral-300">Next period →</span>
+        )
+      }
+    </div>
+
+    <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <section class="rounded-xl border border-neutral-200 bg-white p-4">
+        <h2 class="text-sm font-bold text-neutral-900">Invoiced</h2>
+        <p class="mt-1 text-lg font-semibold text-neutral-900">
+          {summary.totalInvoiced}
+          {organization.currency}
+        </p>
+      </section>
+      <section class="rounded-xl border border-neutral-200 bg-white p-4">
+        <h2 class="text-sm font-bold text-neutral-900">Paid</h2>
+        <p class="mt-1 text-lg font-semibold text-neutral-900">
+          {summary.totalPaid}
+          {organization.currency}
+        </p>
+      </section>
+      <section class="rounded-xl border border-neutral-200 bg-white p-4">
+        <h2 class="text-sm font-bold text-neutral-900">Outstanding</h2>
+        <p class="mt-1 text-lg font-semibold text-neutral-900">
+          {summary.totalOutstanding}
+          {organization.currency}
+        </p>
+      </section>
+      <section class="rounded-xl border border-neutral-200 bg-white p-4">
+        <h2 class="text-sm font-bold text-neutral-900">Needs attention</h2>
+        <p class="mt-1 text-lg font-semibold text-neutral-900">
+          {summary.needsAttention.length}
+        </p>
+      </section>
+    </div>
+
+    <form method="GET" class="flex flex-wrap items-end gap-3">
+      <div>
+        <label class="block text-sm font-medium text-neutral-700" for="search">
+          Search dwelling
+        </label>
+        <input
+          id="search"
+          name="search"
+          value={search ?? ""}
+          class="mt-1 rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-neutral-700" for="status">
+          Status
+        </label>
+        <select
+          id="status"
+          name="status"
+          class="mt-1 rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+        >
+          <option value="" selected={!statusFilter}>All statuses</option>
+          <option
+            value="MISSING_DATA"
+            selected={statusFilter === "MISSING_DATA"}
+          >
+            Missing data
+          </option>
+          <option value="DRAFT" selected={statusFilter === "DRAFT"}>
+            Draft
+          </option>
+          <option value="PREPARED" selected={statusFilter === "PREPARED"}>
+            Prepared
+          </option>
+          <option value="OVERDUE" selected={statusFilter === "OVERDUE"}>
+            Overdue
+          </option>
+          <option value="SENT" selected={statusFilter === "SENT"}>
+            Sent
+          </option>
+          <option value="PAID" selected={statusFilter === "PAID"}>
+            Paid
+          </option>
+        </select>
+      </div>
+      <button
+        type="submit"
+        class="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
+      >
+        Apply
+      </button>
+      {
+        (search || statusFilter) && (
+          <a
+            href={`/admin/o/${organizationId}/periods/${periodId}`}
+            class="text-sm text-neutral-600 hover:underline"
+          >
+            Clear
+          </a>
+        )
+      }
+    </form>
+
     {
       (lockResult?.error || generateResult?.error) && (
         <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
@@ -115,6 +267,78 @@ try {
         </p>
       )
     }
+    {
+      bulkPrepareResult?.data && (
+        <p class="rounded-md bg-neutral-100 p-3 text-sm text-neutral-700">
+          Prepared {bulkPrepareResult.data.prepared.length} invoice(s).
+          {bulkPrepareResult.data.skipped.length > 0 && (
+            <>
+              {" "}
+              Skipped {bulkPrepareResult.data.skipped.length}:{" "}
+              {bulkPrepareResult.data.skipped.map((s) => s.reason).join("; ")}
+            </>
+          )}
+        </p>
+      )
+    }
+    {
+      bulkPrepareResult?.error && (
+        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+          {bulkPrepareResult.error.message}
+        </p>
+      )
+    }
+    {
+      bulkSendResult?.data && (
+        <p class="rounded-md bg-neutral-100 p-3 text-sm text-neutral-700">
+          Sent {bulkSendResult.data.sent.length} invoice(s).
+          {bulkSendResult.data.skipped.length > 0 && (
+            <>
+              {" "}
+              Skipped {bulkSendResult.data.skipped.length}:{" "}
+              {bulkSendResult.data.skipped.map((s) => s.reason).join("; ")}
+            </>
+          )}
+        </p>
+      )
+    }
+    {
+      bulkSendResult?.error && (
+        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+          {bulkSendResult.error.message}
+        </p>
+      )
+    }
+
+    <!-- Not wrapped around the table: the per-row Generate/Regenerate forms
+    below live inside the table too, and HTML forms cannot nest. Every bulk
+    control instead points at this empty form by id via the `form`
+    attribute, which is valid anywhere in the document. -->
+    <form id="bulk-select-form" method="POST"></form>
+    <div class="mb-4 flex gap-3">
+      <input
+        type="hidden"
+        name="organizationId"
+        value={organizationId}
+        form="bulk-select-form"
+      />
+      <button
+        type="submit"
+        form="bulk-select-form"
+        formaction={actions.billing.bulkPrepare}
+        class="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
+      >
+        Prepare selected
+      </button>
+      <button
+        type="submit"
+        form="bulk-select-form"
+        formaction={actions.invoices.bulkSend}
+        class="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
+      >
+        Send selected
+      </button>
+    </div>
 
     <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
       <table class="w-full text-left text-sm">
@@ -122,6 +346,7 @@ try {
           class="border-b border-neutral-200 bg-neutral-50 text-neutral-600"
         >
           <tr>
+            <th class="w-8 px-4 py-2"></th>
             <th class="px-4 py-2">Dwelling</th>
             <th class="px-4 py-2">Status</th>
             <th class="px-4 py-2">Missing readings</th>
@@ -138,6 +363,16 @@ try {
               }[];
               return (
                 <tr>
+                  <td class="px-4 py-2">
+                    {c.invoiceId && (
+                      <input
+                        type="checkbox"
+                        name="invoiceIds"
+                        value={c.invoiceId}
+                        form="bulk-select-form"
+                      />
+                    )}
+                  </td>
                   <td class="px-4 py-2 font-medium">{c.dwellingNumber}</td>
                   <td class="px-4 py-2">{c.status}</td>
                   <td class="px-4 py-2">
@@ -202,7 +437,7 @@ try {
           {
             cases.length === 0 && (
               <tr>
-                <td colspan="5" class="px-4 py-8 text-center text-neutral-500">
+                <td colspan="6" class="px-4 py-8 text-center text-neutral-500">
                   No billing cases for this period.
                 </td>
               </tr>

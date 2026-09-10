@@ -28,7 +28,12 @@ import {
   sumExact,
 } from "../../lib/decimal2";
 import { recordAuditEvent } from "../../lib/logging/audit";
-import { ConflictError, NotFoundError, ValidationError } from "../errors";
+import {
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+  toSafeSkipReason,
+} from "../errors";
 import { wasMeterActiveDuringPeriod } from "../periods/case-readiness";
 import { getEffectiveRules } from "./rules";
 
@@ -423,7 +428,7 @@ export async function bulkGenerateInvoices(
     } catch (err) {
       result.skipped.push({
         dwellingId: billingCase.dwellingId,
-        reason: err instanceof Error ? err.message : "Unknown error",
+        reason: toSafeSkipReason(err),
       });
     }
   }
@@ -564,6 +569,35 @@ export async function prepareInvoice(
     });
     return prepared;
   });
+}
+
+export interface BulkPrepareResult {
+  prepared: string[];
+  skipped: { invoiceId: string; reason: string }[];
+}
+
+// Spec Section 27: workbench "bulk selection" -- prepares whichever
+// admin-selected invoices are eligible (DRAFT), same
+// one-failure-does-not-block-the-rest pattern as bulkGenerateInvoices.
+export async function bulkPrepareInvoices(
+  db: Db,
+  organizationId: string,
+  invoiceIds: string[],
+  actorUserId: string
+): Promise<BulkPrepareResult> {
+  const result: BulkPrepareResult = { prepared: [], skipped: [] };
+  for (const invoiceId of invoiceIds) {
+    try {
+      await prepareInvoice(db, organizationId, invoiceId, actorUserId);
+      result.prepared.push(invoiceId);
+    } catch (err) {
+      result.skipped.push({
+        invoiceId,
+        reason: toSafeSkipReason(err),
+      });
+    }
+  }
+  return result;
 }
 
 // Spec Section 19: "Manual admin status override is allowed but must

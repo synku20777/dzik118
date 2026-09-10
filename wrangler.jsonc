@@ -7,10 +7,6 @@
 
   // Cloudflare Browser Rendering for invoice PDF generation (spec Section
   // 3.4/3.5/22). Unlike Hyperdrive, this has no localConnectionString-style
-  // passthrough -- verify separately whether `wrangler dev` (no --remote)
-  // actually renders locally or needs a real account.
-  // Cloudflare Browser Rendering for invoice PDF generation (spec Section
-  // 3.4/3.5/22). Unlike Hyperdrive, this has no localConnectionString-style
   // passthrough. Confirmed empirically: merely declaring this binding makes
   // EVERY request to `wrangler dev` hang indefinitely in this sandbox (not
   // just requests that call renderPdf) -- see src/lib/pdf/render.ts for the

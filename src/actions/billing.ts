@@ -8,6 +8,7 @@ import { requireOrganizationAccess } from "../domain/authorization/guards";
 import { archiveRule, createRule, updateRule } from "../domain/billing/rules";
 import {
   bulkGenerateInvoices,
+  bulkPrepareInvoices,
   generateInvoice,
   overrideCaseStatus,
   prepareInvoice,
@@ -151,6 +152,21 @@ export const billing = {
       requireOrganizationAccess(locals.auth, organizationId);
       return withDb((db) =>
         prepareInvoice(db, organizationId, invoiceId, locals.auth!.userId)
+      );
+    }),
+  }),
+
+  // spec Section 27: workbench bulk selection.
+  bulkPrepare: defineAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      invoiceIds: z.array(z.uuid()).min(1),
+    }),
+    handler: safeHandler(async ({ organizationId, invoiceIds }, { locals }) => {
+      requireOrganizationAccess(locals.auth, organizationId);
+      return withDb((db) =>
+        bulkPrepareInvoices(db, organizationId, invoiceIds, locals.auth!.userId)
       );
     }),
   }),
