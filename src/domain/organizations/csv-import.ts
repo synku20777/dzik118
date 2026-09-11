@@ -284,14 +284,6 @@ export async function importDwellingsCsv(
   };
 }
 
-// Protects against spreadsheet formula injection (spec Section 26): any
-// cell whose first character would make Excel/Sheets interpret it as a
-// formula is prefixed with a tab, a common, non-visible mitigation that
-// still round-trips the original text when re-imported.
-function sanitizeForSpreadsheet(value: string): string {
-  return /^[=+\-@]/.test(value) ? `\t${value}` : value;
-}
-
 export async function exportDwellingsCsv(
   db: Db,
   organizationId: string
@@ -320,19 +312,27 @@ export async function exportDwellingsCsv(
   const csvRows = rows.map((d) => {
     const serials = serialsByDwelling.get(d.id) ?? { cold: "", hot: "" };
     return {
-      number: sanitizeForSpreadsheet(d.number),
+      number: d.number,
       type: d.type,
-      display_name: sanitizeForSpreadsheet(d.displayName ?? ""),
-      occupant_name: sanitizeForSpreadsheet(d.occupantName ?? ""),
-      billing_name: sanitizeForSpreadsheet(d.billingName ?? ""),
-      billing_email: sanitizeForSpreadsheet(d.billingEmail ?? ""),
-      billing_address: sanitizeForSpreadsheet(d.billingAddress ?? ""),
+      display_name: d.displayName ?? "",
+      occupant_name: d.occupantName ?? "",
+      billing_name: d.billingName ?? "",
+      billing_email: d.billingEmail ?? "",
+      billing_address: d.billingAddress ?? "",
       area_m2: d.areaM2,
       resident_count: d.residentCount,
-      cold_water_meter_serial: sanitizeForSpreadsheet(serials.cold),
-      hot_water_meter_serial: sanitizeForSpreadsheet(serials.hot),
+      cold_water_meter_serial: serials.cold,
+      hot_water_meter_serial: serials.hot,
     };
   });
 
-  return Papa.unparse(csvRows, { columns: REQUIRED_HEADERS });
+  // Spec Section 26: protect exports against spreadsheet formula injection.
+  // PapaParse's own escapeFormulae prefixes a leading =/+/-/@/tab/CR with an
+  // apostrophe (Excel's own "force text" marker) -- more complete than a
+  // hand-rolled tab prefix, which didn't cover a value already starting
+  // with a tab or carriage return.
+  return Papa.unparse(
+    { fields: REQUIRED_HEADERS, data: csvRows },
+    { escapeFormulae: true }
+  );
 }

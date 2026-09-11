@@ -1,0 +1,152 @@
+---
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { listConversationsForOrganization } from "../../../../../domain/messaging/conversations";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const rawStatus = Astro.url.searchParams.get("status");
+const statusFilter =
+  rawStatus === "NEW" || rawStatus === "OPEN" || rawStatus === "RESOLVED"
+    ? rawStatus
+    : undefined;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const rawDwellingId = Astro.url.searchParams.get("dwellingId");
+const dwellingIdFilter =
+  rawDwellingId && UUID_PATTERN.test(rawDwellingId) ? rawDwellingId : undefined;
+
+const { organization, conversations } = await withRequestDb(async (db) => ({
+  organization: await getOrganization(db, organizationId),
+  conversations: await listConversationsForOrganization(db, organizationId, {
+    status: statusFilter,
+    dwellingId: dwellingIdFilter,
+  }),
+}));
+
+const statusBadgeMap = {
+  NEW: { label: "New", className: "bg-blue-50 text-blue-700" },
+  OPEN: { label: "Open", className: "bg-amber-50 text-amber-700" },
+  RESOLVED: { label: "Resolved", className: "bg-green-50 text-green-700" },
+} as const;
+---
+
+<AdminLayout
+  title={`Messages - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="space-y-6">
+    <h1 class="text-xl font-bold text-neutral-900">Messages</h1>
+
+    <form method="GET" class="flex flex-wrap items-end gap-3">
+      <div>
+        <label class="block text-sm font-medium text-neutral-700" for="status"
+          >Status</label
+        >
+        <select
+          id="status"
+          name="status"
+          class="mt-1 rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+        >
+          <option value="" selected={!statusFilter}>All statuses</option>
+          <option value="NEW" selected={statusFilter === "NEW"}>New</option>
+          <option value="OPEN" selected={statusFilter === "OPEN"}>Open</option>
+          <option value="RESOLVED" selected={statusFilter === "RESOLVED"}
+            >Resolved</option
+          >
+        </select>
+      </div>
+      {
+        dwellingIdFilter && (
+          <input type="hidden" name="dwellingId" value={dwellingIdFilter} />
+        )
+      }
+      <button
+        type="submit"
+        class="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white"
+      >
+        Filter
+      </button>
+    </form>
+
+    {
+      dwellingIdFilter && (
+        <p class="text-sm text-neutral-600">
+          Showing conversations for one dwelling only.{" "}
+          <a
+            href={`/admin/o/${organizationId}/messages`}
+            class="text-neutral-700 underline hover:no-underline"
+          >
+            Clear
+          </a>
+        </p>
+      )
+    }
+
+    <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+      <table class="w-full text-left text-sm">
+        <thead
+          class="border-b border-neutral-200 bg-neutral-50 text-neutral-600"
+        >
+          <tr>
+            <th class="px-4 py-2">Subject</th>
+            <th class="px-4 py-2">Dwelling</th>
+            <th class="px-4 py-2">Status</th>
+            <th class="px-4 py-2">Updated</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-100">
+          {
+            conversations.map((c) => (
+              <tr>
+                <td class="px-4 py-2 font-medium">
+                  <a
+                    href={`/admin/o/${organizationId}/messages/${c.id}`}
+                    class="hover:underline"
+                  >
+                    {c.subject}
+                  </a>
+                </td>
+                <td class="px-4 py-2">
+                  {c.dwellingNumber}
+                  {c.occupantName && (
+                    <span class="text-neutral-500"> · {c.occupantName}</span>
+                  )}
+                </td>
+                <td class="px-4 py-2">
+                  <span
+                    class={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeMap[c.status].className}`}
+                  >
+                    {statusBadgeMap[c.status].label}
+                  </span>
+                </td>
+                <td class="px-4 py-2">{c.updatedAt.toISOString()}</td>
+              </tr>
+            ))
+          }
+          {
+            conversations.length === 0 && (
+              <tr>
+                <td colspan="4" class="px-4 py-8 text-center text-neutral-500">
+                  No conversations match this filter.
+                </td>
+              </tr>
+            )
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</AdminLayout>

@@ -42,6 +42,8 @@ export async function cleanupOrganization(
     "delete from payment_matches where organization_id = $1",
     "delete from bank_transactions where organization_id = $1",
     "delete from bank_imports where organization_id = $1",
+    "delete from messages where organization_id = $1",
+    "delete from conversations where organization_id = $1",
     "delete from invoice_deliveries where organization_id = $1",
     "delete from invoice_access_tokens where organization_id = $1",
     "delete from invoice_lines where organization_id = $1",

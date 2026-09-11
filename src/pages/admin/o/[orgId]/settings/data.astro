@@ -1,8 +1,7 @@
 ---
-// Phase D (Organizations/dwellings) - data import/export index (spec
-// Section 9.2, 27 "Settings: data/import/export"). Dwelling CSV import/
-// export is real (this phase); other data types arrive with the phases
-// that own them.
+// Phase D (Organizations/dwellings) / Phase K (Messaging/data) - data
+// import/export index (spec Section 9.2, 11, 27 "Settings:
+// data/import/export").
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import {
   ForbiddenError,
@@ -43,9 +42,21 @@ try {
         Export dwellings (CSV)
       </a>
     </li>
+    <li>
+      <a
+        href={`/api/v1/admin/o/${organizationId}/readings/export`}
+        class="text-neutral-900 hover:underline"
+      >
+        Export meter readings (CSV)
+      </a>
+    </li>
+    <li>
+      <a
+        href={`/admin/o/${organizationId}/payments/import`}
+        class="text-neutral-900 hover:underline"
+      >
+        Import bank statement (CSV)
+      </a>
+    </li>
   </ul>
-  <p class="mt-6 text-sm text-neutral-500">
-    Bank statement import and reading exports arrive with the phases that own
-    them.
-  </p>
 </AdminLayout>

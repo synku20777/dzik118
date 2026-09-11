@@ -1,0 +1,150 @@
+---
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import { actions } from "astro:actions";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import {
+  getConversationForAdmin,
+  listMessagesForConversation,
+} from "../../../../../domain/messaging/conversations";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const organizationId = Astro.params.orgId!;
+const conversationId = Astro.params.conversationId!;
+
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const replyResult = Astro.getActionResult(actions.messages.reply);
+const resolveResult = Astro.getActionResult(actions.messages.resolve);
+
+// Post-redirect-get after a successful mutation: without this, the POST
+// response itself is what's rendered, so a browser refresh/resubmit of
+// that response would resend the reply/resolve action a second time.
+if (
+  (replyResult && !replyResult.error) ||
+  (resolveResult && !resolveResult.error)
+) {
+  return Astro.redirect(Astro.url.pathname);
+}
+
+let organization: Awaited<ReturnType<typeof getOrganization>>;
+let conversation: Awaited<ReturnType<typeof getConversationForAdmin>>;
+let messagesList: Awaited<ReturnType<typeof listMessagesForConversation>>;
+try {
+  ({ organization, conversation, messagesList } = await withRequestDb(
+    async (db) => ({
+      organization: await getOrganization(db, organizationId),
+      conversation: await getConversationForAdmin(
+        db,
+        organizationId,
+        conversationId
+      ),
+      messagesList: await listMessagesForConversation(db, conversationId),
+    })
+  ));
+} catch {
+  return Astro.redirect(`/admin/o/${organizationId}/messages`);
+}
+
+const statusBadgeMap = {
+  NEW: { label: "New", className: "bg-blue-50 text-blue-700" },
+  OPEN: { label: "Open", className: "bg-amber-50 text-amber-700" },
+  RESOLVED: { label: "Resolved", className: "bg-green-50 text-green-700" },
+} as const;
+---
+
+<AdminLayout
+  title={`${conversation.subject} - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div>
+    <a
+      href={`/admin/o/${organizationId}/messages`}
+      class="text-sm text-neutral-600 hover:underline"
+    >
+      ← Messages
+    </a>
+  </div>
+
+  <div class="mt-4">
+    <div class="flex items-center gap-3">
+      <h1 class="text-xl font-bold text-neutral-900">{conversation.subject}</h1>
+      <span
+        class={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeMap[conversation.status].className}`}
+      >
+        {statusBadgeMap[conversation.status].label}
+      </span>
+    </div>
+    <p class="text-sm text-neutral-500">
+      {conversation.dwellingNumber}{
+        conversation.occupantName ? ` · ${conversation.occupantName}` : ""
+      }
+    </p>
+  </div>
+
+  {
+    (replyResult?.error || resolveResult?.error) && (
+      <p class="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-800">
+        {replyResult?.error?.message ?? resolveResult?.error?.message}
+      </p>
+    )
+  }
+
+  <div class="space-y-3 mt-6">
+    {
+      messagesList.map((message) => (
+        <div class="rounded-xl border border-neutral-200 bg-white p-4">
+          <p class="text-sm text-neutral-900">{message.body}</p>
+          <p class="mt-2 text-xs text-neutral-500">
+            {message.createdAt.toISOString()}
+          </p>
+        </div>
+      ))
+    }
+  </div>
+
+  {
+    conversation.status !== "RESOLVED" ? (
+      <div class="mt-6 space-y-3 rounded-xl border border-neutral-200 bg-white p-4">
+        <form method="POST" action={actions.messages.reply} class="space-y-3">
+          <input type="hidden" name="conversationId" value={conversationId} />
+          <textarea
+            name="body"
+            required
+            rows="3"
+            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          />
+          <button
+            type="submit"
+            class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            Send reply
+          </button>
+        </form>
+        <form method="POST" action={actions.messages.resolve}>
+          <input type="hidden" name="organizationId" value={organizationId} />
+          <input type="hidden" name="conversationId" value={conversationId} />
+          <button
+            type="submit"
+            class="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
+          >
+            Resolve
+          </button>
+        </form>
+      </div>
+    ) : (
+      <p class="mt-6 text-sm text-neutral-500">
+        This conversation is resolved.
+      </p>
+    )
+  }
+</AdminLayout>
