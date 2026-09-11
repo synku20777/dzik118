@@ -100,7 +100,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const { data: aal } =
       await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
     if (aal?.currentLevel !== "aal2") {
-      return respond(redirect("/unauthorized"));
+      // Distinct from the plain role/scope mismatch below: this admin DOES
+      // have permission, they just haven't completed their second factor
+      // yet -- "verify your MFA" is a different, actionable remedy from
+      // "you don't have access", so it gets its own reason code.
+      return respond(redirect("/unauthorized?reason=mfa"));
     }
   }
 

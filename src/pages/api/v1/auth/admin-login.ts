@@ -16,7 +16,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect, url }) => {
   if (env.AUTH_IP_RATE_LIMITER) {
     const { success } = await env.AUTH_IP_RATE_LIMITER.limit({ key: clientIp });
     if (!success) {
-      return redirect("/login?error=1", 303);
+      return redirect("/login?error=4", 303);
     }
   }
 
@@ -45,6 +45,9 @@ export const POST: APIRoute = async ({ request, cookies, redirect, url }) => {
 
     return applyPendingHeaders(redirect("/admin", 303));
   } catch {
-    return redirect("/login?error=1", 303);
+    // A network/Supabase-availability hiccup, not a credential problem --
+    // telling the admin "incorrect email or password" here would send them
+    // chasing the wrong fix.
+    return redirect("/login?error=5", 303);
   }
 };

@@ -20,7 +20,7 @@ export const GET: APIRoute = ({ url, redirect }) => {
   const type = url.searchParams.get("type");
 
   if (!tokenHash || type !== "email" || !TOKEN_HASH_PATTERN.test(tokenHash)) {
-    return redirect("/login?error=1");
+    return redirect("/login?error=3");
   }
 
   const html = `<!doctype html>
@@ -61,7 +61,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect, url }) => {
   if (env.AUTH_IP_RATE_LIMITER) {
     const { success } = await env.AUTH_IP_RATE_LIMITER.limit({ key: clientIp });
     if (!success) {
-      return redirect("/login?error=1");
+      return redirect("/login?error=4");
     }
   }
 
@@ -70,7 +70,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect, url }) => {
   const type = formData.get("type") === "email" ? "email" : null;
 
   if (!tokenHash || !type || !TOKEN_HASH_PATTERN.test(tokenHash)) {
-    return redirect("/login?error=1");
+    return redirect("/login?error=3");
   }
 
   const { supabase, applyPendingHeaders } = createSupabaseServerClient(
@@ -84,7 +84,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect, url }) => {
 
   // Expired/already-used tokens land here too (spec AUTH-002).
   if (error) {
-    return applyPendingHeaders(redirect("/login?error=1"));
+    return applyPendingHeaders(redirect("/login?error=3"));
   }
 
   return applyPendingHeaders(redirect("/portal"));

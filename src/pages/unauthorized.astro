@@ -1,6 +1,12 @@
 ---
 // Phase C (Auth/security) - Access denied (spec Section 9.1).
 import AuthLayout from "../layouts/AuthLayout.astro";
+
+// Set by middleware.ts when an otherwise-permitted admin hasn't completed
+// their second authentication factor yet (spec's AAL2 boundary) -- a
+// different, actionable situation from a plain role/scope mismatch, which
+// has no remedy beyond "you don't have access".
+const needsMfa = Astro.url.searchParams.get("reason") === "mfa";
 ---
 
 <AuthLayout title="Access Denied - Property Billing">
@@ -9,7 +15,11 @@ import AuthLayout from "../layouts/AuthLayout.astro";
   >
     <h1 class="text-xl font-bold text-neutral-900">Access denied</h1>
     <p class="mt-2 text-sm text-neutral-600">
-      You do not have access to this resource.
+      {
+        needsMfa
+          ? "This area requires additional verification. Please complete sign-in with your second factor."
+          : "You do not have access to this resource."
+      }
     </p>
     <a
       href="/login"

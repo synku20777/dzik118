@@ -3,12 +3,26 @@
 import AuthLayout from "../layouts/AuthLayout.astro";
 
 const sent = Astro.url.searchParams.get("sent") === "1";
-const adminError = Astro.url.searchParams.get("error") === "1";
+// Each code maps to a distinct, specific message rather than one generic
+// "sign-in failed" -- each represents a genuinely different remedy (fix
+// your password, request a new link, wait and retry, contact an admin),
+// so collapsing them would leave the visitor guessing.
+const errorCode = Astro.url.searchParams.get("error");
+const adminError = errorCode === "1";
 // Set by middleware.ts: a valid Supabase session with no matching/enabled
 // app_users row (never-provisioned resident, deprovisioned admin, disabled
 // account). Shown regardless of which form the visitor used -- neither the
 // message nor this page distinguishes which check failed.
-const noAccountError = Astro.url.searchParams.get("error") === "2";
+const noAccountError = errorCode === "2";
+// Set by auth/confirm.ts: the magic-link token is missing, malformed,
+// expired, or already used.
+const expiredLinkError = errorCode === "3";
+// Set by admin-login.ts and auth/confirm.ts's IP rate limiter.
+const rateLimitedError = errorCode === "4";
+// Set by admin-login.ts's catch-all: a transient failure (e.g. Supabase
+// unreachable), not a credential problem -- shown separately so it doesn't
+// send the admin chasing a password that was never actually wrong.
+const unexpectedError = errorCode === "5";
 ---
 
 <AuthLayout title="Sign In - Property Billing">
@@ -21,6 +35,13 @@ const noAccountError = Astro.url.searchParams.get("error") === "2";
         </p>
       )
     }
+    {
+      rateLimitedError && (
+        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+          Too many sign-in attempts. Please wait a minute and try again.
+        </p>
+      )
+    }
     <div class="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm">
       <h1 class="text-xl font-bold text-neutral-900">Resident sign in</h1>
       <p class="mt-1 text-sm text-neutral-600">
@@ -30,6 +51,14 @@ const noAccountError = Astro.url.searchParams.get("error") === "2";
         sent && (
           <p class="mt-4 rounded-md bg-green-50 p-3 text-sm text-green-800">
             If that email is registered, a sign-in link is on its way.
+          </p>
+        )
+      }
+      {
+        expiredLinkError && (
+          <p class="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-800">
+            This sign-in link is invalid or has expired. Request a new one
+            below.
           </p>
         )
       }
@@ -69,6 +98,13 @@ const noAccountError = Astro.url.searchParams.get("error") === "2";
         adminError && (
           <p class="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-800">
             Incorrect email or password.
+          </p>
+        )
+      }
+      {
+        unexpectedError && (
+          <p class="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-800">
+            Something went wrong. Please try again.
           </p>
         )
       }
