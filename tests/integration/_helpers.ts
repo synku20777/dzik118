@@ -39,6 +39,9 @@ export async function cleanupOrganization(
   organizationId: string
 ): Promise<void> {
   const statements = [
+    "delete from payment_matches where organization_id = $1",
+    "delete from bank_transactions where organization_id = $1",
+    "delete from bank_imports where organization_id = $1",
     "delete from invoice_deliveries where organization_id = $1",
     "delete from invoice_access_tokens where organization_id = $1",
     "delete from invoice_lines where organization_id = $1",

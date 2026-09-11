@@ -1,0 +1,134 @@
+---
+// Phase J (Payments) - bank import detail.
+import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../../domain/organizations/organizations";
+import {
+  getBankImport,
+  listTransactionsForImport,
+} from "../../../../../../domain/payments/bank-import";
+import { withRequestDb } from "../../../../../../lib/db-request";
+
+const organizationId = Astro.params.orgId!;
+const importId = Astro.params.importId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+let organization: Awaited<ReturnType<typeof getOrganization>>;
+let bankImport: Awaited<ReturnType<typeof getBankImport>>;
+let transactions: Awaited<ReturnType<typeof listTransactionsForImport>>;
+try {
+  ({ organization, bankImport, transactions } = await withRequestDb(
+    async (db) => ({
+      organization: await getOrganization(db, organizationId),
+      bankImport: await getBankImport(db, organizationId, importId),
+      transactions: await listTransactionsForImport(
+        db,
+        organizationId,
+        importId
+      ),
+    })
+  ));
+} catch {
+  return Astro.redirect(`/admin/o/${organizationId}/payments`);
+}
+
+function matchBadge(status: "PROPOSED" | "CONFIRMED" | "REJECTED" | null) {
+  switch (status) {
+    case "PROPOSED":
+      return { label: "Proposed", className: "bg-blue-50 text-blue-700" };
+    case "CONFIRMED":
+      return { label: "Confirmed", className: "bg-green-50 text-green-700" };
+    case "REJECTED":
+      return { label: "Rejected", className: "bg-red-50 text-red-700" };
+    case null:
+    default:
+      return {
+        label: "Unmatched",
+        className: "bg-neutral-100 text-neutral-600",
+      };
+  }
+}
+---
+
+<AdminLayout
+  title={`Import - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="space-y-6">
+    <a
+      href={`/admin/o/${organizationId}/payments`}
+      class="text-sm text-neutral-600 hover:underline"
+    >
+      ← Payments
+    </a>
+
+    <div>
+      <h1 class="text-xl font-bold text-neutral-900">
+        {bankImport.originalFilename}
+      </h1>
+      <p class="text-sm text-neutral-500">
+        Imported {bankImport.importedAt.toISOString()} -- {bankImport.rowCount} row(s)
+      </p>
+    </div>
+
+    <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+      <table class="w-full text-left text-sm">
+        <thead
+          class="border-b border-neutral-200 bg-neutral-50 text-neutral-600"
+        >
+          <tr>
+            <th class="px-4 py-2">Row</th>
+            <th class="px-4 py-2">Booking date</th>
+            <th class="px-4 py-2">Amount</th>
+            <th class="px-4 py-2">Currency</th>
+            <th class="px-4 py-2">Payer</th>
+            <th class="px-4 py-2">Reference</th>
+            <th class="px-4 py-2">Match status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-100">
+          {
+            transactions.map((tx) => {
+              const badge = matchBadge(tx.matchStatus);
+              return (
+                <tr>
+                  <td class="px-4 py-2">{tx.rowNumber}</td>
+                  <td class="px-4 py-2">{tx.bookingDate}</td>
+                  <td class="px-4 py-2">{tx.amount}</td>
+                  <td class="px-4 py-2">{tx.currency}</td>
+                  <td class="px-4 py-2">{tx.payerName ?? "—"}</td>
+                  <td class="px-4 py-2">{tx.reference ?? "—"}</td>
+                  <td class="px-4 py-2">
+                    <span
+                      class={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.className}`}
+                    >
+                      {badge.label}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })
+          }
+          {
+            transactions.length === 0 && (
+              <tr>
+                <td colspan="7" class="px-4 py-8 text-center text-neutral-500">
+                  No transactions in this import.
+                </td>
+              </tr>
+            )
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</AdminLayout>

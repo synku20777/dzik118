@@ -1,0 +1,237 @@
+---
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import {
+  ImportHeaderError,
+  importBankCsv,
+  validateBankCsv,
+  MAX_CSV_BYTES,
+  type BankTransactionRow,
+  type ImportBankCsvResult,
+} from "../../../../../domain/payments/bank-import";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const organization = await withRequestDb((db) =>
+  getOrganization(db, organizationId)
+);
+
+let step: "upload" | "preview" | "result" = "upload";
+let rows: BankTransactionRow[] = [];
+let headerError: string | null = null;
+let isDuplicateFile = false;
+let csvText = "";
+let filename = "";
+let result: ImportBankCsvResult | null = null;
+let confirmError: string | null = null;
+
+if (Astro.request.method === "POST") {
+  const formData = await Astro.request.formData();
+
+  if (formData.get("confirm") === "1") {
+    csvText = String(formData.get("csvText") ?? "");
+    filename = String(formData.get("filename") ?? "");
+    try {
+      const imported = await withRequestDb((db) =>
+        importBankCsv(
+          db,
+          organizationId,
+          filename,
+          csvText,
+          Astro.locals.auth!.userId
+        )
+      );
+      result = imported;
+      step = "result";
+    } catch (err) {
+      confirmError =
+        err instanceof ImportHeaderError
+          ? err.message
+          : "Import failed. Please check your file and try again.";
+      const preview = await withRequestDb((db) =>
+        validateBankCsv(db, organizationId, csvText)
+      );
+      rows = preview.rows;
+      headerError = preview.headerError;
+      isDuplicateFile = preview.isDuplicateFile;
+      step = "preview";
+    }
+  } else {
+    const file = formData.get("file");
+    if (file instanceof File) {
+      filename = file.name;
+      if (file.size > MAX_CSV_BYTES) {
+        headerError = `File is too large (max ${MAX_CSV_BYTES / 1_000_000}MB).`;
+        step = "preview";
+      } else {
+        csvText = await file.text();
+        const preview = await withRequestDb((db) =>
+          validateBankCsv(db, organizationId, csvText)
+        );
+        rows = preview.rows;
+        headerError = preview.headerError;
+        isDuplicateFile = preview.isDuplicateFile;
+        step = "preview";
+      }
+    }
+  }
+}
+---
+
+<AdminLayout
+  title={`Import bank statement - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="space-y-6">
+    <a
+      href={`/admin/o/${organizationId}/payments`}
+      class="text-sm text-neutral-600 hover:underline"
+    >
+      ← Payments
+    </a>
+    <h1 class="text-xl font-bold text-neutral-900">Import bank statement</h1>
+
+    {
+      step === "upload" && (
+        <form
+          method="POST"
+          enctype="multipart/form-data"
+          class="max-w-lg space-y-3 rounded-xl border border-neutral-200 bg-white p-6"
+        >
+          <div>
+            <label
+              class="block text-sm font-medium text-neutral-700"
+              for="file"
+            >
+              Bank statement CSV file
+            </label>
+            <input
+              id="file"
+              name="file"
+              type="file"
+              accept=".csv,text/csv"
+              required
+              class="mt-1 w-full text-sm"
+            />
+          </div>
+          <button
+            type="submit"
+            class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            Preview
+          </button>
+        </form>
+      )
+    }
+
+    {
+      step === "preview" && headerError && (
+        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+          {headerError}
+        </p>
+      )
+    }
+
+    {
+      step === "preview" && !headerError && (
+        <div class="space-y-4">
+          {isDuplicateFile && (
+            <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+              This exact file has already been imported for this organization.
+              Importing it again will be blocked.
+            </p>
+          )}
+          <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+            <table class="w-full text-left text-sm">
+              <thead class="border-b border-neutral-200 bg-neutral-50 text-neutral-600">
+                <tr>
+                  <th class="px-4 py-2">Row</th>
+                  <th class="px-4 py-2">Booking date</th>
+                  <th class="px-4 py-2">Amount</th>
+                  <th class="px-4 py-2">Currency</th>
+                  <th class="px-4 py-2">Status</th>
+                  <th class="px-4 py-2">Reference</th>
+                  <th class="px-4 py-2">Errors</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-neutral-100">
+                {rows.map((row) => (
+                  <tr>
+                    <td class="px-4 py-2">{row.rowNumber}</td>
+                    <td class="px-4 py-2">{row.bookingDate || "—"}</td>
+                    <td class="px-4 py-2">{row.amount || "—"}</td>
+                    <td class="px-4 py-2">{row.currency || "—"}</td>
+                    <td class="px-4 py-2">
+                      <span
+                        class:list={{
+                          "text-green-700": row.status === "OK",
+                          "text-red-700": row.status === "ERROR",
+                        }}
+                      >
+                        {row.status}
+                      </span>
+                    </td>
+                    <td class="px-4 py-2">{row.reference || "—"}</td>
+                    <td class="px-4 py-2 text-red-700">
+                      {row.errors.join("; ")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p class="text-sm text-neutral-600">
+            {rows.filter((r) => r.status === "OK").length} to import,{" "}
+            {rows.filter((r) => r.status === "ERROR").length} with errors
+            (skipped).
+          </p>
+          {confirmError && (
+            <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+              {confirmError}
+            </p>
+          )}
+          <form method="POST">
+            <input type="hidden" name="confirm" value="1" />
+            <input type="hidden" name="filename" value={filename} />
+            <input type="hidden" name="csvText" value={csvText} />
+            <button
+              type="submit"
+              class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+            >
+              Confirm import
+            </button>
+          </form>
+        </div>
+      )
+    }
+
+    {
+      step === "result" && result && (
+        <div class="rounded-xl border border-neutral-200 bg-white p-6">
+          <p class="text-sm text-neutral-900">
+            Imported {result.imported} transaction(s), skipped {result.errored}{" "}
+            row(s) with errors, proposed {result.proposed} exact match(es).
+          </p>
+          <a
+            href={`/admin/o/${organizationId}/payments`}
+            class="mt-4 inline-block rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            Back to payments
+          </a>
+        </div>
+      )
+    }
+  </div>
+</AdminLayout>
