@@ -1,11 +1,12 @@
 // Phase E (Periods/meters/readings) - billing_case read model for the
 // admin period workbench (spec Section 27, route
 // /admin/o/[orgId]/periods/[periodId]).
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import {
   billingCaseStatusEnum,
   billingCases,
+  billingPeriods,
   meterReadings,
 } from "../../db/schema/billing";
 import { dwellings, meters } from "../../db/schema/dwellings";
@@ -120,4 +121,57 @@ export async function listMetersWithReadingForPeriod(
       )
     )
     .orderBy(meters.createdAt);
+}
+
+export interface ConsumptionHistoryEntry {
+  year: number;
+  month: number;
+  coldWaterConsumption: string | null;
+  hotWaterConsumption: string | null;
+}
+
+// Phase I (Resident UX) - consumption history for the resident dwelling
+// dashboard (spec Section 28), one row per period, newest first. Grouped
+// and limited here rather than in the page: a dwelling can have more than
+// one meter of the same type (replacements, extra meters), so limiting the
+// underlying flat rows before grouping could cut an older period's data in
+// half instead of dropping it cleanly.
+export async function listConsumptionHistoryForDwelling(
+  db: Db,
+  dwellingId: string,
+  periodLimit = 6
+): Promise<ConsumptionHistoryEntry[]> {
+  const rows = await db
+    .select({
+      year: billingPeriods.year,
+      month: billingPeriods.month,
+      meterType: meters.type,
+      consumption: meterReadings.consumption,
+    })
+    .from(meterReadings)
+    .innerJoin(meters, eq(meters.id, meterReadings.meterId))
+    .innerJoin(billingPeriods, eq(billingPeriods.id, meterReadings.periodId))
+    .where(eq(meters.dwellingId, dwellingId))
+    .orderBy(desc(billingPeriods.year), desc(billingPeriods.month));
+
+  const byPeriod = new Map<string, ConsumptionHistoryEntry>();
+  for (const row of rows) {
+    const key = `${row.year}-${row.month}`;
+    let entry = byPeriod.get(key);
+    if (!entry) {
+      entry = {
+        year: row.year,
+        month: row.month,
+        coldWaterConsumption: null,
+        hotWaterConsumption: null,
+      };
+      byPeriod.set(key, entry);
+    }
+    if (row.meterType === "COLD_WATER") {
+      entry.coldWaterConsumption = row.consumption;
+    } else if (row.meterType === "HOT_WATER") {
+      entry.hotWaterConsumption = row.consumption;
+    }
+  }
+  return Array.from(byPeriod.values()).slice(0, periodLimit);
 }

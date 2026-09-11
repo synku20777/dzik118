@@ -1,4 +1,8 @@
 ---
+// Phase I (Resident UX, spec Section 28/29) - shared mobile-first shell.
+// Sign-out lives here once instead of duplicated on every resident page;
+// each page still renders its own contextual back link inline, since that
+// target varies per page in a way this shared header can't generalize.
 import "../styles/global.css";
 
 interface Props {
@@ -16,7 +20,21 @@ const { title = "Resident Portal - Property Billing" } = Astro.props;
     <title>{title}</title>
   </head>
   <body class="min-h-screen bg-neutral-50 text-neutral-900 antialiased">
-    <!-- TODO: Phase I (Resident UX) - Resident portal mobile-first layout shell -->
+    <header class="border-b border-neutral-200 bg-white">
+      <div
+        class="mx-auto flex max-w-2xl items-center justify-between px-4 py-3"
+      >
+        <a href="/portal" class="font-bold text-neutral-900">
+          Property Billing
+        </a>
+        <a
+          href="/logout"
+          class="text-sm text-neutral-600 hover:text-neutral-900"
+        >
+          Sign out
+        </a>
+      </div>
+    </header>
     <main>
       <slot />
     </main>

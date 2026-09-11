@@ -2,7 +2,7 @@
 // (spec Section 10, DWL-001/002/003). Callers must call
 // requireOrganizationAccess() before calling any of these -- they take an
 // already-authorized organizationId, per spec Section 14.
-import { and, asc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, isNull, or } from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
 import { appUsers } from "../../db/schema/auth";
 import {
@@ -101,6 +101,18 @@ export async function getDwellingForResident(db: DbOrTx, dwellingId: string) {
     .limit(1);
   if (!dwelling) throw new NotFoundError("Dwelling not found");
   return dwelling;
+}
+
+// Batched form of getDwellingForResident, for pages that already have the
+// resident's full dwellingIds list from auth context (the dwellings
+// selector, the profile page) and would otherwise issue one query per
+// dwelling.
+export async function listDwellingsForResident(
+  db: DbOrTx,
+  dwellingIds: string[]
+) {
+  if (dwellingIds.length === 0) return [];
+  return db.select().from(dwellings).where(inArray(dwellings.id, dwellingIds));
 }
 
 export interface ListDwellingsOptions {

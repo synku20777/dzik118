@@ -39,20 +39,12 @@ const payment = invoice.paymentSnapshot as Record<string, string | null>;
 <ResidentLayout title={invoice.invoiceNumber}>
   <div class="mx-auto max-w-3xl p-6">
     <div class="space-y-6">
-      <div class="flex items-center justify-between">
-        <a
-          href={`/portal/dwellings/${dwellingId}/invoices`}
-          class="text-sm text-neutral-600 hover:underline"
-        >
-          ← Invoices
-        </a>
-        <a
-          href="/logout"
-          class="text-sm text-neutral-600 hover:text-neutral-900 hover:underline"
-        >
-          Sign out
-        </a>
-      </div>
+      <a
+        href={`/portal/dwellings/${dwellingId}/invoices`}
+        class="text-sm text-neutral-600 hover:underline"
+      >
+        ← Invoices
+      </a>
 
       <div class="flex flex-wrap items-center justify-between gap-4">
         <h1 class="text-xl font-bold text-neutral-900">

@@ -490,12 +490,57 @@ export async function getInvoiceForResident(
   return loadInvoiceAndLines(db, invoice);
 }
 
+// caseStatus is included (not just sentAt/paidAt) because those two columns
+// alone can't distinguish OVERDUE from SENT, or PREPARED from DRAFT --
+// billing_cases.status is the source of truth for workflow state (spec
+// Section 19).
 export async function listInvoicesForDwelling(db: Db, dwellingId: string) {
   return db
-    .select()
+    .select({
+      id: invoices.id,
+      invoiceNumber: invoices.invoiceNumber,
+      issueDate: invoices.issueDate,
+      dueDate: invoices.dueDate,
+      total: invoices.total,
+      currency: invoices.currency,
+      sentAt: invoices.sentAt,
+      paidAt: invoices.paidAt,
+      caseStatus: billingCases.status,
+    })
     .from(invoices)
+    .innerJoin(billingCases, eq(billingCases.id, invoices.billingCaseId))
     .where(eq(invoices.dwellingId, dwellingId))
     .orderBy(invoices.issueDate);
+}
+
+// Phase I (Resident UX) - "current invoice" for the resident dwelling
+// dashboard (spec Section 28). Returns null rather than throwing when none
+// exists yet (e.g. the period's case is still DRAFT/MISSING_DATA) -- that's
+// a normal, expected state for the current period, not an error.
+export async function getInvoiceForDwellingPeriod(
+  db: Db,
+  dwellingId: string,
+  periodId: string
+) {
+  const [invoice] = await db
+    .select({
+      id: invoices.id,
+      invoiceNumber: invoices.invoiceNumber,
+      issueDate: invoices.issueDate,
+      dueDate: invoices.dueDate,
+      total: invoices.total,
+      currency: invoices.currency,
+      sentAt: invoices.sentAt,
+      paidAt: invoices.paidAt,
+      caseStatus: billingCases.status,
+    })
+    .from(invoices)
+    .innerJoin(billingCases, eq(billingCases.id, invoices.billingCaseId))
+    .where(
+      and(eq(invoices.dwellingId, dwellingId), eq(invoices.periodId, periodId))
+    )
+    .limit(1);
+  return invoice ?? null;
 }
 
 // INV-004: normal transition only from DRAFT.

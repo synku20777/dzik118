@@ -20,16 +20,26 @@ const dwellings = await withRequestDb((db) =>
 );
 ---
 
-<ResidentLayout title="Your Dwellings - Property Billing">
+<ResidentLayout title="Profile - Property Billing">
   <div class="mx-auto max-w-2xl p-6">
-    <div class="space-y-8">
-      <section>
-        <h1 class="text-xl font-bold text-neutral-900">Your dwellings</h1>
+    <div class="space-y-6">
+      <a href="/portal" class="text-sm text-neutral-600 hover:underline">
+        ← Portal
+      </a>
+
+      <h1 class="text-xl font-bold text-neutral-900">Profile</h1>
+
+      <section class="rounded-xl border border-neutral-200 bg-white p-4">
+        <h2 class="text-sm font-bold text-neutral-900">Account</h2>
+        <p class="mt-2 text-sm text-neutral-700">{auth.email}</p>
+        <p class="mt-1 text-sm text-neutral-500">Resident</p>
+      </section>
+
+      <section class="rounded-xl border border-neutral-200 bg-white p-4">
+        <h2 class="text-sm font-bold text-neutral-900">Dwelling access</h2>
         {
           dwellings.length === 0 ? (
-            <p class="mt-2 text-sm text-neutral-600">
-              You don't have access to any dwellings.
-            </p>
+            <p class="mt-2 text-sm text-neutral-500">No dwellings assigned.</p>
           ) : (
             <ul class="mt-4 divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white">
               {dwellings.map((dwelling) => (

@@ -7,6 +7,7 @@ import {
 import { getDwellingForResident } from "../../../../../domain/organizations/dwellings";
 import { listInvoicesForDwelling } from "../../../../../domain/billing/generation";
 import { withRequestDb } from "../../../../../lib/db-request";
+import { invoiceStatusBadge } from "../../../../../lib/ui/invoice-status";
 
 const dwellingId = Astro.params.dwellingId!;
 try {
@@ -36,20 +37,12 @@ const invoiceList = [...rawInvoices].sort((a, b) =>
 <ResidentLayout title={`Invoices - Dwelling ${dwelling.number}`}>
   <div class="mx-auto max-w-2xl p-6">
     <div class="space-y-6">
-      <div class="flex items-center justify-between">
-        <a
-          href={`/portal/dwellings/${dwellingId}`}
-          class="text-sm text-neutral-600 hover:underline"
-        >
-          ← Dashboard
-        </a>
-        <a
-          href="/logout"
-          class="text-sm text-neutral-600 hover:text-neutral-900 hover:underline"
-        >
-          Sign out
-        </a>
-      </div>
+      <a
+        href={`/portal/dwellings/${dwellingId}`}
+        class="text-sm text-neutral-600 hover:underline"
+      >
+        ← Dashboard
+      </a>
 
       <h1 class="text-xl font-bold text-neutral-900">
         Invoices for dwelling {dwelling.number}
@@ -69,19 +62,11 @@ const invoiceList = [...rawInvoices].sort((a, b) =>
                   <span class="font-medium text-neutral-900">
                     {invoice.invoiceNumber}
                   </span>
-                  {invoice.paidAt ? (
-                    <span class="rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
-                      Paid
-                    </span>
-                  ) : invoice.sentAt ? (
-                    <span class="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
-                      Sent
-                    </span>
-                  ) : (
-                    <span class="rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-medium text-neutral-600">
-                      Pending
-                    </span>
-                  )}
+                  <span
+                    class={`rounded-full px-2.5 py-0.5 text-xs font-medium ${invoiceStatusBadge(invoice.caseStatus).className}`}
+                  >
+                    {invoiceStatusBadge(invoice.caseStatus).label}
+                  </span>
                 </div>
                 <div class="mt-2 flex items-center justify-between text-sm text-neutral-600">
                   <span>Due {invoice.dueDate}</span>
