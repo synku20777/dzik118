@@ -4,6 +4,8 @@ This is a multi-tenant property billing SaaS application. It serves apartment bu
 
 See the full product and engineering specification in [docs/product/ORCA_PROPERTY_BILLING_ASTRO_SPEC.md](docs/product/ORCA_PROPERTY_BILLING_ASTRO_SPEC.md).
 
+To deploy this to a real Cloudflare/Supabase/AWS account, see [docs/deployment/DEPLOYMENT_RUNBOOK.md](docs/deployment/DEPLOYMENT_RUNBOOK.md). Before relying on any part of the system, read [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) for what's incomplete, deferred, or a deliberate trade-off rather than a bug.
+
 ## Technology stack
 
 - **Framework**: [Astro](https://astro.build) (SSR, `output: "server"`)

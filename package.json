@@ -19,7 +19,7 @@
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "deploy": "node -e \"console.error('Error: deploy is implemented in Phase N (Final integration & deployment).'); process.exit(1);\"",
+    "deploy": "npm run build && wrangler deploy",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "vite-node scripts/seed.ts",
     "db:migrate:fresh": "vite-node scripts/db-migrate-fresh.ts",
