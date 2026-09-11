@@ -7,7 +7,7 @@
 // period Y"). Building that input mechanism is real, undefined-by-spec
 // scope on its own; until it exists, those rules are skipped during
 // generation rather than guessed at.
-import { and, eq, like } from "drizzle-orm";
+import { and, eq, inArray, like } from "drizzle-orm";
 import type { Db, Tx } from "../../db/client";
 import {
   billingCases,
@@ -475,7 +475,8 @@ export async function getInvoice(
 // dwelling (requireDwellingAccess ran in the caller), same convention as
 // getDwellingForResident (Phase E). A valid invoice id for a *different*
 // dwelling is rejected as not found, not forbidden, so a resident can't
-// probe which invoice ids exist elsewhere.
+// probe which invoice ids exist elsewhere. Invoices are only visible once
+// issued and dispatched (SENT, PAID, OVERDUE), not in preliminary DRAFT/PREPARED state.
 export async function getInvoiceForResident(
   db: Db,
   invoiceId: string,
@@ -487,13 +488,20 @@ export async function getInvoiceForResident(
     .where(and(eq(invoices.id, invoiceId), eq(invoices.dwellingId, dwellingId)))
     .limit(1);
   if (!invoice) throw new NotFoundError("Invoice not found");
-  return loadInvoiceAndLines(db, invoice);
+  const result = await loadInvoiceAndLines(db, invoice);
+  if (
+    !result.caseStatus ||
+    !["SENT", "PAID", "OVERDUE"].includes(result.caseStatus)
+  ) {
+    throw new NotFoundError("Invoice not found");
+  }
+  return result;
 }
 
 // caseStatus is included (not just sentAt/paidAt) because those two columns
 // alone can't distinguish OVERDUE from SENT, or PREPARED from DRAFT --
 // billing_cases.status is the source of truth for workflow state (spec
-// Section 19).
+// Section 19). Only published invoices (SENT, PAID, OVERDUE) are visible to residents.
 export async function listInvoicesForDwelling(db: Db, dwellingId: string) {
   return db
     .select({
@@ -509,7 +517,12 @@ export async function listInvoicesForDwelling(db: Db, dwellingId: string) {
     })
     .from(invoices)
     .innerJoin(billingCases, eq(billingCases.id, invoices.billingCaseId))
-    .where(eq(invoices.dwellingId, dwellingId))
+    .where(
+      and(
+        eq(invoices.dwellingId, dwellingId),
+        inArray(billingCases.status, ["SENT", "PAID", "OVERDUE"])
+      )
+    )
     .orderBy(invoices.issueDate);
 }
 

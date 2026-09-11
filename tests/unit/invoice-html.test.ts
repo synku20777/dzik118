@@ -59,6 +59,21 @@ describe("renderInvoiceHtml", () => {
     expect(html).not.toContain("<script>");
     expect(html).not.toContain("<img");
     expect(html).toContain("&lt;script&gt;");
+    expect(html).toContain("&quot;&gt;");
+  });
+
+  it("escapes single quotes to prevent attribute breakout", () => {
+    const html = renderInvoiceHtml(
+      makeInvoice({
+        recipientSnapshot: {
+          dwellingNumber: "5",
+          billingName: "O'Connor' onmouseover='alert(1)",
+        },
+      }),
+      []
+    );
+    expect(html).not.toContain("' onmouseover=");
+    expect(html).toContain("O&#39;Connor&#39;");
   });
 
   it("never emits a remote resource reference (no external img/link/script tags)", () => {

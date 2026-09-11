@@ -10,6 +10,7 @@ import {
   invoiceEmailHtml,
   invoiceEmailSubject,
   invoiceEmailText,
+  sanitizeHeader,
   type EmailDeliveryResult,
   type EmailService,
   type SendInvoiceEmailInput,
@@ -76,14 +77,16 @@ export function createSmtpEmailService(config: SmtpConfig): EmailService {
         });
         await readResponse(socket); // 220 greeting
         await sendLine(socket, "EHLO localhost");
-        await sendLine(socket, `MAIL FROM:<${config.fromAddress}>`);
-        await sendLine(socket, `RCPT TO:<${input.to}>`);
+        const safeFrom = sanitizeHeader(config.fromAddress).replace(/[<>]/g, "");
+        const safeTo = sanitizeHeader(input.to).replace(/[<>]/g, "");
+        await sendLine(socket, `MAIL FROM:<${safeFrom}>`);
+        await sendLine(socket, `RCPT TO:<${safeTo}>`);
         await sendLine(socket, "DATA");
 
         const boundary = `part-${crypto.randomUUID()}`;
         const body = [
-          `From: ${config.fromAddress}`,
-          `To: ${input.to}`,
+          `From: ${safeFrom}`,
+          `To: ${safeTo}`,
           `Subject: ${invoiceEmailSubject(input)}`,
           "MIME-Version: 1.0",
           `Content-Type: multipart/alternative; boundary="${boundary}"`,

@@ -336,9 +336,18 @@ describe("SEC-001: cross-tenant UUID access is denied for every listed entity", 
 });
 
 describe("SEC-002: cross-resident UUID access is denied for every listed entity", () => {
-  it("invoice: resident A2 knows resident A1's valid invoice UUID and is denied (spec's canonical high-risk scenario)", async () => {
+  // The canonical high-risk invoice-cross-resident check (spec's own named
+  // scenario) is deliberately NOT here: at this point in the file invoiceA1
+  // is still DRAFT, and generation.ts's getInvoiceForResident now also
+  // hides non-issued (DRAFT/PREPARED) invoices from residents regardless of
+  // dwelling. Asserting NotFoundError here would pass for that reason alone
+  // and never actually exercise the dwelling check -- see the dedicated,
+  // isolated re-check after the "Invoice mutation" describe below, once
+  // invoiceA1 is genuinely SENT and that confound is gone.
+
+  it("draft invoice: resident A1 cannot access an unissued (DRAFT) invoice for their own dwelling", async () => {
     await expect(
-      getInvoiceForResident(db, invoiceA1.id, dwellingA2.id)
+      getInvoiceForResident(db, invoiceA1.id, dwellingA1.id)
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -415,6 +424,12 @@ describe("Invoice mutation: generation cannot be re-run past DRAFT", () => {
     // PDF hash unchanged") covers the deeper snapshot-immutability proof;
     // this test only re-confirms the entry point into that mutation is
     // closed for a SENT case specifically.
+  });
+
+  it("SEC-002 (isolated): now that invoiceA1 is genuinely SENT, resident A2 knows resident A1's valid invoice UUID and is still denied (spec's canonical high-risk scenario)", async () => {
+    await expect(
+      getInvoiceForResident(db, invoiceA1.id, dwellingA2.id)
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 });
 

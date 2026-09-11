@@ -19,18 +19,23 @@ import { runScheduledJobs } from "../../../../domain/automation/scheduler";
 import { renderPdf } from "../../../../lib/pdf/render";
 import { getSupabaseAdmin } from "../../../../actions/_supabase_admin";
 import { getEmailService } from "../../../../actions/_email";
-import { sha256Hex } from "../../../../lib/hash";
 
-// Comparing SHA-256 digests instead of the raw strings avoids leaking
-// early-exit timing on the first differing byte/length of the actual
-// secret -- a fixed-size hash comparison is a much smaller timing side
-// channel than String !== on variable-length input.
-async function secretsMatch(provided: string, expected: string) {
-  const [a, b] = await Promise.all([
-    sha256Hex(new TextEncoder().encode(provided)),
-    sha256Hex(new TextEncoder().encode(expected)),
+// Compares fixed-size SHA-256 digests in constant time using byte-level XOR
+// to eliminate observable timing side channels.
+async function secretsMatch(provided: string, expected: string): Promise<boolean> {
+  if (!provided || !expected) return false;
+  const enc = new TextEncoder();
+  const [digestA, digestB] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(provided)),
+    crypto.subtle.digest("SHA-256", enc.encode(expected)),
   ]);
-  return a === b;
+  const a = new Uint8Array(digestA);
+  const b = new Uint8Array(digestB);
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a[i] ^ b[i];
+  }
+  return mismatch === 0;
 }
 
 export const POST: APIRoute = async ({ request }) => {

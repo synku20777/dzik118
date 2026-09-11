@@ -149,15 +149,33 @@ export async function validateBankCsv(
       errors.push("currency must be a 3-letter code");
     }
 
+    const externalTransactionId = cell(raw, "external_transaction_id");
+    const payerName = cell(raw, "payer_name");
+    const payerAccount = cell(raw, "payer_account");
+    const reference = cell(raw, "reference");
+
+    if (externalTransactionId.length > 100) {
+      errors.push("external_transaction_id exceeds 100 characters");
+    }
+    if (payerName.length > 200) {
+      errors.push("payer_name exceeds 200 characters");
+    }
+    if (payerAccount.length > 50) {
+      errors.push("payer_account exceeds 50 characters");
+    }
+    if (reference.length > 500) {
+      errors.push("reference exceeds 500 characters");
+    }
+
     return {
       rowNumber: index + 1,
-      externalTransactionId: cell(raw, "external_transaction_id"),
+      externalTransactionId,
       bookingDate,
       amount,
       currency,
-      payerName: cell(raw, "payer_name"),
-      payerAccount: cell(raw, "payer_account"),
-      reference: cell(raw, "reference"),
+      payerName,
+      payerAccount,
+      reference,
       rawData: raw,
       status: errors.length > 0 ? "ERROR" : "OK",
       errors,

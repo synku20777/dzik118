@@ -30,7 +30,10 @@ export async function checkPublicInvoiceTokenRequest(
   if (!rawToken) {
     return new Response("Not found", { status: 404 });
   }
-  const clientIp = request.headers.get("cf-connecting-ip") ?? "unknown";
+  const clientIp =
+    request.headers.get("cf-connecting-ip") ??
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "127.0.0.1";
   // Spec Section 33: "auth/public token rate limiting".
   const { success } = await env.INVOICE_TOKEN_RATE_LIMITER.limit({
     key: clientIp,

@@ -37,6 +37,10 @@ let result: ImportBankCsvResult | null = null;
 let confirmError: string | null = null;
 
 if (Astro.request.method === "POST") {
+  const origin = Astro.request.headers.get("origin");
+  if (origin && origin !== Astro.url.origin) {
+    return new Response("Cross-site submission forbidden", { status: 403 });
+  }
   const formData = await Astro.request.formData();
 
   if (formData.get("confirm") === "1") {

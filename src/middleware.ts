@@ -9,8 +9,33 @@ import { createDb } from "./db/client";
 import { loadAuthContext } from "./domain/authorization/context";
 import { createSupabaseServerClient } from "./lib/supabase/server";
 
+function applySecurityHeaders<T extends Response>(
+  response: T,
+  isHttps: boolean
+): T {
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.headers.set(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=()"
+  );
+  response.headers.set(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://*.supabase.co; frame-ancestors 'none';"
+  );
+  if (isHttps) {
+    response.headers.set(
+      "Strict-Transport-Security",
+      "max-age=31536000; includeSubDomains; preload"
+    );
+  }
+  return response;
+}
+
 export const onRequest = defineMiddleware(async (context, next) => {
   const { request, cookies, locals, redirect, url } = context;
+  const isHttps = url.protocol === "https:";
 
   locals.auth = null;
 
@@ -18,6 +43,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
     request,
     cookies
   );
+
+  const respond = <T extends Response>(res: T): T =>
+    applySecurityHeaders(applyPendingHeaders(res), isHttps);
   // getUser() revalidates the JWT against Supabase, unlike getSession()
   // which trusts the cookie's claims -- required since this decides identity.
   const {
@@ -44,15 +72,13 @@ export const onRequest = defineMiddleware(async (context, next) => {
       // if left unsurfaced -- the sign-in appears to just silently do
       // nothing. Distinguish it with an explicit, safe (no PII, no role
       // hint) query param rather than bouncing to a blank /login.
-      return applyPendingHeaders(
-        redirect(user ? "/login?error=2" : "/login")
-      );
+      return respond(redirect(user ? "/login?error=2" : "/login"));
     }
     if (isAdminPath && locals.auth.role !== "ADMIN") {
-      return applyPendingHeaders(redirect("/unauthorized"));
+      return respond(redirect("/unauthorized"));
     }
     if (isResidentPath && locals.auth.role !== "RESIDENT") {
-      return applyPendingHeaders(redirect("/unauthorized"));
+      return respond(redirect("/unauthorized"));
     }
   }
 
@@ -74,7 +100,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     const { data: aal } =
       await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
     if (aal?.currentLevel !== "aal2") {
-      return applyPendingHeaders(redirect("/unauthorized"));
+      return respond(redirect("/unauthorized"));
     }
   }
 
@@ -84,5 +110,5 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // protected paths). Public paths remain reachable, matching Section 15.3's
   // instruction to reject disabled users only where it matters.
 
-  return applyPendingHeaders(await next());
+  return respond(await next());
 });

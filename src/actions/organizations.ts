@@ -54,7 +54,15 @@ export const organizations = {
       currency: z.string().length(3).optional(),
       timezone: z.string().max(100).optional(),
       locale: z.string().max(10).optional(),
-      invoicePrefix: z.string().min(1).max(20).optional(),
+      invoicePrefix: z
+        .string()
+        .min(1)
+        .max(20)
+        .regex(
+          /^[A-Za-z0-9_-]+$/,
+          "Must contain only letters, numbers, hyphens, and underscores"
+        )
+        .optional(),
       defaultDueDays: z.number().int().min(0).max(120).optional(),
       autoGenerateEnabled: z.boolean().optional(),
       autoSendEnabled: z.boolean().optional(),

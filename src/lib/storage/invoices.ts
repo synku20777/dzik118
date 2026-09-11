@@ -63,11 +63,14 @@ export async function invoicePdfResponse(
     });
   }
   const pdf = await downloadInvoicePdf(supabaseAdmin, invoice.pdfObjectKey);
+  const safeFilename = encodeURIComponent(
+    invoice.invoiceNumber.replace(/[\r\n"]/g, "")
+  );
   return new Response(pdf, {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${invoice.invoiceNumber}.pdf"`,
+      "Content-Disposition": `inline; filename="${safeFilename}.pdf"; filename*=UTF-8''${safeFilename}.pdf`,
       ...options.extraHeaders,
     },
   });

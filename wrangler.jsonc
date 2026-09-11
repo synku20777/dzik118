@@ -45,6 +45,11 @@
       "namespace_id": "1001",
       "simple": { "limit": 5, "period": 60 },
     },
+    {
+      "name": "AUTH_IP_RATE_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 20, "period": 60 },
+    },
     // Spec Section 33: "auth/public token rate limiting" -- the public,
     // unauthenticated /invoice/access/[token] routes need the same
     // protection as the auth magic-link endpoint, keyed by client IP.

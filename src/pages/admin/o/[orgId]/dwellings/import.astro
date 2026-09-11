@@ -46,6 +46,10 @@ let result: { created: number; updated: number; errored: number } | null = null;
 let confirmError: string | null = null;
 
 if (Astro.request.method === "POST") {
+  const origin = Astro.request.headers.get("origin");
+  if (origin && origin !== Astro.url.origin) {
+    return new Response("Cross-site submission forbidden", { status: 403 });
+  }
   const formData = await Astro.request.formData();
   mode = formData.get("mode") === "update" ? "update" : "create";
 

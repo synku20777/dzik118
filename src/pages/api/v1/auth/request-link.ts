@@ -28,8 +28,12 @@ export const POST: APIRoute = async ({ request, redirect }) => {
       .toLowerCase();
 
     if (EMAIL_PATTERN.test(email)) {
-      const { success } = await env.AUTH_RATE_LIMITER.limit({ key: email });
-      if (success) {
+      const clientIp = request.headers.get("cf-connecting-ip") ?? "unknown";
+      const ipLimit = env.AUTH_IP_RATE_LIMITER
+        ? await env.AUTH_IP_RATE_LIMITER.limit({ key: clientIp })
+        : { success: true };
+      const emailLimit = await env.AUTH_RATE_LIMITER.limit({ key: email });
+      if (ipLimit.success && emailLimit.success) {
         await withRequestDb(async (db) => {
           const [existing] = await db
             .select({ role: appUsers.role })

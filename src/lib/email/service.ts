@@ -35,9 +35,16 @@ export interface EmailService {
 // (production SES, local-dev SMTP) never drift into showing different
 // content for the same input (spec Section 23's required fields: org,
 // period, invoice number, total, due date, "View invoice", "Open
-// resident portal"; "No attachment by default in v1").
+export function sanitizeHeader(value: string): string {
+  return String(value ?? "")
+    .replace(/[\r\n]+/g, " ")
+    .trim();
+}
+
 export function invoiceEmailSubject(input: SendInvoiceEmailInput): string {
-  return `${input.organizationName}: invoice ${input.invoiceNumber} for ${input.periodLabel}`;
+  return sanitizeHeader(
+    `${input.organizationName}: invoice ${input.invoiceNumber} for ${input.periodLabel}`
+  );
 }
 
 export function invoiceEmailHtml(input: SendInvoiceEmailInput): string {

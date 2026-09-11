@@ -17,14 +17,31 @@ export function createSupabaseServerClient(
     // Cookies must never be sent over plain HTTP once deployed (spec
     // Section 33). Derived from the actual request scheme, not build mode,
     // so local http:// dev/preview still works.
-    cookieOptions: { secure: isHttps },
+    cookieOptions: {
+      secure: isHttps,
+      sameSite: "lax",
+      path: "/",
+    },
     cookies: {
       getAll() {
         return parseCookieHeader(request.headers.get("Cookie") ?? "");
       },
       setAll(cookiesToSet, headers) {
         for (const { name, value, options } of cookiesToSet) {
-          cookies.set(name, value, options);
+          // @supabase/ssr's own DEFAULT_COOKIE_OPTIONS hardcodes
+          // httpOnly: false (it assumes a browser client may also need to
+          // read the cookie) and is already merged into `options` by the
+          // time it reaches here -- placing our own choices before
+          // `...options` would spread right over them, silently reverting
+          // to that library default. Placing them after, like `secure`
+          // already was, is what actually makes them win.
+          cookies.set(name, value, {
+            ...options,
+            httpOnly: true,
+            sameSite: "lax",
+            path: "/",
+            secure: isHttps,
+          });
         }
         // Responses that set auth cookies must never be cached by a CDN
         // (Cloudflare in front of this Worker) or one user's session could

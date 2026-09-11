@@ -4,6 +4,7 @@
 // an admin's email in the first place, but this also rejects any OTP type
 // other than the one we ever issue, as defense in depth.
 import type { APIRoute } from "astro";
+import { env } from "cloudflare:workers";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
 import { escapeHtml } from "../../lib/html-escape";
 
@@ -50,7 +51,20 @@ export const GET: APIRoute = ({ url, redirect }) => {
   });
 };
 
-export const POST: APIRoute = async ({ request, cookies, redirect }) => {
+export const POST: APIRoute = async ({ request, cookies, redirect, url }) => {
+  const origin = request.headers.get("origin");
+  if (origin && origin !== url.origin) {
+    return new Response("Cross-site submission forbidden", { status: 403 });
+  }
+
+  const clientIp = request.headers.get("cf-connecting-ip") ?? "unknown";
+  if (env.AUTH_IP_RATE_LIMITER) {
+    const { success } = await env.AUTH_IP_RATE_LIMITER.limit({ key: clientIp });
+    if (!success) {
+      return redirect("/login?error=1");
+    }
+  }
+
   const formData = await request.formData();
   const tokenHash = String(formData.get("token_hash") ?? "");
   const type = formData.get("type") === "email" ? "email" : null;

@@ -27,12 +27,14 @@ const { title = "Resident Portal - Property Billing" } = Astro.props;
         <a href="/portal" class="font-bold text-neutral-900">
           Property Billing
         </a>
-        <a
-          href="/logout"
-          class="text-sm text-neutral-600 hover:text-neutral-900"
-        >
-          Sign out
-        </a>
+        <form method="POST" action="/logout" class="inline">
+          <button
+            type="submit"
+            class="text-sm text-neutral-600 hover:text-neutral-900 bg-transparent border-none p-0 cursor-pointer"
+          >
+            Sign out
+          </button>
+        </form>
       </div>
     </header>
     <main>
