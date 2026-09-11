@@ -24,7 +24,10 @@ import {
   createDwelling,
   getDwelling,
 } from "../../src/domain/organizations/dwellings";
-import { createMeter, archiveMeter } from "../../src/domain/organizations/meters";
+import {
+  createMeter,
+  archiveMeter,
+} from "../../src/domain/organizations/meters";
 import { createPeriod, getPeriod } from "../../src/domain/periods/periods";
 import { createRule } from "../../src/domain/billing/rules";
 import {
@@ -274,9 +277,9 @@ afterAll(async () => {
 
 describe("SEC-001: cross-tenant UUID access is denied for every listed entity", () => {
   it("dwelling: org B cannot read org A's dwelling by known UUID", async () => {
-    await expect(getDwelling(db, orgB.id, dwellingA1.id)).rejects.toBeInstanceOf(
-      NotFoundError
-    );
+    await expect(
+      getDwelling(db, orgB.id, dwellingA1.id)
+    ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it("period: org B cannot read org A's period by known UUID", async () => {
@@ -324,9 +327,9 @@ describe("SEC-001: cross-tenant UUID access is denied for every listed entity", 
   });
 
   it("invoice: org B cannot read org A's invoice by known UUID", async () => {
-    await expect(
-      getInvoice(db, orgB.id, invoiceA1.id)
-    ).rejects.toBeInstanceOf(NotFoundError);
+    await expect(getInvoice(db, orgB.id, invoiceA1.id)).rejects.toBeInstanceOf(
+      NotFoundError
+    );
   });
 
   // Bank import and conversation cross-tenant isolation already have

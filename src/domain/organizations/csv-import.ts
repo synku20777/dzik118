@@ -138,12 +138,18 @@ export async function validateDwellingsCsv(
     const hotWaterMeterSerial = cell(raw, "hot_water_meter_serial");
 
     if (number.length > 50) errors.push("number exceeds 50 characters");
-    if (displayName.length > 200) errors.push("display_name exceeds 200 characters");
-    if (occupantName.length > 200) errors.push("occupant_name exceeds 200 characters");
-    if (billingName.length > 200) errors.push("billing_name exceeds 200 characters");
-    if (billingAddress.length > 300) errors.push("billing_address exceeds 300 characters");
-    if (coldWaterMeterSerial.length > 100) errors.push("cold_water_meter_serial exceeds 100 characters");
-    if (hotWaterMeterSerial.length > 100) errors.push("hot_water_meter_serial exceeds 100 characters");
+    if (displayName.length > 200)
+      errors.push("display_name exceeds 200 characters");
+    if (occupantName.length > 200)
+      errors.push("occupant_name exceeds 200 characters");
+    if (billingName.length > 200)
+      errors.push("billing_name exceeds 200 characters");
+    if (billingAddress.length > 300)
+      errors.push("billing_address exceeds 300 characters");
+    if (coldWaterMeterSerial.length > 100)
+      errors.push("cold_water_meter_serial exceeds 100 characters");
+    if (hotWaterMeterSerial.length > 100)
+      errors.push("hot_water_meter_serial exceeds 100 characters");
 
     const numberExists = number ? existingNumbers.has(number) : false;
     let status: DwellingImportRowStatus;

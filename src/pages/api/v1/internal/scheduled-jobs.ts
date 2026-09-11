@@ -22,7 +22,10 @@ import { getEmailService } from "../../../../actions/_email";
 
 // Compares fixed-size SHA-256 digests in constant time using byte-level XOR
 // to eliminate observable timing side channels.
-async function secretsMatch(provided: string, expected: string): Promise<boolean> {
+async function secretsMatch(
+  provided: string,
+  expected: string
+): Promise<boolean> {
   if (!provided || !expected) return false;
   const enc = new TextEncoder();
   const [digestA, digestB] = await Promise.all([

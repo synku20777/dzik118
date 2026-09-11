@@ -77,7 +77,10 @@ export function createSmtpEmailService(config: SmtpConfig): EmailService {
         });
         await readResponse(socket); // 220 greeting
         await sendLine(socket, "EHLO localhost");
-        const safeFrom = sanitizeHeader(config.fromAddress).replace(/[<>]/g, "");
+        const safeFrom = sanitizeHeader(config.fromAddress).replace(
+          /[<>]/g,
+          ""
+        );
         const safeTo = sanitizeHeader(input.to).replace(/[<>]/g, "");
         await sendLine(socket, `MAIL FROM:<${safeFrom}>`);
         await sendLine(socket, `RCPT TO:<${safeTo}>`);

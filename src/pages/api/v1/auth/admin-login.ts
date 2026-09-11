@@ -22,7 +22,9 @@ export const POST: APIRoute = async ({ request, cookies, redirect, url }) => {
 
   try {
     const formData = await request.formData();
-    const email = String(formData.get("email") ?? "").trim().toLowerCase();
+    const email = String(formData.get("email") ?? "")
+      .trim()
+      .toLowerCase();
     const password = String(formData.get("password") ?? "");
 
     if (!email || !password) {
