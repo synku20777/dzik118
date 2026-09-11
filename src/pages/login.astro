@@ -4,10 +4,23 @@ import AuthLayout from "../layouts/AuthLayout.astro";
 
 const sent = Astro.url.searchParams.get("sent") === "1";
 const adminError = Astro.url.searchParams.get("error") === "1";
+// Set by middleware.ts: a valid Supabase session with no matching/enabled
+// app_users row (never-provisioned resident, deprovisioned admin, disabled
+// account). Shown regardless of which form the visitor used -- neither the
+// message nor this page distinguishes which check failed.
+const noAccountError = Astro.url.searchParams.get("error") === "2";
 ---
 
 <AuthLayout title="Sign In - Property Billing">
   <div class="w-full max-w-md space-y-6">
+    {
+      noAccountError && (
+        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+          We couldn't find an account for that sign-in. If you believe this
+          is a mistake, contact your administrator.
+        </p>
+      )
+    }
     <div class="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm">
       <h1 class="text-xl font-bold text-neutral-900">Resident sign in</h1>
       <p class="mt-1 text-sm text-neutral-600">

@@ -38,7 +38,15 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   if (isAdminPath || isResidentPath) {
     if (!locals.auth) {
-      return applyPendingHeaders(redirect("/login"));
+      // A valid Supabase session with no matching/enabled app_users row (a
+      // resident never provisioned, an admin removed elsewhere, or a
+      // disabled account) looks identical to a plain unauthenticated visit
+      // if left unsurfaced -- the sign-in appears to just silently do
+      // nothing. Distinguish it with an explicit, safe (no PII, no role
+      // hint) query param rather than bouncing to a blank /login.
+      return applyPendingHeaders(
+        redirect(user ? "/login?error=2" : "/login")
+      );
     }
     if (isAdminPath && locals.auth.role !== "ADMIN") {
       return applyPendingHeaders(redirect("/unauthorized"));
