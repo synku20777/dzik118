@@ -8,12 +8,16 @@
 // comment). Everything downstream of "here are some PDF bytes" -- hashing,
 // storage, tokens, email, state transitions, immutability -- is exercised
 // for real.
-import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, type Db } from "../../src/db/client";
-import { appUsers } from "../../src/db/schema/auth";
+import type { Db } from "../../src/db/client";
 import { invoices } from "../../src/db/schema/invoices";
+import {
+  cleanupOrganization,
+  createIntegrationDb,
+  deleteTestAdmin,
+  seedTestAdmin,
+} from "./_helpers";
 import {
   createOrganization,
   updateOrganization,
@@ -44,17 +48,16 @@ import { createSupabaseAdminClient } from "../../src/lib/supabase/admin";
 import type { EmailService } from "../../src/lib/email/service";
 import { createSmtpEmailService } from "../../src/lib/email/smtp";
 
-const connectionString = process.env.DATABASE_URL;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
-if (!connectionString || !supabaseUrl || !supabaseSecretKey) {
+if (!supabaseUrl || !supabaseSecretKey) {
   throw new Error(
-    "DATABASE_URL, SUPABASE_URL and SUPABASE_SECRET_KEY are required for integration tests"
+    "SUPABASE_URL and SUPABASE_SECRET_KEY are required for integration tests"
   );
 }
 
 let db: Db;
-const seedAdminId = randomUUID();
+let seedAdminId: string;
 const supabaseAdmin = createSupabaseAdminClient(supabaseUrl, supabaseSecretKey);
 const TOKEN_SECRET = "it-test-token-secret";
 
@@ -77,60 +80,17 @@ function stubDeps(overrides: Partial<SendInvoiceDeps> = {}): SendInvoiceDeps {
 }
 
 beforeAll(async () => {
-  db = await createDb(connectionString!);
-  await db.insert(appUsers).values({
-    id: seedAdminId,
-    role: "ADMIN",
-    emailSnapshot: "it-g-admin@example.com",
-  });
+  db = await createIntegrationDb();
+  seedAdminId = await seedTestAdmin(db, "it-g-admin@example.com");
 });
 
 afterAll(async () => {
-  await db.$client.query("delete from app_users where id = $1", [seedAdminId]);
+  await deleteTestAdmin(db, seedAdminId);
   await db.$client.end();
 });
 
-async function cleanupOrg(organizationId: string) {
-  await db.$client.query(
-    "delete from invoice_access_tokens where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query(
-    "delete from invoice_deliveries where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query(
-    "delete from invoice_lines where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query("delete from invoices where organization_id = $1", [
-    organizationId,
-  ]);
-  await db.$client.query(
-    "delete from billing_cases where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query(
-    "delete from billing_periods where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query(
-    "delete from billing_rules where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query("delete from dwellings where organization_id = $1", [
-    organizationId,
-  ]);
-  await db.$client.query(
-    "delete from organization_memberships where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query("delete from audit_logs where organization_id = $1", [
-    organizationId,
-  ]);
-  await db.$client.query("delete from organizations where id = $1", [
-    organizationId,
-  ]);
+function cleanupOrg(organizationId: string) {
+  return cleanupOrganization(db, organizationId);
 }
 
 async function setupPreparedInvoice(name: string, month: number) {

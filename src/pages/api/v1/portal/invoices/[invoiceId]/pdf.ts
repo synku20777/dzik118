@@ -3,7 +3,7 @@
 import type { APIRoute } from "astro";
 import { getInvoiceForResident } from "../../../../../../domain/billing/generation";
 import { requireDwellingAccess } from "../../../../../../domain/authorization/guards";
-import { downloadInvoicePdf } from "../../../../../../lib/storage/invoices";
+import { invoicePdfResponse } from "../../../../../../lib/storage/invoices";
 import { toApiErrorResponse } from "../../../../../../lib/http/api-error";
 import { withRequestDb } from "../../../../../../lib/db-request";
 import { getSupabaseAdmin } from "../../../../../../actions/_supabase_admin";
@@ -30,20 +30,7 @@ export const GET: APIRoute = async ({ params, locals, url }) => {
       );
       return invoice;
     });
-    if (!invoice.pdfObjectKey) {
-      return new Response("PDF not generated yet", { status: 404 });
-    }
-    const pdf = await downloadInvoicePdf(
-      getSupabaseAdmin(),
-      invoice.pdfObjectKey
-    );
-    return new Response(pdf, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${invoice.invoiceNumber}.pdf"`,
-      },
-    });
+    return await invoicePdfResponse(getSupabaseAdmin(), invoice);
   } catch (err) {
     return toApiErrorResponse(err);
   }

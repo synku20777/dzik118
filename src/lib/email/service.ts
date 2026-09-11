@@ -3,6 +3,8 @@
 // via its configured SMTP directly -- app code never calls this for
 // those. This is only for invoice delivery (and any future
 // app-originated email).
+import { escapeHtml } from "../html-escape";
+
 export interface SendInvoiceEmailInput {
   to: string;
   organizationName: string;
@@ -27,14 +29,6 @@ export interface EmailDeliveryResult {
 
 export interface EmailService {
   sendInvoice(input: SendInvoiceEmailInput): Promise<EmailDeliveryResult>;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 // Shared by every EmailService implementation so the two send paths

@@ -12,17 +12,10 @@
 // Rendering never fetches anything user-influenced while producing the
 // canonical PDF.
 import type { invoiceLines, invoices } from "../../db/schema/invoices";
+import { escapeHtml } from "../../lib/html-escape";
 
 type Invoice = typeof invoices.$inferSelect;
 type InvoiceLine = typeof invoiceLines.$inferSelect;
-
-function escapeHtml(value: unknown): string {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 interface IssuerSnapshot {
   name?: string;

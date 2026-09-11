@@ -5,9 +5,14 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, type Db } from "../../src/db/client";
-import { appUsers } from "../../src/db/schema/auth";
+import type { Db } from "../../src/db/client";
 import { organizationMemberships } from "../../src/db/schema/organizations";
+import {
+  cleanupOrganization,
+  createIntegrationDb,
+  deleteTestAdmin,
+  seedTestAdmin,
+} from "./_helpers";
 import { createSupabaseAdminClient } from "../../src/lib/supabase/admin";
 import {
   ConflictError,
@@ -31,30 +36,25 @@ import {
   validateDwellingsCsv,
 } from "../../src/domain/organizations/csv-import";
 
-const connectionString = process.env.DATABASE_URL;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
-if (!connectionString || !supabaseUrl || !supabaseSecretKey) {
+if (!supabaseUrl || !supabaseSecretKey) {
   throw new Error(
-    "DATABASE_URL, SUPABASE_URL and SUPABASE_SECRET_KEY are required for integration tests"
+    "SUPABASE_URL and SUPABASE_SECRET_KEY are required for integration tests"
   );
 }
 
 let db: Db;
+let seedAdminId: string;
 const supabaseAdmin = createSupabaseAdminClient(supabaseUrl, supabaseSecretKey);
-const seedAdminId = randomUUID();
 
 beforeAll(async () => {
-  db = await createDb(connectionString!);
-  await db.insert(appUsers).values({
-    id: seedAdminId,
-    role: "ADMIN",
-    emailSnapshot: "it-d-admin@example.com",
-  });
+  db = await createIntegrationDb();
+  seedAdminId = await seedTestAdmin(db, "it-d-admin@example.com");
 });
 
 afterAll(async () => {
-  await db.$client.query("delete from app_users where id = $1", [seedAdminId]);
+  await deleteTestAdmin(db, seedAdminId);
   await db.$client.end();
 });
 
@@ -304,25 +304,6 @@ describe("DWL-004: CSV import", () => {
   });
 });
 
-async function cleanupOrg(organizationId: string) {
-  await db.$client.query(
-    "delete from dwelling_access where dwelling_id in (select id from dwellings where organization_id = $1)",
-    [organizationId]
-  );
-  await db.$client.query("delete from meters where organization_id = $1", [
-    organizationId,
-  ]);
-  await db.$client.query("delete from audit_logs where organization_id = $1", [
-    organizationId,
-  ]);
-  await db.$client.query("delete from dwellings where organization_id = $1", [
-    organizationId,
-  ]);
-  await db.$client.query(
-    "delete from organization_memberships where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query("delete from organizations where id = $1", [
-    organizationId,
-  ]);
+function cleanupOrg(organizationId: string) {
+  return cleanupOrganization(db, organizationId);
 }

@@ -1,11 +1,16 @@
 // Phase F (Billing) - domain-layer integration tests (spec BIL-001..005,
 // INV-001/002/004). Requires a real Postgres reachable via DATABASE_URL.
-import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../../src/db/client";
-import { appUsers } from "../../src/db/schema/auth";
 import { invoices } from "../../src/db/schema/invoices";
+import {
+  cleanupOrganization,
+  createIntegrationDb,
+  deleteTestAdmin,
+  requireDatabaseUrl,
+  seedTestAdmin,
+} from "./_helpers";
 import { createOrganization } from "../../src/domain/organizations/organizations";
 import {
   createDwelling,
@@ -28,68 +33,21 @@ import {
   prepareInvoice,
 } from "../../src/domain/billing/generation";
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error("DATABASE_URL is required for integration tests");
-}
-
 let db: Db;
-const seedAdminId = randomUUID();
+let seedAdminId: string;
 
 beforeAll(async () => {
-  db = await createDb(connectionString!);
-  await db.insert(appUsers).values({
-    id: seedAdminId,
-    role: "ADMIN",
-    emailSnapshot: "it-f-admin@example.com",
-  });
+  db = await createIntegrationDb();
+  seedAdminId = await seedTestAdmin(db, "it-f-admin@example.com");
 });
 
 afterAll(async () => {
-  await db.$client.query("delete from app_users where id = $1", [seedAdminId]);
+  await deleteTestAdmin(db, seedAdminId);
   await db.$client.end();
 });
 
-async function cleanupOrg(organizationId: string) {
-  await db.$client.query(
-    "delete from invoice_lines where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query("delete from invoices where organization_id = $1", [
-    organizationId,
-  ]);
-  await db.$client.query(
-    "delete from meter_readings where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query(
-    "delete from billing_cases where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query(
-    "delete from billing_periods where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query(
-    "delete from billing_rules where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query("delete from meters where organization_id = $1", [
-    organizationId,
-  ]);
-  await db.$client.query("delete from audit_logs where organization_id = $1", [
-    organizationId,
-  ]);
-  await db.$client.query("delete from dwellings where organization_id = $1", [
-    organizationId,
-  ]);
-  await db.$client.query(
-    "delete from organization_memberships where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query("delete from organizations where id = $1", [
-    organizationId,
-  ]);
+function cleanupOrg(organizationId: string) {
+  return cleanupOrganization(db, organizationId);
 }
 
 async function setupOrgAndPeriod(name: string, month: number) {
@@ -668,8 +626,8 @@ describe("invoice generation", () => {
       seedAdminId
     );
 
-    const dbA = await createDb(connectionString!);
-    const dbB = await createDb(connectionString!);
+    const dbA = await createDb(requireDatabaseUrl());
+    const dbB = await createDb(requireDatabaseUrl());
     const [r1, r2] = await Promise.all([
       generateInvoice(dbA, org.id, period.id, dwelling.id, seedAdminId),
       generateInvoice(dbB, org.id, period.id, dwelling2.id, seedAdminId),

@@ -1,10 +1,14 @@
 // Phase I (Resident UX) - domain-layer integration tests for the resident
 // dashboard's new read helpers (spec Section 28). Requires a real Postgres
 // reachable via DATABASE_URL.
-import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, type Db } from "../../src/db/client";
-import { appUsers } from "../../src/db/schema/auth";
+import type { Db } from "../../src/db/client";
+import {
+  cleanupOrganization,
+  createIntegrationDb,
+  deleteTestAdmin,
+  seedTestAdmin,
+} from "./_helpers";
 import { createOrganization } from "../../src/domain/organizations/organizations";
 import {
   createDwelling,
@@ -20,68 +24,21 @@ import {
   getInvoiceForDwellingPeriod,
 } from "../../src/domain/billing/generation";
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error("DATABASE_URL is required for integration tests");
-}
-
 let db: Db;
-const seedAdminId = randomUUID();
+let seedAdminId: string;
 
 beforeAll(async () => {
-  db = await createDb(connectionString!);
-  await db.insert(appUsers).values({
-    id: seedAdminId,
-    role: "ADMIN",
-    emailSnapshot: "it-i-admin@example.com",
-  });
+  db = await createIntegrationDb();
+  seedAdminId = await seedTestAdmin(db, "it-i-admin@example.com");
 });
 
 afterAll(async () => {
-  await db.$client.query("delete from app_users where id = $1", [seedAdminId]);
+  await deleteTestAdmin(db, seedAdminId);
   await db.$client.end();
 });
 
-async function cleanupOrg(organizationId: string) {
-  await db.$client.query(
-    "delete from invoice_lines where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query("delete from invoices where organization_id = $1", [
-    organizationId,
-  ]);
-  await db.$client.query(
-    "delete from meter_readings where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query(
-    "delete from billing_cases where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query(
-    "delete from billing_periods where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query(
-    "delete from billing_rules where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query("delete from meters where organization_id = $1", [
-    organizationId,
-  ]);
-  await db.$client.query("delete from dwellings where organization_id = $1", [
-    organizationId,
-  ]);
-  await db.$client.query(
-    "delete from organization_memberships where organization_id = $1",
-    [organizationId]
-  );
-  await db.$client.query("delete from audit_logs where organization_id = $1", [
-    organizationId,
-  ]);
-  await db.$client.query("delete from organizations where id = $1", [
-    organizationId,
-  ]);
+function cleanupOrg(organizationId: string) {
+  return cleanupOrganization(db, organizationId);
 }
 
 describe("resident dashboard read helpers", () => {

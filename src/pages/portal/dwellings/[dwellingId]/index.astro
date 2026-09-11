@@ -35,37 +35,35 @@ try {
   return Astro.redirect("/portal/dwellings");
 }
 
-const period = await withRequestDb((db) =>
-  getCurrentOpenPeriod(db, dwelling.organizationId)
-);
-
-const meters = period
-  ? await withRequestDb((db) =>
-      listMetersWithReadingForPeriod(
-        db,
-        dwelling.organizationId,
-        dwellingId,
-        period.id
-      )
-    )
-  : [];
-
-const currentInvoice = period
-  ? await withRequestDb((db) =>
-      getInvoiceForDwellingPeriod(db, dwellingId, period.id)
-    )
-  : null;
+const { period, meters, currentInvoice, groupedHistory, recentInvoices } =
+  await withRequestDb(async (db) => {
+    const period = await getCurrentOpenPeriod(db, dwelling.organizationId);
+    const meters = period
+      ? await listMetersWithReadingForPeriod(
+          db,
+          dwelling.organizationId,
+          dwellingId,
+          period.id
+        )
+      : [];
+    const currentInvoice = period
+      ? await getInvoiceForDwellingPeriod(db, dwellingId, period.id)
+      : null;
+    const groupedHistory = await listConsumptionHistoryForDwelling(
+      db,
+      dwellingId
+    );
+    const allInvoices = await listInvoicesForDwelling(db, dwellingId);
+    return {
+      period,
+      meters,
+      currentInvoice,
+      groupedHistory,
+      recentInvoices: [...allInvoices].reverse().slice(0, 3),
+    };
+  });
 
 const submitResult = Astro.getActionResult(actions.readings.residentSubmit);
-
-const groupedHistory = await withRequestDb((db) =>
-  listConsumptionHistoryForDwelling(db, dwellingId)
-);
-
-const allInvoices = await withRequestDb((db) =>
-  listInvoicesForDwelling(db, dwellingId)
-);
-const recentInvoices = [...allInvoices].reverse().slice(0, 3);
 ---
 
 <ResidentLayout title={`Dwelling ${dwelling.number} - Property Billing`}>

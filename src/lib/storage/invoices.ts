@@ -45,3 +45,30 @@ export async function downloadInvoicePdf(
   if (error || !data) throw error ?? new Error("PDF not found in storage");
   return data;
 }
+
+// Shared by every route that serves an invoice's canonical PDF (admin,
+// resident, and the public token-access download) -- each only differs in
+// how it authorizes and resolves the invoice beforehand.
+export async function invoicePdfResponse(
+  supabaseAdmin: SupabaseAdmin,
+  invoice: { pdfObjectKey: string | null; invoiceNumber: string },
+  options: {
+    notReadyMessage?: string;
+    extraHeaders?: Record<string, string>;
+  } = {}
+): Promise<Response> {
+  if (!invoice.pdfObjectKey) {
+    return new Response(options.notReadyMessage ?? "PDF not generated yet", {
+      status: 404,
+    });
+  }
+  const pdf = await downloadInvoicePdf(supabaseAdmin, invoice.pdfObjectKey);
+  return new Response(pdf, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="${invoice.invoiceNumber}.pdf"`,
+      ...options.extraHeaders,
+    },
+  });
+}

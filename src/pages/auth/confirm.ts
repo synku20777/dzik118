@@ -5,16 +5,9 @@
 // other than the one we ever issue, as defense in depth.
 import type { APIRoute } from "astro";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
+import { escapeHtml } from "../../lib/html-escape";
 
 const TOKEN_HASH_PATTERN = /^[A-Za-z0-9_-]+$/;
-
-function escapeHtmlAttribute(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
 
 // GET renders a confirmation page instead of verifying immediately. Email
 // security scanners routinely prefetch links in inboxes, which would
@@ -41,7 +34,7 @@ export const GET: APIRoute = ({ url, redirect }) => {
       <h1 style="margin: 0 0 0.5rem;">Confirm sign-in</h1>
       <p style="color: #555;">Click below to finish signing in.</p>
       <form method="POST">
-        <input type="hidden" name="token_hash" value="${escapeHtmlAttribute(tokenHash)}" />
+        <input type="hidden" name="token_hash" value="${escapeHtml(tokenHash)}" />
         <input type="hidden" name="type" value="email" />
         <button type="submit" style="width: 100%; padding: 0.5rem 1rem; background: #171717; color: white; border: none; border-radius: 0.375rem; font-size: 0.875rem; cursor: pointer;">
           Confirm sign-in
