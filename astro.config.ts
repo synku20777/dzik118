@@ -79,6 +79,22 @@ export default defineConfig({
         access: "secret",
         default: "dev-only-insecure-default-change-in-production",
       }),
+      // Phase L (Automation/audit, spec Section 32). Shared secret the
+      // scheduled-jobs entry point (src/pages/api/v1/internal/
+      // scheduled-jobs.ts) requires on every request, since it's a normal
+      // publicly-routable API endpoint otherwise -- without this, anyone
+      // could POST to it and trigger invoice generation/sending for every
+      // organization. The `scheduled` Worker export (dist/server/
+      // scheduled-entry.mjs, written by scripts/postbuild-wire-scheduled.mjs)
+      // is the only intended caller. Deliberately NO dev-fallback default
+      // (unlike INVOICE_TOKEN_SECRET above): this secret alone gates an
+      // org-wide, financially-consequential automated action, so a missing
+      // Cloudflare secret binding must fail the build/boot, not silently
+      // fall back to a value visible in this file.
+      INTERNAL_CRON_SECRET: envField.string({
+        context: "server",
+        access: "secret",
+      }),
     },
   },
 });

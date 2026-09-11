@@ -33,7 +33,7 @@ export async function createInvoiceAccessToken(
   invoiceId: string,
   tokenSecret: string,
   expiresAt: Date | null,
-  actorUserId: string
+  actorUserId: string | null
 ): Promise<string> {
   const rawToken = randomToken();
   const tokenHash = await hmacSha256Hex(tokenSecret, rawToken);

@@ -16,6 +16,15 @@
     "binding": "BROWSER",
   },
 
+  // Phase L (Automation/audit, spec Section 32): billing-overdue-scan,
+  // auto-invoice-generate, auto-invoice-send all run from one daily tick.
+  // 02:15 UTC keeps it well clear of any organization's local midnight
+  // rollover (spec: "cron runs in UTC; organization billing decisions use
+  // organizations.timezone").
+  "triggers": {
+    "crons": ["15 2 * * *"],
+  },
+
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",

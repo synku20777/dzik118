@@ -1,0 +1,171 @@
+---
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import {
+  listAuditLogs,
+  listDistinctAuditActions,
+} from "../../../../../domain/audit/audit-log";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const actionFilter = Astro.url.searchParams.get("action") || undefined;
+const entityTypeFilter = Astro.url.searchParams.get("entityType") || undefined;
+const rawPage = Number(Astro.url.searchParams.get("page") ?? "1");
+// Number.isFinite rejects Infinity/NaN from a malformed ?page= value before
+// it can reach the SQL offset below.
+const page = Number.isFinite(rawPage) ? Math.max(1, Math.floor(rawPage)) : 1;
+const pageSize = 50;
+
+const { organization, logs, availableActions } = await withRequestDb(
+  async (db) => ({
+    organization: await getOrganization(db, organizationId),
+    logs: await listAuditLogs(db, organizationId, {
+      action: actionFilter,
+      entityType: entityTypeFilter,
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+    }),
+    availableActions: await listDistinctAuditActions(db, organizationId),
+  })
+);
+---
+
+<AdminLayout
+  title={`Audit log - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="space-y-6">
+    <h1 class="text-xl font-bold text-neutral-900">Audit log</h1>
+
+    <form method="GET" class="flex flex-wrap items-end gap-3">
+      <div>
+        <label class="block text-sm font-medium text-neutral-700" for="action"
+          >Action</label
+        >
+        <select
+          id="action"
+          name="action"
+          class="mt-1 rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+        >
+          <option value="" selected={!actionFilter}>All actions</option>
+          {
+            availableActions.map((action) => (
+              <option value={action} selected={action === actionFilter}>
+                {action}
+              </option>
+            ))
+          }
+        </select>
+      </div>
+      <div>
+        <label
+          class="block text-sm font-medium text-neutral-700"
+          for="entityType">Entity type</label
+        >
+        <input
+          id="entityType"
+          name="entityType"
+          value={entityTypeFilter ?? ""}
+          placeholder="invoice, conversation, ..."
+          class="mt-1 rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+        />
+      </div>
+      <button
+        type="submit"
+        class="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white"
+      >
+        Filter
+      </button>
+    </form>
+
+    <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+      <table class="w-full text-left text-sm">
+        <thead
+          class="border-b border-neutral-200 bg-neutral-50 text-neutral-600"
+        >
+          <tr>
+            <th class="px-4 py-2">Time</th>
+            <th class="px-4 py-2">Actor</th>
+            <th class="px-4 py-2">Action</th>
+            <th class="px-4 py-2">Entity</th>
+            <th class="px-4 py-2">Details</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-neutral-100">
+          {
+            logs.map((log) => (
+              <tr>
+                <td class="px-4 py-2">{log.createdAt.toISOString()}</td>
+                <td class="px-4 py-2">
+                  {log.actorDisplayName ?? log.actorEmail ?? "—"}
+                </td>
+                <td class="px-4 py-2">{log.action}</td>
+                <td class="px-4 py-2">
+                  {log.entityType}
+                  {log.entityId ? ` (${log.entityId})` : ""}
+                </td>
+                <td class="px-4 py-2">
+                  {log.beforeData != null || log.afterData != null ? (
+                    <details>
+                      <summary class="cursor-pointer text-neutral-600 hover:underline">
+                        View
+                      </summary>
+                      <pre class="mt-2 max-w-md overflow-x-auto rounded bg-neutral-50 p-2 text-xs">
+                        {JSON.stringify(
+                          { before: log.beforeData, after: log.afterData },
+                          null,
+                          2
+                        )}
+                      </pre>
+                    </details>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              </tr>
+            ))
+          }
+          {
+            logs.length === 0 && (
+              <tr>
+                <td colspan="5" class="px-4 py-8 text-center text-neutral-500">
+                  No audit events match this filter.
+                </td>
+              </tr>
+            )
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flex justify-between text-sm text-neutral-600">
+      <a
+        href={`?action=${encodeURIComponent(actionFilter ?? "")}&entityType=${encodeURIComponent(entityTypeFilter ?? "")}&page=${Math.max(1, page - 1)}`}
+        class:list={{ "pointer-events-none opacity-40": page <= 1 }}
+      >
+        ← Previous
+      </a>
+      <span>Page {page}</span>
+      <a
+        href={`?action=${encodeURIComponent(actionFilter ?? "")}&entityType=${encodeURIComponent(entityTypeFilter ?? "")}&page=${page + 1}`}
+        class:list={{
+          "pointer-events-none opacity-40": logs.length < pageSize,
+        }}
+      >
+        Next →
+      </a>
+    </div>
+  </div>
+</AdminLayout>

@@ -94,7 +94,7 @@ async function deliver(
   organizationId: string,
   invoiceId: string,
   deps: SendInvoiceDeps,
-  actorUserId: string
+  actorUserId: string | null
 ): Promise<{ success: boolean }> {
   const { invoice } = await getInvoice(db, organizationId, invoiceId);
   const [period] = await db
@@ -172,7 +172,7 @@ export async function sendInvoice(
   organizationId: string,
   invoiceId: string,
   deps: SendInvoiceDeps,
-  actorUserId: string
+  actorUserId: string | null
 ) {
   const { invoice } = await getInvoice(db, organizationId, invoiceId);
   if (invoice.sentAt) {
@@ -275,7 +275,7 @@ export async function bulkSendInvoices(
   organizationId: string,
   invoiceIds: string[],
   deps: SendInvoiceDeps,
-  actorUserId: string
+  actorUserId: string | null
 ): Promise<BulkSendResult> {
   const result: BulkSendResult = { sent: [], skipped: [] };
   for (const invoiceId of invoiceIds) {

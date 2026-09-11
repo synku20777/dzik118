@@ -11,6 +11,7 @@
     "cf-typegen": "wrangler types",
     "dev": "astro dev",
     "build": "astro build",
+    "postbuild": "node scripts/postbuild-wire-scheduled.mjs",
     "preview": "astro preview",
     "astro:check": "astro check",
     "typecheck": "tsc --noEmit",

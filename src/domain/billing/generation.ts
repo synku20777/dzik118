@@ -128,7 +128,7 @@ export async function generateInvoice(
   organizationId: string,
   periodId: string,
   dwellingId: string,
-  actorUserId: string
+  actorUserId: string | null
 ) {
   return db.transaction(async (tx) => {
     // FOR UPDATE: serializes invoice-number sequencing per organization
@@ -385,7 +385,7 @@ export async function bulkGenerateInvoices(
   db: Db,
   organizationId: string,
   periodId: string,
-  actorUserId: string
+  actorUserId: string | null
 ): Promise<BulkGenerateResult> {
   const cases = await db
     .select()
@@ -548,7 +548,7 @@ export async function prepareInvoice(
   db: Db,
   organizationId: string,
   invoiceId: string,
-  actorUserId: string
+  actorUserId: string | null
 ) {
   return db.transaction(async (tx) => {
     const [invoice] = await tx
@@ -628,7 +628,7 @@ export async function bulkPrepareInvoices(
   db: Db,
   organizationId: string,
   invoiceIds: string[],
-  actorUserId: string
+  actorUserId: string | null
 ): Promise<BulkPrepareResult> {
   const result: BulkPrepareResult = { prepared: [], skipped: [] };
   for (const invoiceId of invoiceIds) {

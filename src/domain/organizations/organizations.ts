@@ -10,14 +10,14 @@ import {
   organizationMemberships,
   organizations,
 } from "../../db/schema/organizations";
-import { ConflictError, NotFoundError } from "../errors";
+import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import {
   findOrCreateSupabaseUser,
   type createSupabaseAdminClient,
 } from "../../lib/supabase/admin";
 
-export { ConflictError, NotFoundError };
+export { ConflictError, NotFoundError, ValidationError };
 
 type SupabaseAdmin = ReturnType<typeof createSupabaseAdminClient>;
 
@@ -102,14 +102,42 @@ export interface UpdateOrganizationInput {
 // ORG-002: this only ever updates the live organization row. Sent invoices
 // snapshot issuer/org data at generation time (spec Section 21) and are
 // never re-read from this table, so they're structurally unaffected.
+// Confirmed valid IANA zone the same way it will actually be used (spec
+// Section 32's per-organization Intl.DateTimeFormat call in the scheduler)
+// rather than trusting free text -- an invalid zone saved here would
+// otherwise silently fail every scheduled job for this organization
+// forever, with no admin-visible error at all.
+function isValidTimezone(timezone: string): boolean {
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function updateOrganization(
   db: Db,
   organizationId: string,
   input: UpdateOrganizationInput,
   actorUserId: string
 ) {
+  if (input.timezone !== undefined && !isValidTimezone(input.timezone)) {
+    throw new ValidationError(`"${input.timezone}" is not a valid timezone`);
+  }
+
   return db.transaction(async (tx) => {
     const before = await getOrganization(tx, organizationId);
+
+    const autoSendEnabled = input.autoSendEnabled ?? before.autoSendEnabled;
+    const autoSendDay =
+      input.autoSendDay !== undefined ? input.autoSendDay : before.autoSendDay;
+    if (autoSendEnabled && autoSendDay === null) {
+      throw new ValidationError(
+        "Auto-send day is required when auto-send is enabled"
+      );
+    }
+
     const [after] = await tx
       .update(organizations)
       .set({ ...input, updatedAt: new Date() })

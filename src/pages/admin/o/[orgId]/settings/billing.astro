@@ -1,10 +1,13 @@
 ---
-// TODO: Phase F (Billing) - billing automation settings
+// Phase F (Billing) - billing automation settings (spec Section 9.2, 27).
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import { actions } from "astro:actions";
 import {
   ForbiddenError,
   requireOrganizationAccess,
 } from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { withRequestDb } from "../../../../../lib/db-request";
 
 const organizationId = Astro.params.orgId!;
 try {
@@ -13,16 +16,146 @@ try {
   if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
   throw err;
 }
+
+const updateResult = Astro.getActionResult(actions.organizations.update);
+const organization = await withRequestDb((db) =>
+  getOrganization(db, organizationId)
+);
 ---
 
-<AdminLayout title="Billing settings" organizationId={organizationId}>
-  <a
-    href={`/admin/o/${organizationId}/settings`}
-    class="text-sm text-neutral-600 hover:underline"
-  >
-    ← Settings
-  </a>
-  <p class="mt-4 text-sm text-neutral-600">
-    Billing automation settings arrive in Phase F.
-  </p>
+<AdminLayout
+  title={`Billing settings - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="max-w-2xl space-y-6">
+    <a
+      href={`/admin/o/${organizationId}/settings`}
+      class="text-sm text-neutral-600 hover:underline"
+    >
+      ← Settings
+    </a>
+    <h1 class="text-xl font-bold text-neutral-900">Billing</h1>
+    {
+      updateResult?.error && (
+        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+          {updateResult.error.message}
+        </p>
+      )
+    }
+    <form
+      method="POST"
+      action={actions.organizations.update}
+      class="grid grid-cols-2 gap-4 rounded-xl border border-neutral-200 bg-white p-6"
+    >
+      <input type="hidden" name="organizationId" value={organizationId} />
+      <div>
+        <label class="block text-sm font-medium text-neutral-700" for="currency"
+          >Currency</label
+        >
+        <input
+          id="currency"
+          name="currency"
+          value={organization.currency}
+          maxlength="3"
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-neutral-700" for="timezone"
+          >Timezone</label
+        >
+        <input
+          id="timezone"
+          name="timezone"
+          value={organization.timezone}
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-neutral-700" for="locale"
+          >Locale</label
+        >
+        <input
+          id="locale"
+          name="locale"
+          value={organization.locale}
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label
+          class="block text-sm font-medium text-neutral-700"
+          for="invoicePrefix">Invoice number prefix</label
+        >
+        <input
+          id="invoicePrefix"
+          name="invoicePrefix"
+          value={organization.invoicePrefix}
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label
+          class="block text-sm font-medium text-neutral-700"
+          for="defaultDueDays">Default due days</label
+        >
+        <input
+          id="defaultDueDays"
+          name="defaultDueDays"
+          type="number"
+          min="0"
+          max="120"
+          value={organization.defaultDueDays}
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div class="col-span-2">
+        <label class="flex items-center gap-2 pb-2 text-sm text-neutral-700">
+          <input
+            type="checkbox"
+            name="autoGenerateEnabled"
+            checked={organization.autoGenerateEnabled}
+          />
+          Automatically generate invoices each period
+        </label>
+      </div>
+      <div class="col-span-2">
+        <label class="flex items-center gap-2 pb-2 text-sm text-neutral-700">
+          <input
+            type="checkbox"
+            name="autoSendEnabled"
+            checked={organization.autoSendEnabled}
+          />
+          Automatically send prepared invoices
+        </label>
+      </div>
+      <div>
+        <label
+          class="block text-sm font-medium text-neutral-700"
+          for="autoSendDay">Auto-send day of month (1-28)</label
+        >
+        <input
+          id="autoSendDay"
+          name="autoSendDay"
+          type="number"
+          min="1"
+          max="28"
+          value={organization.autoSendDay ?? ""}
+          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+        />
+        <p class="mt-1 text-xs text-neutral-500">
+          Only applies when auto-send is enabled above.
+        </p>
+      </div>
+      <div class="col-span-2">
+        <button
+          type="submit"
+          class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+        >
+          Save
+        </button>
+      </div>
+    </form>
+  </div>
 </AdminLayout>

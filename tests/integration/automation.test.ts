@@ -1,0 +1,406 @@
+// Phase L (Automation/audit) - domain-layer integration tests (spec
+// Section 32). Requires a real Postgres and a real local Supabase
+// Storage/SMTP stack reachable via the env vars below (same setup as
+// invoice-delivery.test.ts, since autoSendForOrganization reuses
+// bulkSendInvoices/sendInvoice for real).
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { Db } from "../../src/db/client";
+import {
+  cleanupOrganization,
+  createIntegrationDb,
+  deleteTestAdmin,
+  seedTestAdmin,
+} from "./_helpers";
+import {
+  ValidationError,
+  createOrganization,
+  updateOrganization,
+} from "../../src/domain/organizations/organizations";
+import { createDwelling } from "../../src/domain/organizations/dwellings";
+import { createPeriod, lockPeriod } from "../../src/domain/periods/periods";
+import { createRule } from "../../src/domain/billing/rules";
+import {
+  generateInvoice,
+  getInvoice,
+  prepareInvoice,
+} from "../../src/domain/billing/generation";
+import {
+  sendInvoice,
+  type SendInvoiceDeps,
+} from "../../src/domain/billing/sending";
+import { createSupabaseAdminClient } from "../../src/lib/supabase/admin";
+import type { EmailService } from "../../src/lib/email/service";
+import {
+  autoGenerateForOrganization,
+  autoSendForOrganization,
+  runScheduledJobs,
+  scanOverdueInvoices,
+} from "../../src/domain/automation/scheduler";
+import { listAuditLogs } from "../../src/domain/audit/audit-log";
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
+if (!supabaseUrl || !supabaseSecretKey) {
+  throw new Error(
+    "SUPABASE_URL and SUPABASE_SECRET_KEY are required for integration tests"
+  );
+}
+
+let db: Db;
+let seedAdminId: string;
+const supabaseAdmin = createSupabaseAdminClient(supabaseUrl, supabaseSecretKey);
+
+function stubDeps(): SendInvoiceDeps {
+  const email: EmailService = {
+    sendInvoice: async () => ({
+      success: true,
+      provider: "smtp" as const,
+      providerMessageId: "stub",
+    }),
+  };
+  return {
+    renderPdf: async () => new TextEncoder().encode("%PDF-1.4 stub"),
+    supabaseAdmin,
+    emailService: email,
+    tokenSecret: "it-l-token-secret",
+    appBaseUrl: "https://billing.example.test",
+  };
+}
+
+beforeAll(async () => {
+  db = await createIntegrationDb();
+  seedAdminId = await seedTestAdmin(db, "it-l-admin@example.com");
+});
+
+afterAll(async () => {
+  await deleteTestAdmin(db, seedAdminId);
+  await db.$client.end();
+});
+
+function cleanupOrg(organizationId: string) {
+  return cleanupOrganization(db, organizationId);
+}
+
+async function setupBillableOrg(name: string, month: number) {
+  const org = await createOrganization(
+    db,
+    {
+      name,
+      addressLine1: "Addr 1",
+      bankName: "Test Bank",
+      iban: "LV00TEST0000000000000",
+    },
+    seedAdminId
+  );
+  const dwelling = await createDwelling(
+    db,
+    org.id,
+    {
+      number: "1",
+      occupantName: "Jane Doe",
+      billingAddress: "1 Test St",
+      billingEmail: "resident@example.com",
+    },
+    seedAdminId
+  );
+  const period = await createPeriod(
+    db,
+    org.id,
+    {
+      year: 2026,
+      month,
+      startsOn: `2026-${String(month).padStart(2, "0")}-01`,
+      endsOn: `2026-${String(month).padStart(2, "0")}-28`,
+      invoiceIssueDate: `2026-${String(month).padStart(2, "0")}-28`,
+      invoiceDueDate: `2026-${String(month).padStart(2, "0")}-28`,
+    },
+    seedAdminId
+  );
+  await createRule(
+    db,
+    org.id,
+    {
+      name: "Fee",
+      code: "fee",
+      calculationType: "FIXED",
+      unit: "month",
+      unitPrice: "50.00",
+      effectiveFrom: "2025-01-01",
+    },
+    seedAdminId
+  );
+  return { org, dwelling, period };
+}
+
+describe("updateOrganization validation", () => {
+  it("rejects an invalid timezone", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT-L Org BadTz", addressLine1: "Addr 1" },
+      seedAdminId
+    );
+    await expect(
+      updateOrganization(
+        db,
+        org.id,
+        { timezone: "Not/A_Real_Zone" },
+        seedAdminId
+      )
+    ).rejects.toBeInstanceOf(ValidationError);
+    await cleanupOrg(org.id);
+  });
+
+  it("rejects enabling auto-send without an auto-send day", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT-L Org NoSendDay", addressLine1: "Addr 1" },
+      seedAdminId
+    );
+    await expect(
+      updateOrganization(db, org.id, { autoSendEnabled: true }, seedAdminId)
+    ).rejects.toBeInstanceOf(ValidationError);
+
+    // Setting the day first, then enabling separately, is fine.
+    await updateOrganization(db, org.id, { autoSendDay: 5 }, seedAdminId);
+    await expect(
+      updateOrganization(db, org.id, { autoSendEnabled: true }, seedAdminId)
+    ).resolves.toBeTruthy();
+
+    await cleanupOrg(org.id);
+  });
+});
+
+describe("scanOverdueInvoices", () => {
+  it("marks a SENT, unpaid, past-due case OVERDUE; leaves a not-yet-due one SENT", async () => {
+    const { org, dwelling, period } = await setupBillableOrg(
+      "IT-L Org Overdue",
+      1
+    );
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    await prepareInvoice(db, org.id, invoice.id, seedAdminId);
+    await sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId);
+
+    const notYetDue = await scanOverdueInvoices(db, org.id, "2020-01-01");
+    expect(notYetDue.overdue).toBe(0);
+    expect((await getInvoice(db, org.id, invoice.id)).caseStatus).toBe("SENT");
+
+    const pastDue = await scanOverdueInvoices(db, org.id, "2099-01-01");
+    expect(pastDue.overdue).toBe(1);
+    expect((await getInvoice(db, org.id, invoice.id)).caseStatus).toBe(
+      "OVERDUE"
+    );
+
+    // Idempotent: already-OVERDUE cases aren't SENT anymore, so a rerun
+    // finds nothing left to flag.
+    const rerun = await scanOverdueInvoices(db, org.id, "2099-01-01");
+    expect(rerun.overdue).toBe(0);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("does not flag a paid invoice even if its due date has passed", async () => {
+    const { org, dwelling, period } = await setupBillableOrg(
+      "IT-L Org OverduePaid",
+      2
+    );
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    await prepareInvoice(db, org.id, invoice.id, seedAdminId);
+    await sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId);
+    await db.$client.query(
+      "update invoices set paid_at = now() where id = $1",
+      [invoice.id]
+    );
+
+    const result = await scanOverdueInvoices(db, org.id, "2099-01-01");
+    expect(result.overdue).toBe(0);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("does not overwrite a case a concurrent payment already moved off SENT", async () => {
+    const { org, dwelling, period } = await setupBillableOrg(
+      "IT-L Org OverdueRace",
+      9
+    );
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    await prepareInvoice(db, org.id, invoice.id, seedAdminId);
+    await sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId);
+    // Simulate a payment confirmation racing the scan: the case moves to
+    // PAID (as Phase J's confirmMatch does) without paid_at happening to be
+    // set yet, the narrow inconsistent window the update-time guard exists
+    // to cover.
+    await db.$client.query(
+      "update billing_cases set status = 'PAID' where id = (select billing_case_id from invoices where id = $1)",
+      [invoice.id]
+    );
+
+    const result = await scanOverdueInvoices(db, org.id, "2099-01-01");
+    expect(result.overdue).toBe(0);
+    expect((await getInvoice(db, org.id, invoice.id)).caseStatus).toBe("PAID");
+
+    await cleanupOrg(org.id);
+  });
+});
+
+describe("autoGenerateForOrganization", () => {
+  it("generates and prepares every eligible case in the current open period", async () => {
+    const { org } = await setupBillableOrg("IT-L Org AutoGenerate", 3);
+
+    const result = await autoGenerateForOrganization(db, org.id, seedAdminId);
+    expect(result).toEqual({ generated: 1, prepared: 1 });
+
+    const rerun = await autoGenerateForOrganization(db, org.id, seedAdminId);
+    expect(rerun).toEqual({ generated: 0, prepared: 0 });
+
+    await cleanupOrg(org.id);
+  });
+
+  it("is a no-op when there is no open period", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT-L Org NoPeriod", addressLine1: "Addr 1" },
+      seedAdminId
+    );
+    const result = await autoGenerateForOrganization(db, org.id, seedAdminId);
+    expect(result).toEqual({ generated: 0, prepared: 0 });
+    await cleanupOrg(org.id);
+  });
+});
+
+describe("autoSendForOrganization", () => {
+  it("sends every PREPARED invoice in the current open period", async () => {
+    const { org, dwelling, period } = await setupBillableOrg(
+      "IT-L Org AutoSend",
+      4
+    );
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    await prepareInvoice(db, org.id, invoice.id, seedAdminId);
+
+    const result = await autoSendForOrganization(
+      db,
+      org.id,
+      stubDeps(),
+      seedAdminId
+    );
+    expect(result.sent).toBe(1);
+    expect(
+      (await getInvoice(db, org.id, invoice.id)).invoice.sentAt
+    ).not.toBeNull();
+
+    await cleanupOrg(org.id);
+  });
+
+  it("sends a PREPARED invoice even in a locked (not the current open) period", async () => {
+    const { org, dwelling, period } = await setupBillableOrg(
+      "IT-L Org AutoSendLocked",
+      7
+    );
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    await prepareInvoice(db, org.id, invoice.id, seedAdminId);
+    await lockPeriod(db, org.id, period.id, seedAdminId);
+
+    const result = await autoSendForOrganization(
+      db,
+      org.id,
+      stubDeps(),
+      seedAdminId
+    );
+    expect(result.sent).toBe(1);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("sends nothing when no invoice is PREPARED", async () => {
+    const { org } = await setupBillableOrg("IT-L Org AutoSendNone", 5);
+    const result = await autoSendForOrganization(
+      db,
+      org.id,
+      stubDeps(),
+      seedAdminId
+    );
+    expect(result.sent).toBe(0);
+    await cleanupOrg(org.id);
+  });
+});
+
+describe("runScheduledJobs", () => {
+  it("only auto-sends on the organization's configured day, and processes organizations independently", async () => {
+    const { org: orgA } = await setupBillableOrg("IT-L Org SchedA", 6);
+    await updateOrganization(
+      db,
+      orgA.id,
+      { autoGenerateEnabled: true, autoSendEnabled: true, autoSendDay: 15 },
+      seedAdminId
+    );
+
+    const { org: orgB } = await setupBillableOrg("IT-L Org SchedB", 6);
+    // orgB has automation disabled entirely (default flags).
+
+    const notFifteenth = await runScheduledJobs(
+      db,
+      stubDeps(),
+      new Date("2026-06-10T10:00:00Z")
+    );
+    const orgAResultEarly = notFifteenth.find(
+      (r) => r.organizationId === orgA.id
+    )!;
+    expect(orgAResultEarly.generated).toBe(1);
+    expect(orgAResultEarly.prepared).toBe(1);
+    expect(orgAResultEarly.sent).toBe(0);
+    const orgBResultEarly = notFifteenth.find(
+      (r) => r.organizationId === orgB.id
+    )!;
+    expect(orgBResultEarly.generated).toBe(0);
+    expect(orgBResultEarly.sent).toBe(0);
+
+    const onTheDay = await runScheduledJobs(
+      db,
+      stubDeps(),
+      new Date("2026-06-15T10:00:00Z")
+    );
+    const orgAResultOnDay = onTheDay.find((r) => r.organizationId === orgA.id)!;
+    expect(orgAResultOnDay.sent).toBe(1);
+
+    // Scheduled mutations record a null actor (no fabricated system
+    // identity -- audit_logs.actor_user_id is nullable for exactly this).
+    const logs = await listAuditLogs(db, orgA.id);
+    expect(
+      logs.some(
+        (l) => l.action === "INVOICE_GENERATED" && l.actorEmail === null
+      )
+    ).toBe(true);
+
+    await cleanupOrg(orgA.id);
+    await cleanupOrg(orgB.id);
+  });
+});
