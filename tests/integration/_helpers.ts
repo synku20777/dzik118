@@ -38,7 +38,39 @@ export async function cleanupOrganization(
   db: Db,
   organizationId: string
 ): Promise<void> {
+  // account_entries/payment_allocations/late_fee_adjustments are append-only
+  // in production (a trigger raises on UPDATE/DELETE, so a mistake can only
+  // ever be corrected with a compensating entry, never erased) -- test
+  // cleanup is the one place that legitimately needs to bypass that.
+  // `ALTER TABLE ... DISABLE TRIGGER` is a global catalog change visible to
+  // every session immediately, so toggling it here would race with any
+  // other integration test file's cleanup running concurrently (confirmed:
+  // an intermittent "Financial history is append-only" failure that never
+  // reproduced when the failing test ran alone). session_replication_role
+  // is a per-connection GUC -- setting it only affects statements run on
+  // this same `db` connection, so it can't interleave with another test
+  // file's connection.
+  await db.$client.query("set session_replication_role = replica");
+  try {
+    // Must run before bank_transactions/invoices below -- these three
+    // reference both.
+    await db.$client.query(
+      "delete from account_entries where organization_id = $1",
+      [organizationId]
+    );
+    await db.$client.query(
+      "delete from payment_allocations where organization_id = $1",
+      [organizationId]
+    );
+    await db.$client.query(
+      "delete from late_fee_adjustments where organization_id = $1",
+      [organizationId]
+    );
+  } finally {
+    await db.$client.query("set session_replication_role = default");
+  }
   const statements = [
+    "delete from late_fee_policies where organization_id = $1",
     "delete from payment_matches where organization_id = $1",
     "delete from bank_transactions where organization_id = $1",
     "delete from bank_imports where organization_id = $1",

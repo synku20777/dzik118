@@ -1,0 +1,30 @@
+---
+// Section 14's single reusable thin-line motif -- a shallow arch cut into
+// an otherwise straight rule. Reserved for the handful of surfaces the
+// spec names (authentication, significant empty states); never used as
+// repeating page chrome or around ordinary cards/forms.
+---
+
+<svg
+  class="ornament"
+  viewBox="0 0 200 20"
+  fill="none"
+  aria-hidden="true"
+  focusable="false"
+>
+  <path
+    d="M0 10 H82 C92 10 92 17 100 17 C108 17 108 10 118 10 H200"
+    stroke="currentColor"
+    stroke-width="1.5"
+    stroke-linecap="round"></path>
+</svg>
+
+<style is:global>
+  .ornament {
+    display: block;
+    width: 6.5rem;
+    height: auto;
+    margin-inline: auto;
+    color: var(--color-border);
+  }
+</style>

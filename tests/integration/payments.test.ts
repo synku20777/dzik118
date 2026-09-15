@@ -12,7 +12,10 @@ import { createOrganization } from "../../src/domain/organizations/organizations
 import { createDwelling } from "../../src/domain/organizations/dwellings";
 import { createPeriod } from "../../src/domain/periods/periods";
 import { createRule } from "../../src/domain/billing/rules";
-import { generateInvoice } from "../../src/domain/billing/generation";
+import {
+  generateInvoice,
+  prepareInvoice,
+} from "../../src/domain/billing/generation";
 import { bankTransactions, paymentMatches } from "../../src/db/schema/payments";
 import {
   ImportHeaderError,
@@ -92,13 +95,17 @@ async function setupOrgWithInvoice(name: string, month: number) {
     },
     seedAdminId
   );
-  const invoice = await generateInvoice(
+  const generated = await generateInvoice(
     db,
     org.id,
     period.id,
     dwelling.id,
     seedAdminId
   );
+  // proposeExactMatches only matches against PREPARED/SENT/OVERDUE invoices
+  // (a DRAFT invoice isn't yet a real payment obligation), so every payments
+  // fixture needs to be prepared before it can be matched against.
+  const invoice = await prepareInvoice(db, org.id, generated.id, seedAdminId);
   return { org, dwelling, period, invoice };
 }
 
@@ -422,7 +429,15 @@ describe("confirmMatch / rejectMatch", () => {
     await cleanupOrg(org.id);
   });
 
-  it("does not propose a second transaction against an invoice already claimed by a live match", async () => {
+  it("still proposes a second transaction against an invoice already claimed by a live match, but only one can ever be confirmed", async () => {
+    // Unlike a bank transaction (which is only ever proposed once, per the
+    // dedup-by-transaction test above), an invoice's remaining balance isn't
+    // reduced until a match is actually CONFIRMED -- two transactions can
+    // legitimately both reference the same invoice (e.g. a duplicate wire,
+    // or a since-rejected first attempt), so both are proposed here.
+    // confirmMatch is what enforces the invariant this test's old name
+    // described, by re-checking the invoice's remaining balance at confirm
+    // time (see the "refuses to double-confirm" test below).
     const { org, invoice } = await setupOrgWithInvoice(
       "IT-J Org DoubleClaim",
       6
@@ -451,12 +466,17 @@ describe("confirmMatch / rejectMatch", () => {
       csvTwo,
       seedAdminId
     );
-    expect(second.proposed).toBe(0);
+    expect(second.proposed).toBe(1);
 
     const unmatched = await listUnmatchedTransactions(db, org.id);
-    expect(unmatched).toHaveLength(1);
+    expect(unmatched).toHaveLength(0);
     const matches = await listPaymentMatches(db, org.id, "PROPOSED");
-    expect(matches).toHaveLength(1);
+    expect(matches).toHaveLength(2);
+
+    await confirmMatch(db, org.id, matches[0].id, seedAdminId);
+    await expect(
+      confirmMatch(db, org.id, matches[1].id, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
 
     await cleanupOrg(org.id);
   });
@@ -471,11 +491,10 @@ describe("confirmMatch / rejectMatch", () => {
     const [firstMatch] = await listPaymentMatches(db, org.id, "PROPOSED");
     await confirmMatch(db, org.id, firstMatch.id, seedAdminId);
 
-    // Simulate a second live match against the same, now-paid invoice --
-    // proposeExactMatches would never create this itself (the dedup test
-    // above covers that); this exercises confirmMatch's own defense-in-depth
-    // guard directly, in case a future match type (e.g. MANUAL) ever
-    // creates one.
+    // Simulate a second live match against the same, now-paid invoice via a
+    // MANUAL match (proposeExactMatches's own version of this is covered by
+    // the test above) to exercise confirmMatch's remaining-balance guard
+    // directly.
     const [existingImport] = await listBankImports(db, org.id);
     const [secondTxn] = await db
       .insert(bankTransactions)

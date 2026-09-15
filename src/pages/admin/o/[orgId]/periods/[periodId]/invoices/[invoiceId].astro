@@ -3,6 +3,16 @@
 // Full formatted/branded preview + PDF is Phase G; this shows the raw
 // persisted snapshot/line data, which is exactly what spec Section 21
 // requires stay unchanged after SENT -- a useful thing to see directly.
+import InvoiceDocument from "../../../../../../../components/ui/InvoiceDocument.astro";
+import StatusBadge from "../../../../../../../components/ui/StatusBadge.astro";
+import {
+  translate,
+  uiLocale,
+  formatDate,
+  formatMoney,
+} from "../../../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
 import {
@@ -55,6 +65,11 @@ try {
 const issuer = invoice.issuerSnapshot as Record<string, string | null>;
 const recipient = invoice.recipientSnapshot as Record<string, string | null>;
 const payment = invoice.paymentSnapshot as Record<string, string | null>;
+const recipientIncomplete =
+  (!recipient.billingName && !recipient.occupantName) ||
+  !recipient.billingAddress;
+const organizationIncomplete =
+  !issuer.name || !issuer.addressLine1 || !payment.iban || !payment.bankName;
 ---
 
 <AdminLayout
@@ -62,30 +77,40 @@ const payment = invoice.paymentSnapshot as Record<string, string | null>;
   organizationId={organizationId}
   organizationName={organization.name}
 >
-  <div class="max-w-3xl space-y-6">
+  <div class="space-y-6">
     <a
       href={`/admin/o/${organizationId}/periods/${periodId}`}
-      class="text-sm text-neutral-600 hover:underline"
+      class="text-sm text-muted hover:underline"
     >
-      ← Period {period.year}-{String(period.month).padStart(2, "0")}
+      ← {t("Period")}
+      {period.year}-{String(period.month).padStart(2, "0")}
     </a>
 
-    <div class="flex items-center justify-between">
-      <h1 class="text-xl font-bold text-neutral-900">
-        {invoice.invoiceNumber}
-        <span class="ml-2 text-sm font-normal text-neutral-500">
-          ({caseStatus})
-        </span>
-      </h1>
-      <div class="flex gap-2">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <p class="text-sm font-semibold text-muted">{t("Invoice")}</p>
+        <h1 class="text-xl font-bold text-foreground">
+          {invoice.invoiceNumber}
+          <span class="ml-2 text-sm font-normal text-muted">
+            <StatusBadge status={caseStatus} />
+          </span>
+        </h1>
+        <p class="mt-2 text-sm text-muted">
+          {t("Amount due")}: <strong class="text-lg text-foreground"
+            >{formatMoney(invoice.amountDue, invoice.currency, locale)}</strong
+          > · {t("Due date")}
+          {formatDate(invoice.dueDate, locale)}
+        </p>
+      </div>
+      <div class="page-actions">
         {
           invoice.pdfObjectKey && (
             <a
               href={`/api/v1/admin/o/${organizationId}/invoices/${invoice.id}/pdf`}
               target="_blank"
-              class="rounded-md border border-neutral-300 px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+              class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
             >
-              Download PDF
+              {t("Download PDF")}
             </a>
           )
         }
@@ -100,9 +125,15 @@ const payment = invoice.paymentSnapshot as Record<string, string | null>;
               <input type="hidden" name="invoiceId" value={invoice.id} />
               <button
                 type="submit"
-                class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+                disabled={recipientIncomplete || organizationIncomplete}
+                aria-describedby={
+                  recipientIncomplete || organizationIncomplete
+                    ? "invoice-validation"
+                    : undefined
+                }
+                class="btn-primary "
               >
-                Prepare
+                {t("Prepare")}
               </button>
             </form>
           )
@@ -118,9 +149,13 @@ const payment = invoice.paymentSnapshot as Record<string, string | null>;
               <input type="hidden" name="invoiceId" value={invoice.id} />
               <button
                 type="submit"
-                class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+                disabled={!recipient.billingEmail}
+                aria-describedby={
+                  !recipient.billingEmail ? "email-validation" : undefined
+                }
+                class="btn-primary "
               >
-                Send
+                {t("Send")}
               </button>
             </form>
           )
@@ -136,9 +171,9 @@ const payment = invoice.paymentSnapshot as Record<string, string | null>;
               <input type="hidden" name="invoiceId" value={invoice.id} />
               <button
                 type="submit"
-                class="rounded-md border border-neutral-300 px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50"
+                class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
               >
-                Resend
+                {t("Resend")}
               </button>
             </form>
           )
@@ -154,9 +189,9 @@ const payment = invoice.paymentSnapshot as Record<string, string | null>;
               <input type="hidden" name="invoiceId" value={invoice.id} />
               <button
                 type="submit"
-                class="rounded-md border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                class="rounded-control border border-destructive px-4 py-2 text-sm text-destructive hover:bg-danger-surface"
               >
-                Revoke access link
+                {t("Revoke access link")}
               </button>
             </form>
           )
@@ -168,7 +203,7 @@ const payment = invoice.paymentSnapshot as Record<string, string | null>;
         sendResult?.error ||
         resendResult?.error ||
         revokeResult?.error) && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
           {prepareResult?.error?.message ??
             sendResult?.error?.message ??
             resendResult?.error?.message ??
@@ -177,120 +212,132 @@ const payment = invoice.paymentSnapshot as Record<string, string | null>;
       )
     }
 
-    <div class="grid grid-cols-2 gap-4">
-      <section class="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 class="text-sm font-bold text-neutral-900">Issuer</h2>
-        <p class="mt-2 text-sm text-neutral-700">
-          {issuer.name}
-          <br />
-          {issuer.addressLine1}
-          {issuer.city && <>, {issuer.city}</>}
+    {
+      caseStatus === "DRAFT" &&
+        (recipientIncomplete || organizationIncomplete) && (
+          <section
+            id="invoice-validation"
+            class="notice notice-danger"
+            role="alert"
+          >
+            {recipientIncomplete && (
+              <p>
+                {t(
+                  "Recipient information is incomplete. Add a billing name or occupant name and billing address."
+                )}{" "}
+                <a
+                  class="font-semibold underline"
+                  href={
+                    "/admin/o/" +
+                    organizationId +
+                    "/dwellings/" +
+                    invoice.dwellingId
+                  }
+                >
+                  {t("Fix dwelling details")}
+                </a>
+              </p>
+            )}
+            {organizationIncomplete && (
+              <p>
+                {t(
+                  "Issuer or payment information is incomplete. Add the organization name, address, bank name and IBAN."
+                )}{" "}
+                <a
+                  class="font-semibold underline"
+                  href={"/admin/o/" + organizationId + "/settings/organization"}
+                >
+                  {t("Fix organization details")}
+                </a>
+              </p>
+            )}
+            <p class="mt-2">
+              {t(
+                "After correcting the details, regenerate this draft in the workbench to refresh its snapshot."
+              )}
+            </p>
+          </section>
+        )
+    }
+    {
+      caseStatus === "PREPARED" && !recipient.billingEmail && (
+        <p id="email-validation" class="notice notice-danger" role="alert">
+          {t("Invoice email is missing. Add a billing email before sending.")}
         </p>
-      </section>
-      <section class="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 class="text-sm font-bold text-neutral-900">Recipient</h2>
-        <p class="mt-2 text-sm text-neutral-700">
-          Dwelling {recipient.dwellingNumber}
-          <br />
-          {recipient.billingName ?? recipient.occupantName ?? "—"}
-          <br />
-          {recipient.billingEmail ?? "—"}
-        </p>
-      </section>
-      <section class="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 class="text-sm font-bold text-neutral-900">Payment</h2>
-        <p class="mt-2 text-sm text-neutral-700">
-          {payment.bankName ?? "—"}
-          <br />
-          {payment.iban ?? "—"}
-        </p>
-      </section>
-      <section class="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 class="text-sm font-bold text-neutral-900">Dates</h2>
-        <p class="mt-2 text-sm text-neutral-700">
-          Issued {invoice.issueDate}
-          <br />
-          Due {invoice.dueDate}
-        </p>
-      </section>
-    </div>
-
-    <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
-      <table class="w-full text-left text-sm">
-        <thead
-          class="border-b border-neutral-200 bg-neutral-50 text-neutral-600"
-        >
-          <tr>
-            <th class="px-4 py-2">Description</th>
-            <th class="px-4 py-2">Quantity</th>
-            <th class="px-4 py-2">Unit price</th>
-            <th class="px-4 py-2">Net</th>
-            <th class="px-4 py-2">VAT</th>
-            <th class="px-4 py-2">Gross</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-neutral-100">
-          {
-            lines.map((line) => (
-              <tr>
-                <td class="px-4 py-2">{line.description}</td>
-                <td class="px-4 py-2">
-                  {line.quantity} {line.unit}
-                </td>
-                <td class="px-4 py-2">{line.unitPrice ?? "—"}</td>
-                <td class="px-4 py-2">{line.netAmount}</td>
-                <td class="px-4 py-2">{line.vatAmount}</td>
-                <td class="px-4 py-2 font-medium">{line.grossAmount}</td>
-              </tr>
-            ))
-          }
-        </tbody>
-        <tfoot class="border-t border-neutral-200 font-medium">
-          <tr>
-            <td colspan="3" class="px-4 py-2 text-right"> Totals </td>
-            <td class="px-4 py-2">{invoice.subtotal}</td>
-            <td class="px-4 py-2">{invoice.vatTotal}</td>
-            <td class="px-4 py-2">
-              {invoice.total}
-              {invoice.currency}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
+      )
+    }
+    {
+      caseStatus === "DRAFT" && (
+        <section class="panel p-4" aria-labelledby="preparation-checks">
+          <>
+            <h2 id="preparation-checks" class="section-title">
+              {t("Preparation checks")}
+            </h2>
+            <ul class="mt-3 space-y-2 text-sm">
+              <>
+                <li>
+                  {recipientIncomplete ? "!" : "✓"}{" "}
+                  {t("Recipient details complete")}
+                </li>
+                <li>
+                  {organizationIncomplete ? "!" : "✓"}{" "}
+                  {t("Issuer and payment details complete")}
+                </li>
+                <li>✓ {t("Current charges calculated")}</li>
+                <li>✓ {t("Account balance resolved")}</li>
+              </>
+            </ul>
+          </>
+        </section>
+      )
+    }
+    <InvoiceDocument
+      invoice={invoice}
+      lines={lines}
+      paid={caseStatus === "PAID"}
+    />
 
     {
       deliveries.length > 0 && (
-        <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
-          <table class="w-full text-left text-sm">
-            <thead class="border-b border-neutral-200 bg-neutral-50 text-neutral-600">
-              <tr>
-                <th class="px-4 py-2">When</th>
-                <th class="px-4 py-2">To</th>
-                <th class="px-4 py-2">Status</th>
-                <th class="px-4 py-2">Error</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-neutral-100">
-              {deliveries.map((d) => (
+        <section>
+          <h2 class="section-title mb-3">{t("Delivery history")}</h2>
+          <div class="table-wrap">
+            <table class="w-full text-left text-sm">
+              <thead class="border-b border-border bg-surface-hover text-muted">
                 <tr>
-                  <td class="px-4 py-2">{d.createdAt.toISOString()}</td>
-                  <td class="px-4 py-2">{d.destinationEmail}</td>
-                  <td class="px-4 py-2">
-                    {d.status === "SENT" ? (
-                      <span class="text-green-700">Sent</span>
-                    ) : (
-                      <span class="text-red-700">Failed</span>
-                    )}
-                  </td>
-                  <td class="px-4 py-2 text-neutral-500">
-                    {d.errorCode ?? "—"}
-                  </td>
+                  <th class="px-4 py-2">{t("When")}</th>
+                  <th class="px-4 py-2">{t("Method")}</th>
+                  <th class="px-4 py-2">{t("To")}</th>
+                  <th class="px-4 py-2">{t("Status")}</th>
+                  <th class="px-4 py-2">{t("Error")}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody class="divide-y divide-border">
+                {deliveries.map((d) => (
+                  <tr>
+                    <td class="px-4 py-2">
+                      {formatDate(d.createdAt, locale, organization.timezone)}
+                    </td>
+                    <td class="px-4 py-2">
+                      {d.method === "PAPER" ? t("Paper") : t("Email")}
+                    </td>
+                    <td class="px-4 py-2">{d.destinationEmail ?? "—"}</td>
+                    <td class="px-4 py-2">
+                      {d.status === "SENT" ? (
+                        <span class="text-success">{t("Sent")}</span>
+                      ) : (
+                        <span class="text-destructive">{t("Failed")}</span>
+                      )}
+                    </td>
+                    <td class="px-4 py-2 text-muted">
+                      {d.errorCode ?? "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )
     }
   </div>

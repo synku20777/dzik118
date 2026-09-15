@@ -1,6 +1,13 @@
 ---
 // Phase E (Periods/meters/readings) - admin reading entry for one
 // dwelling/period (spec Section 9.2, MTR-002).
+import {
+  translate,
+  uiLocale,
+  entityLabel,
+} from "../../../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
 import {
@@ -53,24 +60,25 @@ try {
   <div class="space-y-6">
     <a
       href={`/admin/o/${organizationId}/periods/${periodId}`}
-      class="text-sm text-neutral-600 hover:underline"
+      class="text-body-sm text-muted hover:underline"
     >
-      ← Period {period.year}-{String(period.month).padStart(2, "0")}
+      ← {t("Period")}
+      {period.year}-{String(period.month).padStart(2, "0")}
     </a>
-    <h1 class="text-xl font-bold text-neutral-900">
+    <h1 class="text-h2 text-foreground">
       Dwelling {dwelling.number} readings
     </h1>
     {
       submitResult?.error && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
           {submitResult.error.message}
         </p>
       )
     }
     {
       period.status === "LOCKED" && (
-        <p class="rounded-md bg-neutral-100 p-3 text-sm text-neutral-700">
-          This period is locked; readings can no longer be edited.
+        <p class="rounded-control bg-canvas p-3 text-body-sm text-foreground">
+          {t("This period is locked; readings can no longer be edited.")}
         </p>
       )
     }
@@ -80,16 +88,16 @@ try {
         meters
           .filter((m) => !m.archivedAt)
           .map((m) => (
-            <section class="rounded-xl border border-neutral-200 bg-white p-4">
-              <h2 class="font-medium text-neutral-900">
-                {m.label ?? m.type}{" "}
-                <span class="text-sm font-normal text-neutral-500">
-                  ({m.type}
+            <section class="rounded-panel border border-border bg-surface p-4">
+              <h2 class="font-medium text-foreground">
+                {m.label ?? entityLabel(m.type, locale)}{" "}
+                <span class="text-body-sm text-muted">
+                  ({entityLabel(m.type, locale)}
                   {m.serialNumber ? ` · ${m.serialNumber}` : ""} · {m.unit})
                 </span>
               </h2>
               {m.currentValue !== null && (
-                <p class="mt-2 text-sm text-neutral-600">
+                <p class="mt-2 text-body-sm text-muted">
                   Previous: {m.previousValue ?? "—"} · Current: {m.currentValue}{" "}
                   · Consumption: {m.consumption} ({m.source})
                 </p>
@@ -108,30 +116,31 @@ try {
                   <input type="hidden" name="periodId" value={periodId} />
                   <input type="hidden" name="meterId" value={m.meterId} />
                   <div>
-                    <label class="block text-sm font-medium text-neutral-700">
-                      Current value
+                    <label
+                      for={"reading-" + m.meterId}
+                      class="block text-label text-foreground"
+                    >
+                      {t("Current value")}
                     </label>
                     <input
+                      id={"reading-" + m.meterId}
                       name="currentValue"
                       type="text"
                       inputmode="decimal"
                       pattern="\d+(\.\d{1,3})?"
                       required
                       value={m.currentValue ?? ""}
-                      class="mt-1 w-40 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                      class="mt-1 w-40 rounded-control border border-border px-3 py-2 text-body-sm"
                     />
                   </div>
                   {m.currentValue !== null && (
-                    <label class="flex items-center gap-2 pb-2 text-sm text-neutral-700">
+                    <label class="flex items-center gap-2 pb-2 text-body-sm text-foreground">
                       <input type="checkbox" name="force" value="true" />
-                      Confirm even if lower than previous
+                      {t("Confirm even if lower than previous")}
                     </label>
                   )}
-                  <button
-                    type="submit"
-                    class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-                  >
-                    Save
+                  <button type="submit" class="btn-primary ">
+                    {t("Save")}
                   </button>
                 </form>
               )}
@@ -140,8 +149,8 @@ try {
       }
       {
         meters.filter((m) => !m.archivedAt).length === 0 && (
-          <p class="text-sm text-neutral-500">
-            This dwelling has no active meters.
+          <p class="text-body-sm text-muted">
+            {t("This dwelling has no active meters.")}
           </p>
         )
       }

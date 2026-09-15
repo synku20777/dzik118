@@ -1,7 +1,19 @@
 ---
 // Phase D (Organizations/dwellings) - dwelling detail (spec Section 9.2, 27
-// "Dwellings: Detail"). Meters/billing history/messages/audit sections are
-// later phases' data (E/F/G/L) -- stubbed here, not built.
+// "Dwellings: Detail").
+import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
+import KpiCard from "../../../../../components/ui/KpiCard.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
+import EmptyState from "../../../../../components/ui/EmptyState.astro";
+import {
+  translate,
+  uiLocale,
+  entityLabel,
+  formatDate,
+  formatMoney,
+} from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
 import {
@@ -15,6 +27,14 @@ import {
 } from "../../../../../domain/organizations/dwellings";
 import { listMeters } from "../../../../../domain/organizations/meters";
 import { withRequestDb } from "../../../../../lib/db-request";
+import {
+  getDwellingAccountBalance,
+  listDwellingAccountActivity,
+} from "../../../../../domain/accounts/ledger";
+import { listCasesForDwelling } from "../../../../../domain/periods/cases";
+import { getCurrentOpenPeriod } from "../../../../../domain/periods/periods";
+import { listAuditLogs } from "../../../../../domain/audit/audit-log";
+import { listConversationsWithMessagesForDwelling } from "../../../../../domain/messaging/conversations";
 
 const organizationId = Astro.params.orgId!;
 const dwellingId = Astro.params.dwellingId!;
@@ -26,26 +46,85 @@ try {
 }
 
 const updateResult = Astro.getActionResult(actions.dwellings.update);
+const additionalInfoResult = updateResult; // shares the same action/form shape
+const deliveryResult = Astro.getActionResult(
+  actions.dwellings.updateInvoiceDelivery
+);
 const assignResult = Astro.getActionResult(actions.dwellings.assignResident);
 const removeResult = Astro.getActionResult(actions.dwellings.removeResident);
 const meterResult =
   Astro.getActionResult(actions.meters.create) ??
   Astro.getActionResult(actions.meters.archive);
+const adjustmentResult = Astro.getActionResult(
+  actions.accounts.createAdjustment
+);
+const archiveResult = Astro.getActionResult(actions.dwellings.archive);
 
-let organization, dwelling, residents, meterList;
+let organization,
+  dwelling,
+  residents,
+  meterList,
+  accountBalance,
+  accountActivity,
+  caseHistory,
+  currentOpenPeriod,
+  auditEntries,
+  conversationsWithMessages;
 try {
-  ({ organization, dwelling, residents, meterList } = await withRequestDb(
-    async (db) => ({
-      organization: await getOrganization(db, organizationId),
+  ({
+    organization,
+    dwelling,
+    residents,
+    meterList,
+    accountBalance,
+    accountActivity,
+    caseHistory,
+    currentOpenPeriod,
+    auditEntries,
+    conversationsWithMessages,
+  } = await withRequestDb(async (db) => {
+    const organization = await getOrganization(db, organizationId);
+    return {
+      organization,
       dwelling: await getDwelling(db, organizationId, dwellingId),
       residents: await listDwellingResidents(db, dwellingId),
       meterList: await listMeters(db, organizationId, dwellingId),
-    })
-  ));
+      accountBalance: await getDwellingAccountBalance(
+        db,
+        organizationId,
+        dwellingId,
+        organization.currency
+      ),
+      accountActivity: await listDwellingAccountActivity(
+        db,
+        organizationId,
+        dwellingId,
+        organization.currency
+      ),
+      caseHistory: await listCasesForDwelling(db, organizationId, dwellingId),
+      currentOpenPeriod: await getCurrentOpenPeriod(db, organizationId),
+      auditEntries: await listAuditLogs(db, organizationId, {
+        entityType: "dwelling",
+        entityId: dwellingId,
+        limit: 20,
+      }),
+      conversationsWithMessages: await listConversationsWithMessagesForDwelling(
+        db,
+        dwellingId
+      ),
+    };
+  }));
 } catch {
   return Astro.redirect(`/admin/o/${organizationId}/dwellings`);
 }
 
+const dwellingTypeOptions = [
+  "APARTMENT",
+  "COMMERCIAL_UNIT",
+  "PARKING",
+  "STORAGE",
+  "OTHER",
+] as const;
 const meterTypeOptions = [
   "COLD_WATER",
   "HOT_WATER",
@@ -54,6 +133,44 @@ const meterTypeOptions = [
   "HEAT",
   "OTHER",
 ] as const;
+
+const base = `/admin/o/${organizationId}`;
+const dwellingStatus = dwelling.archivedAt ? "ARCHIVED" : "ACTIVE";
+const subtitle = [organization.addressLine1, entityLabel(dwelling.type, locale)]
+  .filter(Boolean)
+  .join(" · ");
+
+const isCredit = accountBalance.startsWith("-");
+const balanceForDisplay = isCredit ? accountBalance.slice(1) : accountBalance;
+const balanceKpiTone =
+  isCredit || accountBalance === "0.00" ? "success" : "warning";
+
+const totals = accountActivity.reduce(
+  (acc, entry) => ({
+    debit: acc.debit + Number(entry.debit),
+    credit: acc.credit + Number(entry.credit),
+  }),
+  { debit: 0, credit: 0 }
+);
+
+const deliveryMethods = [
+  dwelling.invoiceByEmail && t("Email"),
+  dwelling.invoiceByPaper && t("Paper"),
+].filter(Boolean) as string[];
+
+const recentMessages = conversationsWithMessages
+  .flatMap((c) => c.messages)
+  .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+  .slice(0, 4);
+
+const meterTypeIcons: Record<string, string> = {
+  COLD_WATER: "💧",
+  HOT_WATER: "🔥",
+  ELECTRICITY: "⚡",
+  GAS: "🔥",
+  HEAT: "🌡️",
+  OTHER: "⚙️",
+};
 ---
 
 <AdminLayout
@@ -62,297 +179,1604 @@ const meterTypeOptions = [
   organizationName={organization.name}
 >
   <div class="space-y-6">
-    <a
-      href={`/admin/o/${organizationId}/dwellings`}
-      class="text-sm text-neutral-600 hover:underline"
-    >
-      ← Dwellings
+    <a href={`${base}/dwellings`} class="back-link">
+      <span aria-hidden="true">←</span>
+      {t("Dwellings")}
     </a>
-    <h1 class="text-xl font-bold text-neutral-900">
-      Dwelling {dwelling.number}
-      {
-        dwelling.archivedAt && (
-          <span class="text-sm font-normal text-red-700">(archived)</span>
-        )
-      }
-    </h1>
 
-    <section class="rounded-xl border border-neutral-200 bg-white p-6">
-      <h2 class="text-lg font-bold text-neutral-900">Overview</h2>
-      {
-        updateResult?.error && (
-          <p class="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-800">
-            {updateResult.error.message}
-          </p>
-        )
-      }
-      <form
-        method="POST"
-        action={actions.dwellings.update}
-        class="mt-4 grid grid-cols-2 gap-3"
-      >
-        <input type="hidden" name="organizationId" value={organizationId} />
-        <input type="hidden" name="dwellingId" value={dwellingId} />
-        <div>
-          <label
-            class="block text-sm font-medium text-neutral-700"
-            for="occupantName">Occupant name</label
-          >
-          <input
-            id="occupantName"
-            name="occupantName"
-            value={dwelling.occupantName ?? ""}
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
+    <header class="page-header">
+      <div>
+        <div class="dwelling-title-row">
+          <h1 class="font-display">{t("Dwelling")} {dwelling.number}</h1>
+          <StatusBadge status={dwellingStatus} />
         </div>
-        <div>
-          <label class="block text-sm font-medium text-neutral-700" for="areaM2"
-            >Area (m²)</label
-          >
-          <input
-            id="areaM2"
-            name="areaM2"
-            type="number"
-            step="0.01"
-            min="0"
-            value={dwelling.areaM2}
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label
-            class="block text-sm font-medium text-neutral-700"
-            for="residentCount">Resident count</label
-          >
-          <input
-            id="residentCount"
-            name="residentCount"
-            type="number"
-            min="0"
-            value={dwelling.residentCount}
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label
-            class="block text-sm font-medium text-neutral-700"
-            for="billingEmail">Billing email</label
-          >
-          <input
-            id="billingEmail"
-            name="billingEmail"
-            type="email"
-            value={dwelling.billingEmail ?? ""}
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div class="col-span-2">
-          <label
-            class="block text-sm font-medium text-neutral-700"
-            for="billingAddress">Billing address</label
-          >
-          <input
-            id="billingAddress"
-            name="billingAddress"
-            value={dwelling.billingAddress ?? ""}
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div class="col-span-2">
-          <button
-            type="submit"
-            class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-          >
-            Save
-          </button>
-        </div>
-      </form>
-    </section>
-
-    <section class="rounded-xl border border-neutral-200 bg-white p-6">
-      <h2 class="text-lg font-bold text-neutral-900">Resident access</h2>
-      {
-        (assignResult?.error || removeResult?.error) && (
-          <p class="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-800">
-            {assignResult?.error?.message ?? removeResult?.error?.message}
-          </p>
-        )
-      }
-      <ul class="mt-4 divide-y divide-neutral-100">
-        {
-          residents.map((r) => (
-            <li class="flex items-center justify-between py-2 text-sm">
-              <span>
-                {r.displayName ?? r.email}{" "}
-                <span class="text-neutral-500">({r.email})</span>
-              </span>
-              <form method="POST" action={actions.dwellings.removeResident}>
-                <input
-                  type="hidden"
-                  name="organizationId"
-                  value={organizationId}
-                />
-                <input type="hidden" name="dwellingId" value={dwellingId} />
-                <input type="hidden" name="userId" value={r.userId} />
-                <button type="submit" class="text-red-700 hover:underline">
-                  Remove
+        {subtitle && <p class="page-description">{subtitle}</p>}
+      </div>
+      <div class="page-actions">
+        <details class="more-menu">
+          <summary class="btn-secondary">
+            <span aria-hidden="true">⋮</span>
+            {t("More actions")}
+          </summary>
+          <div>
+            {
+              currentOpenPeriod ? (
+                <a href={`${base}/periods/${currentOpenPeriod.id}`}>
+                  {t("View current period")} →
+                </a>
+              ) : (
+                <span class="menu-disabled">{t("No open period")}</span>
+              )
+            }
+            <button type="button" data-goto-panel="account-balance">
+              {t("Create adjustment")} →
+            </button>
+            {
+              !dwelling.archivedAt && (
+                <button
+                  type="button"
+                  data-open-archive-dialog
+                  class="menu-danger"
+                >
+                  {t("Archive dwelling")} →
                 </button>
-              </form>
-            </li>
-          ))
-        }
-        {
-          residents.length === 0 && (
-            <li class="py-2 text-sm text-neutral-500">
-              No residents assigned.
-            </li>
-          )
-        }
-      </ul>
-      <form
-        method="POST"
-        action={actions.dwellings.assignResident}
-        class="mt-4 flex gap-2"
-      >
-        <input type="hidden" name="organizationId" value={organizationId} />
-        <input type="hidden" name="dwellingId" value={dwellingId} />
-        <input
-          name="email"
-          type="email"
-          required
-          placeholder="resident@example.com"
-          class="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-        <button
-          type="submit"
-          class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-        >
-          Assign
-        </button>
-      </form>
-    </section>
+              )
+            }
+          </div>
+        </details>
+      </div>
+    </header>
 
-    <section class="rounded-xl border border-neutral-200 bg-white p-6">
-      <h2 class="text-lg font-bold text-neutral-900">Meters</h2>
-      {
-        meterResult?.error && (
-          <p class="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-800">
-            {meterResult.error.message}
-          </p>
-        )
-      }
-      <ul class="mt-4 divide-y divide-neutral-100">
-        {
-          meterList.map((m) => (
-            <li class="flex items-center justify-between py-2 text-sm">
-              <span>
-                {m.label ?? m.type}{" "}
-                <span class="text-neutral-500">
-                  ({m.type}
-                  {m.serialNumber ? ` · ${m.serialNumber}` : ""} · {m.unit})
-                </span>
-                {m.archivedAt && <span class="text-red-700"> (archived)</span>}
-              </span>
-              {!m.archivedAt && (
-                <form method="POST" action={actions.meters.archive}>
+    {
+      archiveResult?.error && (
+        <p class="notice notice-danger" role="alert">
+          {archiveResult.error.message}
+        </p>
+      )
+    }
+
+    <div class="stat-grid">
+      <KpiCard label={t("Area")} value={`${dwelling.areaM2} m²`} />
+      <KpiCard label={t("Resident count")} value={dwelling.residentCount} />
+      <KpiCard
+        label={isCredit ? t("Account credit") : t("Outstanding balance")}
+        value={formatMoney(balanceForDisplay, organization.currency, locale)}
+        tone={balanceKpiTone}
+      />
+      <KpiCard
+        label={t("Invoice delivery")}
+        value={deliveryMethods.length > 0
+          ? deliveryMethods.join(", ")
+          : t("None")}
+      />
+    </div>
+
+    <div class="dwelling-tabs" role="tablist" aria-label={t("Sections")}>
+      <button
+        type="button"
+        role="tab"
+        data-filter="overview"
+        aria-selected="true"
+      >
+        {t("Overview")}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        data-filter="account-balance"
+        aria-selected="false"
+      >
+        {t("Account balance")}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        data-filter="meters"
+        aria-selected="false"
+      >
+        {t("Meters")}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        data-filter="residents"
+        aria-selected="false"
+      >
+        {t("Residents")}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        data-filter="messages"
+        aria-selected="false"
+      >
+        {t("Messages")}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        data-filter="history"
+        aria-selected="false"
+      >
+        {t("History")}
+      </button>
+    </div>
+
+    <div class="dwelling-grid" data-panel-group>
+      <div class="dwelling-main">
+        <section class="panel p-6" data-panel="overview">
+          <div class="card-header">
+            <div>
+              <h2>{t("Basic information")}</h2>
+              <p class="text-body-sm text-muted">
+                {t("Core information about this dwelling.")}
+              </p>
+            </div>
+            <details class="edit-disclosure" open={!!updateResult?.error}>
+              <summary class="btn-secondary">
+                <Icon name="pencil" size="sm" />
+                {t("Edit")}
+              </summary>
+              <div class="edit-disclosure-panel">
+                {
+                  updateResult?.error && (
+                    <p class="notice notice-danger" role="alert">
+                      {updateResult.error.message}
+                    </p>
+                  )
+                }
+                <form
+                  method="POST"
+                  action={actions.dwellings.update}
+                  class="mt-4 grid grid-cols-2 gap-3"
+                >
                   <input
                     type="hidden"
                     name="organizationId"
                     value={organizationId}
                   />
-                  <input type="hidden" name="meterId" value={m.id} />
-                  <button type="submit" class="text-red-700 hover:underline">
-                    Archive
+                  <input type="hidden" name="dwellingId" value={dwellingId} />
+                  <div class="col-span-2">
+                    <label class="block text-label" for="billingName"
+                      >{t("Billing name")}</label
+                    >
+                    <input
+                      id="billingName"
+                      name="billingName"
+                      value={dwelling.billingName ?? ""}
+                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      class="block text-label text-foreground"
+                      for="occupantName">{t("Occupant name")}</label
+                    >
+                    <input
+                      id="occupantName"
+                      name="occupantName"
+                      value={dwelling.occupantName ?? ""}
+                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      class="block text-label text-foreground"
+                      for="areaM2">{t("Area (m²)")}</label
+                    >
+                    <input
+                      id="areaM2"
+                      name="areaM2"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={dwelling.areaM2}
+                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      class="block text-label text-foreground"
+                      for="residentCount">{t("Resident count")}</label
+                    >
+                    <input
+                      id="residentCount"
+                      name="residentCount"
+                      type="number"
+                      min="0"
+                      value={dwelling.residentCount}
+                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      class="block text-label text-foreground"
+                      for="billingEmail">{t("Billing email")}</label
+                    >
+                    <input
+                      id="billingEmail"
+                      name="billingEmail"
+                      type="email"
+                      value={dwelling.billingEmail ?? ""}
+                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                    />
+                  </div>
+                  <div class="col-span-2">
+                    <label
+                      class="block text-label text-foreground"
+                      for="billingAddress">{t("Billing address")}</label
+                    >
+                    <input
+                      id="billingAddress"
+                      name="billingAddress"
+                      value={dwelling.billingAddress ?? ""}
+                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                    />
+                  </div>
+                  <div class="col-span-2 flex gap-2">
+                    <button type="submit" class="btn-primary">
+                      {t("Save")}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </details>
+          </div>
+          <dl class="detail-list">
+            <div>
+              <dt>{t("Occupant name")}</dt>
+              <dd>{dwelling.occupantName ?? "—"}</dd>
+            </div>
+            <div>
+              <dt>{t("Billing name")}</dt>
+              <dd>{dwelling.billingName ?? "—"}</dd>
+            </div>
+            <div>
+              <dt>{t("Billing email")}</dt>
+              <dd>{dwelling.billingEmail ?? "—"}</dd>
+            </div>
+            <div>
+              <dt>{t("Billing address")}</dt>
+              <dd>{dwelling.billingAddress ?? "—"}</dd>
+            </div>
+            <div>
+              <dt>{t("Area (m²)")}</dt>
+              <dd>{dwelling.areaM2}</dd>
+            </div>
+            <div>
+              <dt>{t("Resident count")}</dt>
+              <dd>{dwelling.residentCount}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section
+          id="account-balance"
+          class="panel p-6"
+          data-panel="account-balance"
+        >
+          <div class="card-header">
+            <div>
+              <h2>{t("Account balance")}</h2>
+              <p class="text-body-sm text-muted">
+                {t("All adjustments and balance history.")}
+              </p>
+            </div>
+            <details class="edit-disclosure" open={!!adjustmentResult?.error}>
+              <summary class="btn-secondary">
+                <Icon name="plus" size="sm" />
+                {t("Add adjustment")}
+              </summary>
+              <div class="edit-disclosure-panel">
+                {
+                  adjustmentResult?.error && (
+                    <p class="notice notice-danger" role="alert">
+                      {adjustmentResult.error.message}
+                    </p>
+                  )
+                }
+                <form
+                  method="POST"
+                  action={actions.accounts.createAdjustment}
+                  class="mt-4 grid grid-cols-2 gap-3"
+                >
+                  <input
+                    type="hidden"
+                    name="organizationId"
+                    value={organizationId}
+                  />
+                  <input type="hidden" name="dwellingId" value={dwellingId} />
+                  <input
+                    type="hidden"
+                    name="currency"
+                    value={organization.currency}
+                  />
+                  <div>
+                    <label class="block text-label" for="adjustment-direction"
+                      >{t("Type")}</label
+                    >
+                    <select
+                      id="adjustment-direction"
+                      name="direction"
+                      class="mt-1 w-full"
+                    >
+                      <option value="CHARGE">{t("Charge adjustment")}</option>
+                      <option value="CREDIT">{t("Credit adjustment")}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-label" for="adjustment-amount"
+                      >{t("Amount")}</label
+                    >
+                    <input
+                      id="adjustment-amount"
+                      name="amount"
+                      inputmode="decimal"
+                      required
+                      class="mt-1 w-full"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-label" for="adjustment-date"
+                      >{t("Date")}</label
+                    >
+                    <input
+                      id="adjustment-date"
+                      name="effectiveDate"
+                      type="date"
+                      required
+                      class="mt-1 w-full"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-label" for="adjustment-reason"
+                      >{t("Reason")}</label
+                    >
+                    <input
+                      id="adjustment-reason"
+                      name="reason"
+                      required
+                      class="mt-1 w-full"
+                    />
+                  </div>
+                  <div class="col-span-2">
+                    <label class="block text-label" for="adjustment-note"
+                      >{t("Note")}</label
+                    >
+                    <textarea
+                      id="adjustment-note"
+                      name="note"
+                      class="mt-1 w-full"></textarea>
+                  </div>
+                  <div class="col-span-2">
+                    <button class="btn-secondary" type="submit"
+                      >{t("Add adjustment")}</button
+                    >
+                  </div>
+                </form>
+              </div>
+            </details>
+          </div>
+          <div class="balance-summary">
+            <div class="balance-highlight" data-tone={balanceKpiTone}>
+              <span>
+                {isCredit ? t("Account credit") : t("Outstanding balance")}
+              </span>
+              <strong>
+                {formatMoney(balanceForDisplay, organization.currency, locale)}
+              </strong>
+            </div>
+            <div>
+              <span>{t("Total debits")}</span>
+              <strong>
+                {
+                  formatMoney(
+                    String(totals.debit),
+                    organization.currency,
+                    locale
+                  )
+                }
+              </strong>
+            </div>
+            <div>
+              <span>{t("Total credits")}</span>
+              <strong>
+                {
+                  formatMoney(
+                    String(totals.credit),
+                    organization.currency,
+                    locale
+                  )
+                }
+              </strong>
+            </div>
+          </div>
+          {
+            accountActivity.length > 0 ? (
+              <div
+                class="table-wrap mt-4"
+                role="region"
+                aria-label={t("Account activity")}
+                tabindex="0"
+              >
+                <table class="w-full text-body-sm">
+                  <thead>
+                    <tr>
+                      <th>{t("Date")}</th>
+                      <th>{t("Description")}</th>
+                      <th class="text-right">{t("Debit")}</th>
+                      <th class="text-right">{t("Credit")}</th>
+                      <th class="text-right">{t("Balance")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {accountActivity
+                      .slice(-10)
+                      .reverse()
+                      .map((entry) => (
+                        <tr>
+                          <td>{formatDate(entry.effectiveDate, locale)}</td>
+                          <td>{entry.description ?? entry.type}</td>
+                          <td class="text-right">
+                            {entry.debit === "0.00"
+                              ? "—"
+                              : formatMoney(
+                                  entry.debit,
+                                  organization.currency,
+                                  locale
+                                )}
+                          </td>
+                          <td class="text-right">
+                            {entry.credit === "0.00"
+                              ? "—"
+                              : formatMoney(
+                                  entry.credit,
+                                  organization.currency,
+                                  locale
+                                )}
+                          </td>
+                          <td class="text-right">
+                            {formatMoney(
+                              entry.balance,
+                              organization.currency,
+                              locale
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState
+                class="mt-4"
+                title={t("No account entries yet")}
+                description={t("Adjustments will appear here.")}
+              />
+            )
+          }
+        </section>
+
+        <section id="messages" class="panel p-6" data-panel="messages">
+          <div class="card-header">
+            <div>
+              <h2>{t("Recent messages")}</h2>
+              <p class="text-body-sm text-muted">
+                {t("Latest messages with this dwelling.")}
+              </p>
+            </div>
+            <a
+              class="btn-secondary"
+              href={`${base}/messages?dwellingId=${dwellingId}`}
+            >
+              {t("View all")}
+            </a>
+          </div>
+          {
+            recentMessages.length > 0 ? (
+              <ul class="message-preview-list">
+                {recentMessages.map((m) => (
+                  <li>
+                    <p>{m.body}</p>
+                    <span>
+                      {formatDate(m.createdAt, locale, organization.timezone)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState
+                class="mt-5"
+                title={t("No messages yet")}
+                description={t(
+                  "Conversations with residents will appear here."
+                )}
+              />
+            )
+          }
+        </section>
+      </div>
+
+      <div class="dwelling-sidebar">
+        <section class="panel p-6" data-panel="overview">
+          <div class="card-header">
+            <div>
+              <h2>{t("Invoice delivery")}</h2>
+              <p class="text-body-sm text-muted">
+                {t("How this dwelling receives its invoices.")}
+              </p>
+            </div>
+          </div>
+          {
+            deliveryResult?.error && (
+              <p class="notice notice-danger" role="alert">
+                {deliveryResult.error.message}
+              </p>
+            )
+          }
+          <form
+            method="POST"
+            action={actions.dwellings.updateInvoiceDelivery}
+            class="delivery-form"
+            data-delivery-form
+          >
+            <input type="hidden" name="organizationId" value={organizationId} />
+            <input type="hidden" name="dwellingId" value={dwellingId} />
+            <ul class="delivery-list">
+              <li>
+                <label class="delivery-option">
+                  <span class="check-toggle">
+                    <input
+                      type="checkbox"
+                      name="invoiceByEmail"
+                      checked={dwelling.invoiceByEmail}
+                    />
+                    <span class="check-icon" aria-hidden="true">
+                      <Icon name="check" size="sm" />
+                    </span>
+                  </span>
+                  <span class="delivery-option-text">
+                    <strong>{t("Email")}</strong>
+                    <p>
+                      {
+                        dwelling.billingEmail
+                          ? `${t("Send invoices to")} ${dwelling.billingEmail}`
+                          : t("No billing email on file")
+                      }
+                    </p>
+                  </span>
+                </label>
+              </li>
+              <li>
+                <label class="delivery-option">
+                  <span class="check-toggle">
+                    <input
+                      type="checkbox"
+                      name="invoiceByPaper"
+                      checked={dwelling.invoiceByPaper}
+                    />
+                    <span class="check-icon" aria-hidden="true">
+                      <Icon name="check" size="sm" />
+                    </span>
+                  </span>
+                  <span class="delivery-option-text">
+                    <strong>{t("Paper")}</strong>
+                    <p>{t("Send a printed copy by mail")}</p>
+                  </span>
+                </label>
+              </li>
+            </ul>
+            <div class="pt-2">
+              <button
+                type="submit"
+                class="btn-primary"
+                disabled={!deliveryResult?.error}
+                data-delivery-save
+              >
+                {t("Save")}
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section id="residents" class="panel p-6" data-panel="residents">
+          <div class="card-header">
+            <div>
+              <h2>{t("Resident access")}</h2>
+              <p class="text-body-sm text-muted">
+                {t("People who can access their invoices and messages.")}
+              </p>
+            </div>
+            <details
+              class="edit-disclosure"
+              open={!!assignResult?.error || !!removeResult?.error}
+            >
+              <summary class="btn-secondary">
+                <Icon name="plus" size="sm" />
+                {t("Add resident")}
+              </summary>
+              <div class="edit-disclosure-panel">
+                {
+                  (assignResult?.error || removeResult?.error) && (
+                    <p class="notice notice-danger" role="alert">
+                      {assignResult?.error?.message ??
+                        removeResult?.error?.message}
+                    </p>
+                  )
+                }
+                <form
+                  method="POST"
+                  action={actions.dwellings.assignResident}
+                  class="mt-4 flex gap-2"
+                >
+                  <input
+                    type="hidden"
+                    name="organizationId"
+                    value={organizationId}
+                  />
+                  <input type="hidden" name="dwellingId" value={dwellingId} />
+                  <input
+                    aria-label={t("Email")}
+                    name="email"
+                    type="email"
+                    required
+                    placeholder="resident@example.com"
+                    class="flex-1 rounded-control border border-border px-3 py-2 text-body-sm"
+                  />
+                  <button type="submit" class="btn-primary">
+                    {t("Assign")}
                   </button>
                 </form>
-              )}
-            </li>
-          ))
-        }
-        {
-          meterList.length === 0 && (
-            <li class="py-2 text-sm text-neutral-500">No meters yet.</li>
-          )
-        }
-      </ul>
-      <form
-        method="POST"
-        action={actions.meters.create}
-        class="mt-4 grid grid-cols-2 gap-3"
-      >
-        <input type="hidden" name="organizationId" value={organizationId} />
-        <input type="hidden" name="dwellingId" value={dwellingId} />
-        <div>
-          <label class="block text-sm font-medium text-neutral-700" for="type"
-            >Type</label
-          >
-          <select
-            id="type"
-            name="type"
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          >
-            {meterTypeOptions.map((t) => <option value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-neutral-700" for="unit"
-            >Unit</label
-          >
-          <input
-            id="unit"
-            name="unit"
-            required
-            placeholder="m3"
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label
-            class="block text-sm font-medium text-neutral-700"
-            for="serialNumber">Serial number</label
-          >
-          <input
-            id="serialNumber"
-            name="serialNumber"
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-neutral-700" for="label"
-            >Label</label
-          >
-          <input
-            id="label"
-            name="label"
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div class="col-span-2">
-          <button
-            type="submit"
-            class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-          >
-            Add meter
-          </button>
-        </div>
-      </form>
+              </div>
+            </details>
+          </div>
+          {
+            residents.length > 0 ? (
+              <ul class="sidebar-item-list">
+                {residents.map((r) => (
+                  <li>
+                    <div class="sidebar-item-avatar" aria-hidden="true">
+                      {(r.displayName ?? r.email).charAt(0).toUpperCase()}
+                    </div>
+                    <div class="sidebar-item-body">
+                      <strong>{r.displayName ?? r.email}</strong>
+                      <p>{r.email}</p>
+                    </div>
+                    <form
+                      method="POST"
+                      action={actions.dwellings.removeResident}
+                    >
+                      <input
+                        type="hidden"
+                        name="organizationId"
+                        value={organizationId}
+                      />
+                      <input
+                        type="hidden"
+                        name="dwellingId"
+                        value={dwellingId}
+                      />
+                      <input type="hidden" name="userId" value={r.userId} />
+                      <button type="submit" class="sidebar-item-remove">
+                        {t("Remove")}
+                      </button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState title={t("No residents assigned.")} />
+            )
+          }
+        </section>
+
+        <section id="meters" class="panel p-6" data-panel="meters">
+          <div class="card-header">
+            <div>
+              <h2>{t("Meters")}</h2>
+              <p class="text-body-sm text-muted">
+                {t("Water and other utility meters in this dwelling.")}
+              </p>
+            </div>
+            <details class="edit-disclosure" open={!!meterResult?.error}>
+              <summary class="btn-secondary">
+                <Icon name="plus" size="sm" />
+                {t("Add meter")}
+              </summary>
+              <div class="edit-disclosure-panel">
+                {
+                  meterResult?.error && (
+                    <p class="notice notice-danger" role="alert">
+                      {meterResult.error.message}
+                    </p>
+                  )
+                }
+                <form
+                  method="POST"
+                  action={actions.meters.create}
+                  class="mt-4 grid grid-cols-2 gap-3"
+                >
+                  <input
+                    type="hidden"
+                    name="organizationId"
+                    value={organizationId}
+                  />
+                  <input type="hidden" name="dwellingId" value={dwellingId} />
+                  <div>
+                    <label class="block text-label text-foreground" for="type"
+                      >{t("Type")}</label
+                    >
+                    <select
+                      id="type"
+                      name="type"
+                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                    >
+                      {
+                        meterTypeOptions.map((mt) => (
+                          <option value={mt}>{entityLabel(mt, locale)}</option>
+                        ))
+                      }
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-label text-foreground" for="unit"
+                      >{t("Unit")}</label
+                    >
+                    <input
+                      id="unit"
+                      name="unit"
+                      required
+                      placeholder="m3"
+                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      class="block text-label text-foreground"
+                      for="serialNumber">{t("Serial number")}</label
+                    >
+                    <input
+                      id="serialNumber"
+                      name="serialNumber"
+                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-label text-foreground" for="label"
+                      >{t("Label")}</label
+                    >
+                    <input
+                      id="label"
+                      name="label"
+                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                    />
+                  </div>
+                  <div class="col-span-2">
+                    <button type="submit" class="btn-primary">
+                      {t("Add meter")}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </details>
+          </div>
+          {
+            meterList.length > 0 ? (
+              <ul class="sidebar-item-list">
+                {meterList.map((m) => (
+                  <li>
+                    <div
+                      class="sidebar-item-icon"
+                      data-meter-type={m.type}
+                      aria-hidden="true"
+                    >
+                      {meterTypeIcons[m.type] ?? "•"}
+                    </div>
+                    <div class="sidebar-item-body">
+                      <strong>
+                        {m.label ?? entityLabel(m.type, locale)}
+                        {m.archivedAt && ` (${t("archived")})`}
+                      </strong>
+                      <p>
+                        {m.serialNumber ? `${m.serialNumber} · ` : ""}
+                        {m.unit}
+                      </p>
+                    </div>
+                    {!m.archivedAt && (
+                      <form method="POST" action={actions.meters.archive}>
+                        <input
+                          type="hidden"
+                          name="organizationId"
+                          value={organizationId}
+                        />
+                        <input type="hidden" name="meterId" value={m.id} />
+                        <button type="submit" class="sidebar-item-remove">
+                          {t("Archive")}
+                        </button>
+                      </form>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState title={t("No meters yet.")} />
+            )
+          }
+        </section>
+      </div>
+    </div>
+
+    <section id="period-history" class="panel p-6" data-panel="history">
+      <h2>{t("Period history")}</h2>
+      <p class="text-body-sm text-muted">
+        {t("This dwelling's billing case in every period it has existed for.")}
+      </p>
+      {
+        caseHistory.length > 0 ? (
+          <div class="table-wrap mt-4">
+            <table class="w-full text-left text-body-sm">
+              <thead class="border-b border-border bg-surface-hover text-muted">
+                <tr>
+                  <th class="px-4 py-2">{t("Period")}</th>
+                  <th class="px-4 py-2">{t("Status")}</th>
+                  <th class="px-4 py-2">{t("Invoice")}</th>
+                  <th class="px-4 py-2 text-right">{t("Amount due")}</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                {caseHistory.map((c) => (
+                  <tr>
+                    <td class="px-4 py-2">
+                      {c.periodYear}-{String(c.periodMonth).padStart(2, "0")}
+                    </td>
+                    <td class="px-4 py-2">
+                      <StatusBadge status={c.status} />
+                    </td>
+                    <td class="px-4 py-2">
+                      {c.invoiceId ? (
+                        <a
+                          href={`${base}/periods/${c.periodId}/invoices/${c.invoiceId}`}
+                          class="text-primary hover:underline"
+                        >
+                          {c.invoiceNumber}
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td class="px-4 py-2 text-right">
+                      {c.invoiceAmountDue
+                        ? formatMoney(
+                            c.invoiceAmountDue,
+                            organization.currency,
+                            locale
+                          )
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState title={t("No billing periods yet.")} />
+        )
+      }
     </section>
 
-    <section class="rounded-xl border border-neutral-200 bg-white p-6">
-      <h2 class="text-lg font-bold text-neutral-900">Messages</h2>
-      <a
-        href={`/admin/o/${organizationId}/messages?dwellingId=${dwellingId}`}
-        class="mt-2 inline-block text-sm text-neutral-900 hover:underline"
-      >
-        View conversations for this dwelling →
-      </a>
+    <section id="audit-history" class="panel p-6" data-panel="history">
+      <h2>{t("Audit history")}</h2>
+      <p class="text-body-sm text-muted">
+        {t("Changes recorded against this dwelling.")}
+      </p>
+      {
+        auditEntries.length > 0 ? (
+          <div class="table-wrap mt-4">
+            <table class="w-full text-left text-body-sm">
+              <thead class="border-b border-border bg-surface-hover text-muted">
+                <tr>
+                  <th class="px-4 py-2">{t("Time")}</th>
+                  <th class="px-4 py-2">{t("Actor")}</th>
+                  <th class="px-4 py-2">{t("Action")}</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                {auditEntries.map((log) => (
+                  <tr>
+                    <td class="px-4 py-2">
+                      {formatDate(log.createdAt, locale, organization.timezone)}
+                    </td>
+                    <td class="px-4 py-2">
+                      {log.actorDisplayName ?? log.actorEmail ?? "—"}
+                    </td>
+                    <td class="px-4 py-2">{log.action}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState title={t("No audit events for this dwelling yet.")} />
+        )
+      }
     </section>
 
-    <section
-      class="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 p-6 text-sm text-neutral-500"
-    >
-      Billing history and audit history for this dwelling become available in
-      later phases.
+    <section class="panel p-6" data-panel="overview">
+      <div class="card-header">
+        <div>
+          <h2>{t("Additional information")}</h2>
+          <p class="text-body-sm text-muted">
+            {t("Internal notes and metadata.")}
+          </p>
+        </div>
+        <details class="edit-disclosure" open={!!additionalInfoResult?.error}>
+          <summary class="btn-secondary">
+            <Icon name="pencil" size="sm" />
+            {t("Edit")}
+          </summary>
+          <div class="edit-disclosure-panel">
+            <form
+              method="POST"
+              action={actions.dwellings.update}
+              class="mt-4 grid grid-cols-2 gap-3"
+            >
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="dwellingId" value={dwellingId} />
+              <div>
+                <label
+                  class="block text-label text-foreground"
+                  for="dwelling-type">{t("Type")}</label
+                >
+                <select
+                  id="dwelling-type"
+                  name="type"
+                  class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                >
+                  {
+                    dwellingTypeOptions.map((dt) => (
+                      <option value={dt} selected={dwelling.type === dt}>
+                        {entityLabel(dt, locale)}
+                      </option>
+                    ))
+                  }
+                </select>
+              </div>
+              <div class="col-span-2">
+                <label class="block text-label text-foreground" for="notes"
+                  >{t("Notes")}</label
+                >
+                <textarea
+                  id="notes"
+                  name="notes"
+                  class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                  >{dwelling.notes ?? ""}</textarea
+                >
+              </div>
+              <div class="col-span-2">
+                <button type="submit" class="btn-primary">{t("Save")}</button>
+              </div>
+            </form>
+          </div>
+        </details>
+      </div>
+      <dl class="detail-list">
+        <div>
+          <dt>{t("Building")}</dt>
+          <dd>{organization.name}</dd>
+        </div>
+        <div>
+          <dt>{t("Apartment number")}</dt>
+          <dd>{dwelling.number}</dd>
+        </div>
+        <div>
+          <dt>{t("Type")}</dt>
+          <dd>{entityLabel(dwelling.type, locale)}</dd>
+        </div>
+        <div>
+          <dt>{t("Status")}</dt>
+          <dd><StatusBadge status={dwellingStatus} /></dd>
+        </div>
+        <div>
+          <dt>{t("Notes")}</dt>
+          <dd>{dwelling.notes ?? "—"}</dd>
+        </div>
+        <div>
+          <dt>{t("Created")}</dt>
+          <dd>
+            {formatDate(dwelling.createdAt, locale, organization.timezone)}
+          </dd>
+        </div>
+        <div>
+          <dt>{t("Last updated")}</dt>
+          <dd>
+            {formatDate(dwelling.updatedAt, locale, organization.timezone)}
+          </dd>
+        </div>
+      </dl>
     </section>
+
+    {
+      !dwelling.archivedAt && (
+        <dialog class="lock-dialog" id="archive-dialog">
+          <div class="dialog-body">
+            <div class="dialog-icon" aria-hidden="true">
+              !
+            </div>
+            <div>
+              <h2>{t("Archive this dwelling?")}</h2>
+              <p>
+                {t(
+                  "Archiving hides it from new periods and active lists. Past invoices and readings remain intact."
+                )}
+              </p>
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <form method="dialog">
+              <button class="btn-secondary" value="cancel">
+                {t("Cancel")}
+              </button>
+            </form>
+            <form method="POST" action={actions.dwellings.archive}>
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="dwellingId" value={dwellingId} />
+              <button type="submit" class="btn-danger">
+                {t("Archive dwelling")}
+              </button>
+            </form>
+          </div>
+        </dialog>
+      )
+    }
   </div>
 </AdminLayout>
+
+<script>
+  const archiveDialog =
+    document.querySelector<HTMLDialogElement>("#archive-dialog");
+  document
+    .querySelector<HTMLButtonElement>("[data-open-archive-dialog]")
+    ?.addEventListener("click", () => {
+      document.querySelector(".more-menu")?.removeAttribute("open");
+      archiveDialog?.showModal();
+    });
+  archiveDialog?.addEventListener("click", (event) => {
+    if (event.target === archiveDialog) archiveDialog.close();
+  });
+
+  // Tabs filter which panels are visible -- "overview" (the default) shows
+  // every panel; any other tab shows only the one panel that declares a
+  // matching data-panel, hiding the rest (including panels like "Basic
+  // information"/"Invoice delivery" that only ever appear under Overview,
+  // since they have no tab of their own).
+  const tabs = [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+  ];
+  const panels = [...document.querySelectorAll<HTMLElement>("[data-panel]")];
+  const panelGroup = document.querySelector<HTMLElement>("[data-panel-group]");
+
+  function setFilter(filter: string) {
+    for (const panel of panels) {
+      panel.hidden = filter !== "overview" && panel.dataset.panel !== filter;
+    }
+    for (const tab of tabs) {
+      tab.setAttribute(
+        "aria-selected",
+        tab.dataset.filter === filter ? "true" : "false"
+      );
+    }
+    panelGroup?.classList.toggle("is-filtered", filter !== "overview");
+  }
+
+  for (const tab of tabs) {
+    tab.addEventListener("click", () => {
+      const filter = tab.dataset.filter;
+      if (filter) setFilter(filter);
+    });
+  }
+
+  document
+    .querySelectorAll<HTMLButtonElement>("[data-goto-panel]")
+    ?.forEach((button) => {
+      button.addEventListener("click", () => {
+        const filter = button.dataset.gotoPanel;
+        if (!filter) return;
+        setFilter(filter);
+        document.querySelector(".more-menu")?.removeAttribute("open");
+        const reduceMotion = window.matchMedia(
+          "(prefers-reduced-motion: reduce)"
+        ).matches;
+        document
+          .querySelector(`[data-panel="${filter}"]`)
+          ?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+      });
+    });
+
+  // Invoice delivery: no separate edit mode -- the checkboxes are always
+  // live, and Save only becomes active once they actually differ from the
+  // saved state (rather than always being submittable).
+  const deliveryForm = document.querySelector<HTMLFormElement>(
+    "[data-delivery-form]"
+  );
+  const deliverySave = deliveryForm?.querySelector<HTMLButtonElement>(
+    "[data-delivery-save]"
+  );
+  if (deliveryForm && deliverySave) {
+    const deliveryCheckboxes = [
+      ...deliveryForm.querySelectorAll<HTMLInputElement>(
+        'input[type="checkbox"]'
+      ),
+    ];
+    const initialState = deliveryCheckboxes.map((box) => box.checked);
+    const updateSaveState = () => {
+      const isDirty = deliveryCheckboxes.some(
+        (box, index) => box.checked !== initialState[index]
+      );
+      deliverySave.disabled = !isDirty;
+    };
+    for (const box of deliveryCheckboxes) {
+      box.addEventListener("change", updateSaveState);
+    }
+  }
+</script>
+
+<style>
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .dwelling-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .more-menu {
+    position: relative;
+  }
+  .more-menu summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  .more-menu summary::-webkit-details-marker {
+    display: none;
+  }
+  .more-menu > div {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 0.35rem);
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 13rem;
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    box-shadow: var(--elevation-1);
+  }
+  .more-menu > div > a,
+  .more-menu > div > button {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-badge);
+    color: var(--color-foreground);
+    font-size: 0.875rem;
+    text-align: left;
+  }
+  .more-menu > div > a:hover,
+  .more-menu > div > button:hover {
+    background: var(--color-surface-hover);
+  }
+  .more-menu .menu-danger {
+    color: var(--color-destructive);
+  }
+  .more-menu .menu-disabled {
+    padding: 0.5rem 0.75rem;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+  }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  .dwelling-tabs {
+    display: flex;
+    gap: 1.5rem;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .dwelling-tabs button {
+    padding: 0 0 0.75rem;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--color-muted);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .dwelling-tabs button:hover {
+    color: var(--color-foreground);
+  }
+  .dwelling-tabs button[aria-selected="true"] {
+    color: var(--color-foreground);
+    border-bottom-color: var(--color-primary);
+  }
+  .dwelling-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 32rem;
+    gap: 1.5rem;
+    align-items: start;
+  }
+  .dwelling-grid.is-filtered {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dwelling-main,
+  .dwelling-sidebar {
+    display: grid;
+    gap: 1.5rem;
+    min-width: 0;
+  }
+  .card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .card-header h2,
+  .panel > h2 {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .edit-disclosure {
+    position: relative;
+    flex: 0 0 auto;
+  }
+  .edit-disclosure summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  .edit-disclosure summary::-webkit-details-marker {
+    display: none;
+  }
+  .edit-disclosure-panel {
+    position: absolute;
+    z-index: 15;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    width: min(28rem, 90vw);
+    padding: 1.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+  }
+  .detail-list {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+  }
+  .detail-list > div {
+    display: grid;
+    grid-template-columns: 10rem minmax(0, 1fr);
+    gap: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.875rem;
+  }
+  .detail-list > div:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+  .detail-list dt {
+    color: var(--color-muted);
+  }
+  .detail-list dd {
+    color: var(--color-foreground);
+    white-space: pre-line;
+  }
+  .balance-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+  }
+  .balance-summary > div {
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+  }
+  .balance-summary > div > span {
+    display: block;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .balance-summary > div > strong {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 1.125rem;
+  }
+  .balance-highlight[data-tone="success"] > strong {
+    color: var(--color-success);
+  }
+  .balance-highlight[data-tone="warning"] > strong {
+    color: var(--color-warning);
+  }
+  .message-preview-list {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+  }
+  .message-preview-list li {
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.875rem;
+  }
+  .message-preview-list li:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+  .message-preview-list p {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .message-preview-list span {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+  .delivery-form {
+    margin-top: 1rem;
+  }
+  .delivery-list {
+    display: grid;
+    gap: 1rem;
+  }
+  .delivery-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    cursor: pointer;
+  }
+  .delivery-option-text strong {
+    font-size: 0.875rem;
+  }
+  .delivery-option-text p {
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .check-toggle {
+    position: relative;
+    display: inline-grid;
+    width: 1.35rem;
+    height: 1.35rem;
+    flex: 0 0 auto;
+    margin-top: 0.1rem;
+  }
+  .check-toggle input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .check-icon {
+    display: grid;
+    width: 1.35rem;
+    height: 1.35rem;
+    place-items: center;
+    border-radius: var(--radius-badge);
+    border: 1px solid var(--color-border);
+    color: var(--color-on-primary);
+    pointer-events: none;
+  }
+  .check-icon svg {
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+  .check-toggle input:checked ~ .check-icon {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+  }
+  .check-toggle input:checked ~ .check-icon svg {
+    opacity: 1;
+  }
+  .check-toggle input:focus-visible ~ .check-icon {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+  .sidebar-item-list {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+  }
+  .sidebar-item-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .sidebar-item-avatar {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-badge-neutral-text);
+    font-size: 0.8125rem;
+    font-weight: 700;
+  }
+  .sidebar-item-icon {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: var(--radius-control);
+    font-size: 1rem;
+  }
+  .sidebar-item-icon[data-meter-type="COLD_WATER"] {
+    background: var(--color-meter-cold-bg);
+    color: var(--color-meter-cold-text);
+  }
+  .sidebar-item-icon[data-meter-type="HOT_WATER"] {
+    background: var(--color-meter-hot-bg);
+    color: var(--color-meter-hot-text);
+  }
+  .sidebar-item-icon[data-meter-type="ELECTRICITY"] {
+    background: var(--color-meter-electricity-bg);
+    color: var(--color-meter-electricity-text);
+  }
+  .sidebar-item-icon[data-meter-type="GAS"] {
+    background: var(--color-meter-gas-bg);
+    color: var(--color-meter-gas-text);
+  }
+  .sidebar-item-icon[data-meter-type="HEAT"] {
+    background: var(--color-meter-heat-bg);
+    color: var(--color-meter-heat-text);
+  }
+  .sidebar-item-icon[data-meter-type="OTHER"] {
+    background: var(--color-badge-neutral-bg);
+  }
+  .sidebar-item-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.875rem;
+  }
+  .sidebar-item-body strong {
+    display: block;
+  }
+  .sidebar-item-body p {
+    margin-top: 0.1rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .sidebar-item-remove {
+    flex: 0 0 auto;
+    color: var(--color-destructive);
+    font-size: 0.8125rem;
+  }
+  .sidebar-item-remove:hover {
+    text-decoration: underline;
+  }
+  .lock-dialog {
+    width: min(30rem, calc(100vw - 2rem));
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    color: var(--color-foreground);
+    box-shadow: var(--elevation-overlay);
+  }
+  .lock-dialog::backdrop {
+    background: var(--color-backdrop);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lock-dialog {
+      opacity: 0;
+      scale: 0.96;
+      transition:
+        opacity 200ms ease,
+        scale 200ms ease,
+        overlay 200ms allow-discrete,
+        display 200ms allow-discrete;
+    }
+    .lock-dialog[open] {
+      opacity: 1;
+      scale: 1;
+    }
+    @starting-style {
+      .lock-dialog[open] {
+        opacity: 0;
+        scale: 0.96;
+      }
+    }
+    .lock-dialog::backdrop {
+      background: transparent;
+      transition:
+        background-color 200ms ease,
+        overlay 200ms allow-discrete,
+        display 200ms allow-discrete;
+    }
+    .lock-dialog[open]::backdrop {
+      background: var(--color-backdrop);
+    }
+    @starting-style {
+      .lock-dialog[open]::backdrop {
+        background: transparent;
+      }
+    }
+  }
+  .dialog-body {
+    display: flex;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+  .dialog-icon {
+    display: grid;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-badge-warning-bg);
+    color: var(--color-badge-warning-text);
+    font-weight: 800;
+  }
+  .dialog-body h2 {
+    font-size: 1.125rem;
+    font-weight: 700;
+  }
+  .dialog-body p {
+    margin-top: 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  @media (max-width: 900px) {
+    .stat-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .dwelling-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 540px) {
+    .stat-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

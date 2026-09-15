@@ -7,14 +7,11 @@
 // every other domain function here, it takes the caller's full AuthContext
 // and does its own role-based tenant/dwelling check after loading the
 // conversation, since which check applies isn't known until then.
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import type { AuthContext } from "../authorization/context";
-import {
-  conversations,
-  conversationStatusEnum,
-  messages,
-} from "../../db/schema/messaging";
+import { conversations, messages } from "../../db/schema/messaging";
+import { appUsers } from "../../db/schema/auth";
 import { dwellings } from "../../db/schema/dwellings";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { NotFoundError } from "../errors";
@@ -175,21 +172,24 @@ export async function resolveConversation(
 }
 
 export interface ListConversationsOptions {
-  status?: (typeof conversationStatusEnum.enumValues)[number];
   dwellingId?: string;
 }
 
+// Returns each conversation's last message and unread flag alongside its
+// own fields, so the inbox list can show a preview snippet and an unread
+// dot without a per-row query -- same two-query shape as
+// listConversationsWithMessagesForDwelling below, just aggregated instead
+// of returning every message.
 export async function listConversationsForOrganization(
   db: Db,
   organizationId: string,
   options: ListConversationsOptions = {}
 ) {
   const conditions = [eq(conversations.organizationId, organizationId)];
-  if (options.status) conditions.push(eq(conversations.status, options.status));
   if (options.dwellingId)
     conditions.push(eq(conversations.dwellingId, options.dwellingId));
 
-  return db
+  const rows = await db
     .select({
       id: conversations.id,
       subject: conversations.subject,
@@ -204,6 +204,34 @@ export async function listConversationsForOrganization(
     .innerJoin(dwellings, eq(dwellings.id, conversations.dwellingId))
     .where(and(...conditions))
     .orderBy(desc(conversations.updatedAt));
+  if (rows.length === 0) return [];
+
+  const allMessages = await db
+    .select()
+    .from(messages)
+    .where(
+      inArray(
+        messages.conversationId,
+        rows.map((r) => r.id)
+      )
+    )
+    .orderBy(messages.createdAt);
+
+  const messagesByConversation = new Map<string, typeof allMessages>();
+  for (const m of allMessages) {
+    const list = messagesByConversation.get(m.conversationId) ?? [];
+    list.push(m);
+    messagesByConversation.set(m.conversationId, list);
+  }
+
+  return rows.map((row) => {
+    const convoMessages = messagesByConversation.get(row.id) ?? [];
+    return {
+      ...row,
+      lastMessage: convoMessages[convoMessages.length - 1] ?? null,
+      hasUnread: convoMessages.some((m) => !m.readAt),
+    };
+  });
 }
 
 export async function getConversationForAdmin(
@@ -217,8 +245,11 @@ export async function getConversationForAdmin(
       subject: conversations.subject,
       status: conversations.status,
       createdAt: conversations.createdAt,
+      updatedAt: conversations.updatedAt,
       dwellingId: conversations.dwellingId,
       dwellingNumber: dwellings.number,
+      dwellingType: dwellings.type,
+      dwellingAreaM2: dwellings.areaM2,
       occupantName: dwellings.occupantName,
     })
     .from(conversations)
@@ -234,15 +265,48 @@ export async function getConversationForAdmin(
   return conversation;
 }
 
+// Joins appUsers for senderRole only (not the sender's own name) -- the
+// inbox displays a resident sender as the dwelling's occupant name (already
+// available from the conversation) and an admin sender generically as
+// "Admin", regardless of which admin account sent it.
 export async function listMessagesForConversation(
   db: Db,
   conversationId: string
 ) {
   return db
-    .select()
+    .select({
+      id: messages.id,
+      body: messages.body,
+      createdAt: messages.createdAt,
+      readAt: messages.readAt,
+      senderUserId: messages.senderUserId,
+      senderRole: appUsers.role,
+    })
     .from(messages)
+    .innerJoin(appUsers, eq(appUsers.id, messages.senderUserId))
     .where(eq(messages.conversationId, conversationId))
     .orderBy(messages.createdAt);
+}
+
+// Called when an admin opens a conversation -- marks every unread message
+// in it as read. Scoped by organizationId in the same query (not a
+// separate check after an unscoped read) so a foreign conversation is a
+// silent no-op rather than a cross-tenant write.
+export async function markConversationRead(
+  db: Db,
+  organizationId: string,
+  conversationId: string
+) {
+  await db
+    .update(messages)
+    .set({ readAt: new Date() })
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.organizationId, organizationId),
+        isNull(messages.readAt)
+      )
+    );
 }
 
 // Resident-facing single page shows every one of the dwelling's

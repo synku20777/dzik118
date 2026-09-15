@@ -21,11 +21,12 @@ const STATUS_PRIORITY: Record<
   number
 > = {
   MISSING_DATA: 0,
-  DRAFT: 1,
-  PREPARED: 2,
-  OVERDUE: 3,
-  SENT: 4,
-  PAID: 5,
+  READY: 1,
+  DRAFT: 2,
+  PREPARED: 3,
+  OVERDUE: 4,
+  SENT: 5,
+  PAID: 6,
 };
 
 function compareDwellingNumbers(a: string, b: string): number {
@@ -51,11 +52,23 @@ export async function listCasesForPeriod(
       id: billingCases.id,
       dwellingId: billingCases.dwellingId,
       dwellingNumber: dwellings.number,
+      occupantName: dwellings.occupantName,
+      billingEmail: dwellings.billingEmail,
+      invoiceByEmail: dwellings.invoiceByEmail,
+      invoiceByPaper: dwellings.invoiceByPaper,
       status: billingCases.status,
       missingData: billingCases.missingData,
       invoiceId: invoices.id,
       invoiceNumber: invoices.invoiceNumber,
       invoiceTotal: invoices.total,
+      invoiceCurrentCharges: invoices.currentCharges,
+      invoiceAmountDue: invoices.amountDue,
+      invoicePreviousOutstanding: invoices.previousOutstanding,
+      invoicePreviousCreditApplied: invoices.previousCreditApplied,
+      invoiceLateFeeApplied: invoices.lateFeeApplied,
+      invoiceIssuerSnapshot: invoices.issuerSnapshot,
+      invoiceRecipientSnapshot: invoices.recipientSnapshot,
+      invoicePaymentSnapshot: invoices.paymentSnapshot,
     })
     .from(billingCases)
     .innerJoin(dwellings, eq(dwellings.id, billingCases.dwellingId))
@@ -83,6 +96,38 @@ export async function listCasesForPeriod(
     if (byStatus !== 0) return byStatus;
     return compareDwellingNumbers(a.dwellingNumber, b.dwellingNumber);
   });
+}
+
+// Phase D (Organizations/dwellings) - the dwelling-detail page's "Period
+// history" tab: this dwelling's billing case in every period it's existed
+// for, newest period first (the inverse of listCasesForPeriod, which lists
+// every dwelling within one period).
+export async function listCasesForDwelling(
+  db: Db,
+  organizationId: string,
+  dwellingId: string
+) {
+  return db
+    .select({
+      id: billingCases.id,
+      periodId: billingCases.periodId,
+      periodYear: billingPeriods.year,
+      periodMonth: billingPeriods.month,
+      status: billingCases.status,
+      invoiceId: invoices.id,
+      invoiceNumber: invoices.invoiceNumber,
+      invoiceAmountDue: invoices.amountDue,
+    })
+    .from(billingCases)
+    .innerJoin(billingPeriods, eq(billingPeriods.id, billingCases.periodId))
+    .leftJoin(invoices, eq(invoices.billingCaseId, billingCases.id))
+    .where(
+      and(
+        eq(billingCases.dwellingId, dwellingId),
+        eq(billingCases.organizationId, organizationId)
+      )
+    )
+    .orderBy(desc(billingPeriods.year), desc(billingPeriods.month));
 }
 
 // Meters + this period's existing reading (if any) for one dwelling, for

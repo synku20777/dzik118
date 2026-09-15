@@ -1,0 +1,169 @@
+---
+import type { getInvoice } from "../../domain/billing/generation";
+import {
+  uiLocale,
+  translate,
+  formatMoney,
+  formatNumber,
+  formatDate,
+} from "../../lib/ui/i18n";
+interface Props {
+  invoice: Awaited<ReturnType<typeof getInvoice>>["invoice"];
+  lines: Awaited<ReturnType<typeof getInvoice>>["lines"];
+  paid?: boolean;
+}
+const { invoice, lines, paid = false } = Astro.props;
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+const issuer = invoice.issuerSnapshot as Record<string, string | null>;
+const recipient = invoice.recipientSnapshot as Record<string, string | null>;
+const payment = invoice.paymentSnapshot as Record<string, string | null>;
+const money = (value: string) => formatMoney(value, invoice.currency, locale);
+---
+
+<article
+  class="invoice-document"
+  aria-label={t("Invoice") + " " + invoice.invoiceNumber}
+>
+  <div class="invoice-parties">
+    <section>
+      <h2>{t("Issuer")}</h2><p>
+        <strong>{issuer.name}</strong><br />{issuer.addressLine1}{
+          issuer.city && <>, {issuer.city}</>
+        }
+      </p>
+    </section>
+    <section>
+      <h2>{t("Recipient")}</h2><p>
+        <strong>{recipient.billingName ?? recipient.occupantName ?? "—"}</strong
+        ><br />{t("Dwelling")}
+        {recipient.dwellingNumber}<br />{recipient.billingAddress}{
+          recipient.billingEmail && (
+            <>
+              <br />
+              {recipient.billingEmail}
+            </>
+          )
+        }
+      </p>
+    </section>
+    <section>
+      <h2>{t("Payment")}</h2><p>
+        {payment.bankName ?? "—"}<br />{payment.iban ?? "—"}<br />{
+          t("Reference")
+        }: {invoice.invoiceNumber}
+      </p>
+    </section>
+    <section>
+      <h2>{t("Dates")}</h2><p>
+        {t("Issue date")}: {formatDate(invoice.issueDate, locale)}<br />{
+          t("Due date")
+        }: <strong>{formatDate(invoice.dueDate, locale)}</strong>
+      </p>
+    </section>
+  </div>
+  <div class="table-wrap" tabindex="0" role="region" aria-label={t("Invoice")}>
+    <table class="w-full text-sm">
+      <thead
+        ><tr
+          ><th class="text-left">{t("Description")}</th><th class="text-right"
+            >{t("Quantity")}</th
+          ><th class="text-right">{t("Unit price")}</th><th class="text-right"
+            >{t("Net")}</th
+          ><th class="text-right">{t("VAT")}</th><th class="text-right"
+            >{t("Gross")}</th
+          ></tr
+        ></thead
+      >
+      <tbody class="divide-y divide-border"
+        >{
+          lines.map((line) => (
+            <tr>
+              <>
+                <td>{line.description}</td>
+                <td class="text-right whitespace-nowrap">
+                  {line.quantity === null
+                    ? "—"
+                    : formatNumber(line.quantity, locale, 4)}{" "}
+                  {line.unit}
+                </td>
+                <td class="text-right">
+                  {line.unitPrice === null
+                    ? "—"
+                    : formatNumber(line.unitPrice, locale, 4)}
+                </td>
+                <td class="text-right">{money(line.netAmount)}</td>
+                <td class="text-right">{money(line.vatAmount)}</td>
+                <td class="text-right font-semibold">
+                  {money(line.grossAmount)}
+                </td>
+              </>
+            </tr>
+          ))
+        }</tbody
+      >
+    </table>
+  </div>
+  <dl class="invoice-totals">
+    <div><dt>{t("Subtotal")}</dt><dd>{money(invoice.subtotal)}</dd></div><div>
+      <dt>{t("VAT")}</dt><dd>{money(invoice.vatTotal)}</dd>
+    </div><div>
+      <dt>{t("Current charges")}</dt><dd>{money(invoice.currentCharges)}</dd>
+    </div>
+    {
+      invoice.previousOutstanding !== "0.00" && (
+        <div>
+          <>
+            <dt>{t("Previous outstanding")}</dt>
+            <dd>{money(invoice.previousOutstanding)}</dd>
+          </>
+        </div>
+      )
+    }
+    {
+      invoice.previousCreditApplied !== "0.00" && (
+        <div>
+          <>
+            <dt>{t("Credit applied")}</dt>
+            <dd>−{money(invoice.previousCreditApplied)}</dd>
+          </>
+        </div>
+      )
+    }
+    {
+      invoice.lateFeeApplied !== "0.00" && (
+        <div>
+          <>
+            <dt>{t("Late fee")}</dt>
+            <dd>{money(invoice.lateFeeApplied)}</dd>
+          </>
+        </div>
+      )
+    }
+    {
+      invoice.manualAdjustment !== "0.00" && (
+        <div>
+          <>
+            <dt>{t("Manual adjustment")}</dt>
+            <dd>{money(invoice.manualAdjustment)}</dd>
+          </>
+        </div>
+      )
+    }
+    <div class="invoice-total-due">
+      <dt>{t(paid ? "Total" : "Amount due")}</dt><dd>
+        {money(invoice.amountDue)}
+      </dd>
+    </div>
+    {
+      invoice.remainingCredit !== "0.00" && (
+        <div>
+          <>
+            <dt>{t("Account credit")}</dt>
+            <dd>{money(invoice.remainingCredit)}</dd>
+          </>
+        </div>
+      )
+    }
+  </dl>
+</article>

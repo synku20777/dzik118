@@ -1,0 +1,418 @@
+---
+// Contextual admin drawer shell (UX spec sections 5-6). One instance lives
+// on the workbench page; WorkbenchDrawerController (src/lib/ui/
+// workbench-drawer.ts) populates its header/body/footer client-side per
+// open, rather than this rendering N pre-built drawer variants server-side
+// -- there's exactly one dwelling's data to show at a time, fetched on
+// demand (spec section 28: "if data is not already in workbench payload,
+// show a compact loading state").
+import { entityLabel, translate, uiLocale } from "../../lib/ui/i18n";
+import { invoiceStatusBadge } from "../../lib/ui/invoice-status";
+
+interface Props {
+  organizationId: string;
+  periodId: string;
+  periodStatus: string;
+  periodName: string;
+  workbenchPath: string;
+  // Selectors re-fetched and swapped in after a drawer save. Defaults to the
+  // monthly workbench's own sections; pages embedding this drawer elsewhere
+  // (e.g. the dashboard's "Needs attention" list) pass their own so a saved
+  // reading or billing-detail change is reflected without a full reload.
+  refreshSelectors?: string[];
+}
+const {
+  organizationId,
+  periodId,
+  periodStatus,
+  periodName,
+  workbenchPath,
+  refreshSelectors = [
+    ".workflow-overview",
+    ".financial-summary",
+    ".case-queue",
+  ],
+} = Astro.props;
+
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+
+const METER_TYPES = [
+  "COLD_WATER",
+  "HOT_WATER",
+  "ELECTRICITY",
+  "GAS",
+  "HEAT",
+  "OTHER",
+];
+const CASE_STATUSES = [
+  "MISSING_DATA",
+  "READY",
+  "DRAFT",
+  "PREPARED",
+  "SENT",
+  "PAID",
+  "OVERDUE",
+  "OPEN",
+  "LOCKED",
+];
+
+const config = {
+  organizationId,
+  periodId,
+  periodStatus,
+  periodName,
+  workbenchPath,
+  refreshSelectors,
+  strings: {
+    dwellingEyebrow: t("DWELLING"),
+    meterReadingsTitle: t("Meter readings"),
+    billingDetailsTitle: t("Billing details"),
+    cancel: t("Cancel"),
+    saveReadings: t("Save readings"),
+    saveChanges: t("Save changes"),
+    saving: t("Saving…"),
+    loading: t("Loading…"),
+    previousReading: t("Previous reading"),
+    currentReading: t("Current reading"),
+    calculatedConsumption: t("Calculated consumption"),
+    readingsBannerTitle: t("Enter current meter readings for this period."),
+    readingsBannerText: t("Consumption is calculated automatically."),
+    occupantName: t("Occupant name"),
+    billingName: t("Billing name"),
+    billingEmail: t("Billing email"),
+    billingAddress: t("Billing address"),
+    billingNamePlaceholder: t("e.g. John Smith or Company Ltd"),
+    billingAddressPlaceholder: t("e.g. 123 Main Street, Apt 4B\nRiga, LV-1010"),
+    billingBlockersBanner: t(
+      "Complete the details below to resolve invoice preparation blockers."
+    ),
+    recipientDetailsIncomplete: t("Recipient details incomplete"),
+    billingEmailMissingBadge: t("Billing email missing"),
+    openFullDwelling: t("Open full dwelling"),
+    residentInformationLabel: t("Resident information"),
+    billingInformationHeading: t("Billing information"),
+    additionalInformationHeading: t("Additional information"),
+    internalNoteLabel: t("Internal note (optional)"),
+    internalNotePlaceholder: t("Add a note about this dwelling…"),
+    discardConfirm: t(
+      "Discard unsaved changes? Your edits have not been saved."
+    ),
+    readingSaved: t("Reading saved"),
+    changesSaved: t("Changes saved"),
+    genericError: t("Something went wrong. Please try again."),
+  },
+  meterTypeLabels: Object.fromEntries(
+    METER_TYPES.map((type) => [type, entityLabel(type, locale)])
+  ),
+  // {label, tone, icon} per status -- drives the header's status pill,
+  // which reuses the app-wide .status-badge tone styling (see StatusBadge).
+  caseStatuses: Object.fromEntries(
+    CASE_STATUSES.map((status) => {
+      const badge = invoiceStatusBadge(status);
+      return [
+        status,
+        {
+          label: translate(locale, badge.label),
+          tone: badge.tone,
+          icon: badge.icon,
+        },
+      ];
+    })
+  ),
+};
+---
+
+<dialog
+  id="admin-context-drawer"
+  class="context-drawer"
+  aria-labelledby="context-drawer-title"
+  data-config={JSON.stringify(config)}
+>
+  <header class="context-drawer-header">
+    <div class="context-drawer-heading">
+      <p class="context-drawer-eyebrow" id="context-drawer-eyebrow"></p>
+      <div class="context-drawer-title-row">
+        <h2 class="context-drawer-title" id="context-drawer-title"></h2>
+        <span class="status-badge" id="context-drawer-status-pill" hidden
+        ></span>
+      </div>
+      <p class="context-drawer-meta" id="context-drawer-meta"></p>
+    </div>
+    <button
+      type="button"
+      class="context-drawer-close"
+      data-close-drawer
+      aria-label={t("Close")}
+    >
+      <span aria-hidden="true">×</span>
+    </button>
+  </header>
+  <div class="context-drawer-body" id="context-drawer-body" aria-live="polite">
+  </div>
+  <footer class="context-drawer-footer" id="context-drawer-footer"></footer>
+</dialog>
+<div id="workbench-announcer" class="sr-only" aria-live="polite"></div>
+<script>
+  import "../../lib/ui/workbench-drawer";
+</script>
+
+<style is:global>
+  /* Astro scopes component styles by adding a data-astro-cid attribute
+     that only elements written directly in this template receive. Every
+     .drawer-* class below is applied by workbench-drawer.ts via
+     document.createElement to elements it inserts at runtime, so scoped
+     CSS can never match them -- this whole block must stay global. Class
+     names are drawer-specific enough (checked against global.css and
+     every other .astro file) that this carries no collision risk.
+
+     The generic drawer SHELL (.context-drawer and its header/body/footer/
+     close/animation rules) lives in global.css instead of here -- it is
+     also used by AdminLayout's mobile-nav-drawer, which renders on every
+     admin page regardless of whether that page happens to render this
+     component. Astro only bundles a component's <style> onto pages that
+     actually render it, so keeping the shell here left every page without
+     its own AdminContextDrawer instance (guide, settings, dwellings list,
+     payments, ...) with an unstyled, broken mobile-nav-drawer. Only the
+     rules specific to THIS drawer's own content (meter rows, resident
+     cards, field rows below) stay component-scoped. */
+  .drawer-info-banner {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+    border-radius: var(--radius-panel);
+    background: var(--color-notice-bg);
+    color: var(--color-notice-text);
+  }
+  .drawer-info-icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 1.5rem;
+    height: 1.5rem;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-style: italic;
+  }
+  .drawer-info-title {
+    font-weight: 650;
+    font-size: 0.875rem;
+  }
+  .drawer-info-text {
+    margin-top: 0.25rem;
+    font-size: 0.8125rem;
+    opacity: 0.85;
+  }
+  .drawer-info-banner[data-tone="warning"] {
+    background: var(--color-notice-warning-bg);
+    color: var(--color-notice-warning-text);
+  }
+  .drawer-info-banner[data-tone="warning"] .drawer-info-icon {
+    background: var(--color-warning);
+  }
+  .drawer-blockers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+  .drawer-meter {
+    padding: 1.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+  }
+  .drawer-meter + .drawer-meter {
+    margin-top: 1rem;
+  }
+  .drawer-meter-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .drawer-meter-icon {
+    display: grid;
+    width: 2.75rem;
+    height: 2.75rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: var(--radius-panel);
+    font-size: 1.25rem;
+  }
+  .drawer-meter-icon svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+  .drawer-meter-icon[data-meter-type="COLD_WATER"] {
+    background: var(--color-meter-cold-bg);
+    color: var(--color-meter-cold-text);
+  }
+  .drawer-meter-icon[data-meter-type="HOT_WATER"] {
+    background: var(--color-meter-hot-bg);
+    color: var(--color-meter-hot-text);
+  }
+  .drawer-meter-icon[data-meter-type="ELECTRICITY"] {
+    background: var(--color-meter-electricity-bg);
+    color: var(--color-meter-electricity-text);
+  }
+  .drawer-meter-icon[data-meter-type="GAS"] {
+    background: var(--color-meter-gas-bg);
+    color: var(--color-meter-gas-text);
+  }
+  .drawer-meter-icon[data-meter-type="HEAT"] {
+    background: var(--color-meter-heat-bg);
+    color: var(--color-meter-heat-text);
+  }
+  .drawer-meter-icon[data-meter-type="OTHER"] {
+    background: var(--color-badge-neutral-bg);
+  }
+  .drawer-meter-name {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .drawer-meter-sub {
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .drawer-resident-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+  }
+  .drawer-resident-main {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+  .drawer-resident-icon {
+    display: grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: var(--radius-panel);
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-muted);
+  }
+  .drawer-resident-icon svg {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+  .drawer-resident-eyebrow {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .drawer-resident-name {
+    font-size: 0.875rem;
+    font-weight: 650;
+  }
+  .drawer-resident-address {
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .drawer-field-row {
+    margin-top: 1rem;
+  }
+  .drawer-field-row:first-of-type {
+    margin-top: 0;
+  }
+  .drawer-field-row-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-muted);
+  }
+  .drawer-field-row-control {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .drawer-field-unit {
+    flex: 0 0 auto;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .drawer-readonly-box,
+  .drawer-input-box {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    padding: 0.75rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+  .drawer-readonly-box {
+    background: var(--color-surface-hover);
+    color: var(--color-muted);
+  }
+  .drawer-input-box,
+  .drawer-textarea-box {
+    background: var(--color-surface);
+    color: var(--color-foreground);
+  }
+  .drawer-input-box:focus-visible,
+  .drawer-textarea-box:focus-visible {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  }
+  .drawer-textarea-box {
+    display: block;
+    width: 100%;
+    min-height: 5.5rem;
+    padding: 0.75rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    font-size: 0.875rem;
+    font-family: inherit;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+  .drawer-field {
+    margin-top: 1.25rem;
+  }
+  .drawer-field:first-of-type {
+    margin-top: 0;
+  }
+  .drawer-field-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+  .drawer-field-error {
+    margin-top: 0.5rem;
+    color: var(--color-destructive);
+    font-size: 0.8125rem;
+  }
+  .drawer-section-heading {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+    font-weight: 650;
+  }
+  .drawer-section-heading:first-of-type {
+    margin-top: 0;
+  }
+</style>

@@ -86,6 +86,45 @@ export function addExact(a: string, b: string): string {
   return formatUnscaled(sum < 0n, sum < 0n ? -sum : sum, scale);
 }
 
+export function negateExact(value: string): string {
+  const parsed = parseDecimal(value);
+  return formatUnscaled(!parsed.negative, parsed.unscaled, parsed.scale);
+}
+
+export function subtractExact(a: string, b: string): string {
+  return addExact(a, negateExact(b));
+}
+
+export function compareExact(a: string, b: string): -1 | 0 | 1 {
+  const difference = parseDecimal(subtractExact(a, b));
+  if (difference.unscaled === 0n) return 0;
+  return difference.negative ? -1 : 1;
+}
+
+export function minExact(a: string, b: string): string {
+  return compareExact(a, b) <= 0 ? a : b;
+}
+
+export function maxExact(a: string, b: string): string {
+  return compareExact(a, b) >= 0 ? a : b;
+}
+
+// ROUND(base × daily percentage × days / 100, scale), with one rounding
+// step so long accrual periods do not compound an intermediate rounded value.
+export function percentForDays(
+  base: string,
+  dailyPercent: string,
+  days: number,
+  scale: number
+): string {
+  const pa = parseDecimal(base);
+  const pb = parseDecimal(dailyPercent);
+  const negative = (pa.negative !== pb.negative) !== days < 0;
+  const rawUnscaled = pa.unscaled * pb.unscaled * BigInt(Math.abs(days));
+  const rounded = rescale(rawUnscaled, pa.scale + pb.scale + 2, scale);
+  return formatUnscaled(negative, rounded, scale);
+}
+
 export function sumExact(values: string[]): string {
   return values.reduce((acc, v) => addExact(acc, v), "0.00");
 }

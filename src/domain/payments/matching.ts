@@ -3,6 +3,7 @@
 // calling any of these (spec Section 14).
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
+import { paymentAllocations } from "../../db/schema/accounts";
 import { billingCases } from "../../db/schema/billing";
 import { invoices } from "../../db/schema/invoices";
 import {
@@ -11,7 +12,17 @@ import {
   paymentMatches,
 } from "../../db/schema/payments";
 import { recordAuditEvent } from "../../lib/logging/audit";
+import {
+  compareExact,
+  maxExact,
+  minExact,
+  subtractExact,
+} from "../../lib/decimal2";
 import { ConflictError, NotFoundError } from "../errors";
+import {
+  getInvoiceAllocatedAmount,
+  postAccountEntry,
+} from "../accounts/ledger";
 
 export { ConflictError, NotFoundError };
 
@@ -27,12 +38,9 @@ export interface ProposeExactMatchesResult {
   proposed: number;
 }
 
-// Spec Section 25 exact-match rule: currency equals invoice currency;
-// amount equals invoice total exactly; normalized reference contains the
-// exact invoice number; invoice is not paid; transaction has no confirmed
-// payment match. Ambiguous cases (zero or more than one candidate
-// invoice) are left unmatched rather than guessed at -- this only ever
-// proposes, never auto-confirms (spec: "admin confirms proposal").
+// Reference identifies a single issued invoice. Exact amount remains the
+// strongest proposal; partial and overpayment proposals stay explicit until
+// an ADMIN confirms their financial consequence.
 export async function proposeExactMatches(
   db: DbOrTx,
   organizationId: string,
@@ -49,21 +57,6 @@ export async function proposeExactMatches(
       )
     );
 
-  // Invoices already claimed by a live (non-rejected) match, in this
-  // import or any earlier one -- an invoice can be proposed for at most
-  // one transaction at a time, otherwise two transactions could each be
-  // confirmed against the same invoice.
-  const claimedRows = await db
-    .select({ invoiceId: paymentMatches.invoiceId })
-    .from(paymentMatches)
-    .where(
-      and(
-        eq(paymentMatches.organizationId, organizationId),
-        inArray(paymentMatches.status, ["PROPOSED", "CONFIRMED"])
-      )
-    );
-  const claimedInvoiceIds = new Set(claimedRows.map((r) => r.invoiceId));
-
   let proposed = 0;
   for (const txn of transactions) {
     // PAY-002: "no reference -> unmatched".
@@ -79,38 +72,58 @@ export async function proposeExactMatches(
     if (existingMatches.length > 0) continue;
 
     const candidates = await db
-      .select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber })
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+        amountDue: invoices.amountDue,
+      })
       .from(invoices)
+      .innerJoin(billingCases, eq(billingCases.id, invoices.billingCaseId))
       .where(
         and(
           eq(invoices.organizationId, organizationId),
           eq(invoices.currency, txn.currency),
-          eq(invoices.total, txn.amount),
-          isNull(invoices.paidAt)
+          isNull(invoices.paidAt),
+          inArray(billingCases.status, ["PREPARED", "SENT", "OVERDUE"])
         )
       );
 
     const normalizedReference = normalizeForMatch(txn.reference);
-    const matching = candidates.filter(
-      (invoice) =>
-        !claimedInvoiceIds.has(invoice.id) &&
-        normalizedReference.includes(normalizeForMatch(invoice.invoiceNumber))
+    const matching = candidates.filter((invoice) =>
+      normalizedReference.includes(normalizeForMatch(invoice.invoiceNumber))
     );
     if (matching.length !== 1) continue;
+
+    const allocated = await getInvoiceAllocatedAmount(
+      db,
+      organizationId,
+      matching[0].id
+    );
+    const remaining = subtractExact(matching[0].amountDue, allocated);
+    if (compareExact(remaining, "0.00") <= 0) continue;
+    const resultType =
+      compareExact(txn.amount, remaining) === 0
+        ? "EXACT"
+        : compareExact(txn.amount, remaining) < 0
+          ? "PARTIAL"
+          : "OVERPAYMENT";
+    const proposedAllocationAmount = minExact(txn.amount, remaining);
 
     // Insert + audit as one unit -- an audit write failing after a bare
     // insert would leave a proposal with no audit trail, and a rerun's
     // existingMatches check above would then skip it forever.
-    const match = await db.transaction(async (tx) => {
+    await db.transaction(async (tx) => {
       const [inserted] = await tx
         .insert(paymentMatches)
         .values({
           organizationId,
           bankTransactionId: txn.id,
           invoiceId: matching[0].id,
-          matchType: "AUTO_EXACT",
+          matchType: resultType === "EXACT" ? "AUTO_EXACT" : "AUTO_PROBABLE",
+          resultType,
+          proposedAllocationAmount,
           status: "PROPOSED",
-          confidence: "1.0000",
+          confidence: resultType === "EXACT" ? "1.0000" : "0.9000",
         })
         .returning();
       await recordAuditEvent(tx, {
@@ -123,15 +136,14 @@ export async function proposeExactMatches(
       });
       return inserted;
     });
-    claimedInvoiceIds.add(match.invoiceId);
     proposed++;
   }
 
   return { proposed };
 }
 
-// PAY-003. Idempotent: confirming an already-confirmed match is a no-op
-// returning its current state (spec: "repeat idempotent").
+// Confirmation posts the bank transaction once, records the portion assigned
+// to this invoice, and marks PAID only when this statement is fully settled.
 export async function confirmMatch(
   db: Db,
   organizationId: string,
@@ -158,6 +170,19 @@ export async function confirmMatch(
       );
     }
 
+    const [transaction] = await tx
+      .select()
+      .from(bankTransactions)
+      .where(
+        and(
+          eq(bankTransactions.id, match.bankTransactionId),
+          eq(bankTransactions.organizationId, organizationId)
+        )
+      )
+      .for("update")
+      .limit(1);
+    if (!transaction) throw new NotFoundError("Bank transaction not found");
+
     const [invoice] = await tx
       .select()
       .from(invoices)
@@ -170,42 +195,99 @@ export async function confirmMatch(
       .for("update")
       .limit(1);
     if (!invoice) throw new NotFoundError("Invoice not found");
-    // match.status is PROPOSED at this point (CONFIRMED/REJECTED already
-    // returned/threw above), so a paid invoice here was paid by a
-    // *different* match -- without this, a second transaction proposed
-    // against the same invoice could be confirmed too, double-recording
-    // payment for one invoice.
-    if (invoice.paidAt) {
-      throw new ConflictError("This invoice already has a confirmed payment");
+    if (invoice.paidAt) throw new ConflictError("This invoice is already paid");
+    const allocatedBefore = await getInvoiceAllocatedAmount(
+      tx,
+      organizationId,
+      invoice.id
+    );
+    const remaining = subtractExact(invoice.amountDue, allocatedBefore);
+    if (compareExact(remaining, "0.00") <= 0) {
+      throw new ConflictError("This invoice is already fully allocated");
     }
+    const allocatedAmount = minExact(transaction.amount, remaining);
+    const resultType =
+      compareExact(transaction.amount, remaining) === 0
+        ? "EXACT"
+        : compareExact(transaction.amount, remaining) < 0
+          ? "PARTIAL"
+          : "OVERPAYMENT";
+
+    await postAccountEntry(tx, {
+      organizationId,
+      dwellingId: invoice.dwellingId,
+      effectiveDate: transaction.bookingDate,
+      type: "PAYMENT",
+      debit: "0.00",
+      credit: transaction.amount,
+      currency: transaction.currency,
+      invoiceId: invoice.id,
+      bankTransactionId: transaction.id,
+      description: `Bank payment ${transaction.reference ?? transaction.id}`,
+      metadata: { allocatedAmount, resultType },
+      idempotencyKey: `bank-transaction:${transaction.id}:payment`,
+    });
+    await tx.insert(paymentAllocations).values({
+      organizationId,
+      dwellingId: invoice.dwellingId,
+      bankTransactionId: transaction.id,
+      invoiceId: invoice.id,
+      allocatedAmount,
+      method: resultType,
+      actorUserId,
+      idempotencyKey: `payment-match:${matchId}:allocation`,
+    });
 
     const [confirmed] = await tx
       .update(paymentMatches)
       .set({
         status: "CONFIRMED",
+        resultType,
+        proposedAllocationAmount: allocatedAmount,
         confirmedByUserId: actorUserId,
         confirmedAt: new Date(),
       })
       .where(eq(paymentMatches.id, matchId))
       .returning();
-    await tx
-      .update(invoices)
-      .set({ paidAt: new Date(), updatedAt: new Date() })
-      .where(eq(invoices.id, invoice.id));
-    await tx
-      .update(billingCases)
-      .set({ status: "PAID", statusUpdatedAt: new Date() })
-      .where(eq(billingCases.id, invoice.billingCaseId));
+    const fullySettled = compareExact(allocatedAmount, remaining) === 0;
+    if (fullySettled) {
+      await tx
+        .update(invoices)
+        .set({ paidAt: new Date(), updatedAt: new Date() })
+        .where(eq(invoices.id, invoice.id));
+      await tx
+        .update(billingCases)
+        .set({ status: "PAID", statusUpdatedAt: new Date() })
+        .where(eq(billingCases.id, invoice.billingCaseId));
+    }
     await recordAuditEvent(tx, {
       organizationId,
       actorUserId,
-      action: "PAYMENT_MATCH_CONFIRMED",
+      action:
+        resultType === "PARTIAL"
+          ? "PAYMENT_PARTIALLY_ALLOCATED"
+          : resultType === "OVERPAYMENT"
+            ? "PAYMENT_OVERPAYMENT_ALLOCATED"
+            : "PAYMENT_MATCH_CONFIRMED",
       entityType: "payment_match",
       entityId: matchId,
-      afterData: confirmed,
+      afterData: { ...confirmed, allocatedAmount, remaining, fullySettled },
     });
+    if (resultType === "OVERPAYMENT") {
+      await recordAuditEvent(tx, {
+        organizationId,
+        actorUserId,
+        action: "ACCOUNT_CREDIT_CREATED",
+        entityType: "account_entry",
+        entityId: null,
+        afterData: {
+          bankTransactionId: transaction.id,
+          credit: subtractExact(transaction.amount, allocatedAmount),
+        },
+      });
+    }
 
-    return confirmed;
+    return { ...confirmed, allocatedAmount, remaining, fullySettled };
   });
 }
 
@@ -262,16 +344,20 @@ export async function listPaymentMatches(
   organizationId: string,
   status?: (typeof paymentMatchStatusEnum.enumValues)[number]
 ) {
-  return db
+  const matches = await db
     .select({
       id: paymentMatches.id,
       status: paymentMatches.status,
       matchType: paymentMatches.matchType,
+      resultType: paymentMatches.resultType,
+      proposedAllocationAmount: paymentMatches.proposedAllocationAmount,
       confirmedAt: paymentMatches.confirmedAt,
       createdAt: paymentMatches.createdAt,
       invoiceId: invoices.id,
       invoiceNumber: invoices.invoiceNumber,
-      invoiceTotal: invoices.total,
+      dwellingId: invoices.dwellingId,
+      currentCharges: invoices.currentCharges,
+      amountDue: invoices.amountDue,
       transactionId: bankTransactions.id,
       transactionAmount: bankTransactions.amount,
       transactionCurrency: bankTransactions.currency,
@@ -294,6 +380,17 @@ export async function listPaymentMatches(
         : eq(paymentMatches.organizationId, organizationId)
     )
     .orderBy(desc(paymentMatches.createdAt));
+  return matches.map((match) => ({
+    ...match,
+    remainingAfterAllocation: maxExact(
+      subtractExact(match.amountDue, match.proposedAllocationAmount),
+      "0.00"
+    ),
+    creditCreated: maxExact(
+      subtractExact(match.transactionAmount, match.proposedAllocationAmount),
+      "0.00"
+    ),
+  }));
 }
 
 export async function listUnmatchedTransactions(

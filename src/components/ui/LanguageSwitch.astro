@@ -1,0 +1,44 @@
+---
+import { uiLocale, type Locale } from "../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+
+const options: { code: Locale; label: string; ariaLabel: string }[] = [
+  { code: "en", label: "EN", ariaLabel: "English" },
+  { code: "lv", label: "LV", ariaLabel: "Latviešu valoda" },
+  { code: "ru", label: "RU", ariaLabel: "Русский язык" },
+];
+
+function hrefFor(code: Locale) {
+  const target = new URL(Astro.url);
+  target.searchParams.set("lang", code);
+  return target.pathname + target.search;
+}
+---
+
+<span class="flex items-center gap-1 text-xs font-semibold">
+  {
+    options.map((option, index) => (
+      <>
+        {index > 0 && (
+          <span aria-hidden="true" class="text-border">
+            ·
+          </span>
+        )}
+        {option.code === locale ? (
+          <span aria-current="true" lang={option.code}>
+            {option.label}
+          </span>
+        ) : (
+          <a
+            href={hrefFor(option.code)}
+            class="underline decoration-border underline-offset-4"
+            lang={option.code}
+            aria-label={option.ariaLabel}
+          >
+            {option.label}
+          </a>
+        )}
+      </>
+    ))
+  }
+</span>

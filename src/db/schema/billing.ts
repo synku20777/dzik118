@@ -30,6 +30,7 @@ export const readingSourceEnum = pgEnum("reading_source", [
 
 export const billingCaseStatusEnum = pgEnum("billing_case_status", [
   "MISSING_DATA",
+  "READY",
   "DRAFT",
   "PREPARED",
   "SENT",

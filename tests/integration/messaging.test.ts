@@ -304,7 +304,7 @@ describe("conversations", () => {
     await deleteAppUser(residentId);
   });
 
-  it("listConversationsForOrganization filters by status and dwelling", async () => {
+  it("listConversationsForOrganization returns status, last message, and unread state; filters by dwelling", async () => {
     const org = await createOrganization(
       db,
       { name: "IT-K Org List", addressLine1: "Addr 1" },
@@ -327,19 +327,21 @@ describe("conversations", () => {
       db,
       dwellingA.id,
       "A",
-      "Body",
+      "Body A",
       residentId
     );
-    await createConversation(db, dwellingB.id, "B", "Body", residentId);
+    await createConversation(db, dwellingB.id, "B", "Body B", residentId);
     await resolveConversation(db, org.id, convoA.id, seedAdminId);
 
     const all = await listConversationsForOrganization(db, org.id);
     expect(all).toHaveLength(2);
-
-    const resolvedOnly = await listConversationsForOrganization(db, org.id, {
-      status: "RESOLVED",
-    });
+    // status filtering is now the caller's responsibility (same pattern as
+    // the dwellings/periods list pages' in-memory type/status filters).
+    const resolvedOnly = all.filter((c) => c.status === "RESOLVED");
     expect(resolvedOnly.map((c) => c.id)).toEqual([convoA.id]);
+    const convoAResult = all.find((c) => c.id === convoA.id)!;
+    expect(convoAResult.lastMessage?.body).toBe("Body A");
+    expect(convoAResult.hasUnread).toBe(true);
 
     const forB = await listConversationsForOrganization(db, org.id, {
       dwellingId: dwellingB.id,

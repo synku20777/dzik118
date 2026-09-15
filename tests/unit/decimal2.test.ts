@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   addExact,
+  compareExact,
+  maxExact,
+  minExact,
   multiplyAndRound,
+  negateExact,
+  percentForDays,
   percentOf,
+  subtractExact,
   sumExact,
 } from "../../src/lib/decimal2";
 
@@ -57,6 +63,49 @@ describe("decimal2", () => {
     it("sums a list of line amounts, including an empty list", () => {
       expect(sumExact(["10.50", "5.25", "0.01"])).toBe("15.76");
       expect(sumExact([])).toBe("0.00");
+    });
+  });
+
+  describe("negateExact / subtractExact / compareExact / minExact / maxExact (accounts ledger balances)", () => {
+    it("negates without ever producing a signed zero", () => {
+      expect(negateExact("0.00")).toBe("0.00");
+      expect(negateExact("5.00")).toBe("-5.00");
+      expect(negateExact("-5.00")).toBe("5.00");
+    });
+
+    it("subtracts exactly, including across mismatched scales", () => {
+      expect(subtractExact("10.00", "3.50")).toBe("6.50");
+      expect(subtractExact("5.00", "5")).toBe("0.00");
+      expect(subtractExact("3.00", "10.00")).toBe("-7.00");
+    });
+
+    it("compares by sign, not string order", () => {
+      expect(compareExact("10.00", "9.00")).toBe(1);
+      expect(compareExact("9.00", "10.00")).toBe(-1);
+      expect(compareExact("5.00", "5.00")).toBe(0);
+      expect(compareExact("-1.00", "0.00")).toBe(-1);
+    });
+
+    it("picks the smaller/larger of two amounts", () => {
+      expect(minExact("10.00", "-2.00")).toBe("-2.00");
+      expect(maxExact("10.00", "-2.00")).toBe("10.00");
+      expect(minExact("5.00", "5.00")).toBe("5.00");
+    });
+  });
+
+  describe("percentForDays (late fee = ROUND(principal x daily% x days / 100, 2))", () => {
+    it("accrues a daily percentage over multiple days", () => {
+      // 1000.00 principal x 0.05%/day x 10 days = 5.00.
+      expect(percentForDays("1000.00", "0.0500", 10, 2)).toBe("5.00");
+    });
+
+    it("is zero for zero days", () => {
+      expect(percentForDays("1000.00", "0.0500", 0, 2)).toBe("0.00");
+    });
+
+    it("rounds half up on the final result", () => {
+      // 100.00 x 0.3333%/day x 1 day = 0.3333 -> rounds to 0.33.
+      expect(percentForDays("100.00", "0.3333", 1, 2)).toBe("0.33");
     });
   });
 });

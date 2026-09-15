@@ -13,6 +13,7 @@ import {
   createDwelling,
   removeResidentAccess,
   updateDwelling,
+  updateInvoiceDeliveryPreferences,
 } from "../domain/organizations/dwellings";
 import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
@@ -82,6 +83,39 @@ export const dwellings = {
               ...input,
               areaM2: areaM2 !== undefined ? String(areaM2) : undefined,
             },
+            locals.auth!.userId
+          )
+        );
+      }
+    ),
+  }),
+
+  // Kept separate from `update` on purpose -- see the comment on
+  // updateInvoiceDeliveryPreferences for why a shared action would be
+  // unsafe here. Both fields are plain (non-optional) booleans: this
+  // action's own form always renders exactly these two checkboxes, so an
+  // unchecked box correctly resolves to `false` (Astro's own form-to-object
+  // coercion), never "leave unchanged".
+  updateInvoiceDelivery: defineAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      dwellingId: z.uuid(),
+      invoiceByEmail: z.boolean(),
+      invoiceByPaper: z.boolean(),
+    }),
+    handler: safeHandler(
+      async (
+        { organizationId, dwellingId, invoiceByEmail, invoiceByPaper },
+        { locals }
+      ) => {
+        requireOrganizationAccess(locals.auth, organizationId);
+        return withDb((db) =>
+          updateInvoiceDeliveryPreferences(
+            db,
+            organizationId,
+            dwellingId,
+            { invoiceByEmail, invoiceByPaper },
             locals.auth!.userId
           )
         );

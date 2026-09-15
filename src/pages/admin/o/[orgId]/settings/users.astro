@@ -1,4 +1,7 @@
 ---
+import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 // Phase D (Organizations/dwellings) - admin + resident access (spec Section
 // 9.2, 27 "Settings: users/access"). Resident dwelling access is managed
 // per-dwelling (dwellings/[dwellingId]), not repeated here, since access is
@@ -44,30 +47,33 @@ const currentUserId = Astro.locals.auth!.userId;
   <div class="max-w-2xl space-y-6">
     <a
       href={`/admin/o/${organizationId}/settings`}
-      class="text-sm text-neutral-600 hover:underline"
+      class="text-body-sm text-muted hover:underline"
     >
-      ← Settings
+      ← {t("Settings")}
     </a>
-    <h1 class="text-xl font-bold text-neutral-900">Admin users</h1>
-    <p class="text-sm text-neutral-600">
-      Resident access is assigned per dwelling, from each dwelling's detail
-      page.
+    <h1 class="text-h2 text-foreground">{t("Admin users")}</h1>
+    <p class="text-body-sm text-muted">
+      {
+        t(
+          "Resident access is assigned per dwelling, from each dwelling's detail page."
+        )
+      }
     </p>
     {
       (addResult?.error || removeResult?.error) && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
           {addResult?.error?.message ?? removeResult?.error?.message}
         </p>
       )
     }
-    <div class="rounded-xl border border-neutral-200 bg-white p-6">
-      <ul class="divide-y divide-neutral-100">
+    <div class="rounded-panel border border-border bg-surface p-6">
+      <ul class="divide-y divide-border">
         {
           members.map((m) => (
-            <li class="flex items-center justify-between py-2 text-sm">
+            <li class="flex items-center justify-between py-2 text-body-sm">
               <span>
                 {m.displayName ?? m.email}{" "}
-                <span class="text-neutral-500">({m.email})</span>
+                <span class="text-muted">({m.email})</span>
               </span>
               {m.userId !== currentUserId && (
                 <form
@@ -80,8 +86,8 @@ const currentUserId = Astro.locals.auth!.userId;
                     value={organizationId}
                   />
                   <input type="hidden" name="userId" value={m.userId} />
-                  <button type="submit" class="text-red-700 hover:underline">
-                    Remove
+                  <button type="submit" class="text-destructive hover:underline">
+                    {t("Remove")}
                   </button>
                 </form>
               )}
@@ -96,17 +102,15 @@ const currentUserId = Astro.locals.auth!.userId;
       >
         <input type="hidden" name="organizationId" value={organizationId} />
         <input
+          aria-label="Email"
           name="email"
           type="email"
           required
           placeholder="admin@example.com"
-          class="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          class="flex-1 rounded-control border border-border px-3 py-2 text-body-sm"
         />
-        <button
-          type="submit"
-          class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-        >
-          Add admin
+        <button type="submit" class="btn-primary">
+          {t("Add admin")}
         </button>
       </form>
     </div>

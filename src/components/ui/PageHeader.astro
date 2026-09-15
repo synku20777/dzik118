@@ -1,0 +1,21 @@
+---
+interface Props {
+  title: string;
+  description?: string;
+  eyebrow?: string;
+  // Section 4.2's Fraunces display treatment -- opt-in per page, not the
+  // default (most page titles stay plain Source Sans 3; see global.css's
+  // .page-header h1.font-display comment for which pages this is for).
+  display?: boolean;
+}
+const { title, description, eyebrow, display = false } = Astro.props;
+---
+
+<header class="page-header">
+  <div>
+    {eyebrow && <p class="eyebrow">{eyebrow}</p>}
+    <h1 class:list={{ "font-display": display }}>{title}</h1>
+    {description && <p class="page-description">{description}</p>}
+  </div>
+  <div class="page-actions"><slot /></div>
+</header>

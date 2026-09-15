@@ -1,5 +1,8 @@
 // Phase B (Database) - Dwellings, resident access, and meters (spec Section 13.4-13.6).
+import { sql } from "drizzle-orm";
 import {
+  boolean,
+  check,
   date,
   foreignKey,
   index,
@@ -47,6 +50,11 @@ export const dwellings = pgTable(
     billingName: text("billing_name"),
     billingEmail: text("billing_email"),
     billingAddress: text("billing_address"),
+    // How this dwelling receives its invoice (spec: admin-configurable per
+    // dwelling). Both default true/false respectively so every existing
+    // dwelling keeps today's email-only behavior after this column is added.
+    invoiceByEmail: boolean("invoice_by_email").notNull().default(true),
+    invoiceByPaper: boolean("invoice_by_paper").notNull().default(false),
     areaM2: numeric("area_m2", { precision: 10, scale: 2 })
       .notNull()
       .default("0"),
@@ -72,6 +80,13 @@ export const dwellings = pgTable(
       table.organizationId
     ),
     index("dwellings_organization_id_idx").on(table.organizationId),
+    // Defense in depth for the same rule the domain layer enforces
+    // (updateInvoiceDeliveryPreferences): a dwelling with neither delivery
+    // method selected could never have its invoice marked delivered.
+    check(
+      "dwellings_invoice_delivery_method_check",
+      sql`${table.invoiceByEmail} OR ${table.invoiceByPaper}`
+    ),
   ]
 );
 

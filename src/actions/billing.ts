@@ -18,6 +18,7 @@ import { withRequestDb as withDb } from "../lib/db-request";
 
 const billingCaseStatus = z.enum([
   "MISSING_DATA",
+  "READY",
   "DRAFT",
   "PREPARED",
   "SENT",

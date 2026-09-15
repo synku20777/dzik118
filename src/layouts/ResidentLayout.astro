@@ -1,44 +1,88 @@
 ---
-// Phase I (Resident UX, spec Section 28/29) - shared mobile-first shell.
-// Sign-out lives here once instead of duplicated on every resident page;
-// each page still renders its own contextual back link inline, since that
-// target varies per page in a way this shared header can't generalize.
 import "../styles/global.css";
-
+import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
+import ThemeToggle from "../components/ui/ThemeToggle.astro";
+import { translate, uiLocale } from "../lib/ui/i18n";
 interface Props {
   title?: string;
 }
-
 const { title = "Resident Portal - Property Billing" } = Astro.props;
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+const id = Astro.params.dwellingId ?? Astro.url.searchParams.get("dwellingId");
+const auth = Astro.locals.auth;
+const dwellingId =
+  auth?.role === "RESIDENT" && id && auth.dwellingIds.includes(id) ? id : null;
+const base = "/portal/dwellings/" + dwellingId;
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={locale}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <script is:inline>
+      (function () {
+        try {
+          const stored = localStorage.getItem("color-scheme");
+          if (stored === "dark" || stored === "light") {
+            document.documentElement.setAttribute("data-theme", stored);
+            const meta = document.querySelector('meta[name="color-scheme"]');
+            if (meta) meta.content = stored;
+          }
+        } catch (e) {
+          void e;
+        }
+      })();
+    </script>
     <title>{title}</title>
   </head>
-  <body class="min-h-screen bg-neutral-50 text-neutral-900 antialiased">
-    <header class="border-b border-neutral-200 bg-white">
-      <div
-        class="mx-auto flex max-w-2xl items-center justify-between px-4 py-3"
-      >
-        <a href="/portal" class="font-bold text-neutral-900">
-          Property Billing
-        </a>
-        <form method="POST" action="/logout" class="inline">
-          <button
-            type="submit"
-            class="text-sm text-neutral-600 hover:text-neutral-900 bg-transparent border-none p-0 cursor-pointer"
+  <body>
+    <a class="skip-link" href="#main-content">{t("Skip to content")}</a>
+    <header class="resident-header">
+      <div>
+        <a class="brand" href="/portal"
+          ><span class="brand-mark" aria-hidden="true">▥</span>{
+            t("Property Billing")
+          }</a
+        ><div class="flex items-center gap-3">
+          <ThemeToggle />
+          <LanguageSwitch /><a href="/portal/profile" class="text-sm text-muted"
+            >{t("Profile")}</a
           >
-            Sign out
-          </button>
-        </form>
+        </div>
       </div>
     </header>
-    <main>
+    <main id="main-content" tabindex="-1" class="resident-content app-content">
+      {
+        dwellingId && (
+          <nav class="resident-nav" aria-label={t("Navigation")}>
+            {[
+              [base, "Overview"],
+              [base + "/invoices", "Invoices"],
+              [base + "/messages", "Messages"],
+            ].map(([href, label]) => (
+              <a
+                href={href}
+                aria-current={
+                  Astro.url.pathname === href ||
+                  (label === "Invoices" &&
+                    Astro.url.pathname.startsWith("/portal/invoices/"))
+                    ? "page"
+                    : undefined
+                }
+              >
+                {t(label)}
+              </a>
+            ))}
+          </nav>
+        )
+      }
       <slot />
     </main>
+    <script>
+      import "../lib/ui/forms";
+    </script>
   </body>
 </html>

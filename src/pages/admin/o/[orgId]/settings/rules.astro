@@ -1,4 +1,12 @@
 ---
+import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+// Phase F (Billing configuration) - tariffs/rules settings (spec Section
+// 9.2, 27, BILL-RULE-001/002/003).
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
+import { ICONS, type IconName } from "../../../../../lib/ui/icons";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import {
   ForbiddenError,
@@ -22,12 +30,133 @@ const createResult = Astro.getActionResult(actions.billing.createRule);
 const updateResult = Astro.getActionResult(actions.billing.updateRule);
 const archiveResult = Astro.getActionResult(actions.billing.archiveRule);
 
-const includeArchived = Astro.url.searchParams.get("includeArchived") === "1";
+const base = `/admin/o/${organizationId}`;
+const settingsHref = `${base}/settings`;
 
-const { organization, rules } = await withRequestDb(async (db) => ({
+const search = Astro.url.searchParams.get("search")?.trim().toLowerCase() ?? "";
+const typeFilter = Astro.url.searchParams.get("type") ?? "";
+const rawStatus = Astro.url.searchParams.get("status");
+const statusFilter =
+  rawStatus === "ACTIVE" || rawStatus === "DISABLED" || rawStatus === "ARCHIVED"
+    ? rawStatus
+    : "";
+const showArchivedChecked =
+  Astro.url.searchParams.get("includeArchived") === "1";
+const includeArchived = showArchivedChecked || statusFilter === "ARCHIVED";
+
+const { organization, allRules } = await withRequestDb(async (db) => ({
   organization: await getOrganization(db, organizationId),
-  rules: await listRules(db, organizationId, { includeArchived }),
+  allRules: await listRules(db, organizationId, { includeArchived }),
 }));
+
+const filtered = allRules
+  .filter((r) => !typeFilter || r.calculationType === typeFilter)
+  .filter((r) => {
+    if (statusFilter === "ACTIVE") return !r.archivedAt && r.enabled;
+    if (statusFilter === "DISABLED") return !r.archivedAt && !r.enabled;
+    if (statusFilter === "ARCHIVED") return !!r.archivedAt;
+    return true;
+  })
+  .filter((r) => {
+    if (!search) return true;
+    return (
+      r.name.toLowerCase().includes(search) ||
+      r.code.toLowerCase().includes(search)
+    );
+  });
+
+const calculationTypes = [
+  "FIXED",
+  "AREA",
+  "RESIDENT_COUNT",
+  "METER_CONSUMPTION",
+  "MANUAL_QUANTITY",
+  "MANUAL_AMOUNT",
+] as const;
+const calculationTypeLabels: Record<string, string> = {
+  FIXED: t("Fixed"),
+  AREA: t("Area"),
+  RESIDENT_COUNT: t("Resident count"),
+  METER_CONSUMPTION: t("Meter consumption"),
+  MANUAL_QUANTITY: t("Manual quantity"),
+  MANUAL_AMOUNT: t("Manual amount"),
+};
+
+function filterHref(overrides: Record<string, string | undefined> = {}) {
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (typeFilter) params.set("type", typeFilter);
+  if (statusFilter) params.set("status", statusFilter);
+  if (showArchivedChecked) params.set("includeArchived", "1");
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  return query ? `${Astro.url.pathname}?${query}` : Astro.url.pathname;
+}
+
+// Icon selection: meter-typed rules get a droplet/flame/bolt/thermometer
+// icon; everything else falls back to an icon keyed by calculation type.
+// Purely decorative -- same convention as the dwellings list's type icons
+// and the readings drawer's meter icons elsewhere in this app.
+type RuleIcon =
+  | "cold_water"
+  | "hot_water"
+  | "electricity"
+  | "gas"
+  | "heat"
+  | "generic"
+  | "fixed"
+  | "area"
+  | "users"
+  | "document";
+
+function ruleIcon(rule: {
+  calculationType: string;
+  meterType: string | null;
+}): RuleIcon {
+  if (rule.meterType === "COLD_WATER") return "cold_water";
+  if (rule.meterType === "HOT_WATER") return "hot_water";
+  if (rule.meterType === "ELECTRICITY") return "electricity";
+  if (rule.meterType === "GAS") return "gas";
+  if (rule.meterType === "HEAT") return "heat";
+  if (rule.meterType === "OTHER") return "generic";
+  if (rule.calculationType === "FIXED") return "fixed";
+  if (rule.calculationType === "AREA") return "area";
+  if (rule.calculationType === "RESIDENT_COUNT") return "users";
+  return "document";
+}
+
+const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
+  cold_water: "droplet",
+  hot_water: "droplet-hot",
+  electricity: "bolt",
+  gas: "flame",
+  heat: "thermometer",
+  generic: "tool",
+  fixed: "tool",
+  area: "ruler-2",
+  users: "users",
+  document: "file-description",
+};
+
+// Fed to the client-side live preview script below via define:vars (an
+// is:inline script, so it cannot import icons.ts directly) -- keeps the
+// preview's icons pulled from the same registry as every server-rendered
+// icon, rather than a separately hand-copied set that could drift.
+const RULE_ICON_BODIES: Record<string, string> = {
+  COLD_WATER: ICONS[RULE_ICON_NAMES.cold_water],
+  HOT_WATER: ICONS[RULE_ICON_NAMES.hot_water],
+  ELECTRICITY: ICONS[RULE_ICON_NAMES.electricity],
+  GAS: ICONS[RULE_ICON_NAMES.gas],
+  HEAT: ICONS[RULE_ICON_NAMES.heat],
+  OTHER: ICONS[RULE_ICON_NAMES.generic],
+  FIXED: ICONS[RULE_ICON_NAMES.fixed],
+  AREA: ICONS[RULE_ICON_NAMES.area],
+  RESIDENT_COUNT: ICONS[RULE_ICON_NAMES.users],
+  DEFAULT: ICONS[RULE_ICON_NAMES.document],
+};
 ---
 
 <AdminLayout
@@ -35,37 +164,28 @@ const { organization, rules } = await withRequestDb(async (db) => ({
   organizationId={organizationId}
   organizationName={organization.name}
 >
-  <div class="space-y-6">
-    <a
-      href={`/admin/o/${organizationId}/settings`}
-      class="text-sm text-neutral-600 hover:underline"
-    >
-      ← Settings
+  <div class="rules-page">
+    <a href={settingsHref} class="back-link">
+      <span aria-hidden="true">←</span>
+      {t("Settings")}
     </a>
 
-    <h1 class="text-xl font-bold text-neutral-900">Tariffs and rules</h1>
-
-    <form method="GET" class="flex flex-wrap items-end gap-3">
-      <label class="flex items-center gap-2 pb-2 text-sm text-neutral-700">
-        <input
-          type="checkbox"
-          name="includeArchived"
-          value="1"
-          checked={includeArchived}
-        />
-        Show archived
-      </label>
-      <button
-        type="submit"
-        class="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white"
-      >
-        Filter
-      </button>
-    </form>
+    <PageHeader
+      title={t("Tariffs and rules")}
+      description={t(
+        "Manage utility rates, billing formulas, and effective periods."
+      )}
+      display
+    >
+      <a href={`${base}/guide`} class="btn-secondary settings-help">
+        <span class="settings-help-icon" aria-hidden="true">?</span>
+        {t("Help & guidance")}
+      </a>
+    </PageHeader>
 
     {
       (createResult?.error || updateResult?.error || archiveResult?.error) && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p class="notice notice-danger" role="alert">
           {createResult?.error?.message ??
             updateResult?.error?.message ??
             archiveResult?.error?.message}
@@ -73,64 +193,174 @@ const { organization, rules } = await withRequestDb(async (db) => ({
       )
     }
 
-    <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+    <form method="GET" class="filter-bar rules-filter-bar" data-instant-filter>
+      <div>
+        <label class="block text-label text-foreground" for="search">
+          {t("Search")}
+        </label>
+        <input
+          id="search"
+          name="search"
+          value={search}
+          placeholder={t("Search rules by name or code...")}
+          autocomplete="off"
+          class="mt-1 rounded-control border border-border px-3 py-1.5 text-body-sm"
+        />
+      </div>
+      <div>
+        <label class="block text-label" for="type-filter">{t("Type")}</label>
+        <select
+          id="type-filter"
+          name="type"
+          class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+        >
+          <option value="">{t("All types")}</option>
+          {
+            calculationTypes.map((type) => (
+              <option value={type} selected={typeFilter === type}>
+                {calculationTypeLabels[type]}
+              </option>
+            ))
+          }
+        </select>
+      </div>
+      <div>
+        <label class="block text-label" for="status-filter">{t("Status")}</label
+        >
+        <select
+          id="status-filter"
+          name="status"
+          class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+        >
+          <option value="">{t("All statuses")}</option>
+          <option value="ACTIVE" selected={statusFilter === "ACTIVE"}>
+            {t("Active")}
+          </option>
+          <option value="DISABLED" selected={statusFilter === "DISABLED"}>
+            {t("Disabled")}
+          </option>
+          <option value="ARCHIVED" selected={statusFilter === "ARCHIVED"}>
+            {t("Archived")}
+          </option>
+        </select>
+      </div>
+      <label class="flex items-center gap-2 pb-2 text-body-sm text-foreground">
+        <input
+          id="show-archived"
+          type="checkbox"
+          name="includeArchived"
+          value="1"
+          checked={showArchivedChecked}
+        />
+        {t("Show archived")}
+      </label>
+      {
+        (search || typeFilter || statusFilter || showArchivedChecked) && (
+          <a
+            href={filterHref({
+              search: undefined,
+              type: undefined,
+              status: undefined,
+              includeArchived: undefined,
+            })}
+            class="clear-filters"
+          >
+            {t("Clear filters")}
+          </a>
+        )
+      }
+      <a href="#create-rule" class="btn-primary rules-create-link">
+        <span aria-hidden="true">+</span>
+        {t("Create rule")}
+      </a>
+    </form>
+
+    <div class="table-wrap">
       <table class="w-full text-left text-sm">
         <thead
-          class="border-b border-neutral-200 bg-neutral-50 text-neutral-600"
+          class="border-b border-border bg-surface-hover text-muted"
         >
           <tr>
-            <th class="px-4 py-2">Name</th>
-            <th class="px-4 py-2">Type</th>
-            <th class="px-4 py-2">Unit price</th>
-            <th class="px-4 py-2">VAT %</th>
-            <th class="px-4 py-2">Effective</th>
-            <th class="px-4 py-2">Status</th>
-            <th class="px-4 py-2"></th>
+            <th class="px-4 py-2">{t("Name")}</th>
+            <th class="px-4 py-2">{t("Code")}</th>
+            <th class="px-4 py-2">{t("Type")}</th>
+            <th class="px-4 py-2">{t("Unit")}</th>
+            <th class="px-4 py-2 text-right">{t("Unit price")}</th>
+            <th class="px-4 py-2">{t("VAT")}</th>
+            <th class="px-4 py-2">{t("Effective period")}</th>
+            <th class="px-4 py-2">{t("Status")}</th>
+            <th class="px-4 py-2 text-right">{t("Actions")}</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-neutral-100">
+        <tbody class="divide-y divide-border">
           {
-            rules.map((rule) => (
+            filtered.map((rule) => (
               <tr>
                 <td class="px-4 py-2">
-                  <span class="font-medium text-neutral-900">{rule.name}</span>
-                  <span class="block text-xs text-neutral-500">
-                    {rule.code}
+                  <div class="rule-name-cell">
+                    <span
+                      class="rule-icon"
+                      data-icon={ruleIcon(rule)}
+                      aria-hidden="true"
+                    >
+                      <Icon name={RULE_ICON_NAMES[ruleIcon(rule)]} />
+                    </span>
+                    <div>
+                      <span class="font-medium text-foreground block">
+                        {rule.name}
+                      </span>
+                      <span class="block text-xs text-muted">
+                        {rule.code}
+                      </span>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-4 py-2 font-mono text-xs text-muted">
+                  {rule.code}
+                </td>
+                <td class="px-4 py-2">
+                  {calculationTypeLabels[rule.calculationType] ??
+                    rule.calculationType}
+                </td>
+                <td class="px-4 py-2">{rule.unit}</td>
+                <td class="px-4 py-2 text-right tabular-nums">
+                  {rule.unitPrice ?? "—"}
+                </td>
+                <td class="px-4 py-2 tabular-nums">{rule.vatRate}%</td>
+                <td class="px-4 py-2">
+                  {rule.effectiveFrom} → {rule.effectiveUntil ?? t("ongoing")}
+                </td>
+                <td class="px-4 py-2">
+                  <span
+                    class="rule-status"
+                    data-tone={
+                      rule.archivedAt
+                        ? "archived"
+                        : rule.enabled
+                          ? "active"
+                          : "disabled"
+                    }
+                  >
+                    <span class="rule-status-dot" aria-hidden="true" />
+                    {rule.archivedAt
+                      ? t("Archived")
+                      : rule.enabled
+                        ? t("Active")
+                        : t("Disabled")}
                   </span>
                 </td>
-                <td class="px-4 py-2">
-                  <span>{rule.calculationType}</span>
-                  {rule.meterType && (
-                    <span class="block text-xs text-neutral-500">
-                      {rule.meterType}
-                    </span>
-                  )}
-                </td>
-                <td class="px-4 py-2">{rule.unitPrice ?? "—"}</td>
-                <td class="px-4 py-2">{rule.vatRate}</td>
-                <td class="px-4 py-2">
-                  {rule.effectiveFrom} → {rule.effectiveUntil ?? "ongoing"}
-                </td>
-                <td class="px-4 py-2">
-                  {rule.archivedAt ? (
-                    <span class="text-red-700">Archived</span>
-                  ) : rule.enabled ? (
-                    <span class="text-green-700">Enabled</span>
-                  ) : (
-                    <span class="text-neutral-500">Disabled</span>
-                  )}
-                </td>
-                <td class="px-4 py-2">
+                <td class="px-4 py-2 text-right">
                   {!rule.archivedAt && (
-                    <div>
-                      <details class="text-left">
-                        <summary class="cursor-pointer text-sm font-medium text-neutral-700 hover:underline">
-                          Edit
+                    <div class="rule-actions">
+                      <details class="rule-edit">
+                        <summary class="btn-secondary btn-sm">
+                          <Icon name="pencil" size="sm" />
+                          {t("Edit")}
                         </summary>
                         <form
                           method="POST"
                           action={actions.billing.updateRule}
-                          class="mt-2 space-y-2 rounded-md border border-neutral-200 bg-neutral-50 p-3"
+                          class="rule-edit-panel"
                         >
                           <input
                             type="hidden"
@@ -139,87 +369,77 @@ const { organization, rules } = await withRequestDb(async (db) => ({
                           />
                           <input type="hidden" name="ruleId" value={rule.id} />
                           <div>
-                            <label
-                              class="block text-xs font-medium text-neutral-700"
-                              for={`unitPrice-${rule.id}`}
-                            >
-                              Unit price
+                            <label for={`unitPrice-${rule.id}`}>
+                              {t("Unit price")}
                             </label>
                             <input
                               id={`unitPrice-${rule.id}`}
                               type="text"
                               name="unitPrice"
                               value={rule.unitPrice ?? ""}
-                              class="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1 text-xs"
                             />
                           </div>
                           <div>
-                            <label
-                              class="block text-xs font-medium text-neutral-700"
-                              for={`vatRate-${rule.id}`}
-                            >
-                              VAT %
+                            <label for={`vatRate-${rule.id}`}>
+                              {t("VAT %")}
                             </label>
                             <input
                               id={`vatRate-${rule.id}`}
                               type="text"
                               name="vatRate"
                               value={rule.vatRate}
-                              class="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1 text-xs"
                             />
                           </div>
                           <div>
-                            <label
-                              class="block text-xs font-medium text-neutral-700"
-                              for={`effectiveUntil-${rule.id}`}
-                            >
-                              Effective until
+                            <label for={`effectiveUntil-${rule.id}`}>
+                              {t("Effective until")}
                             </label>
                             <input
                               id={`effectiveUntil-${rule.id}`}
                               type="date"
                               name="effectiveUntil"
                               value={rule.effectiveUntil ?? ""}
-                              class="mt-1 w-full rounded-md border border-neutral-300 px-2 py-1 text-xs"
                             />
                           </div>
-                          <div>
-                            <label class="flex items-center gap-2 text-xs text-neutral-700">
-                              <input
-                                type="checkbox"
-                                name="enabled"
-                                value="1"
-                                checked={rule.enabled}
-                              />
-                              Enabled
-                            </label>
-                          </div>
-                          <button
-                            type="submit"
-                            class="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white"
-                          >
-                            Save
+                          <label class="rule-edit-checkbox">
+                            <input
+                              type="checkbox"
+                              name="enabled"
+                              value="1"
+                              checked={rule.enabled}
+                            />
+                            {t("Enabled")}
+                          </label>
+                          <button type="submit" class="btn-primary btn-sm">
+                            {t("Save")}
                           </button>
                         </form>
                       </details>
-                      <form
-                        method="POST"
-                        action={actions.billing.archiveRule}
-                        class="mt-1"
-                      >
-                        <input
-                          type="hidden"
-                          name="organizationId"
-                          value={organizationId}
-                        />
-                        <input type="hidden" name="ruleId" value={rule.id} />
-                        <button
-                          type="submit"
-                          class="text-red-700 hover:underline"
+                      <details class="row-menu">
+                        <summary
+                          aria-label={`${t("More actions")}: ${rule.name}`}
                         >
-                          Archive
-                        </button>
-                      </form>
+                          •••
+                        </summary>
+                        <div>
+                          <form
+                            method="POST"
+                            action={actions.billing.archiveRule}
+                          >
+                            <input
+                              type="hidden"
+                              name="organizationId"
+                              value={organizationId}
+                            />
+                            <input
+                              type="hidden"
+                              name="ruleId"
+                              value={rule.id}
+                            />
+                            <button type="submit">{t("Archive")}</button>
+                          </form>
+                        </div>
+                      </details>
                     </div>
                   )}
                 </td>
@@ -227,10 +447,10 @@ const { organization, rules } = await withRequestDb(async (db) => ({
             ))
           }
           {
-            rules.length === 0 && (
+            filtered.length === 0 && (
               <tr>
-                <td colspan="7" class="px-4 py-8 text-center text-neutral-500">
-                  No billing rules yet.
+                <td colspan="9" class="px-4 py-8 text-center text-muted">
+                  {t("No billing rules match this filter.")}
                 </td>
               </tr>
             )
@@ -239,161 +459,779 @@ const { organization, rules } = await withRequestDb(async (db) => ({
       </table>
     </div>
 
-    <section
-      class="max-w-2xl rounded-xl border border-neutral-200 bg-white p-6"
-    >
-      <h2 class="text-lg font-bold text-neutral-900">Create rule</h2>
-      <form
-        method="POST"
-        action={actions.billing.createRule}
-        class="mt-4 grid grid-cols-2 gap-3"
-      >
-        <input type="hidden" name="organizationId" value={organizationId} />
-        <div class="col-span-2">
-          <label class="block text-sm font-medium text-neutral-700" for="name">
-            Name
-          </label>
-          <input
-            id="name"
-            name="name"
-            type="text"
-            required
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
+    <div class="rules-split">
+      <section class="rules-create" id="create-rule">
+        <h2>{t("Create rule")}</h2>
+        <p class="rules-create-desc">
+          {t("Add a new tariff or billing rule. Fill in the details below.")}
+        </p>
+        <form
+          method="POST"
+          action={actions.billing.createRule}
+          id="create-rule-form"
+        >
+          <input type="hidden" name="organizationId" value={organizationId} />
+
+          <div class="rule-field-row">
+            <div class="rule-field">
+              <label for="name">{t("Name")} *</label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                required
+                placeholder={t("e.g. Cold Water")}
+              />
+              <p class="rule-field-hint">
+                {t("A descriptive name for this rule.")}
+              </p>
+            </div>
+            <div class="rule-field">
+              <label for="code">{t("Code")} *</label>
+              <input
+                id="code"
+                name="code"
+                type="text"
+                required
+                placeholder={t("e.g. cold_water")}
+              />
+              <p class="rule-field-hint">
+                {t("Unique identifier (e.g. cold_water).")}
+              </p>
+            </div>
+          </div>
+
+          <div class="rule-field-row rule-field-row-3">
+            <div class="rule-field">
+              <label for="calculationType">{t("Type")} *</label>
+              <select id="calculationType" name="calculationType">
+                {
+                  calculationTypes.map((type) => (
+                    <option value={type}>{calculationTypeLabels[type]}</option>
+                  ))
+                }
+              </select>
+              <p class="rule-field-hint">
+                {t("How the charge is calculated.")}
+              </p>
+            </div>
+            <div class="rule-field">
+              <label for="unit">{t("Unit")} *</label>
+              <input
+                id="unit"
+                name="unit"
+                type="text"
+                required
+                placeholder={t("e.g. m3, month, person")}
+              />
+              <p class="rule-field-hint">{t("Unit of measurement.")}</p>
+            </div>
+            <div class="rule-field">
+              <label for="meterType">{t("Meter type")}</label>
+              <select id="meterType" name="meterType">
+                <option value="">{t("-- none --")}</option>
+                <option value="COLD_WATER">{t("Cold water")}</option>
+                <option value="HOT_WATER">{t("Hot water")}</option>
+                <option value="ELECTRICITY">{t("Electricity")}</option>
+                <option value="GAS">{t("Gas")}</option>
+                <option value="HEAT">{t("Heat")}</option>
+                <option value="OTHER">{t("Other")}</option>
+              </select>
+              <p class="rule-field-hint">
+                {t("Only for meter consumption rules.")}
+              </p>
+            </div>
+          </div>
+
+          <div class="rule-field-row">
+            <div class="rule-field">
+              <label for="unitPrice">{t("Unit price")} *</label>
+              <input
+                id="unitPrice"
+                name="unitPrice"
+                type="text"
+                placeholder="0.0000"
+              />
+              <p class="rule-field-hint">{t("Price per unit (excl. VAT).")}</p>
+            </div>
+            <div class="rule-field">
+              <label for="vatRate">{t("VAT %")} *</label>
+              <input
+                id="vatRate"
+                name="vatRate"
+                type="text"
+                placeholder="21.0000"
+              />
+              <p class="rule-field-hint">{t("Value added tax percentage.")}</p>
+            </div>
+          </div>
+
+          <div class="rule-field-row">
+            <div class="rule-field">
+              <label for="effectiveFrom">{t("Effective from")} *</label>
+              <input
+                id="effectiveFrom"
+                name="effectiveFrom"
+                type="date"
+                required
+              />
+              <p class="rule-field-hint">
+                {t("Date when this rule becomes active.")}
+              </p>
+            </div>
+            <div class="rule-field">
+              <label for="effectiveUntil">{t("Effective until")}</label>
+              <input id="effectiveUntil" name="effectiveUntil" type="date" />
+              <p class="rule-field-hint">{t("Leave empty for ongoing.")}</p>
+            </div>
+          </div>
+
+          <div class="rule-form-actions">
+            <a href={settingsHref} class="btn-secondary">{t("Cancel")}</a>
+            <button type="submit" class="btn-primary">{t("Create rule")}</button
+            >
+          </div>
+        </form>
+      </section>
+
+      <aside class="rules-sidebar">
+        <div class="rule-summary-card">
+          <div class="rule-summary-head">
+            <h2>{t("Rule summary")}</h2>
+            <span class="rule-summary-preview-label">
+              <Icon name="eye" size="sm" />
+              {t("Preview")}
+            </span>
+          </div>
+          <div id="rule-summary-body">
+            <div class="rule-summary-empty">
+              <Icon name="file-description" size="lg" />
+              <div>
+                <p class="rule-summary-empty-title">
+                  {t("Fill in the form to see a preview")}
+                </p>
+                <p class="rule-summary-empty-text">
+                  {
+                    t(
+                      "The summary will show how this rule will appear in the list and how it will be applied to bills."
+                    )
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
-        <div>
-          <label class="block text-sm font-medium text-neutral-700" for="code">
-            Code (unique identifier, e.g. cold_water)
-          </label>
-          <input
-            id="code"
-            name="code"
-            type="text"
-            required
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
+
+        <div class="rule-info-banner">
+          <span class="rule-info-icon" aria-hidden="true">i</span>
+          <div>
+            <p class="rule-info-title">{t("How tariffs are applied")}</p>
+            <p>
+              {
+                t(
+                  "Tariffs define how charges are calculated for each billing period."
+                )
+              }
+              {" "}
+              {
+                t(
+                  "Each rule has an effective period and can be archived when no longer in use."
+                )
+              }
+            </p>
+          </div>
         </div>
-        <div>
-          <label class="block text-sm font-medium text-neutral-700" for="unit">
-            Unit (e.g. m3, month, person)
-          </label>
-          <input
-            id="unit"
-            name="unit"
-            type="text"
-            required
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
+
+        <div class="rule-tips">
+          <h3>{t("Good to know")}</h3>
+          <div class="rule-tip">
+            <span
+              class="rule-tip-icon"
+              data-icon="cold_water"
+              aria-hidden="true"
+            >
+              <Icon name="droplet" size="lg" />
+            </span>
+            <div>
+              <p class="rule-tip-title">{t("Meter-based rules")}</p>
+              <p>
+                {
+                  t(
+                    "Use meter consumption for utilities like water, heat, or electricity. Charges are calculated from the difference in meter readings."
+                  )
+                }
+              </p>
+            </div>
+          </div>
+          <div class="rule-tip">
+            <span class="rule-tip-icon" data-icon="area" aria-hidden="true">
+              <Icon name="tool" size="lg" />
+            </span>
+            <div>
+              <p class="rule-tip-title">{t("Fixed rules")}</p>
+              <p>
+                {
+                  t(
+                    "Use fixed rules for regular charges like maintenance fees. The amount is the same each period (per unit)."
+                  )
+                }
+              </p>
+            </div>
+          </div>
+          <div class="rule-tip">
+            <span class="rule-tip-icon" data-icon="calendar" aria-hidden="true">
+              <Icon name="calendar-month" size="lg" />
+            </span>
+            <div>
+              <p class="rule-tip-title">{t("Effective periods")}</p>
+              <p>
+                {
+                  t(
+                    "Avoid overlapping rules of the same type. When a new rate applies, create a new rule with a later effective date."
+                  )
+                }
+              </p>
+            </div>
+          </div>
         </div>
-        <div>
-          <label
-            class="block text-sm font-medium text-neutral-700"
-            for="calculationType"
-          >
-            Type
-          </label>
-          <select
-            id="calculationType"
-            name="calculationType"
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          >
-            <option value="FIXED">Fixed</option>
-            <option value="AREA">Area (m2)</option>
-            <option value="RESIDENT_COUNT">Resident count</option>
-            <option value="METER_CONSUMPTION">Meter consumption</option>
-            <option value="MANUAL_QUANTITY">Manual quantity</option>
-            <option value="MANUAL_AMOUNT">Manual amount</option>
-          </select>
-        </div>
-        <div>
-          <label
-            class="block text-sm font-medium text-neutral-700"
-            for="meterType"
-          >
-            Meter type (only for meter consumption rules)
-          </label>
-          <select
-            id="meterType"
-            name="meterType"
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          >
-            <option value="">-- none --</option>
-            <option value="COLD_WATER">Cold water</option>
-            <option value="HOT_WATER">Hot water</option>
-            <option value="ELECTRICITY">Electricity</option>
-            <option value="GAS">Gas</option>
-            <option value="HEAT">Heat</option>
-            <option value="OTHER">Other</option>
-          </select>
-        </div>
-        <div>
-          <label
-            class="block text-sm font-medium text-neutral-700"
-            for="unitPrice"
-          >
-            Unit price
-          </label>
-          <input
-            id="unitPrice"
-            name="unitPrice"
-            type="text"
-            placeholder="0.0000"
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label
-            class="block text-sm font-medium text-neutral-700"
-            for="vatRate"
-          >
-            VAT %
-          </label>
-          <input
-            id="vatRate"
-            name="vatRate"
-            type="text"
-            placeholder="21.0000"
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label
-            class="block text-sm font-medium text-neutral-700"
-            for="effectiveFrom"
-          >
-            Effective from
-          </label>
-          <input
-            id="effectiveFrom"
-            name="effectiveFrom"
-            type="date"
-            required
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label
-            class="block text-sm font-medium text-neutral-700"
-            for="effectiveUntil"
-          >
-            Effective until (optional)
-          </label>
-          <input
-            id="effectiveUntil"
-            name="effectiveUntil"
-            type="date"
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div class="col-span-2">
-          <button
-            type="submit"
-            class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-          >
-            Create rule
-          </button>
-        </div>
-      </form>
-    </section>
+      </aside>
+    </div>
   </div>
 </AdminLayout>
+
+<script
+  is:inline
+  define:vars={{
+    calculationTypeLabels,
+    ongoingLabel: t("ongoing"),
+    iconBodies: RULE_ICON_BODIES,
+  }}
+>
+  const filterForm = document.querySelector("[data-instant-filter]");
+  const searchInput = document.querySelector("#search");
+  const typeSelect = document.querySelector("#type-filter");
+  const statusSelect = document.querySelector("#status-filter");
+  const archivedCheckbox = document.querySelector("#show-archived");
+  let searchTimer;
+  searchInput?.addEventListener("input", () => {
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(() => filterForm?.requestSubmit(), 300);
+  });
+  typeSelect?.addEventListener("change", () => filterForm?.requestSubmit());
+  statusSelect?.addEventListener("change", () => filterForm?.requestSubmit());
+  archivedCheckbox?.addEventListener("change", () =>
+    filterForm?.requestSubmit()
+  );
+
+  // Pure client-side preview of the create-rule form -- no backend call,
+  // just reflects the form's own current field values. Icon selection
+  // mirrors the server-rendered table rows' ruleIcon() logic above.
+  const form = document.querySelector("#create-rule-form");
+  const summaryBody = document.querySelector("#rule-summary-body");
+  if (form && summaryBody) {
+    // Captured once, before any mutation, so restoring the empty state
+    // below reuses the server-rendered (correctly localized) markup
+    // instead of a separately hard-coded copy that could drift out of
+    // sync with translations.
+    const emptyStateHtml = summaryBody.innerHTML;
+    const ICONS = iconBodies;
+    const iconKeyFor = (meterType, calculationType) => {
+      if (meterType && ICONS[meterType]) return meterType;
+      if (ICONS[calculationType]) return calculationType;
+      return "DEFAULT";
+    };
+
+    const render = () => {
+      const data = new FormData(form);
+      const name = String(data.get("name") || "").trim();
+      const code = String(data.get("code") || "").trim();
+      if (!name && !code) {
+        summaryBody.innerHTML = emptyStateHtml;
+        return;
+      }
+      const calculationType = String(data.get("calculationType") || "FIXED");
+      const meterType = String(data.get("meterType") || "");
+      const unit = String(data.get("unit") || "");
+      const unitPrice = String(data.get("unitPrice") || "").trim();
+      const vatRate = String(data.get("vatRate") || "").trim();
+      const effectiveFrom = String(data.get("effectiveFrom") || "");
+      const effectiveUntil = String(data.get("effectiveUntil") || "");
+      const iconKey = iconKeyFor(meterType, calculationType);
+      const typeLabel =
+        calculationTypeLabels[calculationType] ?? calculationType;
+
+      const wrap = document.createElement("div");
+      wrap.className = "rule-summary-preview";
+
+      const head = document.createElement("div");
+      head.className = "rule-summary-preview-head";
+      const icon = document.createElement("span");
+      icon.className = "rule-icon";
+      icon.dataset.icon = iconKey.toLowerCase();
+      icon.setAttribute("aria-hidden", "true");
+      icon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${ICONS[iconKey]}</svg>`;
+      const text = document.createElement("div");
+      const nameEl = document.createElement("p");
+      nameEl.className = "rule-summary-preview-name";
+      nameEl.textContent = name || "—";
+      const codeEl = document.createElement("p");
+      codeEl.className = "rule-summary-preview-code";
+      codeEl.textContent = code || "—";
+      text.appendChild(nameEl);
+      text.appendChild(codeEl);
+      head.appendChild(icon);
+      head.appendChild(text);
+
+      const typeLine = document.createElement("p");
+      typeLine.className = "rule-summary-preview-line";
+      typeLine.textContent = unit ? `${typeLabel} · ${unit}` : typeLabel;
+
+      const priceLine = document.createElement("p");
+      priceLine.className = "rule-summary-preview-line";
+      const priceText = unitPrice ? unitPrice : "0.0000";
+      const vatText = vatRate ? vatRate : "0.0000";
+      priceLine.textContent = unit
+        ? `${priceText} / ${unit} + ${vatText}% VAT`
+        : `${priceText} + ${vatText}% VAT`;
+
+      const periodLine = document.createElement("p");
+      periodLine.className = "rule-summary-preview-line";
+      periodLine.textContent = `${effectiveFrom || "—"} → ${effectiveUntil || ongoingLabel}`;
+
+      wrap.appendChild(head);
+      wrap.appendChild(typeLine);
+      wrap.appendChild(priceLine);
+      wrap.appendChild(periodLine);
+      summaryBody.replaceChildren(wrap);
+    };
+
+    form.addEventListener("input", render);
+    form.addEventListener("change", render);
+  }
+</script>
+
+<style is:global>
+  /* Astro scopes component styles by adding a data-astro-cid attribute
+     that only elements written directly in this template receive --
+     the live preview built by the <script> above creates elements via
+     document.createElement/innerHTML at runtime, so .rule-summary-preview*
+     and .rule-icon must be styled globally, not in the scoped <style>
+     block below (same reasoning as the messages inbox page's .message-*
+     classes). */
+  /* Table-row icon -- bare, no badge container (per the icon system's
+     container rule: table rows/buttons/chips stay bare; only category
+     cards, empty states, and summary/KPI cards keep the badge treatment). */
+  .rule-icon {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    color: var(--color-muted);
+  }
+  .rule-icon[data-icon="cold_water"] {
+    color: var(--color-meter-cold-text);
+  }
+  .rule-icon[data-icon="hot_water"] {
+    color: var(--color-meter-hot-text);
+  }
+  .rule-summary-preview {
+    display: grid;
+    gap: 0.75rem;
+  }
+  .rule-summary-preview-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .rule-summary-preview-name {
+    font-weight: 700;
+    font-size: 1rem;
+  }
+  .rule-summary-preview-code {
+    margin-top: 0.1rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-family: monospace;
+  }
+  .rule-summary-preview-line {
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+</style>
+
+<style>
+  .rules-page {
+    display: grid;
+    gap: 1.25rem;
+  }
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: fit-content;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .settings-help {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .settings-help-icon {
+    display: grid;
+    width: 1.1rem;
+    height: 1.1rem;
+    place-items: center;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .rules-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 1rem;
+  }
+  .rules-filter-bar > div {
+    min-width: 10rem;
+  }
+  .rules-create-link {
+    margin-left: auto;
+  }
+  .rule-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .rule-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+  }
+  .rule-status-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--color-muted);
+  }
+  .rule-status[data-tone="active"] .rule-status-dot {
+    background: var(--color-success);
+  }
+  .rule-status[data-tone="disabled"] .rule-status-dot {
+    background: var(--color-muted);
+  }
+  .rule-status[data-tone="archived"] .rule-status-dot {
+    background: var(--color-destructive);
+  }
+  .rule-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+  .rule-edit,
+  .row-menu {
+    position: relative;
+    display: inline-block;
+  }
+  .rule-edit summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  .rule-edit summary::-webkit-details-marker {
+    display: none;
+  }
+  .rule-edit-panel {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 0.35rem);
+    right: 0;
+    display: grid;
+    gap: 0.75rem;
+    width: 14rem;
+    padding: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    box-shadow: var(--elevation-1);
+    text-align: left;
+  }
+  .rule-edit-panel label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-muted);
+  }
+  .rule-edit-panel input[type="text"],
+  .rule-edit-panel input[type="date"] {
+    width: 100%;
+    padding: 0.5rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-input);
+    font-size: 0.8125rem;
+    box-sizing: border-box;
+  }
+  .rule-edit-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+  }
+  .row-menu summary {
+    display: grid;
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+    place-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-muted);
+    list-style: none;
+    cursor: pointer;
+  }
+  .row-menu summary::-webkit-details-marker {
+    display: none;
+  }
+  .row-menu > div {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 0.35rem);
+    right: 0;
+    min-width: 9rem;
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    box-shadow: var(--elevation-1);
+  }
+  .row-menu button {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-badge);
+    color: var(--color-destructive);
+    font-size: 0.875rem;
+    text-align: left;
+  }
+  .row-menu button:hover {
+    background: var(--color-surface-hover);
+  }
+  .rules-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
+    gap: 1.25rem;
+    align-items: start;
+  }
+  .rules-create {
+    padding: 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+  }
+  .rules-create h2 {
+    font-size: 1.125rem;
+    font-weight: 700;
+  }
+  .rules-create-desc {
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+  }
+  .rules-create form {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1.25rem;
+  }
+  .rule-field-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  .rule-field-row-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .rule-field label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .rule-field input,
+  .rule-field select {
+    width: 100%;
+    padding: 0.75rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-foreground);
+    font: inherit;
+    font-size: 0.875rem;
+    box-sizing: border-box;
+  }
+  .rule-field input:focus-visible,
+  .rule-field select:focus-visible {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  }
+  .rule-field-hint {
+    margin-top: 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+  .rule-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .rules-sidebar {
+    display: grid;
+    gap: 1.25rem;
+  }
+  .rule-summary-card {
+    padding: 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+  }
+  .rule-summary-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  .rule-summary-head h2 {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .rule-summary-preview-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-primary);
+    font-size: 0.8125rem;
+    font-weight: 650;
+  }
+  .rule-summary-preview-label svg {
+    width: 1rem;
+    height: 1rem;
+  }
+  #rule-summary-body {
+    margin-top: 1rem;
+  }
+  .rule-summary-empty {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius-panel);
+    color: var(--color-muted);
+  }
+  .rule-summary-empty svg {
+    width: 1.5rem;
+    height: 1.5rem;
+    flex: 0 0 auto;
+  }
+  .rule-summary-empty-title {
+    font-size: 0.875rem;
+    font-weight: 650;
+    color: var(--color-foreground);
+  }
+  .rule-summary-empty-text {
+    margin-top: 0.25rem;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+  }
+  .rule-info-banner {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-radius: var(--radius-panel);
+    background: var(--color-notice-bg);
+    color: var(--color-notice-text);
+  }
+  .rule-info-icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 1.5rem;
+    height: 1.5rem;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-style: italic;
+  }
+  .rule-info-title {
+    font-weight: 650;
+    font-size: 0.875rem;
+  }
+  .rule-info-banner p:not(.rule-info-title) {
+    margin-top: 0.25rem;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+  .rule-tips {
+    padding: 1.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+  }
+  .rule-tips h3 {
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+  .rule-tip {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+  .rule-tip-icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 2rem;
+    height: 2rem;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-muted);
+  }
+  .rule-tip-icon svg {
+    width: 1rem;
+    height: 1rem;
+  }
+  .rule-tip-icon[data-icon="cold_water"] {
+    background: var(--color-meter-cold-bg);
+    color: var(--color-meter-cold-text);
+  }
+  .rule-tip-title {
+    font-size: 0.875rem;
+    font-weight: 650;
+  }
+  .rule-tip p:not(.rule-tip-title) {
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
+  @media (max-width: 900px) {
+    .rules-split {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 640px) {
+    .rule-field-row,
+    .rule-field-row-3 {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

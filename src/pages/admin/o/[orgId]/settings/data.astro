@@ -1,4 +1,7 @@
 ---
+import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 // Phase D (Organizations/dwellings) / Phase K (Messaging/data) - data
 // import/export index (spec Section 9.2, 11, 27 "Settings:
 // data/import/export").
@@ -8,6 +11,8 @@ import {
   requireOrganizationAccess,
 } from "../../../../../domain/authorization/guards";
 
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { withRequestDb } from "../../../../../lib/db-request";
 const organizationId = Astro.params.orgId!;
 try {
   requireOrganizationAccess(Astro.locals.auth, organizationId);
@@ -15,47 +20,54 @@ try {
   if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
   throw err;
 }
+const organization = await withRequestDb((db) =>
+  getOrganization(db, organizationId)
+);
 ---
 
-<AdminLayout title="Data import/export" organizationId={organizationId}>
+<AdminLayout
+  title="Data import/export"
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
   <a
     href={`/admin/o/${organizationId}/settings`}
-    class="text-sm text-neutral-600 hover:underline"
+    class="text-body-sm text-muted hover:underline"
   >
-    ← Settings
+    ← {t("Settings")}
   </a>
-  <h1 class="mt-4 text-xl font-bold text-neutral-900">Data</h1>
-  <ul class="mt-4 space-y-3">
+  <h1 class="mt-4 text-h2 text-foreground">{t("Data")}</h1>
+  <ul class="mt-6 grid gap-4 sm:grid-cols-2">
     <li>
       <a
         href={`/admin/o/${organizationId}/dwellings/import`}
-        class="text-neutral-900 hover:underline"
+        class="panel block p-5 font-medium text-primary hover:underline"
       >
-        Import dwellings (CSV)
+        {t("Import dwellings (CSV)")}
       </a>
     </li>
     <li>
       <a
         href={`/api/v1/admin/o/${organizationId}/dwellings/export`}
-        class="text-neutral-900 hover:underline"
+        class="panel block p-5 font-medium text-primary hover:underline"
       >
-        Export dwellings (CSV)
+        {t("Export dwellings (CSV)")}
       </a>
     </li>
     <li>
       <a
         href={`/api/v1/admin/o/${organizationId}/readings/export`}
-        class="text-neutral-900 hover:underline"
+        class="panel block p-5 font-medium text-primary hover:underline"
       >
-        Export meter readings (CSV)
+        {t("Export meter readings (CSV)")}
       </a>
     </li>
     <li>
       <a
         href={`/admin/o/${organizationId}/payments/import`}
-        class="text-neutral-900 hover:underline"
+        class="panel block p-5 font-medium text-primary hover:underline"
       >
-        Import bank statement (CSV)
+        {t("Import bank statement (CSV)")}
       </a>
     </li>
   </ul>

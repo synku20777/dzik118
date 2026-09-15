@@ -1,4 +1,7 @@
 ---
+import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 // Phase D (Organizations/dwellings) - CSV dwelling import (spec Section 26,
 // DWL-004). Calls the domain functions directly rather than through
 // astro:actions: this needs a raw multipart file upload, which doesn't fit
@@ -108,25 +111,22 @@ if (Astro.request.method === "POST") {
   <div class="space-y-6">
     <a
       href={`/admin/o/${organizationId}/dwellings`}
-      class="text-sm text-neutral-600 hover:underline"
+      class="text-body-sm text-muted hover:underline"
     >
-      ← Dwellings
+      ← {t("Dwellings")}
     </a>
-    <h1 class="text-xl font-bold text-neutral-900">Import dwellings</h1>
+    <h1 class="text-h2 text-foreground">{t("Import dwellings")}</h1>
 
     {
       step === "upload" && (
         <form
           method="POST"
           enctype="multipart/form-data"
-          class="max-w-lg space-y-3 rounded-xl border border-neutral-200 bg-white p-6"
+          class="max-w-lg space-y-3 rounded-panel border border-border bg-surface p-6"
         >
           <div>
-            <label
-              class="block text-sm font-medium text-neutral-700"
-              for="file"
-            >
-              CSV file
+            <label class="block text-label text-foreground" for="file">
+              {t("CSV file")}
             </label>
             <input
               id="file"
@@ -134,34 +134,28 @@ if (Astro.request.method === "POST") {
               type="file"
               accept=".csv,text/csv"
               required
-              class="mt-1 w-full text-sm"
+              class="mt-1 w-full text-body-sm"
             />
           </div>
           <div>
-            <label
-              class="block text-sm font-medium text-neutral-700"
-              for="mode"
-            >
-              Mode
+            <label class="block text-label text-foreground" for="mode">
+              {t("Mode")}
             </label>
             <select
               id="mode"
               name="mode"
-              class="mt-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+              class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
             >
               <option value="create">
-                Create only (default) -- existing numbers become errors
+                {t("Create only (default) -- existing numbers become errors")}
               </option>
               <option value="update">
-                Update -- existing numbers are updated
+                {t("Update -- existing numbers are updated")}
               </option>
             </select>
           </div>
-          <button
-            type="submit"
-            class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-          >
-            Preview
+          <button type="submit" class="btn-primary ">
+            {t("Preview")}
           </button>
         </form>
       )
@@ -169,7 +163,7 @@ if (Astro.request.method === "POST") {
 
     {
       step === "preview" && headerError && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
           {headerError}
         </p>
       )
@@ -178,17 +172,17 @@ if (Astro.request.method === "POST") {
     {
       step === "preview" && !headerError && (
         <div class="space-y-4">
-          <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
-            <table class="w-full text-left text-sm">
-              <thead class="border-b border-neutral-200 bg-neutral-50 text-neutral-600">
+          <div class="table-wrap">
+            <table class="w-full text-left text-body-sm">
+              <thead class="border-b border-border bg-surface-hover text-muted">
                 <tr>
-                  <th class="px-4 py-2">Row</th>
-                  <th class="px-4 py-2">Number</th>
-                  <th class="px-4 py-2">Status</th>
-                  <th class="px-4 py-2">Errors</th>
+                  <th class="px-4 py-2">{t("Row")}</th>
+                  <th class="px-4 py-2">{t("Number")}</th>
+                  <th class="px-4 py-2">{t("Status")}</th>
+                  <th class="px-4 py-2">{t("Errors")}</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-neutral-100">
+              <tbody class="divide-y divide-border">
                 {rows.map((row) => (
                   <tr>
                     <td class="px-4 py-2">{row.rowNumber}</td>
@@ -196,15 +190,15 @@ if (Astro.request.method === "POST") {
                     <td class="px-4 py-2">
                       <span
                         class:list={{
-                          "text-green-700": row.status === "CREATE",
-                          "text-blue-700": row.status === "UPDATE",
-                          "text-red-700": row.status === "ERROR",
+                          "text-success": row.status === "CREATE",
+                          "text-primary": row.status === "UPDATE",
+                          "text-destructive": row.status === "ERROR",
                         }}
                       >
                         {row.status}
                       </span>
                     </td>
-                    <td class="px-4 py-2 text-red-700">
+                    <td class="px-4 py-2 text-destructive">
                       {row.errors.join("; ")}
                     </td>
                   </tr>
@@ -212,14 +206,14 @@ if (Astro.request.method === "POST") {
               </tbody>
             </table>
           </div>
-          <p class="text-sm text-neutral-600">
+          <p class="text-body-sm text-muted">
             {rows.filter((r) => r.status === "CREATE").length} to create,{" "}
             {rows.filter((r) => r.status === "UPDATE").length} to update,{" "}
             {rows.filter((r) => r.status === "ERROR").length} with errors
             (skipped on import).
           </p>
           {confirmError && (
-            <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+            <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
               {confirmError}
             </p>
           )}
@@ -229,9 +223,10 @@ if (Astro.request.method === "POST") {
             <input type="hidden" name="csvText" value={csvText} />
             <button
               type="submit"
-              class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+              disabled={!rows.some((row) => row.status !== "ERROR")}
+              class="btn-primary "
             >
-              Confirm import
+              {t("Confirm import")}
             </button>
           </form>
         </div>
@@ -240,16 +235,16 @@ if (Astro.request.method === "POST") {
 
     {
       step === "result" && result && (
-        <div class="rounded-xl border border-neutral-200 bg-white p-6">
-          <p class="text-sm text-neutral-900">
+        <div class="rounded-panel border border-border bg-surface p-6">
+          <p class="text-body-sm text-foreground">
             Created {result.created}, updated {result.updated}, skipped{" "}
             {result.errored} row(s) with errors.
           </p>
           <a
             href={`/admin/o/${organizationId}/dwellings`}
-            class="mt-4 inline-block rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+            class="btn-primary mt-4"
           >
-            Back to dwellings
+            {t("Back to dwellings")}
           </a>
         </div>
       )

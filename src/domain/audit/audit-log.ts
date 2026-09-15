@@ -10,6 +10,7 @@ import { appUsers } from "../../db/schema/auth";
 export interface ListAuditLogsOptions {
   action?: string;
   entityType?: string;
+  entityId?: string;
   limit?: number;
   offset?: number;
 }
@@ -19,10 +20,11 @@ export async function listAuditLogs(
   organizationId: string,
   options: ListAuditLogsOptions = {}
 ) {
-  const { action, entityType, limit = 50, offset = 0 } = options;
+  const { action, entityType, entityId, limit = 50, offset = 0 } = options;
   const conditions = [eq(auditLogs.organizationId, organizationId)];
   if (action) conditions.push(eq(auditLogs.action, action));
   if (entityType) conditions.push(eq(auditLogs.entityType, entityType));
+  if (entityId) conditions.push(eq(auditLogs.entityId, entityId));
 
   return db
     .select({

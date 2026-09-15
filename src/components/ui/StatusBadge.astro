@@ -1,0 +1,15 @@
+---
+import Icon from "./Icon.astro";
+import { invoiceStatusBadge } from "../../lib/ui/invoice-status";
+import { translate, uiLocale } from "../../lib/ui/i18n";
+interface Props {
+  status: string;
+}
+const { status } = Astro.props;
+const locale = uiLocale(Astro.cookies, Astro.url);
+const { label, tone, icon } = invoiceStatusBadge(status);
+---
+
+<span class="status-badge" data-tone={tone}
+  ><Icon name={icon} size="xs" />{translate(locale, label)}</span
+>

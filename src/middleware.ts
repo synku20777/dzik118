@@ -22,7 +22,12 @@ function applySecurityHeaders<T extends Response>(
   );
   response.headers.set(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://*.supabase.co; frame-ancestors 'none';"
+    // style-src/font-src allow Google Fonts (global.css @imports Source
+    // Sans 3 + Fraunces from fonts.googleapis.com, which serves @font-face
+    // rules pointing at fonts.gstatic.com) -- without these, the stylesheet
+    // request itself is blocked and every page silently falls back to the
+    // OS default font instead of the design system's typefaces.
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; frame-ancestors 'none';"
   );
   if (isHttps) {
     response.headers.set(

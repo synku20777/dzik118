@@ -1,4 +1,7 @@
 ---
+import { translate, uiLocale } from "../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 import ResidentLayout from "../../../layouts/ResidentLayout.astro";
 import {
   ForbiddenError,
@@ -24,25 +27,27 @@ const dwellings = await withRequestDb((db) =>
   <div class="mx-auto max-w-2xl p-6">
     <div class="space-y-8">
       <section>
-        <h1 class="text-xl font-bold text-neutral-900">Your dwellings</h1>
+        <h1 class="text-h2 text-foreground">
+          {t("Your dwellings")}
+        </h1>
         {
           dwellings.length === 0 ? (
-            <p class="mt-2 text-sm text-neutral-600">
-              You don't have access to any dwellings.
+            <p class="mt-2 text-body-sm text-muted">
+              {t("You don't have access to any dwellings.")}
             </p>
           ) : (
-            <ul class="mt-4 divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white">
+            <ul class="mt-4 divide-y divide-border rounded-control border border-border bg-surface">
               {dwellings.map((dwelling) => (
                 <li>
                   <a
                     href={`/portal/dwellings/${dwelling.id}`}
-                    class="flex items-center justify-between px-4 py-3 hover:bg-neutral-50"
+                    class="flex items-center justify-between px-4 py-3 hover:bg-surface-hover"
                   >
-                    <span class="font-medium text-neutral-900">
+                    <span class="font-medium text-foreground">
                       {dwelling.number}
                     </span>
                     {dwelling.displayName && (
-                      <span class="text-sm text-neutral-500">
+                      <span class="text-body-sm text-muted">
                         {dwelling.displayName}
                       </span>
                     )}

@@ -4,22 +4,17 @@ import AuthLayout from "../layouts/AuthLayout.astro";
 
 <AuthLayout title="Property Billing Platform">
   <div
-    class="max-w-md w-full rounded-xl bg-white p-8 shadow-sm border border-neutral-200 text-center"
+    class="max-w-md w-full rounded-panel bg-surface p-8 border border-border text-center"
   >
-    <h1 class="text-2xl font-bold tracking-tight text-neutral-900">
+    <h1 class="font-display text-2xl tracking-tight text-foreground">
       Property Billing Platform
     </h1>
-    <p class="mt-2 text-sm text-neutral-600">
+    <p class="mt-2 text-sm text-muted">
       Multi-tenant property billing for apartment buildings and housing
       associations.
     </p>
     <div class="mt-6 flex flex-col gap-3">
-      <a
-        href="/login"
-        class="inline-flex justify-center rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 transition-colors"
-      >
-        Sign in
-      </a>
+      <a href="/login" class="btn-primary justify-center"> Sign in </a>
     </div>
   </div>
 </AuthLayout>

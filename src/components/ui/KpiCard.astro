@@ -1,0 +1,36 @@
+---
+import Icon from "./Icon.astro";
+interface Props {
+  label: string;
+  value: string | number;
+  tone?: "neutral" | "success" | "warning";
+  icon?: "invoice" | "coins" | "clock" | "open" | "lock";
+}
+const { label, value, tone = "neutral", icon } = Astro.props;
+
+// Summary/KPI cards keep their icon-container badge treatment (Tabler
+// Icons system) -- unlike table rows, buttons, and status chips, which
+// use bare icons with no background.
+const ICON_NAMES = {
+  invoice: "receipt-euro",
+  coins: "coin",
+  clock: "clock",
+  open: "lock-open",
+  lock: "lock",
+} as const;
+---
+
+<section class="kpi" data-tone={tone}>
+  {
+    icon && (
+      <span class="kpi-icon" aria-hidden="true">
+        <Icon name={ICON_NAMES[icon]} size="lg" />
+      </span>
+    )
+  }
+  <div class="kpi-text">
+    <h2>{label}</h2>
+    <p>{value}</p>
+  </div>
+  <slot />
+</section>

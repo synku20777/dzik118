@@ -101,6 +101,39 @@ describe("periods", () => {
     await cleanupOrg(org.id);
   });
 
+  it("case status moves MISSING_DATA -> READY once the last required reading is submitted", async () => {
+    const { org, meter } = await setupOrgWithDwellingAndMeter("IT-E Org Ready");
+    const period = await createPeriod(
+      db,
+      org.id,
+      {
+        year: 2026,
+        month: 3,
+        startsOn: "2026-03-01",
+        endsOn: "2026-03-31",
+        invoiceIssueDate: "2026-04-01",
+        invoiceDueDate: "2026-04-15",
+      },
+      seedAdminId
+    );
+    const [before] = await listCasesForPeriod(db, org.id, period.id);
+    expect(before.status).toBe("MISSING_DATA");
+
+    await submitAdminReading(
+      db,
+      org.id,
+      period.id,
+      meter.id,
+      "10.000",
+      seedAdminId
+    );
+
+    const [after] = await listCasesForPeriod(db, org.id, period.id);
+    expect(after.status).toBe("READY");
+    expect(after.missingData).toEqual([]);
+    await cleanupOrg(org.id);
+  });
+
   it("PER-001: rejects a duplicate org/year/month period", async () => {
     const { org } = await setupOrgWithDwellingAndMeter("IT-E Org 2");
     const input = {

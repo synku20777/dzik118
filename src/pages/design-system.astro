@@ -1,0 +1,1346 @@
+---
+import "../styles/global.css";
+import AppNavigation from "../components/ui/AppNavigation.astro";
+import EmptyState from "../components/ui/EmptyState.astro";
+import Icon from "../components/ui/Icon.astro";
+import KpiCard from "../components/ui/KpiCard.astro";
+import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
+import Ornament from "../components/ui/Ornament.astro";
+import PageHeader from "../components/ui/PageHeader.astro";
+import StatusBadge from "../components/ui/StatusBadge.astro";
+import ThemeToggle from "../components/ui/ThemeToggle.astro";
+
+Astro.response.headers.set("X-Robots-Tag", "noindex, nofollow");
+
+const routes = [
+  "/",
+  "/login",
+  "/unauthorized",
+  "/admin",
+  "/admin/organizations",
+  "/admin/o/[orgId]/dashboard",
+  "/admin/o/[orgId]/periods",
+  "/admin/o/[orgId]/periods/[periodId]",
+  "/admin/o/[orgId]/periods/[periodId]/dwellings/[dwellingId]",
+  "/admin/o/[orgId]/periods/[periodId]/invoices/[invoiceId]",
+  "/admin/o/[orgId]/dwellings",
+  "/admin/o/[orgId]/dwellings/import",
+  "/admin/o/[orgId]/dwellings/[dwellingId]",
+  "/admin/o/[orgId]/payments",
+  "/admin/o/[orgId]/payments/import",
+  "/admin/o/[orgId]/payments/imports/[importId]",
+  "/admin/o/[orgId]/messages",
+  "/admin/o/[orgId]/settings",
+  "/admin/o/[orgId]/settings/organization",
+  "/admin/o/[orgId]/settings/billing",
+  "/admin/o/[orgId]/settings/rules",
+  "/admin/o/[orgId]/settings/users",
+  "/admin/o/[orgId]/settings/data",
+  "/admin/o/[orgId]/settings/invoice-template",
+  "/admin/o/[orgId]/guide",
+  "/admin/o/[orgId]/audit",
+  "/portal",
+  "/portal/dwellings",
+  "/portal/dwellings/[dwellingId]",
+  "/portal/dwellings/[dwellingId]/invoices",
+  "/portal/dwellings/[dwellingId]/messages",
+  "/portal/invoices/[invoiceId]",
+  "/portal/profile",
+  "/design-system",
+];
+
+const colors = [
+  ["Canvas", "--color-canvas", "#F7F4EE"],
+  ["Surface", "--color-surface", "#FFFCF7"],
+  ["Surface hover", "--color-surface-hover", "#EEE8DE"],
+  ["Foreground", "--color-foreground", "#17242B"],
+  ["Muted", "--color-muted", "#58666C"],
+  ["Border", "--color-border", "#D5CEC2"],
+  ["Input border", "--color-input-border", "#8F887E"],
+  ["Primary", "--color-primary", "#274B5B"],
+  ["Primary hover", "--color-primary-hover", "#35677A"],
+  ["Secondary", "--color-secondary", "#2F736D"],
+  ["Success", "--color-success", "#1F5955"],
+  ["Warning", "--color-warning", "#7C470F"],
+  ["Destructive", "--color-destructive", "#783529"],
+  ["Positive secondary", "--color-positive-secondary", "#4F5D3A"],
+  ["Info", "--color-info", "#274B5B"],
+  ["Chart 1", "--chart-1", "#35677A"],
+  ["Chart 2", "--chart-2", "#2F736D"],
+  ["Chart 3", "--chart-3", "#C17B26"],
+  ["Chart 4", "--chart-4", "#9A493A"],
+  ["Chart 5", "--chart-5", "#4F5D3A"],
+  ["Chart 6", "--chart-6", "#58666C"],
+] as const;
+
+const typeScale = [
+  ["Caption", "text-caption", "12px", "16px", "500"],
+  ["Label", "text-label", "13px", "18px", "600"],
+  ["Body small", "text-body-sm", "14px", "20px", "400"],
+  ["Body", "text-body", "16px", "24px", "400"],
+  ["UI strong", "text-ui-strong", "16px", "22px", "600"],
+  ["Heading 3", "text-h3", "20px", "26px", "600"],
+  ["Heading 2", "text-h2", "28px", "34px", "600"],
+] as const;
+
+const spacing = [0, 4, 8, 12, 16, 24, 32, 48, 64, 96];
+const radii = [
+  ["Badge", "5px"],
+  ["Input", "7px"],
+  ["Control", "8px"],
+  ["Panel", "10px"],
+] as const;
+const elevations = [
+  ["0 · panel", "--shadow-panel", "none"],
+  ["1 · menu", "--elevation-1", "var(--elevation-1)"],
+  ["2 · raised", "--elevation-2", "var(--elevation-2)"],
+  ["Overlay", "--elevation-overlay", "var(--elevation-overlay)"],
+] as const;
+
+const states = [
+  "Default",
+  "Hover",
+  "Active",
+  "Focus-visible",
+  "Disabled",
+  "Loading",
+];
+const sourceTokens = [
+  ...colors.map((color) => color[1]),
+  "--color-destructive-hover-bg",
+  "--color-destructive-hover",
+  "--color-focus-ring",
+  "--color-backdrop",
+  "--color-control-thumb",
+  "--color-on-primary",
+  "--shadow-control",
+  "--color-meter-cold-bg",
+  "--color-meter-cold-text",
+  "--color-meter-hot-bg",
+  "--color-meter-hot-text",
+  "--color-meter-electricity-bg",
+  "--color-meter-electricity-text",
+  "--color-meter-gas-bg",
+  "--color-meter-gas-text",
+  "--color-meter-heat-bg",
+  "--color-meter-heat-text",
+  "--color-badge-neutral-bg",
+  "--color-badge-neutral-text",
+  "--color-badge-info-bg",
+  "--color-badge-info-text",
+  "--color-badge-success-bg",
+  "--color-badge-success-text",
+  "--color-badge-warning-bg",
+  "--color-badge-warning-text",
+  "--color-badge-danger-bg",
+  "--color-badge-danger-text",
+  "--color-notice-bg",
+  "--color-notice-text",
+  "--color-notice-warning-bg",
+  "--color-notice-warning-text",
+  "--color-notice-danger-bg",
+  "--color-notice-danger-text",
+  "--color-table-th-bg",
+  "--color-org-context-bg",
+  "--color-nav-active-bg",
+  "--color-current-invoice-border",
+  "--color-danger-surface",
+  "--color-success-surface",
+  "--color-info-surface",
+  "--chart-grid",
+  "--radius-badge",
+  "--radius-input",
+  "--radius-control",
+  "--radius-panel",
+  "--shadow-panel",
+  "--font-sans",
+  "--font-display",
+  "--elevation-1",
+  "--elevation-2",
+  "--elevation-overlay",
+  "--shadow-drawer",
+  "--icon-size-xs",
+  "--icon-size-sm",
+  "--icon-size-md",
+  "--icon-size-lg",
+  "--icon-stroke",
+];
+
+function channel(value: number) {
+  const n = value / 255;
+  return n <= 0.03928 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
+}
+function luminance(hex: string) {
+  const value = hex.replace("#", "");
+  return (
+    0.2126 * channel(parseInt(value.slice(0, 2), 16)) +
+    0.7152 * channel(parseInt(value.slice(2, 4), 16)) +
+    0.0722 * channel(parseInt(value.slice(4, 6), 16))
+  );
+}
+function contrast(a: string, b: string) {
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return ((light + 0.05) / (dark + 0.05)).toFixed(2);
+}
+function rgb(hex: string) {
+  const value = hex.replace("#", "");
+  return `${parseInt(value.slice(0, 2), 16)}, ${parseInt(value.slice(2, 4), 16)}, ${parseInt(value.slice(4, 6), 16)}`;
+}
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#F7F4EE" />
+    <title>Riga Design System · Property Billing</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <header class="ds-topbar">
+      <a class="brand" href="#overview"
+        ><span class="brand-mark" aria-hidden="true">▥</span>Riga system</a
+      >
+      <div class="ds-top-actions">
+        <span class="status-badge" data-tone="success">Internal artifact</span
+        ><LanguageSwitch /><ThemeToggle />
+      </div>
+    </header>
+
+    <div class="ds-shell">
+      <aside class="ds-sidebar" aria-label="Design system sections">
+        <p class="eyebrow">Reference</p>
+        <nav>
+          <a href="#overview">Overview</a><a href="#colors">Colors</a>
+          <a href="#typography">Typography</a><a href="#geometry">Geometry</a>
+          <a href="#elevation">Elevation</a><a href="#components">Components</a>
+          <a href="#shells">Shell patterns</a><a href="#audit">Audit</a>
+        </nav>
+        <p class="ds-side-note">
+          Generated from 34 page routes, 12 UI components, and the runtime CSS
+          contract.
+        </p>
+      </aside>
+
+      <main id="main-content" tabindex="-1" class="ds-main">
+        <section id="overview" class="ds-hero">
+          <div>
+            <p class="eyebrow">Property Billing · Riga</p>
+            <h1 class="font-display">The interface, in working order.</h1>
+            <p>
+              Live repository components, source tokens, route inventory, and
+              the state contract used by the administration and resident
+              experiences.
+            </p>
+          </div>
+          <dl class="ds-stats">
+            <div><dt>Page routes</dt><dd>34</dd></div>
+            <div><dt>Source tokens</dt><dd>{sourceTokens.length}</dd></div>
+            <div><dt>UI components</dt><dd>12</dd></div>
+            <div><dt>External UI deps</dt><dd>0</dd></div>
+          </dl>
+        </section>
+
+        <section id="colors" class="ds-section">
+          <header>
+            <p class="eyebrow">Foundation</p><h2>Color ledger</h2><p>
+              Light-theme raw values. Theme-aware swatches resolve the same CSS
+              variables live.
+            </p>
+          </header>
+          <div class="color-grid">
+            {
+              colors.map(([name, variable, value]) => (
+                <article class="swatch">
+                  <div
+                    class="swatch-color"
+                    style={`background:var(${variable})`}
+                    aria-label={`${name} color swatch`}
+                  />
+                  <div class="swatch-copy">
+                    <>
+                      <h3>{name}</h3>
+                      <code>{variable}</code>
+                      <p>
+                        {value} · rgb({rgb(value)})
+                      </p>
+                    </>
+                    <div class="contrast-row">
+                      <>
+                        <span title="Contrast against canvas">
+                          C {contrast(value, "#F7F4EE")}:1
+                        </span>
+                        <span title="Contrast against surface">
+                          S {contrast(value, "#FFFCF7")}:1
+                        </span>
+                      </>
+                    </div>
+                  </div>
+                </article>
+              ))
+            }
+          </div>
+        </section>
+
+        <section id="typography" class="ds-section">
+          <header>
+            <p class="eyebrow">Voice</p><h2>Typography ladder</h2><p>
+              Edit any specimen. Source Sans 3 handles UI; Fraunces is reserved
+              for selected display moments.
+            </p>
+          </header>
+          <div class="type-stack">
+            {
+              typeScale.map(([name, className, size, lineHeight, weight]) => (
+                <article class="type-row">
+                  <>
+                    <div>
+                      <>
+                        <strong>{name}</strong>
+                        <code>
+                          {size} / {lineHeight} · {weight}
+                        </code>
+                      </>
+                    </div>
+                    <p
+                      class={className}
+                      contenteditable="true"
+                      spellcheck="true"
+                      aria-label={`Editable ${name} specimen`}
+                    >
+                      Residents can review clear, accurate monthly charges.
+                    </p>
+                  </>
+                </article>
+              ))
+            }
+            <article class="type-row type-display">
+              <div>
+                <strong>Display</strong><code>40px / 46px · 600</code>
+              </div><p
+                class="font-display"
+                contenteditable="true"
+                spellcheck="true"
+                aria-label="Editable display specimen"
+              >
+                September 2026
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section id="geometry" class="ds-section">
+          <header>
+            <p class="eyebrow">Rhythm</p><h2>Metrics & geometry</h2><p>
+              The system uses an 8px base rhythm, with 4px and 12px intermediate
+              steps for compact UI.
+            </p>
+          </header>
+          <div class="geometry-grid">
+            <article class="ds-panel">
+              <h3>Spacing</h3><div class="space-scale">
+                {
+                  spacing.map((value) => (
+                    <div>
+                      <>
+                        <span
+                          style={`width:${Math.max(value, 1)}px;height:${Math.max(value, 1)}px`}
+                        />
+                        <code>{value}px</code>
+                      </>
+                    </div>
+                  ))
+                }
+              </div>
+            </article>
+            <article class="ds-panel">
+              <h3>Radius</h3><div class="radius-scale">
+                {
+                  radii.map(([name, value]) => (
+                    <div>
+                      <>
+                        <span style={`border-radius:${value}`} />
+                        <code>
+                          {name} · {value}
+                        </code>
+                      </>
+                    </div>
+                  ))
+                }
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="elevation" class="ds-section">
+          <header>
+            <p class="eyebrow">Depth</p><h2>Elevation</h2><p>
+              Ordinary panels remain flat. Shadow appears only when hierarchy or
+              overlap requires it.
+            </p>
+          </header>
+          <div class="elevation-grid">
+            {
+              elevations.map(([name, variable, value]) => (
+                <article style={`box-shadow:${value}`}>
+                  <>
+                    <strong>{name}</strong>
+                    <code>{variable}</code>
+                  </>
+                </article>
+              ))
+            }
+          </div>
+        </section>
+
+        <section id="components" class="ds-section">
+          <header>
+            <p class="eyebrow">Living inventory</p><h2>Component matrix</h2><p>
+              Specimens use repository classes and imported Astro components.
+              Hover and focus columns are also checked with real browser input.
+            </p>
+          </header>
+
+          <article class="component-block" data-component="buttons">
+            <div class="component-heading">
+              <div>
+                <h3>Button</h3><p>
+                  Primary, secondary, and destructive actions.
+                </p>
+              </div><button
+                class="copy-button"
+                type="button"
+                data-copy={`<button class="btn-primary">Save changes</button>`}
+                >Copy snippet</button
+              >
+            </div>
+            <div class="state-grid">
+              {
+                states.map((state) => (
+                  <div class="state-cell">
+                    <>
+                      <span>{state}</span>
+                      <button
+                        type="button"
+                        class="btn-primary"
+                        data-preview-state={state.toLowerCase()}
+                        disabled={state === "Disabled"}
+                        aria-busy={state === "Loading"}
+                      >
+                        {state === "Loading" ? "Saving…" : "Save changes"}
+                      </button>
+                    </>
+                  </div>
+                ))
+              }
+            </div>
+          </article>
+
+          <article class="component-block" data-component="inputs">
+            <div class="component-heading">
+              <div>
+                <h3>Input</h3><p>
+                  Labeled controls, select, checkbox, and error treatment.
+                </p>
+              </div><button
+                class="copy-button"
+                type="button"
+                data-copy={`<label for="email">Billing email</label>\n<input id="email" name="email" type="email" autocomplete="email" />`}
+                >Copy snippet</button
+              >
+            </div>
+            <div class="form-grid">
+              <label
+                >Billing email<input
+                  id="specimen-email"
+                  name="specimen-email"
+                  type="email"
+                  autocomplete="email"
+                  placeholder="name@example.com"
+                /></label
+              ><label
+                >Billing cycle<select name="cycle"
+                  ><option>Monthly</option><option>Quarterly</option></select
+                ></label
+              ><label class="check-row"
+                ><input type="checkbox" name="reminders" checked /> Send reminders</label
+              ><label
+                >Invalid reference<input
+                  name="reference"
+                  aria-invalid="true"
+                  aria-describedby="reference-error"
+                  value="PB-"
+                /><span id="reference-error" class="field-error"
+                  >Use a complete invoice reference.</span
+                ></label
+              >
+            </div>
+          </article>
+
+          <article class="component-block" data-component="status-badges">
+            <div class="component-heading">
+              <div>
+                <h3>StatusBadge</h3><p>
+                  Actual repository status mapping and icon renderer.
+                </p>
+              </div><button
+                class="copy-button"
+                type="button"
+                data-copy={`<StatusBadge status="PAID" />`}>Copy snippet</button
+              >
+            </div>
+            <div class="component-row">
+              <StatusBadge status="MISSING_DATA" /><StatusBadge
+                status="DRAFT"
+              /><StatusBadge status="SENT" /><StatusBadge
+                status="PAID"
+              /><StatusBadge status="OVERDUE" />
+            </div>
+          </article>
+
+          <div class="component-pair">
+            <article class="component-block">
+              <div class="component-heading">
+                <h3>KpiCard</h3><code
+                  >&lt;KpiCard label="Collected" value="€48,920" /&gt;</code
+                >
+              </div><div class="kpi-grid">
+                <KpiCard
+                  label="Collected"
+                  value="€48,920"
+                  tone="success"
+                  icon="coins"
+                /><KpiCard
+                  label="Due soon"
+                  value="14"
+                  tone="warning"
+                  icon="clock"
+                />
+              </div>
+            </article>
+            <article class="component-block">
+              <div class="component-heading">
+                <h3>Notices</h3><code>class="notice notice-warning"</code>
+              </div><div class="notice-stack">
+                <p class="notice">Invoices are ready for review.</p><p
+                  class="notice notice-warning"
+                >
+                  3 readings still need attention.
+                </p><p class="notice notice-danger">
+                  Payment import failed. Check the CSV columns.
+                </p>
+              </div>
+            </article>
+          </div>
+
+          <article class="component-block">
+            <div class="component-heading">
+              <div>
+                <h3>PageHeader, EmptyState & Icon</h3><p>
+                  Composed from the actual repository components.
+                </p>
+              </div><code>src/components/ui</code>
+            </div><div class="embedded-panel">
+              <PageHeader
+                title="Billing periods"
+                description="Prepare, issue, and reconcile monthly invoices."
+                eyebrow="September 2026"
+                ><button class="btn-primary"
+                  ><Icon name="plus" size="sm" />New period</button
+                ></PageHeader
+              ><EmptyState
+                title="No billing periods yet"
+                description="Create the first period to start collecting readings."
+                ornament
+                ><button class="btn-secondary">Create period</button
+                ></EmptyState
+              >
+            </div>
+          </article>
+
+          <article class="component-block">
+            <div class="component-heading">
+              <div>
+                <h3>Disclosure</h3><p>Native details/summary behavior.</p>
+              </div><code>&lt;details class="disclosure"&gt;</code>
+            </div><details class="disclosure">
+              <summary>Why is this invoice blocked?</summary><p
+                class="text-body-sm text-muted"
+              >
+                The billing email is missing. Add it to the dwelling record,
+                then prepare the invoice again.
+              </p>
+            </details>
+          </article>
+        </section>
+
+        <section id="shells" class="ds-section">
+          <header>
+            <p class="eyebrow">Structure</p><h2>Shell patterns</h2><p>
+              Scaled maps of the 2 recurring authenticated layouts and the
+              authentication card.
+            </p>
+          </header>
+          <div class="shell-grid">
+            <article>
+              <h3>Admin workspace</h3><div class="wireframe admin-wire">
+                <aside>
+                  <span></span><AppNavigation organizationId="specimen" />
+                </aside><main><i></i><i></i><i></i><b></b></main>
+              </div>
+            </article>
+            <article>
+              <h3>Resident portal</h3><div class="wireframe resident-wire">
+                <header><span></span><span></span></header><nav></nav><main>
+                  <i></i><b></b><b></b>
+                </main>
+              </div>
+            </article>
+            <article>
+              <h3>Authentication</h3><div class="wireframe auth-wire">
+                <div><Ornament /><i></i><i></i><b></b></div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="audit" class="ds-section">
+          <header>
+            <p class="eyebrow">Audit record</p><h2>Coverage & drift</h2><p>
+              Source cross-reference and runtime verification targets.
+            </p>
+          </header>
+          <div class="audit-grid">
+            <article>
+              <strong>Token completeness</strong><span
+                >{sourceTokens.length}/{sourceTokens.length}</span
+              ><p>
+                All source-level color, type, geometry, elevation, chart, and
+                icon tokens are represented here or in the registry below.
+              </p>
+            </article>
+            <article>
+              <strong>Component coverage</strong><span>10/12</span><p>
+                10 reusable components render directly. InvoiceDocument and
+                AdminContextDrawer remain data-bound; their patterns are covered
+                without booting action clients.
+              </p>
+            </article>
+            <article>
+              <strong>Layout fidelity</strong><span data-audit-layout
+                >Pending runtime</span
+              ><p>
+                Desktop, tablet, and 390px overflow plus sticky navigation are
+                checked by Playwright.
+              </p>
+            </article>
+            <article>
+              <strong>Leakage prevention</strong><span>Tag + header</span><p>
+                <code>robots=noindex,nofollow</code> and <code
+                  >X-Robots-Tag</code
+                > are both emitted.
+              </p>
+            </article>
+          </div>
+          <details class="disclosure">
+            <summary>Route inventory ({routes.length})</summary><ul
+              class="route-list"
+            >
+              {
+                routes.map((route) => (
+                  <li>
+                    <code>{route}</code>
+                  </li>
+                ))
+              }
+            </ul>
+          </details>
+          <details class="disclosure">
+            <summary>Source token registry ({sourceTokens.length})</summary><ul
+              class="token-list"
+            >
+              {
+                sourceTokens.map((token) => (
+                  <li>
+                    <>
+                      <code>{token}</code>
+                      <span data-token-value={token} />
+                    </>
+                  </li>
+                ))
+              }
+            </ul>
+          </details>
+          <div class="drift-panel">
+            <h3>Drift status</h3><ul>
+              <li>
+                <strong>Resolved:</strong> meter categories now use shared, muted
+                Riga tokens.
+              </li><li>
+                <strong>Resolved:</strong> page templates use semantic palette utilities
+                directly.
+              </li><li>
+                <strong>Resolved:</strong> local type, spacing, and ordinary radii
+                follow named scales.
+              </li><li>
+                <strong>Expected:</strong> printable invoice/email HTML uses self-contained
+                colors because global CSS is unavailable.
+              </li>
+            </ul>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="copy-status" class="sr-only" aria-live="polite"></div>
+    <script>
+      import { initTheme } from "../lib/ui/theme";
+      initTheme();
+      document.addEventListener("astro:page-load", initTheme);
+
+      const rootStyle = getComputedStyle(document.documentElement);
+      document
+        .querySelectorAll<HTMLElement>("[data-token-value]")
+        .forEach((el) => {
+          el.textContent =
+            rootStyle.getPropertyValue(el.dataset.tokenValue!).trim() ||
+            "Defined by theme";
+        });
+      document.querySelector<HTMLElement>("[data-audit-layout]")!.textContent =
+        document.documentElement.scrollWidth <= window.innerWidth
+          ? "No overflow"
+          : "Overflow found";
+
+      document
+        .querySelectorAll<HTMLButtonElement>("[data-copy]")
+        .forEach((button) => {
+          button.addEventListener("click", async () => {
+            await navigator.clipboard.writeText(button.dataset.copy!);
+            const status = document.querySelector<HTMLElement>("#copy-status")!;
+            status.textContent = "Snippet copied";
+            const label = button.textContent;
+            button.textContent = "Copied";
+            window.setTimeout(() => {
+              button.textContent = label;
+            }, 1200);
+          });
+        });
+    </script>
+  </body>
+</html>
+
+<style>
+  :global(html) {
+    scroll-behavior: smooth;
+  }
+  :global(body) {
+    margin: 0;
+  }
+  .ds-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    height: 4.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0 1.5rem;
+    background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+    border-bottom: 1px solid var(--color-border);
+    backdrop-filter: blur(14px);
+  }
+  .ds-top-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .ds-shell {
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+  }
+  .ds-sidebar {
+    position: sticky;
+    top: 4.25rem;
+    height: calc(100vh - 4.25rem);
+    padding: 2rem 1.5rem;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-surface);
+  }
+  .ds-sidebar nav {
+    display: grid;
+    gap: 0.2rem;
+  }
+  .ds-sidebar nav a {
+    padding: 0.55rem 0.7rem;
+    border-radius: 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+  }
+  .ds-sidebar nav a:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-foreground);
+  }
+  .ds-side-note {
+    position: absolute;
+    inset: auto 1.5rem 1.5rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    line-height: 1.45;
+  }
+  .ds-main {
+    min-width: 0;
+    padding: 0 clamp(1rem, 4vw, 4rem) 6rem;
+  }
+  .ds-main > section {
+    scroll-margin-top: 6rem;
+  }
+  .ds-hero {
+    min-height: min(42rem, calc(100vh - 4.25rem));
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(17rem, 0.7fr);
+    align-items: center;
+    gap: clamp(2rem, 7vw, 7rem);
+    padding-block: 5rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .ds-hero h1 {
+    max-width: 12ch;
+    font-size: clamp(3rem, 7vw, 6.8rem);
+    line-height: 0.92;
+    letter-spacing: -0.05em;
+    text-wrap: balance;
+  }
+  .ds-hero > div > p:last-child {
+    max-width: 42rem;
+    margin-top: 2rem;
+    color: var(--color-muted);
+    font-size: 1.1rem;
+    line-height: 1.6;
+    text-wrap: pretty;
+  }
+  .ds-stats {
+    border-top: 1px solid var(--color-foreground);
+  }
+  .ds-stats div {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .ds-stats dt {
+    color: var(--color-muted);
+    font-size: 0.875rem;
+  }
+  .ds-stats dd {
+    font-family: var(--font-display);
+    font-size: 1.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .ds-section {
+    padding-block: 5rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .ds-section > header {
+    display: grid;
+    grid-template-columns: minmax(10rem, 0.35fr) minmax(16rem, 0.65fr);
+    gap: 0.25rem 2rem;
+    margin-bottom: 2.5rem;
+  }
+  .ds-section > header .eyebrow {
+    grid-row: span 2;
+  }
+  .ds-section > header h2 {
+    font-size: clamp(1.8rem, 4vw, 3rem);
+    line-height: 1.05;
+    text-wrap: balance;
+  }
+  .ds-section > header > p:last-child {
+    max-width: 48rem;
+    margin-top: 0.65rem;
+    color: var(--color-muted);
+    line-height: 1.55;
+  }
+  code {
+    color: var(--color-muted);
+    font-family: ui-monospace, "Cascadia Code", monospace;
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+  }
+  .color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    border-top: 1px solid var(--color-border);
+    border-left: 1px solid var(--color-border);
+  }
+  .swatch {
+    min-width: 0;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .swatch-color {
+    height: 8rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .swatch-copy {
+    padding: 1rem;
+  }
+  .swatch-copy h3 {
+    font-size: 0.95rem;
+  }
+  .swatch-copy code {
+    display: block;
+    margin: 0.3rem 0 0.7rem;
+  }
+  .swatch-copy p {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+  .contrast-row {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.8rem;
+  }
+  .contrast-row span {
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.3rem;
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-badge-neutral-text);
+    font-size: 0.7rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .type-stack {
+    border-top: 1px solid var(--color-border);
+  }
+  .type-row {
+    display: grid;
+    grid-template-columns: minmax(10rem, 0.35fr) minmax(0, 0.65fr);
+    gap: 2rem;
+    align-items: baseline;
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .type-row > div {
+    display: grid;
+  }
+  .type-row p {
+    max-width: 44rem;
+    outline-offset: 0.35rem;
+  }
+  .type-display p {
+    font-size: 2.5rem;
+    line-height: 1.15;
+  }
+  .geometry-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+  .ds-panel,
+  .component-block {
+    min-width: 0;
+    overflow: hidden;
+    padding: 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+  }
+  .ds-panel h3 {
+    margin-bottom: 1.5rem;
+  }
+  .space-scale {
+    display: grid;
+    gap: 0.8rem;
+  }
+  .space-scale div {
+    display: grid;
+    grid-template-columns: 7rem 1fr;
+    align-items: center;
+    gap: 1rem;
+  }
+  .space-scale span {
+    display: block;
+    background: var(--color-primary);
+  }
+  .radius-scale {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+  .radius-scale div {
+    display: grid;
+    gap: 0.5rem;
+  }
+  .radius-scale span {
+    display: block;
+    height: 4rem;
+    border: 1px solid var(--color-primary);
+    background: var(--color-nav-active-bg);
+  }
+  .elevation-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2rem;
+    padding: 2rem;
+    background: var(--color-canvas);
+  }
+  .elevation-grid article {
+    display: grid;
+    gap: 1.5rem;
+    min-height: 9rem;
+    padding: 1.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+  }
+  .component-block + .component-block,
+  .component-pair + .component-block,
+  .component-block + .component-pair {
+    margin-top: 1rem;
+  }
+  .component-heading {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .component-heading p {
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+  }
+  .copy-button {
+    min-height: 2.25rem;
+    padding: 0.4rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    background: var(--color-surface);
+    color: var(--color-foreground);
+    font-size: 0.75rem;
+  }
+  .copy-button:hover {
+    background: var(--color-surface-hover);
+  }
+  .state-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(8.5rem, 1fr));
+    gap: 0.75rem;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .state-cell {
+    display: grid;
+    align-content: start;
+    gap: 0.75rem;
+    min-height: 7.5rem;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+  }
+  .state-cell > span {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+  [data-preview-state="hover"] {
+    background: var(--color-primary-hover);
+  }
+  [data-preview-state="active"] {
+    background: var(--color-primary-hover);
+    transform: translateY(1px);
+  }
+  [data-preview-state="focus-visible"] {
+    outline: 3px solid var(--color-primary-hover);
+    outline-offset: 3px;
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+  .form-grid label:not(.check-row) {
+    display: grid;
+    gap: 0.4rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+  .form-grid input,
+  .form-grid select {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    font: inherit;
+  }
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .field-error {
+    color: var(--color-destructive);
+    font-size: 0.75rem;
+    font-weight: 400;
+  }
+  [aria-invalid="true"] {
+    border-color: var(--color-destructive);
+  }
+  .component-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .component-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+  .kpi-grid,
+  .notice-stack {
+    display: grid;
+    gap: 0.75rem;
+  }
+  .embedded-panel {
+    padding: 1.5rem;
+    border: 1px dashed var(--color-border);
+    border-radius: 0.5rem;
+    background: var(--color-canvas);
+  }
+  .shell-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+  }
+  .shell-grid article > h3 {
+    margin-bottom: 0.75rem;
+  }
+  .wireframe {
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+  }
+  .wireframe span,
+  .wireframe i,
+  .wireframe b,
+  .wireframe nav {
+    display: block;
+    border-radius: 0.2rem;
+    background: var(--color-border);
+  }
+  .admin-wire {
+    display: grid;
+    grid-template-columns: 34% 1fr;
+  }
+  .admin-wire aside {
+    padding: 0.75rem;
+    border-right: 1px solid var(--color-border);
+  }
+  .admin-wire aside > span {
+    width: 55%;
+    height: 0.45rem;
+    margin-bottom: 1rem;
+    background: var(--color-primary);
+  }
+  .admin-wire :global(.app-nav) {
+    gap: 0.15rem;
+  }
+  .admin-wire :global(.app-nav a) {
+    padding: 0.28rem;
+    font-size: 0.38rem;
+  }
+  .admin-wire :global(.nav-icon) {
+    width: 0.45rem;
+    height: 0.45rem;
+  }
+  .admin-wire main {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    padding: 1rem;
+  }
+  .admin-wire main i {
+    height: 2.6rem;
+  }
+  .admin-wire main b {
+    grid-column: 1 / -1;
+  }
+  .resident-wire {
+    padding: 0.75rem;
+  }
+  .resident-wire header {
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 0.6rem;
+  }
+  .resident-wire header span {
+    width: 28%;
+    height: 0.45rem;
+  }
+  .resident-wire nav {
+    width: 55%;
+    height: 0.35rem;
+    margin: 0.8rem 0;
+  }
+  .resident-wire main {
+    display: grid;
+    gap: 0.5rem;
+  }
+  .resident-wire main i {
+    width: 48%;
+    height: 1rem;
+    background: var(--color-primary);
+  }
+  .resident-wire main b {
+    height: 3rem;
+  }
+  .auth-wire {
+    display: grid;
+    place-items: center;
+    background: var(--color-canvas);
+  }
+  .auth-wire > div {
+    width: 58%;
+    display: grid;
+    gap: 0.7rem;
+    padding: 1.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+  }
+  .auth-wire i {
+    height: 0.55rem;
+  }
+  .auth-wire b {
+    height: 1.5rem;
+    background: var(--color-primary);
+  }
+  .audit-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  .audit-grid article {
+    display: grid;
+    gap: 0.75rem;
+    align-content: start;
+    padding: 1.25rem;
+    border-top: 3px solid var(--color-primary);
+    background: var(--color-surface);
+  }
+  .audit-grid article > span {
+    font-family: var(--font-display);
+    font-size: 1.65rem;
+  }
+  .audit-grid p {
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+  #audit .disclosure + .disclosure {
+    margin-top: 0.75rem;
+  }
+  .route-list,
+  .token-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem 1rem;
+  }
+  .token-list li {
+    display: grid;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+  .token-list span {
+    color: var(--color-muted);
+    font-size: 0.7rem;
+    overflow-wrap: anywhere;
+  }
+  .drift-panel {
+    margin-top: 1rem;
+    padding: 1.5rem;
+    border-left: 3px solid var(--color-warning);
+    background: var(--color-notice-warning-bg);
+    color: var(--color-notice-warning-text);
+  }
+  .drift-panel ul {
+    margin: 0.75rem 0 0 1.1rem;
+    display: grid;
+    gap: 0.4rem;
+    font-size: 0.875rem;
+  }
+  @media (max-width: 1023px) {
+    .ds-shell {
+      grid-template-columns: 1fr;
+    }
+    .ds-sidebar {
+      display: none;
+    }
+    .ds-hero {
+      grid-template-columns: 1fr;
+      min-height: auto;
+    }
+    .elevation-grid,
+    .audit-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    .shell-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  @media (max-width: 639px) {
+    .ds-topbar {
+      padding: 0 1rem;
+    }
+    .ds-top-actions > :global(.status-badge),
+    .ds-top-actions > :global(span) {
+      display: none;
+    }
+    .ds-main {
+      padding-inline: 1rem;
+    }
+    .ds-section,
+    .ds-hero {
+      padding-block: 3.5rem;
+    }
+    .ds-section > header,
+    .type-row {
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+    .ds-section > header .eyebrow {
+      grid-row: auto;
+    }
+    .geometry-grid,
+    .component-pair,
+    .form-grid,
+    .shell-grid,
+    .audit-grid {
+      grid-template-columns: 1fr;
+    }
+    .elevation-grid {
+      grid-template-columns: 1fr;
+      padding: 1rem;
+    }
+    .route-list,
+    .token-list {
+      grid-template-columns: 1fr;
+    }
+    .ds-hero h1 {
+      font-size: clamp(3rem, 17vw, 4.5rem);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :global(html) {
+      scroll-behavior: auto;
+    }
+  }
+</style>

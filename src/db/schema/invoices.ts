@@ -7,17 +7,20 @@
 // "immutable after column X is set" without triggers this spec doesn't ask for.
 import {
   char,
+  check,
   date,
   index,
   integer,
   jsonb,
   numeric,
+  pgEnum,
   pgTable,
   text,
   timestamp,
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import {
   billingCalculationTypeEnum,
   billingCases,
@@ -26,6 +29,8 @@ import {
 } from "./billing";
 import { dwellings } from "./dwellings";
 import { organizations } from "./organizations";
+
+export const deliveryMethodEnum = pgEnum("delivery_method", ["EMAIL", "PAPER"]);
 
 export const invoices = pgTable(
   "invoices",
@@ -50,7 +55,56 @@ export const invoices = pgTable(
     currency: char("currency", { length: 3 }).notNull(),
     subtotal: numeric("subtotal", { precision: 14, scale: 2 }).notNull(),
     vatTotal: numeric("vat_total", { precision: 14, scale: 2 }).notNull(),
+    // `total` remains the v1 current-period gross for compatibility. New
+    // financial surfaces use the explicit names below.
     total: numeric("total", { precision: 14, scale: 2 }).notNull(),
+    currentCharges: numeric("current_charges", { precision: 14, scale: 2 })
+      .notNull()
+      .default("0"),
+    previousOutstanding: numeric("previous_outstanding", {
+      precision: 14,
+      scale: 2,
+    })
+      .notNull()
+      .default("0"),
+    previousCreditApplied: numeric("previous_credit_applied", {
+      precision: 14,
+      scale: 2,
+    })
+      .notNull()
+      .default("0"),
+    lateFeeCalculated: numeric("late_fee_calculated", {
+      precision: 14,
+      scale: 2,
+    })
+      .notNull()
+      .default("0"),
+    lateFeeAdjustment: numeric("late_fee_adjustment", {
+      precision: 14,
+      scale: 2,
+    })
+      .notNull()
+      .default("0"),
+    lateFeeApplied: numeric("late_fee_applied", { precision: 14, scale: 2 })
+      .notNull()
+      .default("0"),
+    manualAdjustment: numeric("manual_adjustment", {
+      precision: 14,
+      scale: 2,
+    })
+      .notNull()
+      .default("0"),
+    amountDue: numeric("amount_due", { precision: 14, scale: 2 })
+      .notNull()
+      .default("0"),
+    remainingCredit: numeric("remaining_credit", { precision: 14, scale: 2 })
+      .notNull()
+      .default("0"),
+    balanceSnapshot: jsonb("balance_snapshot").notNull().default({}),
+    penaltySnapshot: jsonb("penalty_snapshot").notNull().default({}),
+    manualAdjustmentSnapshot: jsonb("manual_adjustment_snapshot")
+      .notNull()
+      .default({}),
     issuerSnapshot: jsonb("issuer_snapshot").notNull(),
     recipientSnapshot: jsonb("recipient_snapshot").notNull(),
     paymentSnapshot: jsonb("payment_snapshot").notNull(),
@@ -76,6 +130,18 @@ export const invoices = pgTable(
     index("invoices_organization_id_idx").on(table.organizationId),
     index("invoices_dwelling_id_idx").on(table.dwellingId),
     index("invoices_period_id_idx").on(table.periodId),
+    check(
+      "invoices_balance_components_nonnegative_check",
+      sql`${table.currentCharges} >= 0 and ${table.previousOutstanding} >= 0 and ${table.previousCreditApplied} >= 0 and ${table.lateFeeCalculated} >= 0 and ${table.lateFeeApplied} >= 0 and ${table.amountDue} >= 0 and ${table.remainingCredit} >= 0`
+    ),
+    check(
+      "invoices_late_fee_reconciles_check",
+      sql`${table.lateFeeApplied} = ${table.lateFeeCalculated} + ${table.lateFeeAdjustment}`
+    ),
+    check(
+      "invoices_amount_due_reconciles_check",
+      sql`${table.amountDue} = greatest(${table.currentCharges} + ${table.previousOutstanding} - ${table.previousCreditApplied} + ${table.lateFeeApplied} + ${table.manualAdjustment}, 0)`
+    ),
   ]
 );
 
@@ -136,7 +202,11 @@ export const invoiceDeliveries = pgTable(
     invoiceId: uuid("invoice_id")
       .notNull()
       .references(() => invoices.id),
-    destinationEmail: text("destination_email").notNull(),
+    method: deliveryMethodEnum("method").notNull().default("EMAIL"),
+    // Nullable: a PAPER delivery has no email address at all -- distinct
+    // from an EMAIL delivery that failed for lack of one, which still
+    // records an empty string (see NO_RECIPIENT_EMAIL in sending.ts).
+    destinationEmail: text("destination_email"),
     provider: text("provider").notNull(),
     providerMessageId: text("provider_message_id"),
     status: text("status").notNull(),

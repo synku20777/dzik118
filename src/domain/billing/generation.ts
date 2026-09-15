@@ -23,11 +23,24 @@ import {
 import { organizations } from "../../db/schema/organizations";
 import {
   addExact,
+  compareExact,
+  maxExact,
   multiplyAndRound,
+  negateExact,
   percentOf,
+  subtractExact,
   sumExact,
 } from "../../lib/decimal2";
 import { recordAuditEvent } from "../../lib/logging/audit";
+import {
+  getInvoiceAllocatedAmount,
+  postAccountEntry,
+} from "../accounts/ledger";
+import {
+  buildBalanceSnapshot,
+  buildPenaltySnapshot,
+  resolveStatementFinancials,
+} from "../accounts/statements";
 import {
   ConflictError,
   NotFoundError,
@@ -182,6 +195,7 @@ export async function generateInvoice(
     }
     if (
       billingCase.status !== "MISSING_DATA" &&
+      billingCase.status !== "READY" &&
       billingCase.status !== "DRAFT"
     ) {
       throw new ConflictError(
@@ -265,19 +279,31 @@ export async function generateInvoice(
       billingName: dwelling.billingName,
       billingEmail: dwelling.billingEmail,
       billingAddress: dwelling.billingAddress,
+      invoiceByEmail: dwelling.invoiceByEmail,
+      invoiceByPaper: dwelling.invoiceByPaper,
     };
+    const [existingInvoice] = await tx
+      .select()
+      .from(invoices)
+      .where(eq(invoices.billingCaseId, billingCase.id))
+      .limit(1);
+    const financials = await resolveStatementFinancials(tx, {
+      organizationId,
+      dwellingId,
+      currency: org.currency,
+      issueDate: period.invoiceIssueDate,
+      currentCharges: total,
+      manualAdjustment: existingInvoice?.manualAdjustment ?? "0.00",
+      lateFeeAdjustment: existingInvoice?.lateFeeAdjustment ?? "0.00",
+    });
+    const balanceSnapshot = buildBalanceSnapshot(financials);
+    const penaltySnapshot = buildPenaltySnapshot(financials);
     const [templateRow] = await tx
       .select()
       .from(invoiceTemplates)
       .where(eq(invoiceTemplates.organizationId, organizationId))
       .limit(1);
     const templateSnapshot = templateRow ?? {};
-
-    const [existingInvoice] = await tx
-      .select()
-      .from(invoices)
-      .where(eq(invoices.billingCaseId, billingCase.id))
-      .limit(1);
 
     let invoice: typeof invoices.$inferSelect;
     if (existingInvoice) {
@@ -305,6 +331,15 @@ export async function generateInvoice(
           subtotal,
           vatTotal,
           total,
+          currentCharges: total,
+          previousOutstanding: financials.balance.previousOutstanding,
+          previousCreditApplied: financials.balance.previousCreditApplied,
+          lateFeeCalculated: financials.lateFee.appliedAmount,
+          lateFeeApplied: financials.balance.lateFee,
+          amountDue: financials.balance.amountDue,
+          remainingCredit: financials.balance.remainingCredit,
+          balanceSnapshot,
+          penaltySnapshot,
           issuerSnapshot,
           recipientSnapshot,
           paymentSnapshot,
@@ -342,6 +377,18 @@ export async function generateInvoice(
           subtotal,
           vatTotal,
           total,
+          currentCharges: total,
+          previousOutstanding: financials.balance.previousOutstanding,
+          previousCreditApplied: financials.balance.previousCreditApplied,
+          lateFeeCalculated: financials.lateFee.appliedAmount,
+          lateFeeAdjustment: "0.00",
+          lateFeeApplied: financials.balance.lateFee,
+          manualAdjustment: "0.00",
+          amountDue: financials.balance.amountDue,
+          remainingCredit: financials.balance.remainingCredit,
+          balanceSnapshot,
+          penaltySnapshot,
+          manualAdjustmentSnapshot: {},
           issuerSnapshot,
           recipientSnapshot,
           paymentSnapshot,
@@ -408,6 +455,7 @@ export async function bulkGenerateInvoices(
     }
     if (
       billingCase.status !== "MISSING_DATA" &&
+      billingCase.status !== "READY" &&
       billingCase.status !== "DRAFT"
     ) {
       result.skipped.push({
@@ -506,10 +554,18 @@ export async function listInvoicesForDwelling(db: Db, dwellingId: string) {
   return db
     .select({
       id: invoices.id,
+      organizationId: invoices.organizationId,
       invoiceNumber: invoices.invoiceNumber,
       issueDate: invoices.issueDate,
       dueDate: invoices.dueDate,
       total: invoices.total,
+      currentCharges: invoices.currentCharges,
+      previousOutstanding: invoices.previousOutstanding,
+      previousCreditApplied: invoices.previousCreditApplied,
+      lateFeeApplied: invoices.lateFeeApplied,
+      manualAdjustment: invoices.manualAdjustment,
+      amountDue: invoices.amountDue,
+      remainingCredit: invoices.remainingCredit,
       currency: invoices.currency,
       sentAt: invoices.sentAt,
       paidAt: invoices.paidAt,
@@ -538,10 +594,18 @@ export async function getInvoiceForDwellingPeriod(
   const [invoice] = await db
     .select({
       id: invoices.id,
+      organizationId: invoices.organizationId,
       invoiceNumber: invoices.invoiceNumber,
       issueDate: invoices.issueDate,
       dueDate: invoices.dueDate,
       total: invoices.total,
+      currentCharges: invoices.currentCharges,
+      previousOutstanding: invoices.previousOutstanding,
+      previousCreditApplied: invoices.previousCreditApplied,
+      lateFeeApplied: invoices.lateFeeApplied,
+      manualAdjustment: invoices.manualAdjustment,
+      amountDue: invoices.amountDue,
+      remainingCredit: invoices.remainingCredit,
       currency: invoices.currency,
       sentAt: invoices.sentAt,
       paidAt: invoices.paidAt,
@@ -550,10 +614,47 @@ export async function getInvoiceForDwellingPeriod(
     .from(invoices)
     .innerJoin(billingCases, eq(billingCases.id, invoices.billingCaseId))
     .where(
+      and(
+        eq(invoices.dwellingId, dwellingId),
+        eq(invoices.periodId, periodId),
+        inArray(billingCases.status, ["SENT", "PAID", "OVERDUE"])
+      )
+    )
+    .limit(1);
+  if (!invoice) return null;
+  const allocated = await getInvoiceAllocatedAmount(
+    db,
+    invoice.organizationId,
+    invoice.id
+  );
+  return {
+    ...invoice,
+    outstandingAmount:
+      invoice.paidAt && allocated === "0.00"
+        ? "0.00"
+        : maxExact(subtractExact(invoice.amountDue, allocated), "0.00"),
+  };
+}
+
+// Internal/admin-side counterpart to getInvoiceForDwellingPeriod, which
+// deliberately hides unissued (DRAFT/PREPARED) invoices from the resident
+// dashboard. The scheduler needs the opposite: right after
+// bulkGenerateInvoices creates a DRAFT invoice, it must find that exact
+// invoice's id to hand to bulkPrepareInvoices next, so it cannot filter by
+// case status at all. Never expose this to a resident-facing caller.
+export async function getInvoiceIdForDwellingPeriod(
+  db: Db,
+  dwellingId: string,
+  periodId: string
+): Promise<string | null> {
+  const [invoice] = await db
+    .select({ id: invoices.id })
+    .from(invoices)
+    .where(
       and(eq(invoices.dwellingId, dwellingId), eq(invoices.periodId, periodId))
     )
     .limit(1);
-  return invoice ?? null;
+  return invoice?.id ?? null;
 }
 
 // INV-004: normal transition only from DRAFT.
@@ -608,11 +709,80 @@ export async function prepareInvoice(
       );
     }
 
+    const financials = await resolveStatementFinancials(tx, {
+      organizationId,
+      dwellingId: invoice.dwellingId,
+      currency: invoice.currency,
+      issueDate: invoice.issueDate,
+      currentCharges: invoice.currentCharges,
+      manualAdjustment: invoice.manualAdjustment,
+      lateFeeAdjustment: invoice.lateFeeAdjustment,
+    });
+    const balanceSnapshot = buildBalanceSnapshot(financials);
+    const penaltySnapshot = buildPenaltySnapshot(financials);
+
     const [prepared] = await tx
       .update(invoices)
-      .set({ preparedAt: new Date(), updatedAt: new Date() })
+      .set({
+        currentCharges: invoice.currentCharges,
+        previousOutstanding: financials.balance.previousOutstanding,
+        previousCreditApplied: financials.balance.previousCreditApplied,
+        lateFeeCalculated: financials.lateFee.appliedAmount,
+        lateFeeApplied: financials.balance.lateFee,
+        amountDue: financials.balance.amountDue,
+        remainingCredit: financials.balance.remainingCredit,
+        balanceSnapshot,
+        penaltySnapshot,
+        preparedAt: new Date(),
+        updatedAt: new Date(),
+      })
       .where(eq(invoices.id, invoiceId))
       .returning();
+    await postAccountEntry(tx, {
+      organizationId,
+      dwellingId: invoice.dwellingId,
+      effectiveDate: invoice.issueDate,
+      type: "INVOICE_CHARGE",
+      debit: prepared.currentCharges,
+      credit: "0.00",
+      currency: invoice.currency,
+      invoiceId,
+      description: `Current charges ${invoice.invoiceNumber}`,
+      metadata: { invoiceNumber: invoice.invoiceNumber },
+      idempotencyKey: `invoice:${invoiceId}:current-charges`,
+    });
+    if (compareExact(prepared.lateFeeApplied, "0.00") > 0) {
+      await postAccountEntry(tx, {
+        organizationId,
+        dwellingId: invoice.dwellingId,
+        effectiveDate: invoice.issueDate,
+        type: "LATE_FEE",
+        debit: prepared.lateFeeApplied,
+        credit: "0.00",
+        currency: invoice.currency,
+        invoiceId,
+        description: `Late fee ${invoice.invoiceNumber}`,
+        metadata: penaltySnapshot,
+        idempotencyKey: `invoice:${invoiceId}:late-fee`,
+      });
+    }
+    if (compareExact(prepared.manualAdjustment, "0.00") !== 0) {
+      const isCredit = compareExact(prepared.manualAdjustment, "0.00") < 0;
+      await postAccountEntry(tx, {
+        organizationId,
+        dwellingId: invoice.dwellingId,
+        effectiveDate: invoice.issueDate,
+        type: "MANUAL_ADJUSTMENT",
+        debit: isCredit ? "0.00" : prepared.manualAdjustment,
+        credit: isCredit ? negateExact(prepared.manualAdjustment) : "0.00",
+        currency: invoice.currency,
+        invoiceId,
+        description: `Manual adjustment ${invoice.invoiceNumber}`,
+        metadata: invoice.manualAdjustmentSnapshot,
+        actorUserId: actorUserId ?? undefined,
+        idempotencyKey: `invoice:${invoiceId}:manual-adjustment`,
+      });
+    }
     await tx
       .update(billingCases)
       .set({ status: "PREPARED", statusUpdatedAt: new Date() })

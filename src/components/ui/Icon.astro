@@ -1,0 +1,30 @@
+---
+// Shared Tabler Icons (Outline) renderer -- the exclusive icon mechanism
+// for this app. See src/lib/ui/icons.ts for the curated path registry.
+import { ICONS, type IconName } from "../../lib/ui/icons";
+
+interface Props {
+  name: IconName;
+  size?: "xs" | "sm" | "md" | "lg";
+  class?: string;
+}
+const { name, size = "md", class: className } = Astro.props;
+const body = ICONS[name];
+if (!body) {
+  throw new Error(`Icon: unknown icon name "${name}"`);
+}
+---
+
+<svg
+  class={className}
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="var(--icon-stroke)"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  width={`var(--icon-size-${size})`}
+  height={`var(--icon-size-${size})`}
+  aria-hidden="true"
+  set:html={body}
+/>

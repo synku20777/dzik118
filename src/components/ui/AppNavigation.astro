@@ -1,0 +1,56 @@
+---
+import { translate, uiLocale } from "../../lib/ui/i18n";
+import Icon from "./Icon.astro";
+import type { IconName } from "../../lib/ui/icons";
+interface Props {
+  organizationId: string;
+}
+const { organizationId } = Astro.props;
+const locale = uiLocale(Astro.cookies, Astro.url);
+const links: Array<[string, string, IconName]> = [
+  ["dashboard", "Dashboard", "layout-dashboard"],
+  ["periods", "Periods", "calendar-month"],
+  ["dwellings", "Dwellings", "building-community"],
+  ["payments", "Payments", "credit-card"],
+  ["messages", "Messages", "message"],
+  ["settings", "Settings", "adjustments-horizontal"],
+];
+---
+
+<nav class="app-nav" aria-label={translate(locale, "Navigation")}>
+  {
+    links.map(([path, label, icon]) => {
+      const href = `/admin/o/${organizationId}/${path}`;
+      return (
+        <a
+          href={href}
+          aria-current={
+            Astro.url.pathname.startsWith(href) ? "page" : undefined
+          }
+        >
+          <Icon name={icon} class="nav-icon" />
+          {translate(locale, label)}
+        </a>
+      );
+    })
+  }
+</nav>
+
+<hr class="mt-5 border-border" />
+
+<a
+  class:list={[
+    "mt-3 flex items-center gap-3 rounded-control px-3 py-3 text-sm font-medium text-muted hover:text-primary",
+    {
+      "bg-info-surface text-primary":
+        Astro.url.pathname === `/admin/o/${organizationId}/guide`,
+    },
+  ]}
+  href={`/admin/o/${organizationId}/guide`}
+  aria-current={Astro.url.pathname === `/admin/o/${organizationId}/guide`
+    ? "page"
+    : undefined}
+>
+  <Icon name="help-circle" class="nav-icon" />
+  {translate(locale, "Admin guide")}
+</a>

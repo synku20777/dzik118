@@ -1,0 +1,17 @@
+---
+import { isInputError } from "astro:actions";
+interface Props {
+  error: unknown;
+  name: string;
+}
+const { error, name } = Astro.props;
+const messages = isInputError(error) ? error.fields[name] : undefined;
+---
+
+{
+  messages && (
+    <p id={name + "-error"} class="mt-1 text-sm text-destructive" role="alert">
+      {messages.join(" ")}
+    </p>
+  )
+}

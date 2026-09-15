@@ -9,7 +9,7 @@ import { dwellings } from "../../db/schema/dwellings";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import { isUniqueViolation } from "../../lib/db-errors";
 import { recordAuditEvent } from "../../lib/logging/audit";
-import { computeMissingData } from "./case-readiness";
+import { computeMissingData, deriveReadinessStatus } from "./case-readiness";
 
 export { ConflictError, NotFoundError, ValidationError };
 
@@ -79,6 +79,7 @@ export async function createPeriod(
           periodId: period.id,
           dwellingId: dwelling.id,
           missingData,
+          status: deriveReadinessStatus(missingData),
         });
       }
 

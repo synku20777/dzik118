@@ -1,4 +1,7 @@
 ---
+import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import {
   ForbiddenError,
@@ -101,25 +104,24 @@ if (Astro.request.method === "POST") {
   <div class="space-y-6">
     <a
       href={`/admin/o/${organizationId}/payments`}
-      class="text-sm text-neutral-600 hover:underline"
+      class="text-body-sm text-muted hover:underline"
     >
-      ← Payments
+      ← {t("Payments")}
     </a>
-    <h1 class="text-xl font-bold text-neutral-900">Import bank statement</h1>
+    <h1 class="text-h2 text-foreground">
+      {t("Import bank statement")}
+    </h1>
 
     {
       step === "upload" && (
         <form
           method="POST"
           enctype="multipart/form-data"
-          class="max-w-lg space-y-3 rounded-xl border border-neutral-200 bg-white p-6"
+          class="max-w-lg space-y-3 rounded-panel border border-border bg-surface p-6"
         >
           <div>
-            <label
-              class="block text-sm font-medium text-neutral-700"
-              for="file"
-            >
-              Bank statement CSV file
+            <label class="block text-label text-foreground" for="file">
+              {t("Bank statement CSV file")}
             </label>
             <input
               id="file"
@@ -127,14 +129,11 @@ if (Astro.request.method === "POST") {
               type="file"
               accept=".csv,text/csv"
               required
-              class="mt-1 w-full text-sm"
+              class="mt-1 w-full text-body-sm"
             />
           </div>
-          <button
-            type="submit"
-            class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-          >
-            Preview
+          <button type="submit" class="btn-primary ">
+            {t("Preview")}
           </button>
         </form>
       )
@@ -142,7 +141,7 @@ if (Astro.request.method === "POST") {
 
     {
       step === "preview" && headerError && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
           {headerError}
         </p>
       )
@@ -152,25 +151,26 @@ if (Astro.request.method === "POST") {
       step === "preview" && !headerError && (
         <div class="space-y-4">
           {isDuplicateFile && (
-            <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
-              This exact file has already been imported for this organization.
-              Importing it again will be blocked.
+            <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
+              {t(
+                "This exact file has already been imported for this organization. Importing it again will be blocked."
+              )}
             </p>
           )}
-          <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
-            <table class="w-full text-left text-sm">
-              <thead class="border-b border-neutral-200 bg-neutral-50 text-neutral-600">
+          <div class="table-wrap">
+            <table class="w-full text-left text-body-sm">
+              <thead class="border-b border-border bg-surface-hover text-muted">
                 <tr>
-                  <th class="px-4 py-2">Row</th>
-                  <th class="px-4 py-2">Booking date</th>
-                  <th class="px-4 py-2">Amount</th>
-                  <th class="px-4 py-2">Currency</th>
-                  <th class="px-4 py-2">Status</th>
-                  <th class="px-4 py-2">Reference</th>
-                  <th class="px-4 py-2">Errors</th>
+                  <th class="px-4 py-2">{t("Row")}</th>
+                  <th class="px-4 py-2">{t("Booking date")}</th>
+                  <th class="px-4 py-2 text-right">{t("Amount")}</th>
+                  <th class="px-4 py-2">{t("Currency")}</th>
+                  <th class="px-4 py-2">{t("Status")}</th>
+                  <th class="px-4 py-2">{t("Reference")}</th>
+                  <th class="px-4 py-2">{t("Errors")}</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-neutral-100">
+              <tbody class="divide-y divide-border">
                 {rows.map((row) => (
                   <tr>
                     <td class="px-4 py-2">{row.rowNumber}</td>
@@ -180,15 +180,15 @@ if (Astro.request.method === "POST") {
                     <td class="px-4 py-2">
                       <span
                         class:list={{
-                          "text-green-700": row.status === "OK",
-                          "text-red-700": row.status === "ERROR",
+                          "text-success": row.status === "OK",
+                          "text-destructive": row.status === "ERROR",
                         }}
                       >
                         {row.status}
                       </span>
                     </td>
                     <td class="px-4 py-2">{row.reference || "—"}</td>
-                    <td class="px-4 py-2 text-red-700">
+                    <td class="px-4 py-2 text-destructive">
                       {row.errors.join("; ")}
                     </td>
                   </tr>
@@ -196,13 +196,13 @@ if (Astro.request.method === "POST") {
               </tbody>
             </table>
           </div>
-          <p class="text-sm text-neutral-600">
+          <p class="text-sm text-muted">
             {rows.filter((r) => r.status === "OK").length} to import,{" "}
             {rows.filter((r) => r.status === "ERROR").length} with errors
             (skipped).
           </p>
           {confirmError && (
-            <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+            <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
               {confirmError}
             </p>
           )}
@@ -212,9 +212,12 @@ if (Astro.request.method === "POST") {
             <input type="hidden" name="csvText" value={csvText} />
             <button
               type="submit"
-              class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+              disabled={
+                isDuplicateFile || !rows.some((row) => row.status === "OK")
+              }
+              class="btn-primary "
             >
-              Confirm import
+              {t("Confirm import")}
             </button>
           </form>
         </div>
@@ -223,16 +226,16 @@ if (Astro.request.method === "POST") {
 
     {
       step === "result" && result && (
-        <div class="rounded-xl border border-neutral-200 bg-white p-6">
-          <p class="text-sm text-neutral-900">
+        <div class="rounded-panel border border-border bg-surface p-6">
+          <p class="text-sm text-foreground">
             Imported {result.imported} transaction(s), skipped {result.errored}{" "}
             row(s) with errors, proposed {result.proposed} exact match(es).
           </p>
           <a
             href={`/admin/o/${organizationId}/payments`}
-            class="mt-4 inline-block rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+            class="btn-primary mt-4"
           >
-            Back to payments
+            {t("Back to payments")}
           </a>
         </div>
       )

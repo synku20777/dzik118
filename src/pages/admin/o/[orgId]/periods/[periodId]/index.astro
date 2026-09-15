@@ -1,8 +1,12 @@
 ---
-// Phase E (Periods/meters/readings) / Phase F (Billing) - monthly billing
-// workbench (spec Section 9.2, 27 "Periods: Workbench", PER-002, INV-001/002).
-import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
+// Monthly billing workbench. Domain actions remain the workflow authority;
+// this page only makes their state and eligibility easier to understand.
 import { actions } from "astro:actions";
+import AdminContextDrawer from "../../../../../../components/ui/AdminContextDrawer.astro";
+import KpiCard from "../../../../../../components/ui/KpiCard.astro";
+import StatusBadge from "../../../../../../components/ui/StatusBadge.astro";
+import Icon from "../../../../../../components/ui/Icon.astro";
+import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
 import {
   ForbiddenError,
   requireOrganizationAccess,
@@ -16,8 +20,16 @@ import { listCasesForPeriod } from "../../../../../../domain/periods/cases";
 import { getDashboardSummary } from "../../../../../../domain/periods/dashboard";
 import { billingCaseStatusEnum } from "../../../../../../db/schema/billing";
 import { withRequestDb } from "../../../../../../lib/db-request";
+import {
+  entityLabel,
+  formatMoney,
+  formatPeriod,
+  translate,
+  uiLocale,
+} from "../../../../../../lib/ui/i18n";
 
 type CaseStatus = (typeof billingCaseStatusEnum.enumValues)[number];
+type Snapshot = Record<string, string | null>;
 
 const organizationId = Astro.params.orgId!;
 const periodId = Astro.params.periodId!;
@@ -28,13 +40,16 @@ try {
   throw err;
 }
 
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 const lockResult = Astro.getActionResult(actions.periods.lock);
 const generateResult = Astro.getActionResult(actions.billing.generate);
 const bulkGenerateResult = Astro.getActionResult(actions.billing.bulkGenerate);
 const bulkPrepareResult = Astro.getActionResult(actions.billing.bulkPrepare);
 const bulkSendResult = Astro.getActionResult(actions.invoices.bulkSend);
+const sendResult = Astro.getActionResult(actions.invoices.send);
 
-const search = Astro.url.searchParams.get("search") ?? undefined;
+const search = Astro.url.searchParams.get("search")?.trim() || undefined;
 const rawStatus = Astro.url.searchParams.get("status");
 const statusFilter = (
   billingCaseStatusEnum.enumValues as readonly string[]
@@ -60,46 +75,149 @@ try {
   return Astro.redirect(`/admin/o/${organizationId}/periods`);
 }
 
-const currentIndex = allPeriods.findIndex((p) => p.id === periodId);
+const currentIndex = allPeriods.findIndex((item) => item.id === periodId);
 const previousPeriod =
   currentIndex >= 0 && currentIndex < allPeriods.length - 1
     ? allPeriods[currentIndex + 1]
     : null;
 const nextPeriod = currentIndex > 0 ? allPeriods[currentIndex - 1] : null;
+const periodName = formatPeriod(period.year, period.month, locale);
+const periodCode = `${period.year}-${String(period.month).padStart(2, "0")}`;
+const workbenchPath = `/admin/o/${organizationId}/periods/${periodId}`;
+const totalCases = Object.values(summary.caseStatusCounts).reduce(
+  (total, count) => total + count,
+  0
+);
+const workflowFilters = [
+  [undefined, "All", "All billing cases", "neutral", "●"],
+  ["MISSING_DATA", "Missing data", "Resolve inputs", "danger", "!"],
+  ["READY", "Ready to invoice", "Generate the invoice", "warning", "✓"],
+  ["DRAFT", "Draft", "Review and prepare", "neutral", "✎"],
+  ["PREPARED", "Prepared", "Ready to send", "info", "✓"],
+  ["OVERDUE", "Overdue", "Payment needs review", "warning", "!"],
+  ["SENT", "Sent", "Delivered", "info", "↗"],
+  ["PAID", "Paid", "Complete", "success", "✓"],
+] as const;
+
+function filterHref(status?: CaseStatus) {
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
+  if (status) params.set("status", status);
+  const query = params.toString();
+  return query ? `${workbenchPath}?${query}` : workbenchPath;
+}
 ---
 
 <AdminLayout
-  title={`${period.year}-${String(period.month).padStart(2, "0")} - ${organization.name}`}
+  title={`${periodName} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
 >
-  <div class="space-y-6">
-    <a
-      href={`/admin/o/${organizationId}/periods`}
-      class="text-sm text-neutral-600 hover:underline"
-    >
-      ← Periods
+  <div class="workbench">
+    <AdminContextDrawer
+      organizationId={organizationId}
+      periodId={periodId}
+      periodStatus={period.status}
+      periodName={periodName}
+      workbenchPath={workbenchPath}
+    />
+    <a href={`/admin/o/${organizationId}/periods`} class="back-link">
+      <span aria-hidden="true">←</span>
+      {t("Periods")}
     </a>
-    <div class="flex items-center justify-between">
-      <h1 class="text-xl font-bold text-neutral-900">
-        Period {period.year}-{String(period.month).padStart(2, "0")}
-        <span class="ml-2 text-sm font-normal text-neutral-500">
-          ({period.status === "LOCKED" ? "Locked" : "Open"})
-        </span>
-      </h1>
-      <div class="flex gap-3">
+
+    <header class="workbench-header">
+      <div>
+        <p class="eyebrow">{t("Monthly workbench")}</p>
+        <div class="period-title">
+          <h1 class="font-display">{periodName}</h1>
+          <StatusBadge status={period.status} />
+        </div>
+        <p class="period-description">
+          {t("Collect readings, generate invoices, then prepare and send.")}
+        </p>
+        <p class="period-code">{t("Period")} {periodCode}</p>
+      </div>
+
+      <div class="period-actions">
         <form method="POST" action={actions.billing.bulkGenerate}>
           <input type="hidden" name="organizationId" value={organizationId} />
           <input type="hidden" name="periodId" value={periodId} />
           <button
             type="submit"
-            class="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
+            disabled={period.status === "LOCKED"}
+            aria-describedby={period.status === "LOCKED"
+              ? "locked-notice"
+              : undefined}
+            class="btn-primary"
           >
-            Generate all eligible
+            {t("Generate all eligible")}
           </button>
         </form>
         {
           period.status === "OPEN" && (
+            <details class="more-menu">
+              <summary aria-label={t("More actions")}>•••</summary>
+              <div>
+                <button type="button" data-open-lock-dialog>
+                  {t("Lock period")}
+                </button>
+              </div>
+            </details>
+          )
+        }
+      </div>
+    </header>
+
+    <nav class="period-navigation" aria-label={t("Period navigation")}>
+      {
+        previousPeriod ? (
+          <a href={`/admin/o/${organizationId}/periods/${previousPeriod.id}`}>
+            <span aria-hidden="true">←</span>
+            <span>
+              {formatPeriod(previousPeriod.year, previousPeriod.month, locale)}
+            </span>
+          </a>
+        ) : (
+          <span aria-disabled="true">← {t("Previous period")}</span>
+        )
+      }
+      {
+        nextPeriod ? (
+          <a href={`/admin/o/${organizationId}/periods/${nextPeriod.id}`}>
+            <span>
+              {formatPeriod(nextPeriod.year, nextPeriod.month, locale)}
+            </span>
+            <span aria-hidden="true">→</span>
+          </a>
+        ) : (
+          <span aria-disabled="true">{t("Next period")} →</span>
+        )
+      }
+    </nav>
+
+    {
+      period.status === "OPEN" && (
+        <dialog class="lock-dialog" id="lock-period-dialog">
+          <div class="dialog-body">
+            <div class="dialog-icon" aria-hidden="true">
+              !
+            </div>
+            <div>
+              <h2>{t("Lock this period?")}</h2>
+              <p>
+                {t(
+                  "Locking this period prevents normal reading edits and invoice regeneration. Historical data will remain available."
+                )}
+              </p>
+            </div>
+          </div>
+          <div class="dialog-actions">
+            <form method="dialog">
+              <button class="btn-secondary" value="cancel">
+                {t("Cancel")}
+              </button>
+            </form>
             <form method="POST" action={actions.periods.lock}>
               <input
                 type="hidden"
@@ -107,154 +225,116 @@ const nextPeriod = currentIndex > 0 ? allPeriods[currentIndex - 1] : null;
                 value={organizationId}
               />
               <input type="hidden" name="periodId" value={periodId} />
-              <button
-                type="submit"
-                class="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
-              >
-                Lock period
+              <button type="submit" class="btn-danger">
+                {t("Lock period")}
               </button>
             </form>
-          )
-        }
-      </div>
-    </div>
-
-    <div class="flex items-center gap-4 text-sm">
-      {
-        previousPeriod ? (
-          <a
-            href={`/admin/o/${organizationId}/periods/${previousPeriod.id}`}
-            class="text-neutral-600 hover:underline"
-          >
-            ← Previous period
-          </a>
-        ) : (
-          <span class="text-neutral-300">← Previous period</span>
-        )
-      }
-      {
-        nextPeriod ? (
-          <a
-            href={`/admin/o/${organizationId}/periods/${nextPeriod.id}`}
-            class="text-neutral-600 hover:underline"
-          >
-            Next period →
-          </a>
-        ) : (
-          <span class="text-neutral-300">Next period →</span>
-        )
-      }
-    </div>
-
-    <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-      <section class="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 class="text-sm font-bold text-neutral-900">Invoiced</h2>
-        <p class="mt-1 text-lg font-semibold text-neutral-900">
-          {summary.totalInvoiced}
-          {organization.currency}
-        </p>
-      </section>
-      <section class="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 class="text-sm font-bold text-neutral-900">Paid</h2>
-        <p class="mt-1 text-lg font-semibold text-neutral-900">
-          {summary.totalPaid}
-          {organization.currency}
-        </p>
-      </section>
-      <section class="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 class="text-sm font-bold text-neutral-900">Outstanding</h2>
-        <p class="mt-1 text-lg font-semibold text-neutral-900">
-          {summary.totalOutstanding}
-          {organization.currency}
-        </p>
-      </section>
-      <section class="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 class="text-sm font-bold text-neutral-900">Needs attention</h2>
-        <p class="mt-1 text-lg font-semibold text-neutral-900">
-          {summary.needsAttention.length}
-        </p>
-      </section>
-    </div>
-
-    <form method="GET" class="flex flex-wrap items-end gap-3">
-      <div>
-        <label class="block text-sm font-medium text-neutral-700" for="search">
-          Search dwelling
-        </label>
-        <input
-          id="search"
-          name="search"
-          value={search ?? ""}
-          class="mt-1 rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
-        />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-neutral-700" for="status">
-          Status
-        </label>
-        <select
-          id="status"
-          name="status"
-          class="mt-1 rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
-        >
-          <option value="" selected={!statusFilter}>All statuses</option>
-          <option
-            value="MISSING_DATA"
-            selected={statusFilter === "MISSING_DATA"}
-          >
-            Missing data
-          </option>
-          <option value="DRAFT" selected={statusFilter === "DRAFT"}>
-            Draft
-          </option>
-          <option value="PREPARED" selected={statusFilter === "PREPARED"}>
-            Prepared
-          </option>
-          <option value="OVERDUE" selected={statusFilter === "OVERDUE"}>
-            Overdue
-          </option>
-          <option value="SENT" selected={statusFilter === "SENT"}>
-            Sent
-          </option>
-          <option value="PAID" selected={statusFilter === "PAID"}>
-            Paid
-          </option>
-        </select>
-      </div>
-      <button
-        type="submit"
-        class="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
-      >
-        Apply
-      </button>
-      {
-        (search || statusFilter) && (
-          <a
-            href={`/admin/o/${organizationId}/periods/${periodId}`}
-            class="text-sm text-neutral-600 hover:underline"
-          >
-            Clear
-          </a>
-        )
-      }
-    </form>
+          </div>
+        </dialog>
+      )
+    }
 
     {
-      (lockResult?.error || generateResult?.error) && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
-          {lockResult?.error?.message ?? generateResult?.error?.message}
+      period.status === "LOCKED" && (
+        <p id="locked-notice" class="notice">
+          {t(
+            "This period is locked. Readings and invoice generation cannot be changed."
+          )}
+        </p>
+      )
+    }
+
+    <section class="workflow-overview" aria-labelledby="workflow-heading">
+      <div class="section-heading">
+        <div>
+          <h2 id="workflow-heading">{t("Billing workflow")}</h2>
+          <p>{totalCases} {t("billing cases in this period")}</p>
+        </div>
+        <span>{t("Select a stage to filter the queue")}</span>
+      </div>
+      <div class="workflow-scroll">
+        <nav class="workflow-rail" aria-label={t("Filter by workflow stage")}>
+          {
+            workflowFilters.map(([status, label, description, tone, icon]) => {
+              const count = status
+                ? summary.caseStatusCounts[status]
+                : totalCases;
+              const active = status ? statusFilter === status : !statusFilter;
+              return (
+                <a
+                  href={filterHref(status)}
+                  class="workflow-filter"
+                  data-tone={tone}
+                  aria-current={active ? "page" : undefined}
+                >
+                  <span class="workflow-label">
+                    <span class="workflow-icon" aria-hidden="true">
+                      {icon}
+                    </span>
+                    {t(label)}
+                    <strong>{count}</strong>
+                  </span>
+                  <span>{t(description)}</span>
+                </a>
+              );
+            })
+          }
+        </nav>
+      </div>
+    </section>
+
+    <section
+      class="grid gap-4 sm:grid-cols-3"
+      aria-labelledby="financial-heading"
+    >
+      <h2 id="financial-heading" class="sr-only">{t("Financial summary")}</h2>
+      <KpiCard
+        icon="invoice"
+        label={t("Invoiced")}
+        value={formatMoney(
+          summary.totalInvoiced,
+          organization.currency,
+          locale
+        )}
+      />
+      <KpiCard
+        icon="coins"
+        label={t("Paid")}
+        tone="success"
+        value={formatMoney(summary.totalPaid, organization.currency, locale)}
+      />
+      <KpiCard
+        icon="clock"
+        label={t("Outstanding")}
+        tone="warning"
+        value={formatMoney(
+          summary.totalOutstanding,
+          organization.currency,
+          locale
+        )}
+      />
+    </section>
+
+    {
+      (lockResult?.error || generateResult?.error || sendResult?.error) && (
+        <p class="notice notice-danger" role="alert">
+          {lockResult?.error?.message ??
+            generateResult?.error?.message ??
+            sendResult?.error?.message}
         </p>
       )
     }
     {
       bulkGenerateResult?.data && (
-        <p class="rounded-md bg-neutral-100 p-3 text-sm text-neutral-700">
-          Generated {bulkGenerateResult.data.generated.length} invoice(s).
+        <p class="notice" role="status">
+          {bulkGenerateResult.data.generated.length} {t("invoices generated")}.
           {bulkGenerateResult.data.skipped.length > 0 && (
             <>
               {" "}
-              Skipped {bulkGenerateResult.data.skipped.length}:{" "}
-              {bulkGenerateResult.data.skipped.map((s) => s.reason).join("; ")}
+              {bulkGenerateResult.data.skipped.length} {t("skipped")}:{" "}
+              {bulkGenerateResult.data.skipped
+                .map((item) => item.reason)
+                .join("; ")}
             </>
           )}
         </p>
@@ -262,20 +342,22 @@ const nextPeriod = currentIndex > 0 ? allPeriods[currentIndex - 1] : null;
     }
     {
       bulkGenerateResult?.error && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p class="notice notice-danger" role="alert">
           {bulkGenerateResult.error.message}
         </p>
       )
     }
     {
       bulkPrepareResult?.data && (
-        <p class="rounded-md bg-neutral-100 p-3 text-sm text-neutral-700">
-          Prepared {bulkPrepareResult.data.prepared.length} invoice(s).
+        <p class="notice" role="status">
+          {bulkPrepareResult.data.prepared.length} {t("invoices prepared")}.
           {bulkPrepareResult.data.skipped.length > 0 && (
             <>
               {" "}
-              Skipped {bulkPrepareResult.data.skipped.length}:{" "}
-              {bulkPrepareResult.data.skipped.map((s) => s.reason).join("; ")}
+              {bulkPrepareResult.data.skipped.length} {t("skipped")}:{" "}
+              {bulkPrepareResult.data.skipped
+                .map((item) => item.reason)
+                .join("; ")}
             </>
           )}
         </p>
@@ -283,20 +365,22 @@ const nextPeriod = currentIndex > 0 ? allPeriods[currentIndex - 1] : null;
     }
     {
       bulkPrepareResult?.error && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p class="notice notice-danger" role="alert">
           {bulkPrepareResult.error.message}
         </p>
       )
     }
     {
       bulkSendResult?.data && (
-        <p class="rounded-md bg-neutral-100 p-3 text-sm text-neutral-700">
-          Sent {bulkSendResult.data.sent.length} invoice(s).
+        <p class="notice" role="status">
+          {bulkSendResult.data.sent.length} {t("invoices sent")}.
           {bulkSendResult.data.skipped.length > 0 && (
             <>
               {" "}
-              Skipped {bulkSendResult.data.skipped.length}:{" "}
-              {bulkSendResult.data.skipped.map((s) => s.reason).join("; ")}
+              {bulkSendResult.data.skipped.length} {t("skipped")}:{" "}
+              {bulkSendResult.data.skipped
+                .map((item) => item.reason)
+                .join("; ")}
             </>
           )}
         </p>
@@ -304,108 +388,360 @@ const nextPeriod = currentIndex > 0 ? allPeriods[currentIndex - 1] : null;
     }
     {
       bulkSendResult?.error && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p class="notice notice-danger" role="alert">
           {bulkSendResult.error.message}
         </p>
       )
     }
 
-    <!-- Not wrapped around the table: the per-row Generate/Regenerate forms
-    below live inside the table too, and HTML forms cannot nest. Every bulk
-    control instead points at this empty form by id via the `form`
-    attribute, which is valid anywhere in the document. -->
-    <form id="bulk-select-form" method="POST"></form>
-    <div class="mb-4 flex gap-3">
+    <section class="case-queue" aria-labelledby="queue-heading">
+      <div class="queue-heading">
+        <div>
+          <h2 id="queue-heading">{t("Billing cases")}</h2>
+          <p>
+            {t("Resolve blockers, then move each invoice to its next stage.")}
+          </p>
+        </div>
+        <form method="GET" class="queue-filters" data-instant-filter>
+          <label class="sr-only" for="search">{t("Search dwelling")}</label>
+          <input
+            id="search"
+            name="search"
+            type="search"
+            value={search ?? ""}
+            placeholder={t("Search dwelling…")}
+            autocomplete="off"
+          />
+          <label class="sr-only" for="status">{t("Status")}</label>
+          <select id="status" name="status">
+            <option value="" selected={!statusFilter}
+              >{t("All statuses")}</option
+            >
+            {
+              workflowFilters.slice(1).map(([status, label]) => (
+                <option value={status} selected={statusFilter === status}>
+                  {t(label)}
+                </option>
+              ))
+            }
+          </select>
+          {
+            (search || statusFilter) && (
+              <a href={workbenchPath} class="clear-filters">
+                {t("Clear filters")}
+              </a>
+            )
+          }
+        </form>
+      </div>
+
+      <!-- Per-row forms cannot nest inside the bulk form, so checkboxes target
+      this empty form by id. The submitted action still receives the same data. -->
+      <form id="bulk-select-form" method="POST"></form>
       <input
         type="hidden"
         name="organizationId"
         value={organizationId}
         form="bulk-select-form"
       />
-      <button
-        type="submit"
-        form="bulk-select-form"
-        formaction={actions.billing.bulkPrepare}
-        class="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
-      >
-        Prepare selected
-      </button>
-      <button
-        type="submit"
-        form="bulk-select-form"
-        formaction={actions.invoices.bulkSend}
-        class="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
-      >
-        Send selected
-      </button>
-    </div>
+      <div id="bulk-toolbar" class="bulk-toolbar" hidden aria-live="polite">
+        <div class="selection-summary">
+          <strong><span id="selected-count">0</span> {t("selected")}</strong>
+          <span
+            ><span id="prepare-count">0</span> {t("eligible to prepare")}</span
+          >
+          <span><span id="send-count">0</span> {t("eligible to send")}</span>
+        </div>
+        <div class="bulk-actions">
+          <button
+            type="submit"
+            form="bulk-select-form"
+            formaction={actions.billing.bulkPrepare}
+            data-bulk-status="DRAFT"
+            class="btn-secondary"
+            disabled
+          >
+            {t("Prepare eligible")}
+          </button>
+          <button
+            type="submit"
+            form="bulk-select-form"
+            formaction={actions.invoices.bulkSend}
+            data-bulk-status="PREPARED"
+            class="btn-primary"
+            disabled
+          >
+            {t("Send eligible")}
+          </button>
+          <button type="button" id="clear-selection" class="clear-selection">
+            {t("Clear selection")}
+          </button>
+        </div>
+      </div>
 
-    <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
-      <table class="w-full text-left text-sm">
-        <thead
-          class="border-b border-neutral-200 bg-neutral-50 text-neutral-600"
-        >
-          <tr>
-            <th class="w-8 px-4 py-2"></th>
-            <th class="px-4 py-2">Dwelling</th>
-            <th class="px-4 py-2">Status</th>
-            <th class="px-4 py-2">Missing readings</th>
-            <th class="px-4 py-2">Invoice</th>
-            <th class="px-4 py-2"></th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-neutral-100">
-          {
-            cases.map((c) => {
-              const missing = c.missingData as {
-                label: string | null;
-                meterType: string;
-              }[];
-              return (
-                <tr>
-                  <td class="px-4 py-2">
-                    {c.invoiceId && (
-                      <input
-                        type="checkbox"
-                        name="invoiceIds"
-                        value={c.invoiceId}
-                        form="bulk-select-form"
-                      />
-                    )}
-                  </td>
-                  <td class="px-4 py-2 font-medium">{c.dwellingNumber}</td>
-                  <td class="px-4 py-2">{c.status}</td>
-                  <td class="px-4 py-2">
-                    {missing.length === 0
-                      ? "None"
-                      : missing.map((m) => m.label ?? m.meterType).join(", ")}
-                  </td>
-                  <td class="px-4 py-2">
-                    {c.invoiceId ? (
-                      <a
-                        href={`/admin/o/${organizationId}/periods/${periodId}/invoices/${c.invoiceId}`}
-                        class="hover:underline"
-                      >
-                        {c.invoiceNumber} ({c.invoiceTotal})
-                      </a>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td class="px-4 py-2 text-right whitespace-nowrap">
-                    <a
-                      href={`/admin/o/${organizationId}/periods/${periodId}/dwellings/${c.dwellingId}`}
-                      class="text-neutral-700 hover:underline"
-                    >
-                      Enter readings
-                    </a>
-                    {missing.length === 0 &&
-                      (c.status === "MISSING_DATA" || c.status === "DRAFT") && (
-                        <form
-                          method="POST"
-                          action={actions.billing.generate}
-                          class="ml-3 inline"
+      <div class="table-wrap case-table-wrap">
+        <table class="case-table">
+          <thead>
+            <tr>
+              <th class="select-column">
+                <input
+                  type="checkbox"
+                  id="select-all"
+                  aria-label={t("Select all eligible invoices")}
+                />
+              </th>
+              <th>{t("Dwelling")}</th>
+              <th>{t("Billing inputs")}</th>
+              <th>{t("Status")}</th>
+              <th class="numeric-column">{t("Invoice")}</th>
+              <th>{t("Next action")}</th>
+              <th aria-label={t("More actions")}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              cases.map((billingCase) => {
+                const missing = billingCase.missingData as (
+                  { label: string | null; meterType: string } | string
+                )[];
+                const issuer = (billingCase.invoiceIssuerSnapshot ??
+                  {}) as Snapshot;
+                const recipient = (billingCase.invoiceRecipientSnapshot ??
+                  {}) as Snapshot & {
+                  invoiceByEmail?: boolean;
+                  invoiceByPaper?: boolean;
+                };
+                const payment = (billingCase.invoicePaymentSnapshot ??
+                  {}) as Snapshot;
+                const recipientIncomplete =
+                  Boolean(billingCase.invoiceId) &&
+                  ((!recipient.billingName && !recipient.occupantName) ||
+                    !recipient.billingAddress);
+                const organizationIncomplete =
+                  Boolean(billingCase.invoiceId) &&
+                  (!issuer.name ||
+                    !issuer.addressLine1 ||
+                    !payment.iban ||
+                    !payment.bankName);
+                const billingEmail = billingCase.invoiceId
+                  ? recipient.billingEmail
+                  : billingCase.billingEmail;
+                // A snapshot taken before per-dwelling delivery preferences
+                // existed has neither key -- same email-only fallback as
+                // sending.ts's deliver().
+                const invoiceByEmail = billingCase.invoiceId
+                  ? (recipient.invoiceByEmail ?? true)
+                  : billingCase.invoiceByEmail;
+                const invoiceByPaper = billingCase.invoiceId
+                  ? (recipient.invoiceByPaper ?? false)
+                  : billingCase.invoiceByPaper;
+                const prepareEligible =
+                  billingCase.status === "DRAFT" &&
+                  !recipientIncomplete &&
+                  !organizationIncomplete;
+                const sendEligible =
+                  billingCase.status === "PREPARED" &&
+                  ((invoiceByEmail && Boolean(billingEmail)) || invoiceByPaper);
+                const invoiceHref = billingCase.invoiceId
+                  ? `${workbenchPath}/invoices/${billingCase.invoiceId}`
+                  : null;
+                const readingsHref = `${workbenchPath}/dwellings/${billingCase.dwellingId}`;
+                const dwellingHref = `/admin/o/${organizationId}/dwellings/${billingCase.dwellingId}`;
+
+                return (
+                  <tr data-status={billingCase.status}>
+                    <td class="select-column">
+                      {billingCase.invoiceId &&
+                        (billingCase.status === "DRAFT" ||
+                          billingCase.status === "PREPARED") && (
+                          <input
+                            type="checkbox"
+                            name="invoiceIds"
+                            data-prepare-eligible={
+                              prepareEligible ? "true" : "false"
+                            }
+                            data-send-eligible={sendEligible ? "true" : "false"}
+                            aria-label={`${t("Select invoice")} ${billingCase.invoiceNumber}`}
+                            value={billingCase.invoiceId}
+                            form="bulk-select-form"
+                          />
+                        )}
+                    </td>
+                    <td class="dwelling-cell">
+                      <a href={readingsHref}>{billingCase.dwellingNumber}</a>
+                      {billingCase.occupantName && (
+                        <span>{billingCase.occupantName}</span>
+                      )}
+                    </td>
+                    <td>
+                      <div class="readiness-list">
+                        {missing.length > 0 ? (
+                          missing.map((item) =>
+                            // missingData is a JSONB column with no schema
+                            // enforcement: cases whose readiness was last
+                            // computed by an older app version can still
+                            // carry the legacy plain-string shape instead of
+                            // today's {meterType, label, reason} object, so
+                            // render those as a non-actionable badge instead
+                            // of crashing on a missing meterType.
+                            item &&
+                            typeof item === "object" &&
+                            item.meterType ? (
+                              <button
+                                type="button"
+                                class="readiness-item"
+                                data-tone="danger"
+                                data-open-drawer="readings"
+                                data-dwelling-id={billingCase.dwellingId}
+                                data-focus={item.meterType
+                                  .toLowerCase()
+                                  .replace(/_/g, "-")}
+                              >
+                                <Icon name="alert-triangle" size="xs" />
+                                {item.label ??
+                                  entityLabel(item.meterType, locale)}{" "}
+                                — {t("missing")}
+                              </button>
+                            ) : (
+                              <span class="readiness-item" data-tone="danger">
+                                <Icon name="alert-triangle" size="xs" />{" "}
+                                {typeof item === "string"
+                                  ? item
+                                  : t("Missing data")}
+                              </span>
+                            )
+                          )
+                        ) : (
+                          <span class="readiness-item" data-tone="success">
+                            <Icon name="check" size="xs" />
+                            {t("Required readings complete")}
+                          </span>
+                        )}
+                        {invoiceByEmail &&
+                          (billingEmail ? (
+                            <span class="readiness-item">
+                              <Icon name="check" size="xs" />{" "}
+                              {t("Billing email ready")}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              class="readiness-item"
+                              data-tone="warning"
+                              data-open-drawer="billing-details"
+                              data-dwelling-id={billingCase.dwellingId}
+                              data-focus="billing-email"
+                            >
+                              <Icon name="alert-triangle" size="xs" />{" "}
+                              {t("Billing email missing")}
+                            </button>
+                          ))}
+                        {invoiceByPaper && (
+                          <span class="readiness-item" data-tone="neutral">
+                            <Icon name="file-description" size="xs" />{" "}
+                            {t("Paper delivery")}
+                          </span>
+                        )}
+                        {recipientIncomplete && (
+                          <button
+                            type="button"
+                            class="readiness-item"
+                            data-tone="danger"
+                            data-open-drawer="billing-details"
+                            data-dwelling-id={billingCase.dwellingId}
+                            data-focus="recipient"
+                          >
+                            <Icon name="alert-triangle" size="xs" />{" "}
+                            {t("Recipient details incomplete")}
+                          </button>
+                        )}
+                        {organizationIncomplete && (
+                          <span class="readiness-item" data-tone="danger">
+                            <Icon name="alert-triangle" size="xs" />{" "}
+                            {t("Issuer or payment details incomplete")}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <StatusBadge status={billingCase.status} />
+                    </td>
+                    <td class="invoice-cell numeric-column">
+                      {invoiceHref ? (
+                        <a href={invoiceHref}>
+                          <span>{billingCase.invoiceNumber}</span>
+                          <strong>
+                            {billingCase.invoiceAmountDue &&
+                              formatMoney(
+                                billingCase.invoiceAmountDue,
+                                organization.currency,
+                                locale
+                              )}
+                          </strong>
+                          {billingCase.invoiceCurrentCharges &&
+                            billingCase.invoiceCurrentCharges !==
+                              billingCase.invoiceAmountDue && (
+                              <small>
+                                {t("Current charges")}:{" "}
+                                {formatMoney(
+                                  billingCase.invoiceCurrentCharges,
+                                  organization.currency,
+                                  locale
+                                )}
+                              </small>
+                            )}
+                          {billingCase.invoicePreviousOutstanding &&
+                            billingCase.invoicePreviousOutstanding !==
+                              "0.00" && (
+                              <small>
+                                +{" "}
+                                {formatMoney(
+                                  billingCase.invoicePreviousOutstanding,
+                                  organization.currency,
+                                  locale
+                                )}{" "}
+                                {t("carried balance")}
+                              </small>
+                            )}
+                          {billingCase.invoicePreviousCreditApplied &&
+                            billingCase.invoicePreviousCreditApplied !==
+                              "0.00" && (
+                              <small>
+                                −{" "}
+                                {formatMoney(
+                                  billingCase.invoicePreviousCreditApplied,
+                                  organization.currency,
+                                  locale
+                                )}{" "}
+                                {t("credit applied")}
+                              </small>
+                            )}
+                        </a>
+                      ) : (
+                        <span aria-label={t("No invoice")}>—</span>
+                      )}
+                    </td>
+                    <td class="next-action">
+                      {period.status === "LOCKED" ? (
+                        <a
+                          class="btn-secondary btn-sm"
+                          href={invoiceHref ?? readingsHref}
                         >
+                          {t(invoiceHref ? "View invoice" : "View readings")}
+                        </a>
+                      ) : missing.length > 0 ? (
+                        <button
+                          type="button"
+                          class="btn-secondary btn-sm"
+                          data-open-drawer="readings"
+                          data-dwelling-id={billingCase.dwellingId}
+                        >
+                          {t("Enter readings")}
+                        </button>
+                      ) : !billingCase.invoiceId ||
+                        billingCase.status === "MISSING_DATA" ||
+                        billingCase.status === "READY" ? (
+                        <form method="POST" action={actions.billing.generate}>
                           <input
                             type="hidden"
                             name="organizationId"
@@ -419,32 +755,752 @@ const nextPeriod = currentIndex > 0 ? allPeriods[currentIndex - 1] : null;
                           <input
                             type="hidden"
                             name="dwellingId"
-                            value={c.dwellingId}
+                            value={billingCase.dwellingId}
                           />
-                          <button
-                            type="submit"
-                            class="text-neutral-700 hover:underline"
-                          >
-                            {c.invoiceId ? "Regenerate" : "Generate"}
+                          <button type="submit" class="btn-primary btn-sm">
+                            {t("Generate invoice")}
                           </button>
                         </form>
+                      ) : billingCase.status === "DRAFT" &&
+                        recipientIncomplete ? (
+                        <button
+                          type="button"
+                          class="btn-secondary btn-sm"
+                          data-open-drawer="billing-details"
+                          data-dwelling-id={billingCase.dwellingId}
+                        >
+                          {t("Fix dwelling details")}
+                        </button>
+                      ) : billingCase.status === "DRAFT" &&
+                        organizationIncomplete ? (
+                        <a
+                          class="btn-secondary btn-sm"
+                          href={`/admin/o/${organizationId}/settings/organization`}
+                        >
+                          {t("Fix organization details")}
+                        </a>
+                      ) : billingCase.status === "DRAFT" ? (
+                        <a class="btn-secondary btn-sm" href={invoiceHref!}>
+                          {t("Review invoice")}
+                        </a>
+                      ) : billingCase.status === "PREPARED" && !sendEligible ? (
+                        <button
+                          type="button"
+                          class="btn-secondary btn-sm"
+                          data-open-drawer="billing-details"
+                          data-dwelling-id={billingCase.dwellingId}
+                          data-focus="billing-email"
+                        >
+                          {t("Add billing email")}
+                        </button>
+                      ) : billingCase.status === "PREPARED" ? (
+                        <form method="POST" action={actions.invoices.send}>
+                          <input
+                            type="hidden"
+                            name="organizationId"
+                            value={organizationId}
+                          />
+                          <input
+                            type="hidden"
+                            name="invoiceId"
+                            value={billingCase.invoiceId!}
+                          />
+                          <button type="submit" class="btn-primary btn-sm">
+                            {t("Send invoice")}
+                          </button>
+                        </form>
+                      ) : (
+                        <a class="btn-secondary btn-sm" href={invoiceHref!}>
+                          {t(
+                            billingCase.status === "OVERDUE"
+                              ? "Review invoice"
+                              : "View invoice"
+                          )}
+                        </a>
                       )}
+                    </td>
+                    <td class="menu-cell">
+                      <details class="case-menu">
+                        <summary
+                          aria-label={`${t("More actions")}: ${billingCase.dwellingNumber}`}
+                        >
+                          •••
+                        </summary>
+                        <div>
+                          <a href={readingsHref}>{t("View readings")}</a>
+                          <a href={dwellingHref}>{t("View dwelling")}</a>
+                          {invoiceHref && (
+                            <a href={invoiceHref}>{t("View invoice")}</a>
+                          )}
+                          {period.status === "OPEN" &&
+                            missing.length === 0 &&
+                            billingCase.status === "DRAFT" && (
+                              <form
+                                method="POST"
+                                action={actions.billing.generate}
+                              >
+                                <input
+                                  type="hidden"
+                                  name="organizationId"
+                                  value={organizationId}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="periodId"
+                                  value={periodId}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="dwellingId"
+                                  value={billingCase.dwellingId}
+                                />
+                                <button type="submit">
+                                  {t("Regenerate invoice")}
+                                </button>
+                              </form>
+                            )}
+                        </div>
+                      </details>
+                    </td>
+                  </tr>
+                );
+              })
+            }
+            {
+              cases.length === 0 && (
+                <tr>
+                  <td colspan="7" class="empty-queue">
+                    <strong>
+                      {t(
+                        statusFilter === "MISSING_DATA"
+                          ? "No dwellings are missing required billing data."
+                          : search || statusFilter
+                            ? "No billing cases match these filters."
+                            : "No billing cases for this period."
+                      )}
+                    </strong>
+                    <span>{periodName}</span>
+                    {(search || statusFilter) && (
+                      <a class="btn-secondary" href={workbenchPath}>
+                        {t("Clear filters")}
+                      </a>
+                    )}
                   </td>
                 </tr>
-              );
-            })
-          }
-          {
-            cases.length === 0 && (
-              <tr>
-                <td colspan="6" class="px-4 py-8 text-center text-neutral-500">
-                  No billing cases for this period.
-                </td>
-              </tr>
-            )
-          }
-        </tbody>
-      </table>
-    </div>
+              )
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 </AdminLayout>
+
+<script>
+  const filterForm = document.querySelector<HTMLFormElement>(
+    "[data-instant-filter]"
+  );
+  const searchInput = document.querySelector<HTMLInputElement>("#search");
+  const statusSelect = document.querySelector("#status");
+  let searchTimer: number | undefined;
+  searchInput?.addEventListener("input", () => {
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(() => filterForm?.requestSubmit(), 300);
+  });
+  statusSelect?.addEventListener("change", () => filterForm?.requestSubmit());
+
+  const lockDialog = document.querySelector<HTMLDialogElement>(
+    "#lock-period-dialog"
+  );
+  const lockButton = document.querySelector<HTMLButtonElement>(
+    "[data-open-lock-dialog]"
+  );
+  lockButton?.addEventListener("click", () => {
+    lockButton.closest("details")?.removeAttribute("open");
+    lockDialog?.showModal();
+  });
+  lockDialog?.addEventListener("click", (event) => {
+    if (event.target === lockDialog) lockDialog.close();
+  });
+
+  const boxes = [
+    ...document.querySelectorAll<HTMLInputElement>('input[name="invoiceIds"]'),
+  ];
+  const selectAll = document.querySelector<HTMLInputElement>("#select-all");
+  const toolbar = document.querySelector<HTMLElement>("#bulk-toolbar");
+  const selectedCount = document.querySelector<HTMLElement>("#selected-count");
+  const prepareCount = document.querySelector<HTMLElement>("#prepare-count");
+  const sendCount = document.querySelector<HTMLElement>("#send-count");
+
+  const updateSelection = () => {
+    const selected = boxes.filter((box) => box.checked);
+    const prepareEligible = selected.filter(
+      (box) => box.dataset.prepareEligible === "true"
+    ).length;
+    const sendEligible = selected.filter(
+      (box) => box.dataset.sendEligible === "true"
+    ).length;
+    if (toolbar) toolbar.hidden = selected.length === 0;
+    if (selectedCount) selectedCount.textContent = String(selected.length);
+    if (prepareCount) prepareCount.textContent = String(prepareEligible);
+    if (sendCount) sendCount.textContent = String(sendEligible);
+    document
+      .querySelectorAll<HTMLButtonElement>("[data-bulk-status]")
+      .forEach((button) => {
+        button.disabled =
+          button.dataset.bulkStatus === "DRAFT"
+            ? prepareEligible === 0
+            : sendEligible === 0;
+      });
+    if (selectAll) {
+      selectAll.checked = boxes.length > 0 && selected.length === boxes.length;
+      selectAll.indeterminate =
+        selected.length > 0 && selected.length < boxes.length;
+      selectAll.disabled = boxes.length === 0;
+    }
+  };
+
+  boxes.forEach((box) => box.addEventListener("change", updateSelection));
+  selectAll?.addEventListener("change", () => {
+    boxes.forEach((box) => (box.checked = selectAll.checked));
+    updateSelection();
+  });
+  document.querySelector("#clear-selection")?.addEventListener("click", () => {
+    boxes.forEach((box) => (box.checked = false));
+    updateSelection();
+  });
+  updateSelection();
+</script>
+
+<style>
+  .workbench {
+    display: grid;
+    gap: 1.5rem;
+    min-width: 0;
+  }
+  .back-link {
+    width: fit-content;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .workbench-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 2rem;
+  }
+  .period-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+  }
+  .period-title h1 {
+    font-size: clamp(2rem, 4vw, 2.75rem);
+    font-weight: 600;
+    line-height: 1.1;
+  }
+  .period-description {
+    max-width: 44rem;
+    margin-top: 0.75rem;
+    color: var(--color-muted);
+    font-size: 1rem;
+  }
+  .period-code {
+    margin-top: 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .period-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .more-menu,
+  .case-menu {
+    position: relative;
+  }
+  .more-menu summary,
+  .case-menu summary {
+    display: grid;
+    min-width: 2.625rem;
+    min-height: 2.625rem;
+    place-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-muted);
+    list-style: none;
+  }
+  .more-menu summary::-webkit-details-marker,
+  .case-menu summary::-webkit-details-marker {
+    display: none;
+  }
+  .more-menu > div,
+  .case-menu > div {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 0.35rem);
+    right: 0;
+    min-width: 11rem;
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    /* Section 6.2: dropdown menus get elevation-1, not the elevation-0
+       cards/tables use. */
+    box-shadow: var(--elevation-1);
+  }
+  .more-menu button,
+  .case-menu a,
+  .case-menu button {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-badge);
+    color: var(--color-foreground);
+    font-size: 0.875rem;
+    text-align: left;
+  }
+  .more-menu button:hover,
+  .case-menu a:hover,
+  .case-menu button:hover {
+    background: var(--color-surface-hover);
+  }
+  .period-navigation {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.875rem;
+  }
+  .period-navigation a {
+    display: flex;
+    gap: 0.5rem;
+    color: var(--color-foreground);
+    font-weight: 600;
+  }
+  .period-navigation [aria-disabled="true"] {
+    color: var(--color-muted);
+    opacity: 0.45;
+  }
+  .lock-dialog {
+    width: min(30rem, calc(100vw - 2rem));
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    color: var(--color-foreground);
+    box-shadow: var(--elevation-overlay);
+  }
+  .lock-dialog::backdrop {
+    background: var(--color-backdrop);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lock-dialog {
+      opacity: 0;
+      scale: 0.96;
+      transition:
+        opacity 200ms ease,
+        scale 200ms ease,
+        overlay 200ms allow-discrete,
+        display 200ms allow-discrete;
+    }
+    .lock-dialog[open] {
+      opacity: 1;
+      scale: 1;
+    }
+    @starting-style {
+      .lock-dialog[open] {
+        opacity: 0;
+        scale: 0.96;
+      }
+    }
+    .lock-dialog::backdrop {
+      background: transparent;
+      transition:
+        background-color 200ms ease,
+        overlay 200ms allow-discrete,
+        display 200ms allow-discrete;
+    }
+    .lock-dialog[open]::backdrop {
+      background: var(--color-backdrop);
+    }
+    @starting-style {
+      .lock-dialog[open]::backdrop {
+        background: transparent;
+      }
+    }
+  }
+  .dialog-body {
+    display: flex;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+  .dialog-icon {
+    display: grid;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-badge-warning-bg);
+    color: var(--color-badge-warning-text);
+    font-weight: 800;
+  }
+  .dialog-body h2 {
+    font-size: 1.125rem;
+    font-weight: 700;
+  }
+  .dialog-body p {
+    margin-top: 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .section-heading,
+  .queue-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .section-heading h2,
+  .queue-heading h2 {
+    font-size: 1.125rem;
+    font-weight: 700;
+  }
+  .section-heading p,
+  .queue-heading p,
+  .section-heading > span {
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .workflow-scroll {
+    margin-top: 0.75rem;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+
+  .workflow-overview {
+    min-width: 0;
+  }
+  .workflow-rail {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(8.5rem, 1fr));
+    min-width: 69rem;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+  }
+  .workflow-filter {
+    position: relative;
+    display: grid;
+    gap: 0.5rem;
+    min-height: 5.25rem;
+    align-content: center;
+    padding: 0.75rem;
+    border-right: 1px solid var(--color-border);
+    color: var(--color-foreground);
+  }
+  .workflow-filter:last-child {
+    border-right: 0;
+  }
+  .workflow-filter:hover {
+    background: var(--color-surface-hover);
+  }
+  .workflow-filter[aria-current="page"] {
+    background: var(--color-nav-active-bg);
+    box-shadow: inset 0 3px 0 var(--color-primary);
+  }
+  .workflow-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 650;
+  }
+  .workflow-label strong {
+    margin-left: auto;
+    font-size: 1rem;
+  }
+  .workflow-icon {
+    color: var(--color-muted);
+    font-weight: 800;
+  }
+  [data-tone="danger"] .workflow-icon {
+    color: var(--color-destructive);
+  }
+  [data-tone="info"] .workflow-icon {
+    color: var(--color-info);
+  }
+  [data-tone="warning"] .workflow-icon {
+    color: var(--color-warning);
+  }
+  [data-tone="success"] .workflow-icon {
+    color: var(--color-success);
+  }
+  .workflow-filter > span:last-child {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    line-height: 1.35;
+  }
+  .case-queue {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+  }
+  .queue-filters {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  .queue-filters input {
+    width: min(18rem, 100%);
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-control);
+    font-size: 0.875rem;
+  }
+  .queue-filters select {
+    min-width: 9rem;
+    padding: 0.5rem 2rem 0.5rem 0.75rem;
+    border-radius: var(--radius-control);
+    font-size: 0.875rem;
+  }
+  .clear-filters,
+  .clear-selection {
+    color: var(--color-primary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+  .bulk-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--radius-panel);
+    background: var(--color-nav-active-bg);
+  }
+  .bulk-toolbar[hidden] {
+    display: none;
+  }
+  .selection-summary,
+  .bulk-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .selection-summary {
+    font-size: 0.8125rem;
+  }
+  .selection-summary > span {
+    color: var(--color-muted);
+  }
+  .case-table {
+    width: 100%;
+    min-width: 58rem;
+    border-collapse: separate;
+    border-spacing: 0;
+    text-align: left;
+    font-size: 0.875rem;
+  }
+
+  .case-table-wrap {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .case-table thead {
+    background: var(--color-table-th-bg);
+    color: var(--color-muted);
+  }
+  .case-table th,
+  .case-table td {
+    padding: 0.75rem 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .case-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .case-table tbody tr:hover {
+    background: var(--color-surface-hover);
+  }
+  .case-table tr[data-status="MISSING_DATA"] td:first-child {
+    box-shadow: inset 3px 0 0 var(--color-destructive);
+  }
+  .case-table tr[data-status="READY"] td:first-child {
+    box-shadow: inset 3px 0 0 var(--color-warning);
+  }
+  .case-table tr[data-status="DRAFT"] td:first-child {
+    box-shadow: inset 3px 0 0 var(--color-muted);
+  }
+  .case-table tr[data-status="PREPARED"] td:first-child,
+  .case-table tr[data-status="SENT"] td:first-child {
+    box-shadow: inset 3px 0 0 var(--color-info);
+  }
+  .case-table tr[data-status="OVERDUE"] td:first-child {
+    box-shadow: inset 3px 0 0 var(--color-warning);
+  }
+  .case-table tr[data-status="PAID"] td:first-child {
+    box-shadow: inset 3px 0 0 var(--color-success);
+  }
+  .select-column {
+    width: 2.75rem;
+    text-align: center;
+  }
+  .dwelling-cell a {
+    color: var(--color-foreground);
+    font-size: 1.125rem;
+    font-weight: 750;
+  }
+  .dwelling-cell span {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+  .readiness-list {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    max-width: 29rem;
+  }
+  .readiness-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border: none;
+    border-radius: var(--radius-badge);
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-badge-neutral-text);
+    font: inherit;
+    font-size: 0.75rem;
+    line-height: 1.35;
+  }
+  button.readiness-item {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+  }
+  button.readiness-item:hover,
+  button.readiness-item:focus-visible {
+    text-decoration-style: solid;
+  }
+  .readiness-item[data-tone="danger"] {
+    background: var(--color-badge-danger-bg);
+    color: var(--color-badge-danger-text);
+  }
+  .readiness-item[data-tone="success"] {
+    background: var(--color-badge-success-bg);
+    color: var(--color-badge-success-text);
+  }
+  .readiness-item[data-tone="warning"] {
+    background: var(--color-badge-warning-bg);
+    color: var(--color-badge-warning-text);
+  }
+  .numeric-column {
+    text-align: right;
+  }
+  .invoice-cell a {
+    display: grid;
+    gap: 0.25rem;
+  }
+  .invoice-cell span {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+  .invoice-cell strong {
+    color: var(--color-foreground);
+    font-size: 0.875rem;
+  }
+  .next-action {
+    white-space: nowrap;
+  }
+  .menu-cell {
+    width: 3.5rem;
+  }
+  .case-menu summary {
+    min-width: 2rem;
+    min-height: 2rem;
+    border-color: transparent;
+  }
+  .empty-queue {
+    padding: 3rem !important;
+    text-align: center;
+  }
+  .empty-queue strong,
+  .empty-queue span,
+  .empty-queue a {
+    display: block;
+    width: fit-content;
+    margin-inline: auto;
+  }
+  .empty-queue span {
+    margin-top: 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .empty-queue a {
+    margin-top: 1rem;
+  }
+
+  @media (max-width: 767px) {
+    .workbench-header,
+    .section-heading,
+    .queue-heading,
+    .bulk-toolbar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .period-actions,
+    .period-actions form,
+    .period-actions .btn-primary {
+      width: 100%;
+    }
+    .more-menu {
+      margin-left: auto;
+    }
+    .queue-filters {
+      justify-content: stretch;
+    }
+    .queue-filters input,
+    .queue-filters select {
+      width: 100%;
+    }
+    .bulk-actions {
+      align-items: stretch;
+    }
+    .bulk-actions .btn-primary,
+    .bulk-actions .btn-secondary {
+      flex: 1 1 auto;
+    }
+    .case-table-wrap {
+      overflow-x: auto;
+    }
+  }
+</style>

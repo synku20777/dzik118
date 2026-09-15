@@ -1,5 +1,9 @@
 ---
+import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import { formatDate } from "../../../../../lib/ui/i18n";
 import {
   ForbiddenError,
   requireOrganizationAccess,
@@ -47,19 +51,19 @@ const { organization, logs, availableActions } = await withRequestDb(
   organizationName={organization.name}
 >
   <div class="space-y-6">
-    <h1 class="text-xl font-bold text-neutral-900">Audit log</h1>
+    <h1 class="text-xl font-bold text-foreground">{t("Audit log")}</h1>
 
     <form method="GET" class="flex flex-wrap items-end gap-3">
       <div>
-        <label class="block text-sm font-medium text-neutral-700" for="action"
-          >Action</label
+        <label class="block text-sm font-medium text-foreground" for="action"
+          >{t("Action")}</label
         >
         <select
           id="action"
           name="action"
-          class="mt-1 rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+          class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
         >
-          <option value="" selected={!actionFilter}>All actions</option>
+          <option value="" selected={!actionFilter}>{t("All actions")}</option>
           {
             availableActions.map((action) => (
               <option value={action} selected={action === actionFilter}>
@@ -71,43 +75,42 @@ const { organization, logs, availableActions } = await withRequestDb(
       </div>
       <div>
         <label
-          class="block text-sm font-medium text-neutral-700"
-          for="entityType">Entity type</label
+          class="block text-sm font-medium text-foreground"
+          for="entityType">{t("Entity type")}</label
         >
         <input
           id="entityType"
           name="entityType"
           value={entityTypeFilter ?? ""}
           placeholder="invoice, conversation, ..."
-          class="mt-1 rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+          class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
         />
       </div>
-      <button
-        type="submit"
-        class="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white"
-      >
-        Filter
+      <button type="submit" class="btn-primary">
+        {t("Filter")}
       </button>
     </form>
 
-    <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+    <div class="table-wrap">
       <table class="w-full text-left text-sm">
         <thead
-          class="border-b border-neutral-200 bg-neutral-50 text-neutral-600"
+          class="border-b border-border bg-surface-hover text-muted"
         >
           <tr>
-            <th class="px-4 py-2">Time</th>
-            <th class="px-4 py-2">Actor</th>
-            <th class="px-4 py-2">Action</th>
-            <th class="px-4 py-2">Entity</th>
-            <th class="px-4 py-2">Details</th>
+            <th class="px-4 py-2">{t("Time")}</th>
+            <th class="px-4 py-2">{t("Actor")}</th>
+            <th class="px-4 py-2">{t("Action")}</th>
+            <th class="px-4 py-2">{t("Entity")}</th>
+            <th class="px-4 py-2">{t("Details")}</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-neutral-100">
+        <tbody class="divide-y divide-border">
           {
             logs.map((log) => (
               <tr>
-                <td class="px-4 py-2">{log.createdAt.toISOString()}</td>
+                <td class="px-4 py-2">
+                  {formatDate(log.createdAt, locale, organization.timezone)}
+                </td>
                 <td class="px-4 py-2">
                   {log.actorDisplayName ?? log.actorEmail ?? "—"}
                 </td>
@@ -119,10 +122,10 @@ const { organization, logs, availableActions } = await withRequestDb(
                 <td class="px-4 py-2">
                   {log.beforeData != null || log.afterData != null ? (
                     <details>
-                      <summary class="cursor-pointer text-neutral-600 hover:underline">
-                        View
+                      <summary class="cursor-pointer text-muted hover:underline">
+                        {t("View")}
                       </summary>
-                      <pre class="mt-2 max-w-md overflow-x-auto rounded bg-neutral-50 p-2 text-xs">
+                      <pre class="mt-2 max-w-md overflow-x-auto rounded bg-surface-hover p-2 text-xs">
                         {JSON.stringify(
                           { before: log.beforeData, after: log.afterData },
                           null,
@@ -140,8 +143,8 @@ const { organization, logs, availableActions } = await withRequestDb(
           {
             logs.length === 0 && (
               <tr>
-                <td colspan="5" class="px-4 py-8 text-center text-neutral-500">
-                  No audit events match this filter.
+                <td colspan="5" class="px-4 py-8 text-center text-muted">
+                  {t("No audit events match this filter.")}
                 </td>
               </tr>
             )
@@ -150,21 +153,21 @@ const { organization, logs, availableActions } = await withRequestDb(
       </table>
     </div>
 
-    <div class="flex justify-between text-sm text-neutral-600">
+    <div class="flex justify-between text-sm text-muted">
       <a
         href={`?action=${encodeURIComponent(actionFilter ?? "")}&entityType=${encodeURIComponent(entityTypeFilter ?? "")}&page=${Math.max(1, page - 1)}`}
         class:list={{ "pointer-events-none opacity-40": page <= 1 }}
       >
-        ← Previous
+        ← {t("Previous")}
       </a>
-      <span>Page {page}</span>
+      <span>{t("Page")} {page}</span>
       <a
         href={`?action=${encodeURIComponent(actionFilter ?? "")}&entityType=${encodeURIComponent(entityTypeFilter ?? "")}&page=${page + 1}`}
         class:list={{
           "pointer-events-none opacity-40": logs.length < pageSize,
         }}
       >
-        Next →
+        {t("Next →")}
       </a>
     </div>
   </div>

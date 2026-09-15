@@ -28,6 +28,7 @@ const requestedPeriodId = Astro.url.searchParams.get("periodId");
 let organization: Awaited<ReturnType<typeof getOrganization>>;
 let allPeriods: Awaited<ReturnType<typeof listPeriods>>;
 let summary: DashboardSummary | null = null;
+let attentionCases: Awaited<ReturnType<typeof listCasesForPeriod>> = [];
 try {
   ({ organization, allPeriods, summary } = await withRequestDb(async (db) => {
     const org = await getOrganization(db, organizationId);
@@ -47,6 +48,8 @@ try {
       ? await getDashboardSummary(db, organizationId, periodId)
       : null;
 
+    if (periodId)
+      attentionCases = await listCasesForPeriod(db, organizationId, periodId);
     return { organization: org, allPeriods: periods, summary };
   }));
 } catch {
@@ -62,185 +65,322 @@ const previousPeriod =
     : null;
 const nextPeriod = currentIndex > 0 ? allPeriods[currentIndex - 1] : null;
 
-const CASE_STATUSES = [
-  {
-    key: "MISSING_DATA",
-    label: "Missing data",
-    className: "bg-red-50 text-red-700",
-  },
-  {
-    key: "DRAFT",
-    label: "Draft",
-    className: "bg-neutral-100 text-neutral-600",
-  },
-  {
-    key: "PREPARED",
-    label: "Prepared",
-    className: "bg-blue-50 text-blue-700",
-  },
-  {
-    key: "OVERDUE",
-    label: "Overdue",
-    className: "bg-amber-50 text-amber-700",
-  },
-  {
-    key: "SENT",
-    label: "Sent",
-    className: "bg-indigo-50 text-indigo-700",
-  },
-  {
-    key: "PAID",
-    label: "Paid",
-    className: "bg-green-50 text-green-700",
-  },
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import KpiCard from "../../../../../components/ui/KpiCard.astro";
+import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
+import EmptyState from "../../../../../components/ui/EmptyState.astro";
+import AdminContextDrawer from "../../../../../components/ui/AdminContextDrawer.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
+import { listCasesForPeriod } from "../../../../../domain/periods/cases";
+import {
+  translate,
+  uiLocale,
+  formatMoney,
+  formatNumber,
+  formatPeriod,
+  entityLabel,
+} from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+const base = "/admin/o/" + organizationId;
+const statuses = [
+  "MISSING_DATA",
+  "READY",
+  "DRAFT",
+  "PREPARED",
+  "OVERDUE",
+  "SENT",
+  "PAID",
 ] as const;
 ---
 
 <AdminLayout
-  title={`Dashboard - ${organization.name}`}
+  title={t("Dashboard") + " - " + organization.name}
   organizationId={organizationId}
   organizationName={organization.name}
 >
-  <div class="space-y-6">
-    {
-      allPeriods.length === 0 || !summary ? (
-        <div class="rounded-xl border border-neutral-200 bg-white p-8 text-center">
-          <p class="text-neutral-500">No billing periods yet.</p>
-          <div class="mt-4">
-            <a
-              href={`/admin/o/${organizationId}/periods`}
-              class="inline-block rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-            >
-              Go to periods
-            </a>
-          </div>
-        </div>
-      ) : (
-        <>
-          <div class="flex items-center justify-between">
-            <h1 class="text-xl font-bold text-neutral-900">
-              Dashboard
-              <span class="ml-2 text-sm font-normal text-neutral-500">
-                ({summary.period.year}-
-                {String(summary.period.month).padStart(2, "0")},{" "}
-                {summary.period.status === "LOCKED" ? "Locked" : "Open"})
-              </span>
-            </h1>
-            <a
-              href={`/admin/o/${organizationId}/periods/${summary.period.id}`}
-              class="text-sm text-neutral-600 hover:underline"
-            >
-              Open workbench →
-            </a>
-          </div>
-
-          <div class="flex items-center gap-4 text-sm">
-            {previousPeriod ? (
-              <a
-                href={`/admin/o/${organizationId}/dashboard?periodId=${previousPeriod.id}`}
-                class="text-neutral-600 hover:underline"
-              >
-                ← Previous period
-              </a>
-            ) : (
-              <span class="text-neutral-300">← Previous period</span>
-            )}
-            {nextPeriod ? (
-              <a
-                href={`/admin/o/${organizationId}/dashboard?periodId=${nextPeriod.id}`}
-                class="text-neutral-600 hover:underline"
-              >
-                Next period →
-              </a>
-            ) : (
-              <span class="text-neutral-300">Next period →</span>
-            )}
-          </div>
-
-          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <section class="rounded-xl border border-neutral-200 bg-white p-4">
-              <h2 class="text-sm font-bold text-neutral-900">Total invoiced</h2>
-              <p class="mt-2 text-xl font-semibold text-neutral-900">
-                {summary.totalInvoiced} {organization.currency}
-              </p>
-            </section>
-            <section class="rounded-xl border border-neutral-200 bg-white p-4">
-              <h2 class="text-sm font-bold text-neutral-900">Paid</h2>
-              <p class="mt-2 text-xl font-semibold text-neutral-900">
-                {summary.totalPaid} {organization.currency}
-              </p>
-            </section>
-            <section class="rounded-xl border border-neutral-200 bg-white p-4">
-              <h2 class="text-sm font-bold text-neutral-900">Outstanding</h2>
-              <p class="mt-2 text-xl font-semibold text-neutral-900">
-                {summary.totalOutstanding} {organization.currency}
-              </p>
-            </section>
-            <section class="rounded-xl border border-neutral-200 bg-white p-4">
-              <h2 class="text-sm font-bold text-neutral-900">Cold water</h2>
-              <p class="mt-2 text-xl font-semibold text-neutral-900">
-                {summary.coldWaterConsumption} m3
-              </p>
-            </section>
-            <section class="rounded-xl border border-neutral-200 bg-white p-4">
-              <h2 class="text-sm font-bold text-neutral-900">Hot water</h2>
-              <p class="mt-2 text-xl font-semibold text-neutral-900">
-                {summary.hotWaterConsumption} m3
-              </p>
-            </section>
-          </div>
-
-          <section class="space-y-3">
-            <h2 class="text-base font-bold text-neutral-900">Case status</h2>
-            <div class="flex flex-wrap gap-2">
-              {CASE_STATUSES.map((item) => (
-                <span
-                  class={`rounded-full px-3 py-1 text-sm font-medium ${item.className}`}
-                >
-                  {item.label}: {summary.caseStatusCounts[item.key]}
-                </span>
-              ))}
+  {
+    !summary ? (
+      <div class="space-y-6">
+        <PageHeader
+          title={t("Dashboard")}
+          eyebrow={organization.name}
+          description={t(
+            "Monitor billing, payments and work requiring attention."
+          )}
+          display
+        />
+        <EmptyState
+          ornament
+          title={t("No billing periods yet.")}
+          description={t(
+            "Create a period to start the monthly billing workflow."
+          )}
+        >
+          <a class="btn-primary" href={base + "/periods"}>
+            {t("Create period")}
+          </a>
+        </EmptyState>
+      </div>
+    ) : (
+      <div class="space-y-6">
+        <AdminContextDrawer
+          organizationId={organizationId}
+          periodId={summary.period.id}
+          periodStatus={summary.period.status}
+          periodName={formatPeriod(
+            summary.period.year,
+            summary.period.month,
+            locale
+          )}
+          workbenchPath={base + "/periods/" + summary.period.id}
+          refreshSelectors={[".dashboard-attention", ".dashboard-case-status"]}
+        />
+        <header class="page-header">
+          <div>
+            <p class="eyebrow">{organization.name}</p>
+            <div class="flex flex-wrap items-center gap-3">
+              <h1 class="font-display">
+                {formatPeriod(
+                  summary.period.year,
+                  summary.period.month,
+                  locale
+                )}
+              </h1>
+              <StatusBadge status={summary.period.status} />
             </div>
-          </section>
-
-          <section class="space-y-3">
-            <h2 class="text-base font-bold text-neutral-900">
-              Needs attention
-            </h2>
+          </div>
+          <div class="page-actions">
+            <a
+              class="btn-primary"
+              href={base + "/periods/" + summary.period.id}
+            >
+              {t("Open workbench")}
+              <Icon name="arrow-right" size="sm" />
+            </a>
+          </div>
+        </header>
+        <nav
+          class="flex items-center justify-between gap-4 border-b border-border pb-4 text-body-sm text-muted"
+          aria-label={t("Period navigation")}
+        >
+          {previousPeriod ? (
+            <a
+              href={base + "/dashboard?periodId=" + previousPeriod.id}
+              class="flex items-center gap-1 hover:text-foreground hover:underline"
+            >
+              <Icon name="arrow-left" size="xs" />
+              {formatPeriod(previousPeriod.year, previousPeriod.month, locale)}
+            </a>
+          ) : (
+            <span class="flex items-center gap-1 opacity-40">
+              <Icon name="arrow-left" size="xs" />
+              {t("Previous period")}
+            </span>
+          )}
+          {nextPeriod ? (
+            <a
+              href={base + "/dashboard?periodId=" + nextPeriod.id}
+              class="flex items-center gap-1 hover:text-foreground hover:underline"
+            >
+              {formatPeriod(nextPeriod.year, nextPeriod.month, locale)}
+              <Icon name="arrow-right" size="xs" />
+            </a>
+          ) : (
+            <span class="flex items-center gap-1 opacity-40">
+              {t("Next period")}
+              <Icon name="arrow-right" size="xs" />
+            </span>
+          )}
+        </nav>
+        <div class="grid gap-4 sm:grid-cols-3">
+          <>
+            <KpiCard
+              icon="invoice"
+              label={t("Total invoiced")}
+              value={formatMoney(
+                summary.totalInvoiced,
+                organization.currency,
+                locale
+              )}
+            />
+            <KpiCard
+              icon="coins"
+              label={t("Paid")}
+              tone="success"
+              value={formatMoney(
+                summary.totalPaid,
+                organization.currency,
+                locale
+              )}
+            />
+            <KpiCard
+              icon="clock"
+              label={t("Outstanding")}
+              tone="warning"
+              value={formatMoney(
+                summary.totalOutstanding,
+                organization.currency,
+                locale
+              )}
+            />
+          </>
+        </div>
+        <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <section class="dashboard-attention">
+            <div class="mb-4 flex items-center justify-between">
+              <>
+                <h2 class="font-semibold">{t("Needs attention")}</h2>
+                <span class="text-body-sm text-muted">
+                  {summary.needsAttention.length}
+                </span>
+              </>
+            </div>
             {summary.needsAttention.length === 0 ? (
-              <p class="text-sm text-neutral-500">
-                Nothing needs attention right now.
-              </p>
+              <EmptyState title={t("Nothing needs attention right now.")} />
             ) : (
-              <div class="divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-200 bg-white">
-                {summary.needsAttention.map((item) => {
-                  const badgeClass =
-                    item.status === "MISSING_DATA"
-                      ? "bg-red-50 text-red-700"
-                      : "bg-amber-50 text-amber-700";
-                  const badgeLabel =
-                    item.status === "MISSING_DATA" ? "Missing data" : "Overdue";
-                  return (
-                    <a
-                      href={`/admin/o/${organizationId}/periods/${summary.period.id}/dwellings/${item.dwellingId}`}
-                      class="flex items-center justify-between px-4 py-3 text-sm hover:bg-neutral-50"
-                    >
-                      <span class="font-medium text-neutral-900">
-                        Dwelling {item.dwellingNumber}
-                      </span>
-                      <span
-                        class={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass}`}
-                      >
-                        {badgeLabel}
-                      </span>
-                    </a>
-                  );
-                })}
+              <div class="panel divide-y divide-border">
+                {attentionCases
+                  .filter(
+                    (c) => c.status === "MISSING_DATA" || c.status === "OVERDUE"
+                  )
+                  .map((c) => {
+                    // missingData is a JSONB column with no schema
+                    // enforcement: cases whose readiness was last computed by
+                    // an older app version can still carry a legacy
+                    // plain-string shape instead of today's {meterType,
+                    // label, reason} object (see the same fix in
+                    // periods/[periodId]/index.astro).
+                    const missing = c.missingData as (
+                      { label: string | null; meterType: string } | string
+                    )[];
+                    const overdue = c.status === "OVERDUE";
+                    const href = overdue
+                      ? base + "/payments"
+                      : base + "/periods/" + summary.period.id;
+                    return (
+                      <div class="flex flex-wrap items-start justify-between gap-3 p-4">
+                        <div class="min-w-0">
+                          <div class="mb-2 flex flex-wrap items-center gap-3">
+                            <a
+                              class="btn-secondary btn-sm"
+                              href={base + "/dwellings/" + c.dwellingId}
+                            >
+                              <Icon name="building" size="sm" />
+                              {t("Dwelling")} {c.dwellingNumber}
+                            </a>
+                            <StatusBadge status={c.status} />
+                          </div>
+                          <p class="text-body-sm text-muted">
+                            {overdue
+                              ? t(
+                                  "Payment is past its due date. Review reconciliation."
+                                )
+                              : missing.length
+                                ? missing
+                                    .map((m) =>
+                                      typeof m === "string"
+                                        ? m
+                                        : (m.label ??
+                                          entityLabel(m.meterType, locale))
+                                    )
+                                    .join(", ")
+                                : t(
+                                    "All readings are present. Generate the invoice in the workbench."
+                                  )}
+                          </p>
+                          {missing.length > 0 && (
+                            <p class="mt-1 text-caption text-muted">
+                              {t(
+                                "Readings are required before generating an invoice."
+                              )}
+                            </p>
+                          )}
+                        </div>
+                        {missing.length > 0 &&
+                        !overdue &&
+                        summary.period.status !== "LOCKED" ? (
+                          <button
+                            type="button"
+                            class="btn-secondary btn-sm"
+                            data-open-drawer="readings"
+                            data-dwelling-id={c.dwellingId}
+                          >
+                            {t("Add readings")}
+                            <Icon name="arrow-right" size="sm" />
+                          </button>
+                        ) : (
+                          <a class="btn-secondary btn-sm" href={href}>
+                            {t(overdue ? "Review payments" : "Open workbench")}
+                            <Icon name="arrow-right" size="sm" />
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })}
               </div>
             )}
           </section>
-        </>
-      )
-    }
-  </div>
+          <div class="space-y-6">
+            <>
+              <section class="dashboard-case-status panel p-5">
+                <>
+                  <h2 class="section-title">{t("Case status")}</h2>
+                  <div class="space-y-3">
+                    {statuses.map((status) => (
+                      <a
+                        class="flex items-center justify-between gap-3 text-body-sm hover:underline"
+                        href={
+                          base +
+                          "/periods/" +
+                          summary.period.id +
+                          "?status=" +
+                          status
+                        }
+                      >
+                        <StatusBadge status={status} />
+                        <span class="font-semibold tabular-nums">
+                          {summary.caseStatusCounts[status]}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                </>
+              </section>
+              <section class="panel p-5">
+                <>
+                  <h2 class="section-title flex items-center gap-2">
+                    <Icon name="droplet" size="sm" class="text-muted" />
+                    {t("Consumption")}
+                  </h2>
+                  <dl class="space-y-3 text-body-sm">
+                    <>
+                      <div class="flex justify-between gap-3">
+                        <>
+                          <dt class="text-muted">{t("Cold water")}</dt>
+                          <dd class="font-semibold tabular-nums">
+                            {formatNumber(summary.coldWaterConsumption, locale)}{" "}
+                            m³
+                          </dd>
+                        </>
+                      </div>
+                      <div class="flex justify-between gap-3">
+                        <>
+                          <dt class="text-muted">{t("Hot water")}</dt>
+                          <dd class="font-semibold tabular-nums">
+                            {formatNumber(summary.hotWaterConsumption, locale)}{" "}
+                            m³
+                          </dd>
+                        </>
+                      </div>
+                    </>
+                  </dl>
+                </>
+              </section>
+            </>
+          </div>
+        </div>
+      </div>
+    )
+  }
 </AdminLayout>

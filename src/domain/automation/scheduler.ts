@@ -13,7 +13,7 @@ import { invoices } from "../../db/schema/invoices";
 import {
   bulkGenerateInvoices,
   bulkPrepareInvoices,
-  getInvoiceForDwellingPeriod,
+  getInvoiceIdForDwellingPeriod,
 } from "../billing/generation";
 import { bulkSendInvoices, type SendInvoiceDeps } from "../billing/sending";
 import { getCurrentOpenPeriod } from "../periods/periods";
@@ -75,8 +75,8 @@ export async function scanOverdueInvoices(
 // autoGenerateEnabled, since there's no automated path from DRAFT to
 // PREPARED otherwise and auto-send only ever sends PREPARED invoices (spec
 // Section 32). Safe to run every scheduler tick -- bulkGenerateInvoices
-// only acts on MISSING_DATA/DRAFT cases, so a case some earlier run already
-// advanced past DRAFT is silently skipped, not re-processed.
+// only acts on MISSING_DATA/READY/DRAFT cases, so a case some earlier run
+// already advanced past DRAFT is silently skipped, not re-processed.
 export async function autoGenerateForOrganization(
   db: Db,
   organizationId: string,
@@ -95,12 +95,12 @@ export async function autoGenerateForOrganization(
 
   const invoiceIds: string[] = [];
   for (const dwellingId of generated) {
-    const invoice = await getInvoiceForDwellingPeriod(
+    const invoiceId = await getInvoiceIdForDwellingPeriod(
       db,
       dwellingId,
       period.id
     );
-    if (invoice) invoiceIds.push(invoice.id);
+    if (invoiceId) invoiceIds.push(invoiceId);
   }
   const { prepared } = await bulkPrepareInvoices(
     db,

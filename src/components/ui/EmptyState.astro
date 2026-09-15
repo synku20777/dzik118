@@ -1,0 +1,22 @@
+---
+import Ornament from "./Ornament.astro";
+interface Props {
+  title: string;
+  description?: string;
+  // Section 14: reserved for a handful of significant empty states (a
+  // brand-new organization's very first screen), not every empty list in
+  // the app -- omit for routine ones ("No meters yet.", etc.).
+  ornament?: boolean;
+  class?: string;
+}
+const { title, description, ornament = false, class: className } = Astro.props;
+---
+
+<div class="empty-state" class:list={[className]}>
+  {ornament && <Ornament />}
+  <p class="font-display text-h3" class:list={{ "mt-3": ornament }}>
+    {title}
+  </p>
+  {description && <p class="mt-2 text-sm text-muted">{description}</p>}
+  <div class="mt-4"><slot /></div>
+</div>

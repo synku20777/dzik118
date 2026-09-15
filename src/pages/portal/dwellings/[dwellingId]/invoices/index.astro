@@ -1,4 +1,13 @@
 ---
+import {
+  translate,
+  uiLocale,
+  formatMoney,
+  formatDate,
+} from "../../../../../lib/ui/i18n";
+import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 import ResidentLayout from "../../../../../layouts/ResidentLayout.astro";
 import {
   ForbiddenError,
@@ -7,7 +16,6 @@ import {
 import { getDwellingForResident } from "../../../../../domain/organizations/dwellings";
 import { listInvoicesForDwelling } from "../../../../../domain/billing/generation";
 import { withRequestDb } from "../../../../../lib/db-request";
-import { invoiceStatusBadge } from "../../../../../lib/ui/invoice-status";
 
 const dwellingId = Astro.params.dwellingId!;
 try {
@@ -39,39 +47,37 @@ const invoiceList = [...rawInvoices].sort((a, b) =>
     <div class="space-y-6">
       <a
         href={`/portal/dwellings/${dwellingId}`}
-        class="text-sm text-neutral-600 hover:underline"
+        class="text-sm text-muted hover:underline"
       >
-        ← Dashboard
+        ← {t("Dashboard")}
       </a>
 
-      <h1 class="text-xl font-bold text-neutral-900">
+      <h1 class="text-xl font-bold text-foreground">
         Invoices for dwelling {dwelling.number}
       </h1>
 
       {
         invoiceList.length === 0 ? (
-          <p class="text-sm text-neutral-600">No invoices yet.</p>
+          <p class="text-sm text-muted">{t("No invoices yet.")}</p>
         ) : (
-          <div class="space-y-4">
+          <div class="invoice-list">
             {invoiceList.map((invoice) => (
               <a
                 href={`/portal/invoices/${invoice.id}?dwellingId=${dwellingId}`}
-                class="block rounded-xl border border-neutral-200 bg-white p-4 hover:border-neutral-300 hover:bg-neutral-50"
+                class="block rounded-panel border border-border bg-surface p-4 hover:border-muted hover:bg-surface-hover"
               >
                 <div class="flex items-center justify-between">
-                  <span class="font-medium text-neutral-900">
+                  <span class="font-medium text-foreground">
                     {invoice.invoiceNumber}
                   </span>
-                  <span
-                    class={`rounded-full px-2.5 py-0.5 text-xs font-medium ${invoiceStatusBadge(invoice.caseStatus).className}`}
-                  >
-                    {invoiceStatusBadge(invoice.caseStatus).label}
-                  </span>
+                  <StatusBadge status={invoice.caseStatus} />
                 </div>
-                <div class="mt-2 flex items-center justify-between text-sm text-neutral-600">
-                  <span>Due {invoice.dueDate}</span>
-                  <span class="font-semibold text-neutral-900">
-                    {invoice.total} {invoice.currency}
+                <div class="mt-2 flex items-center justify-between text-sm text-muted">
+                  <span>
+                    {t("Due date")}: {formatDate(invoice.dueDate, locale)}
+                  </span>
+                  <span class="font-semibold text-foreground">
+                    {formatMoney(invoice.amountDue, invoice.currency, locale)}
                   </span>
                 </div>
               </a>

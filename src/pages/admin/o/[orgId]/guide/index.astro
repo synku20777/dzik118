@@ -1,0 +1,564 @@
+---
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { withRequestDb } from "../../../../../lib/db-request";
+import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const organization = await withRequestDb((db) =>
+  getOrganization(db, organizationId)
+);
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+const base = `/admin/o/${organizationId}`;
+
+const setupSteps = [
+  {
+    title: "Complete organization details",
+    description:
+      "Add the legal name, address, contact details, bank name, and IBAN used on invoices.",
+    ready: "Ready when the invoice issuer and payment details are complete.",
+    action: "Open settings",
+    href: `${base}/settings/organization`,
+    image: "/guide/organization-settings.jpg",
+    imageAlt: "Organization settings with issuer and payment details.",
+  },
+  {
+    title: "Add dwellings",
+    description:
+      "Create dwellings one at a time, or import them from a CSV file. Check each number, type, occupant, area, and resident count.",
+    ready: "Ready when every billable unit appears in the dwelling list.",
+    action: "Open dwellings",
+    href: `${base}/dwellings`,
+    image: "/guide/dwellings.jpg",
+    imageAlt: "Dwelling list with filters and dwelling details.",
+  },
+  {
+    title: "Assign residents and meters",
+    description:
+      "Open each dwelling. Assign resident access. Add billing contact details. Register its meters.",
+    ready:
+      "Ready when residents can access their dwelling and all meters are listed.",
+    action: "Open dwellings",
+    href: `${base}/dwellings`,
+    image: "/guide/dwelling-detail.jpg",
+    imageAlt:
+      "Dwelling detail page with resident access and meter registration.",
+  },
+  {
+    title: "Set tariffs and rules",
+    description:
+      "Add the billing rules that set fixed, area, resident-count, or meter-consumption charges.",
+    ready:
+      "Ready when every required charge has an enabled rule for the billing date.",
+    action: "Open billing rules",
+    href: `${base}/settings/rules`,
+    image: "/guide/rules.jpg",
+    imageAlt: "Tariffs and rules list with rule details.",
+  },
+];
+
+const monthlySteps = [
+  {
+    title: "Create the billing period",
+    description:
+      "Set the billing window, reading deadline, invoice issue date, and due date. A new period creates a case for each active dwelling.",
+    ready: "Ready when the new OPEN period appears in the period list.",
+    action: "Open periods",
+    href: `${base}/periods`,
+    image: "/guide/periods.jpg",
+    imageAlt: "Billing period list and period actions.",
+  },
+  {
+    title: "Collect missing readings",
+    description:
+      "Use the dashboard attention list or the monthly workbench to find missing readings. Residents can also submit readings when allowed.",
+    ready: "Ready when required cases no longer show missing readings.",
+    action: "Open dashboard",
+    href: `${base}/dashboard`,
+    image: "/guide/dashboard.jpg",
+    imageAlt:
+      "Admin dashboard with billing totals and work that needs attention.",
+  },
+  {
+    title: "Generate and review invoices",
+    description:
+      "Generate eligible invoices in the workbench. Review the calculation lines, recipient details, dates, and totals.",
+    ready:
+      "Ready when correct invoices are in DRAFT and you have fixed all validation blockers.",
+    action: "Open periods",
+    href: `${base}/periods`,
+    image: "/guide/workbench.jpg",
+    imageAlt: "Monthly workbench with the billing workflow and case list.",
+  },
+  {
+    title: "Prepare and send invoices",
+    description:
+      "Prepare approved drafts. Send the prepared invoices. Delivery moves each case to SENT and locks the invoice.",
+    ready:
+      "Ready when sent invoices show SENT, or show a clear delivery error to fix.",
+    action: "Open periods",
+    href: `${base}/periods`,
+  },
+  {
+    title: "Reconcile incoming payments",
+    description:
+      "Import a bank statement. Check the preview. Confirm the import. Review proposed or unmatched transactions.",
+    ready:
+      "Ready when you have confirmed valid matches and the matching invoices show PAID.",
+    action: "Open payments",
+    href: `${base}/payments`,
+    image: "/guide/payments.jpg",
+    imageAlt: "Payment reconciliation workspace with transaction states.",
+  },
+  {
+    title: "Handle questions and exceptions",
+    description:
+      "Review resident messages, overdue invoices, unmatched payments, and delivery failures. Resolve each conversation once its issue is fixed.",
+    ready: "Ready when every attention item has an owner or is resolved.",
+    action: "Open messages",
+    href: `${base}/messages`,
+    image: "/guide/messages.jpg",
+    imageAlt: "Messages inbox with a resident conversation open.",
+  },
+];
+
+const faqs = [
+  [
+    "What do the invoice statuses mean?",
+    "MISSING DATA means a required input is missing. READY means all required readings are in. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.",
+  ],
+  [
+    "Why can I not generate an invoice?",
+    "The system blocks generation when required readings are missing or the period is locked. Open the affected dwelling in the workbench to see what is missing.",
+  ],
+  [
+    "Why can I not prepare an invoice?",
+    "The invoice must be a DRAFT with complete issuer, recipient, and payment details. Fix the related settings. Regenerate the draft to update its snapshot.",
+  ],
+  [
+    "Why can I not send an invoice?",
+    "You can send only PREPARED invoices that have a billing email. If delivery fails, fix the cause, then retry or resend.",
+  ],
+  [
+    "Can I edit a sent invoice?",
+    "No. A sent invoice is a permanent financial record and cannot change. Changes to dwellings, tariffs, or settings apply only to future invoices.",
+  ],
+  [
+    "What should I do with an unmatched payment?",
+    "Review its amount, currency, payer, and reference. Leave it unmatched until you find the correct invoice. Do not confirm a match you are not sure about.",
+  ],
+  [
+    "When should I lock a period?",
+    "Lock a period after its normal reading and invoice work is complete. A locked period stays available for history, but blocks reading edits and invoice regeneration.",
+  ],
+] as const;
+
+const statuses = [
+  [
+    "MISSING_DATA",
+    "Required input is missing. Generation is blocked.",
+    "danger",
+  ],
+  [
+    "READY",
+    "All required readings are in. You can now generate the invoice.",
+    "warning",
+  ],
+  ["DRAFT", "You can still review and regenerate the invoice.", "neutral"],
+  ["PREPARED", "The invoice is approved and ready to send.", "info"],
+  ["SENT", "Delivery succeeded.", "info"],
+  ["PAID", "The invoice is fully paid.", "success"],
+  [
+    "OVERDUE",
+    "The due date passed and the invoice is still unpaid.",
+    "warning",
+  ],
+] as const;
+---
+
+<AdminLayout
+  title={`${t("Admin guide")} - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="guide-layout">
+    <article class="min-w-0">
+      <div class="guide-hero">
+        <nav class="breadcrumb" aria-label={t("Breadcrumb")}>
+          <a href={`/admin/o/${organizationId}/dashboard`}>{t("Dashboard")}</a>
+          <span aria-hidden="true">›</span>
+          <span aria-current="page">{t("Admin guide")}</span>
+        </nav>
+        <PageHeader
+          title={t("Admin guide")}
+          description={t(
+            "Set up your organization and complete your first billing cycle."
+          )}
+          display
+        >
+          <a class="btn-primary" href="#setup">
+            {t("Start here")}
+            <span aria-hidden="true">↓</span>
+          </a>
+          <a class="btn-secondary" href={`${base}/dashboard`}>
+            {t("Open dashboard")}
+            <span aria-hidden="true">→</span>
+          </a>
+        </PageHeader>
+      </div>
+
+      <figure class="guide-shot guide-shot-hero">
+        <img
+          src="/guide/dashboard.jpg"
+          alt={t(
+            "Admin dashboard with billing totals and work that needs attention."
+          )}
+          width="1440"
+          height="900"
+        />
+      </figure>
+
+      <section id="setup" class="guide-section">
+        <div class="guide-section-intro">
+          <p class="eyebrow">{t("First-time setup")}</p>
+          <h2>{t("Initial setup")}</h2>
+          <p>
+            {
+              t(
+                "Follow these steps in order for your first billing run. After setup, repeat the monthly cycle every month."
+              )
+            }
+          </p>
+        </div>
+        <ol class="guide-steps">
+          {
+            setupSteps.map((step, index) => (
+              <li id={`setup-step-${index + 1}`} class="guide-step">
+                <p class="guide-number">{String(index + 1).padStart(2, "0")}</p>
+                <div class="guide-copy">
+                  <h3>{t(step.title)}</h3>
+                  <p>{t(step.description)}</p>
+                  <p class="guide-ready">
+                    <Icon name="check" size="xs" /> {t(step.ready)}
+                  </p>
+                  <a href={step.href}>{t(step.action)} →</a>
+                </div>
+                {step.image && (
+                  <figure class="guide-shot">
+                    <img
+                      src={step.image}
+                      alt={t(step.imageAlt)}
+                      width="1440"
+                      height="900"
+                      loading="lazy"
+                    />
+                  </figure>
+                )}
+              </li>
+            ))
+          }
+        </ol>
+      </section>
+
+      <section id="monthly" class="guide-section">
+        <div class="guide-section-intro">
+          <p class="eyebrow">{t("Repeat every month")}</p>
+          <h2>{t("Monthly billing cycle")}</h2>
+          <p>
+            {
+              t(
+                "Each month, open the current period. Resolve missing inputs, prepare invoices, send them, and reconcile payments."
+              )
+            }
+          </p>
+        </div>
+        <ol class="guide-steps">
+          {
+            monthlySteps.map((step, index) => (
+              <li id={`monthly-step-${index + 1}`} class="guide-step">
+                <p class="guide-number">{String(index + 1).padStart(2, "0")}</p>
+                <div class="guide-copy">
+                  <h3>{t(step.title)}</h3>
+                  <p>{t(step.description)}</p>
+                  <p class="guide-ready">
+                    <Icon name="check" size="xs" /> {t(step.ready)}
+                  </p>
+                  <a href={step.href}>{t(step.action)} →</a>
+                </div>
+                {step.image && (
+                  <figure class="guide-shot">
+                    <img
+                      src={step.image}
+                      alt={t(step.imageAlt)}
+                      width="1440"
+                      height="900"
+                      loading="lazy"
+                    />
+                  </figure>
+                )}
+              </li>
+            ))
+          }
+        </ol>
+      </section>
+
+      <section id="statuses" class="guide-section">
+        <div class="guide-section-intro">
+          <p class="eyebrow">{t("Quick reference")}</p>
+          <h2>{t("Invoice status guide")}</h2>
+          <p>{t("Use the status to see what you can do next.")}</p>
+        </div>
+        <dl class="status-guide">
+          {
+            statuses.map(([status, description, tone]) => (
+              <div>
+                <dt>
+                  <span class="status-badge" data-tone={tone}>
+                    <span aria-hidden="true">●</span> {status.replace("_", " ")}
+                  </span>
+                </dt>
+                <dd>{t(description)}</dd>
+              </div>
+            ))
+          }
+        </dl>
+      </section>
+
+      <section id="faq" class="guide-section">
+        <div class="guide-section-intro">
+          <p class="eyebrow">{t("Help")}</p>
+          <h2>{t("Frequently asked questions")}</h2>
+        </div>
+        <div class="space-y-3">
+          {
+            faqs.map(([question, answer]) => (
+              <details class="disclosure">
+                <summary>{t(question)}</summary>
+                <p class="text-body-sm text-muted">{t(answer)}</p>
+              </details>
+            ))
+          }
+        </div>
+      </section>
+    </article>
+
+    <nav class="guide-toc" aria-label={t("On this page")}>
+      <p class="eyebrow">{t("On this page")}</p>
+      <a href="#setup">{t("Initial setup")}</a>
+      {
+        setupSteps.map((step, index) => (
+          <a class="guide-toc-child" href={`#setup-step-${index + 1}`}>
+            {t(step.title)}
+          </a>
+        ))
+      }
+      <a href="#monthly">{t("Monthly billing cycle")}</a>
+      {
+        monthlySteps.map((step, index) => (
+          <a class="guide-toc-child" href={`#monthly-step-${index + 1}`}>
+            {t(step.title)}
+          </a>
+        ))
+      }
+      <a href="#statuses">{t("Invoice status guide")}</a>
+      <a href="#faq">{t("Frequently asked questions")}</a>
+    </nav>
+  </div>
+</AdminLayout>
+
+<style>
+  .guide-layout {
+    display: grid;
+    gap: 3rem;
+    align-items: start;
+  }
+
+  .guide-hero {
+    max-width: 48rem;
+    padding: 2rem 0 3rem;
+  }
+
+  .guide-section-intro > p:last-child {
+    margin-top: 1.25rem;
+    color: var(--color-muted);
+    font-size: 1rem;
+    line-height: 1.75;
+  }
+
+  .guide-shot {
+    overflow: hidden;
+    margin-top: 1.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+  }
+
+  .guide-shot img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .guide-shot-hero {
+    margin: 0;
+  }
+
+  .guide-section {
+    scroll-margin-top: 2rem;
+    padding-top: 6rem;
+  }
+
+  .guide-section-intro {
+    max-width: 44rem;
+  }
+
+  .guide-section-intro h2 {
+    margin-top: 0.5rem;
+    font-size: clamp(1.75rem, 4vw, 2.5rem);
+    font-weight: 700;
+    letter-spacing: -0.035em;
+  }
+
+  .guide-steps {
+    margin-top: 1rem;
+  }
+
+  .guide-step {
+    scroll-margin-top: 2rem;
+    display: grid;
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+    gap: 0 1rem;
+    padding: 3rem 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .guide-number {
+    padding-top: 0.25rem;
+    color: var(--color-primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+  }
+
+  .guide-copy {
+    max-width: 42rem;
+  }
+
+  .guide-copy h3 {
+    font-size: 1.25rem;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+  }
+
+  .guide-copy > p {
+    margin-top: 0.75rem;
+    color: var(--color-muted);
+    line-height: 1.7;
+  }
+
+  .guide-copy .guide-ready {
+    color: var(--color-success);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .guide-copy > a {
+    display: inline-block;
+    margin-top: 1rem;
+    color: var(--color-primary);
+    font-size: 0.875rem;
+    font-weight: 650;
+  }
+
+  .guide-step > .guide-shot {
+    grid-column: 1 / -1;
+  }
+
+  .status-guide {
+    margin-top: 2rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .status-guide > div {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .status-guide dd {
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+
+  .guide-toc {
+    display: none;
+  }
+
+  @media (min-width: 640px) {
+    .guide-step {
+      grid-template-columns: 3rem minmax(0, 1fr);
+      gap: 0 1.5rem;
+    }
+
+    .status-guide > div {
+      grid-template-columns: 10rem minmax(0, 1fr);
+      align-items: center;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .guide-layout {
+      grid-template-columns: minmax(0, 1fr) 15rem;
+    }
+
+    .guide-toc {
+      position: sticky;
+      top: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+      max-height: calc(100vh - 4rem);
+      overflow-y: auto;
+      padding-left: 1rem;
+      border-left: 1px solid var(--color-border);
+    }
+
+    .guide-toc a {
+      padding: 0.5rem 0;
+      color: var(--color-muted);
+      font-size: 0.8125rem;
+      line-height: 1.35;
+    }
+
+    .guide-toc a:not(.guide-toc-child) {
+      margin-top: 0.75rem;
+      color: var(--color-foreground);
+      font-weight: 650;
+    }
+
+    .guide-toc .guide-toc-child {
+      padding-left: 0.75rem;
+    }
+
+    .guide-toc a:hover {
+      color: var(--color-primary);
+    }
+  }
+</style>

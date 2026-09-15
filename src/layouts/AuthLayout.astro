@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import ThemeToggle from "../components/ui/ThemeToggle.astro";
 
 interface Props {
   title?: string;
@@ -13,10 +14,27 @@ const { title = "Sign In - Property Billing" } = Astro.props;
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <script is:inline>
+      (function () {
+        try {
+          const stored = localStorage.getItem("color-scheme");
+          if (stored === "dark" || stored === "light") {
+            document.documentElement.setAttribute("data-theme", stored);
+            const meta = document.querySelector('meta[name="color-scheme"]');
+            if (meta) meta.content = stored;
+          }
+        } catch (e) {
+          void e;
+        }
+      })();
+    </script>
     <title>{title}</title>
   </head>
-  <body class="min-h-screen bg-neutral-100 text-neutral-900 antialiased">
-    <!-- TODO: Phase C (Auth/security) - Authentication layout shell -->
+  <body class="min-h-screen bg-canvas text-foreground antialiased relative">
+    <header class="absolute top-4 right-4 flex items-center gap-2">
+      <ThemeToggle />
+    </header>
     <main class="flex min-h-screen items-center justify-center p-4">
       <slot />
     </main>

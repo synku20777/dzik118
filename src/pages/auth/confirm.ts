@@ -30,14 +30,14 @@ export const GET: APIRoute = ({ url, redirect }) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Confirm sign-in - Property Billing</title>
   </head>
-  <body style="font-family: system-ui, sans-serif; display: flex; min-height: 100vh; align-items: center; justify-content: center; margin: 0;">
-    <div style="max-width: 28rem; width: 100%; padding: 2rem; border: 1px solid #e5e5e5; border-radius: 0.75rem;">
-      <h1 style="margin: 0 0 0.5rem;">Confirm sign-in</h1>
-      <p style="color: #555;">Click below to finish signing in.</p>
+  <body style="font-family: 'Source Sans 3', 'Segoe UI', sans-serif; display: flex; min-height: 100vh; align-items: center; justify-content: center; margin: 0; background: #F7F4EE; color: #17242B;">
+    <div style="max-width: 28rem; width: 100%; padding: 2rem; background: #FFFCF7; border: 1px solid #D5CEC2; border-radius: 0.625rem;">
+      <h1 style="margin: 0 0 0.5rem; font-family: Georgia, 'Times New Roman', serif; font-weight: 600;">Confirm sign-in</h1>
+      <p style="color: #58666C;">Click below to finish signing in.</p>
       <form method="POST">
         <input type="hidden" name="token_hash" value="${escapeHtml(tokenHash)}" />
         <input type="hidden" name="type" value="email" />
-        <button type="submit" style="width: 100%; padding: 0.5rem 1rem; background: #171717; color: white; border: none; border-radius: 0.375rem; font-size: 0.875rem; cursor: pointer;">
+        <button type="submit" style="width: 100%; min-height: 40px; padding: 0.6rem 1rem; background: #274B5B; color: #FFFCF7; border: 1px solid #274B5B; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 600; cursor: pointer;">
           Confirm sign-in
         </button>
       </form>

@@ -1,11 +1,16 @@
 ---
 // TODO: Phase G (Invoices/delivery) - invoice template/appearance settings
+import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import {
   ForbiddenError,
   requireOrganizationAccess,
 } from "../../../../../domain/authorization/guards";
 
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { withRequestDb } from "../../../../../lib/db-request";
 const organizationId = Astro.params.orgId!;
 try {
   requireOrganizationAccess(Astro.locals.auth, organizationId);
@@ -13,16 +18,27 @@ try {
   if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
   throw err;
 }
+const organization = await withRequestDb((db) =>
+  getOrganization(db, organizationId)
+);
 ---
 
-<AdminLayout title="Invoice template" organizationId={organizationId}>
+<AdminLayout
+  title="Invoice template"
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
   <a
     href={`/admin/o/${organizationId}/settings`}
-    class="text-sm text-neutral-600 hover:underline"
+    class="text-body-sm text-muted hover:underline"
   >
-    ← Settings
+    ← {t("Settings")}
   </a>
-  <p class="mt-4 text-sm text-neutral-600">
-    Invoice template/appearance settings arrive in Phase G.
+  <h1 class="mt-6">{t("Invoice template")}</h1><p class="notice mt-4">
+    {
+      t(
+        "Settings are not available yet. Existing invoice documents remain available from billing periods."
+      )
+    }
   </p>
 </AdminLayout>

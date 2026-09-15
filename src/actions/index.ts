@@ -10,6 +10,8 @@ import { billing } from "./billing";
 import { invoices } from "./invoices";
 import { payments } from "./payments";
 import { messages } from "./messages";
+import { accounts } from "./accounts";
+import { workbench } from "./workbench";
 
 export const server = {
   organizations,
@@ -21,4 +23,6 @@ export const server = {
   invoices,
   payments,
   messages,
+  accounts,
+  workbench,
 };

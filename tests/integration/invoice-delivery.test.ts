@@ -93,7 +93,11 @@ function cleanupOrg(organizationId: string) {
   return cleanupOrganization(db, organizationId);
 }
 
-async function setupPreparedInvoice(name: string, month: number) {
+async function setupPreparedInvoice(
+  name: string,
+  month: number,
+  dwellingOverrides: Partial<Parameters<typeof createDwelling>[2]> = {}
+) {
   const org = await createOrganization(
     db,
     {
@@ -112,6 +116,7 @@ async function setupPreparedInvoice(name: string, month: number) {
       occupantName: "Jane Doe",
       billingAddress: "1 Test St",
       billingEmail: "resident@example.com",
+      ...dwellingOverrides,
     },
     seedAdminId
   );
@@ -494,6 +499,89 @@ describe("invoice sending", () => {
       .from(invoices)
       .where(eq(invoices.id, invoice.id));
     expect(invoiceRow.sentAt).not.toBeNull();
+
+    await cleanupOrg(org.id);
+  });
+
+  it("a paper-only dwelling sends without a billing email, recording a PAPER delivery", async () => {
+    const { org, invoice } = await setupPreparedInvoice("IT-G Org Paper", 7, {
+      billingEmail: undefined,
+      invoiceByEmail: false,
+      invoiceByPaper: true,
+    });
+    const sent = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps(),
+      seedAdminId
+    );
+    expect(sent.sentAt).not.toBeNull();
+
+    const deliveries = await db.$client
+      .query(
+        "select method, destination_email, status from invoice_deliveries where invoice_id = $1",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(deliveries).toEqual([
+      { method: "PAPER", destination_email: null, status: "SENT" },
+    ]);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("a dwelling with both email and paper enabled records one delivery per method", async () => {
+    const { org, invoice } = await setupPreparedInvoice("IT-G Org Both", 8, {
+      invoiceByEmail: true,
+      invoiceByPaper: true,
+    });
+    const sent = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps(),
+      seedAdminId
+    );
+    expect(sent.sentAt).not.toBeNull();
+
+    const deliveries = await db.$client
+      .query(
+        "select method, status from invoice_deliveries where invoice_id = $1 order by method",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(deliveries).toEqual([
+      { method: "EMAIL", status: "SENT" },
+      { method: "PAPER", status: "SENT" },
+    ]);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("email-only dwelling with no billing email fails to send (no paper fallback enabled)", async () => {
+    const { org, invoice } = await setupPreparedInvoice("IT-G Org NoEmail", 9, {
+      billingEmail: undefined,
+    });
+    const sent = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps(),
+      seedAdminId
+    );
+    expect(sent.sentAt).toBeNull();
+
+    const [delivery] = await db.$client
+      .query(
+        "select method, error_code from invoice_deliveries where invoice_id = $1",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(delivery).toEqual({
+      method: "EMAIL",
+      error_code: "NO_RECIPIENT_EMAIL",
+    });
 
     await cleanupOrg(org.id);
   });

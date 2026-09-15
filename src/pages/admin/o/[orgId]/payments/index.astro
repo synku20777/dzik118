@@ -1,5 +1,18 @@
 ---
 // Phase J (Payments) - payments index (spec Section 25, PAY-003).
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import KpiCard from "../../../../../components/ui/KpiCard.astro";
+import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
+import EmptyState from "../../../../../components/ui/EmptyState.astro";
+import { listDwellings } from "../../../../../domain/organizations/dwellings";
+import {
+  translate,
+  uiLocale,
+  formatMoney,
+  formatDate,
+} from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
 import {
@@ -27,6 +40,7 @@ const rejectResult = Astro.getActionResult(actions.payments.rejectMatch);
 
 const {
   organization,
+  dwellingDirectory,
   rawImports,
   proposedMatches,
   confirmedMatches,
@@ -34,6 +48,10 @@ const {
   unmatchedTransactions,
 } = await withRequestDb(async (db) => ({
   organization: await getOrganization(db, organizationId),
+  dwellingDirectory: await listDwellings(db, organizationId, {
+    includeArchived: true,
+    limit: 2147483647,
+  }),
   rawImports: await listBankImports(db, organizationId),
   proposedMatches: await listPaymentMatches(db, organizationId, "PROPOSED"),
   confirmedMatches: await listPaymentMatches(db, organizationId, "CONFIRMED"),
@@ -42,253 +60,280 @@ const {
 }));
 
 const imports = [...rawImports].reverse();
+const views = ["PROPOSED", "UNMATCHED", "CONFIRMED", "REJECTED"] as const;
+const requestedView = Astro.url.searchParams.get("view");
+const view = views.find((v) => v === requestedView) ?? "PROPOSED";
+const matches =
+  view === "CONFIRMED"
+    ? confirmedMatches
+    : view === "REJECTED"
+      ? rejectedMatches
+      : proposedMatches;
+const counts = {
+  PROPOSED: proposedMatches.length,
+  UNMATCHED: unmatchedTransactions.length,
+  CONFIRMED: confirmedMatches.length,
+  REJECTED: rejectedMatches.length,
+};
+const labels = {
+  PROPOSED: "Proposed",
+  UNMATCHED: "Unmatched",
+  CONFIRMED: "Confirmed",
+  REJECTED: "Rejected",
+};
+const payer = (name: string | null) => {
+  // A bank transaction's payer name is free text from the resident's own
+  // bank -- it can never contain our internal dwelling id, but it commonly
+  // matches the name registered on the dwelling (occupant or billing name).
+  const dwelling =
+    name != null &&
+    dwellingDirectory.find(
+      (d) => d.occupantName === name || d.billingName === name
+    );
+  return dwelling ? t("Dwelling") + " " + dwelling.number : (name ?? "—");
+};
 ---
 
 <AdminLayout
-  title={`Payments - ${organization.name}`}
+  title={t("Payments") + " - " + organization.name}
   organizationId={organizationId}
   organizationName={organization.name}
 >
-  <div class="flex items-center justify-between">
-    <h1 class="text-xl font-bold text-neutral-900">Payments</h1>
-    <a
-      href={`/admin/o/${organizationId}/payments/import`}
-      class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
+  <div class="space-y-6">
+    <nav class="breadcrumb" aria-label={t("Breadcrumb")}>
+      <a href={`/admin/o/${organizationId}/dashboard`}>{t("Dashboard")}</a>
+      <span aria-hidden="true">›</span>
+      <span aria-current="page">{t("Payments")}</span>
+    </nav>
+    <PageHeader
+      title={t("Payments")}
+      description={t(
+        "Review proposed matches and reconcile incoming payments."
+      )}
+      display
+      ><a
+        class="btn-primary"
+        href={"/admin/o/" + organizationId + "/payments/import"}
+        >{t("Import bank statement")}</a
+      ></PageHeader
     >
-      Import bank statement
-    </a>
+    {
+      (confirmResult?.error || rejectResult?.error) && (
+        <p role="alert" class="notice notice-danger mb-6">
+          {confirmResult?.error?.message ?? rejectResult?.error?.message}
+        </p>
+      )
+    }
+    <div class="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <KpiCard label={t("Imports")} value={imports.length} /><KpiCard
+        label={t("Proposed")}
+        value={proposedMatches.length}
+      /><KpiCard
+        label={t("Confirmed")}
+        tone="success"
+        value={confirmedMatches.length}
+      /><KpiCard
+        label={t("Unmatched")}
+        tone="warning"
+        value={unmatchedTransactions.length}
+      />
+    </div>
+    <section class="mt-8">
+      <h2 class="section-title">{t("Reconciliation")}</h2><nav
+        class="tabs"
+        aria-label={t("Reconciliation")}
+      >
+        {
+          views.map((v) => (
+            <a
+              href={"?view=" + v}
+              aria-current={view === v ? "page" : undefined}
+            >
+              {t(labels[v])} <span class="ml-1 tabular-nums">{counts[v]}</span>
+            </a>
+          ))
+        }
+      </nav>
+      {
+        counts[view] === 0 ? (
+          <EmptyState title={t("No transactions in this view.")} />
+        ) : (
+          <div class="table-wrap">
+            <table class="w-full text-left text-sm">
+              <>
+                <thead>
+                  <tr>
+                    <th>{t("Invoice")}</th>
+                    <th class="text-right">{t("Payment")}</th>
+                    <th>{t("Payer")}</th>
+                    <th>{t("Reference")}</th>
+                    <th>{t("Date")}</th>
+                    <th>{t("Status")}</th>
+                    {view === "PROPOSED" && <th>{t("Actions")}</th>}
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                  {view === "UNMATCHED"
+                    ? unmatchedTransactions.map((tx) => (
+                        <tr>
+                          <td>—</td>
+                          <td class="text-right whitespace-nowrap font-medium">
+                            {formatMoney(tx.amount, tx.currency, locale)}
+                          </td>
+                          <td>{payer(tx.payerName)}</td>
+                          <td>{tx.reference ?? "—"}</td>
+                          <td class="whitespace-nowrap">
+                            {formatDate(tx.bookingDate, locale)}
+                          </td>
+                          <td>
+                            <StatusBadge status="UNMATCHED" />
+                          </td>
+                        </tr>
+                      ))
+                    : matches.map((m) => (
+                        <tr>
+                          <td class="font-semibold">
+                            <div>{m.invoiceNumber}</div>
+                            <small class="text-muted">
+                              {t("Amount due")}:{" "}
+                              {formatMoney(
+                                m.amountDue,
+                                m.transactionCurrency,
+                                locale
+                              )}
+                            </small>
+                            {m.resultType !== "EXACT" && (
+                              <small class="block text-muted">
+                                {m.resultType === "PARTIAL"
+                                  ? t("Remaining after allocation")
+                                  : t("Credit created")}
+                                :{" "}
+                                {formatMoney(
+                                  m.resultType === "PARTIAL"
+                                    ? m.remainingAfterAllocation
+                                    : m.creditCreated,
+                                  m.transactionCurrency,
+                                  locale
+                                )}
+                              </small>
+                            )}
+                          </td>
+                          <td class="text-right whitespace-nowrap font-medium">
+                            {formatMoney(
+                              m.transactionAmount,
+                              m.transactionCurrency,
+                              locale
+                            )}
+                          </td>
+                          <td>{payer(m.transactionPayerName)}</td>
+                          <td>{m.transactionReference ?? "—"}</td>
+                          <td class="whitespace-nowrap">
+                            {formatDate(m.transactionBookingDate, locale)}
+                          </td>
+                          <td>
+                            <StatusBadge status={m.status} />
+                          </td>
+                          {view === "PROPOSED" && (
+                            <td>
+                              <div class="flex gap-2">
+                                <form
+                                  method="POST"
+                                  action={actions.payments.confirmMatch}
+                                >
+                                  <input
+                                    type="hidden"
+                                    name="organizationId"
+                                    value={organizationId}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="matchId"
+                                    value={m.id}
+                                  />
+                                  <button type="submit" class="btn-primary">
+                                    {t("Confirm")}
+                                  </button>
+                                </form>
+                                <form
+                                  method="POST"
+                                  action={actions.payments.rejectMatch}
+                                >
+                                  <input
+                                    type="hidden"
+                                    name="organizationId"
+                                    value={organizationId}
+                                  />
+                                  <input
+                                    type="hidden"
+                                    name="matchId"
+                                    value={m.id}
+                                  />
+                                  <button type="submit" class="btn-secondary">
+                                    {t("Reject")}
+                                  </button>
+                                </form>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                </tbody>
+              </>
+            </table>
+          </div>
+        )
+      }
+    </section>
+    <section class="mt-8">
+      <h2 class="section-title">{t("Import history")}</h2>{
+        imports.length === 0 ? (
+          <EmptyState title={t("No imports yet.")} />
+        ) : (
+          <div class="table-wrap">
+            <table class="w-full text-left text-sm">
+              <>
+                <thead>
+                  <tr>
+                    <>
+                      <th>{t("Filename")}</th>
+                      <th>{t("Imported")}</th>
+                      <th class="text-right">{t("Rows")}</th>
+                      <th>{t("Actions")}</th>
+                    </>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                  {imports.map((imp) => (
+                    <tr>
+                      <td class="font-medium">{imp.originalFilename}</td>
+                      <td>
+                        {formatDate(
+                          imp.importedAt,
+                          locale,
+                          organization.timezone
+                        )}
+                      </td>
+                      <td class="text-right">{imp.rowCount}</td>
+                      <td class="text-right">
+                        <a
+                          href={
+                            "/admin/o/" +
+                            organizationId +
+                            "/payments/imports/" +
+                            imp.id
+                          }
+                        >
+                          {t("View")} →
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </>
+            </table>
+          </div>
+        )
+      }
+    </section>
   </div>
-
-  {
-    (confirmResult?.error || rejectResult?.error) && (
-      <p class="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-800">
-        {confirmResult?.error?.message ?? rejectResult?.error?.message}
-      </p>
-    )
-  }
-
-  <section class="space-y-3 mt-6">
-    <h2 class="text-base font-bold text-neutral-900">Bank imports</h2>
-    {
-      imports.length === 0 ? (
-        <p class="text-sm text-neutral-500">No imports yet.</p>
-      ) : (
-        <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
-          <table class="w-full text-left text-sm">
-            <thead class="border-b border-neutral-200 bg-neutral-50 text-neutral-600">
-              <tr>
-                <th class="px-4 py-2">Filename</th>
-                <th class="px-4 py-2">Imported</th>
-                <th class="px-4 py-2">Rows</th>
-                <th class="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-neutral-100">
-              {imports.map((imp) => (
-                <tr>
-                  <td class="px-4 py-2 font-medium">{imp.originalFilename}</td>
-                  <td class="px-4 py-2">{imp.importedAt.toISOString()}</td>
-                  <td class="px-4 py-2">{imp.rowCount}</td>
-                  <td class="px-4 py-2 text-right">
-                    <a
-                      href={`/admin/o/${organizationId}/payments/imports/${imp.id}`}
-                      class="text-neutral-700 hover:underline"
-                    >
-                      View
-                    </a>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )
-    }
-  </section>
-
-  <section class="space-y-3 mt-8">
-    <h2 class="text-base font-bold text-neutral-900">
-      Proposed matches ({proposedMatches.length})
-    </h2>
-    {
-      proposedMatches.length === 0 ? (
-        <p class="text-sm text-neutral-500">No proposed matches.</p>
-      ) : (
-        <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
-          <table class="w-full text-left text-sm">
-            <thead class="border-b border-neutral-200 bg-neutral-50 text-neutral-600">
-              <tr>
-                <th class="px-4 py-2">Invoice</th>
-                <th class="px-4 py-2">Amount</th>
-                <th class="px-4 py-2">Reference</th>
-                <th class="px-4 py-2">Payer</th>
-                <th class="px-4 py-2">Booking date</th>
-                <th class="px-4 py-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-neutral-100">
-              {proposedMatches.map((m) => (
-                <tr>
-                  <td class="px-4 py-2 font-medium">{m.invoiceNumber}</td>
-                  <td class="px-4 py-2">
-                    {m.transactionAmount} {m.transactionCurrency}
-                  </td>
-                  <td class="px-4 py-2">{m.transactionReference ?? "—"}</td>
-                  <td class="px-4 py-2">{m.transactionPayerName ?? "—"}</td>
-                  <td class="px-4 py-2">{m.transactionBookingDate}</td>
-                  <td class="px-4 py-2">
-                    <div class="flex items-center gap-2">
-                      <form
-                        method="POST"
-                        action={actions.payments.confirmMatch}
-                      >
-                        <input
-                          type="hidden"
-                          name="organizationId"
-                          value={organizationId}
-                        />
-                        <input type="hidden" name="matchId" value={m.id} />
-                        <button
-                          type="submit"
-                          class="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white"
-                        >
-                          Confirm
-                        </button>
-                      </form>
-                      <form method="POST" action={actions.payments.rejectMatch}>
-                        <input
-                          type="hidden"
-                          name="organizationId"
-                          value={organizationId}
-                        />
-                        <input type="hidden" name="matchId" value={m.id} />
-                        <button
-                          type="submit"
-                          class="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50"
-                        >
-                          Reject
-                        </button>
-                      </form>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )
-    }
-  </section>
-
-  <section class="space-y-3 mt-8">
-    <h2 class="text-base font-bold text-neutral-900">
-      Confirmed matches ({confirmedMatches.length})
-    </h2>
-    {
-      confirmedMatches.length === 0 ? (
-        <p class="text-sm text-neutral-500">No confirmed matches.</p>
-      ) : (
-        <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
-          <table class="w-full text-left text-sm">
-            <thead class="border-b border-neutral-200 bg-neutral-50 text-neutral-600">
-              <tr>
-                <th class="px-4 py-2">Invoice</th>
-                <th class="px-4 py-2">Amount</th>
-                <th class="px-4 py-2">Reference</th>
-                <th class="px-4 py-2">Payer</th>
-                <th class="px-4 py-2">Booking date</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-neutral-100">
-              {confirmedMatches.map((m) => (
-                <tr>
-                  <td class="px-4 py-2 font-medium">{m.invoiceNumber}</td>
-                  <td class="px-4 py-2">
-                    {m.transactionAmount} {m.transactionCurrency}
-                  </td>
-                  <td class="px-4 py-2">{m.transactionReference ?? "—"}</td>
-                  <td class="px-4 py-2">{m.transactionPayerName ?? "—"}</td>
-                  <td class="px-4 py-2">{m.transactionBookingDate}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )
-    }
-  </section>
-
-  <section class="space-y-3 mt-8">
-    <h2 class="text-base font-bold text-neutral-900">
-      Rejected matches ({rejectedMatches.length})
-    </h2>
-    {
-      rejectedMatches.length === 0 ? (
-        <p class="text-sm text-neutral-500">No rejected matches.</p>
-      ) : (
-        <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
-          <table class="w-full text-left text-sm">
-            <thead class="border-b border-neutral-200 bg-neutral-50 text-neutral-600">
-              <tr>
-                <th class="px-4 py-2">Invoice</th>
-                <th class="px-4 py-2">Amount</th>
-                <th class="px-4 py-2">Reference</th>
-                <th class="px-4 py-2">Payer</th>
-                <th class="px-4 py-2">Booking date</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-neutral-100">
-              {rejectedMatches.map((m) => (
-                <tr>
-                  <td class="px-4 py-2 font-medium">{m.invoiceNumber}</td>
-                  <td class="px-4 py-2">
-                    {m.transactionAmount} {m.transactionCurrency}
-                  </td>
-                  <td class="px-4 py-2">{m.transactionReference ?? "—"}</td>
-                  <td class="px-4 py-2">{m.transactionPayerName ?? "—"}</td>
-                  <td class="px-4 py-2">{m.transactionBookingDate}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )
-    }
-  </section>
-
-  <section class="space-y-3 mt-8">
-    <h2 class="text-base font-bold text-neutral-900">
-      Unmatched transactions ({unmatchedTransactions.length})
-    </h2>
-    {
-      unmatchedTransactions.length === 0 ? (
-        <p class="text-sm text-neutral-500">No unmatched transactions.</p>
-      ) : (
-        <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
-          <table class="w-full text-left text-sm">
-            <thead class="border-b border-neutral-200 bg-neutral-50 text-neutral-600">
-              <tr>
-                <th class="px-4 py-2">Booking date</th>
-                <th class="px-4 py-2">Amount</th>
-                <th class="px-4 py-2">Currency</th>
-                <th class="px-4 py-2">Payer</th>
-                <th class="px-4 py-2">Reference</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-neutral-100">
-              {unmatchedTransactions.map((u) => (
-                <tr>
-                  <td class="px-4 py-2">{u.bookingDate}</td>
-                  <td class="px-4 py-2">{u.amount}</td>
-                  <td class="px-4 py-2">{u.currency}</td>
-                  <td class="px-4 py-2">{u.payerName ?? "—"}</td>
-                  <td class="px-4 py-2">{u.reference ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )
-    }
-  </section>
 </AdminLayout>

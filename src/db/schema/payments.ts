@@ -1,5 +1,5 @@
 // Phase B (Database) - Bank CSV imports, transactions, and payment matches
-// (spec Section 13.16-13.18). Partial payments are out of scope (Section 25).
+// (spec Section 13.16-13.18), including explicit non-exact allocation review.
 import {
   char,
   date,
@@ -28,6 +28,12 @@ export const paymentMatchTypeEnum = pgEnum("payment_match_type", [
   "AUTO_EXACT",
   "AUTO_PROBABLE",
   "MANUAL",
+]);
+
+export const paymentResultTypeEnum = pgEnum("payment_result_type", [
+  "EXACT",
+  "PARTIAL",
+  "OVERPAYMENT",
 ]);
 
 export const bankImports = pgTable(
@@ -96,6 +102,13 @@ export const paymentMatches = pgTable(
       .notNull()
       .references(() => invoices.id),
     matchType: paymentMatchTypeEnum("match_type").notNull(),
+    resultType: paymentResultTypeEnum("result_type").notNull().default("EXACT"),
+    proposedAllocationAmount: numeric("proposed_allocation_amount", {
+      precision: 14,
+      scale: 2,
+    })
+      .notNull()
+      .default("0"),
     status: paymentMatchStatusEnum("status").notNull().default("PROPOSED"),
     confidence: numeric("confidence", { precision: 5, scale: 4 }),
     confirmedByUserId: uuid("confirmed_by_user_id").references(

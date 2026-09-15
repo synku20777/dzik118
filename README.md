@@ -167,7 +167,21 @@ Run the automated end-to-end suite. Playwright builds the app and starts a local
 npm run test:e2e
 ```
 
-To test by hand, start the dev server (`npm run dev`, or `npm run build && npx wrangler dev --port 4321` for a closer match to production) and walk through the flows in [Logging in](#logging-in) above. Then check the main areas:
+To test by hand, start a local server, then walk through the flows in [Logging in](#logging-in) above. Two ways to start a server:
+
+```bash
+npm run dev
+```
+
+This starts the Astro dev server at [http://localhost:4321](http://localhost:4321) with fast reloads. Good for most day-to-day UI work.
+
+```bash
+npm run build && npx wrangler dev --port 4321
+```
+
+This builds the app and serves it through a local Cloudflare Worker, the same runtime used in production. Use this to test anything that submits a form (Astro Actions), since some environments don't run these correctly under the plain dev server. If a form submit hangs or never completes under `npm run dev`, rebuild and test again with `wrangler dev` before assuming there's a bug.
+
+Either way, then check the main areas:
 
 - `/admin` and `/admin/organizations` — pick an organization, then manage its dwellings, billing periods, rules, and settings under `/admin/o/:orgId/...`.
 - `/portal` and `/portal/dwellings` — a resident's own dwellings and invoices.

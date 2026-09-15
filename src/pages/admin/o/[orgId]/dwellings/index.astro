@@ -3,6 +3,19 @@
 // 9.2, 27 "Dwellings: List"). Every route performs independent server
 // authorization (spec Section 9.2's closing line) -- this doesn't rely on
 // middleware alone.
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
+import type { IconName } from "../../../../../lib/ui/icons";
+import {
+  translate,
+  uiLocale,
+  entityLabel,
+  formatNumber,
+} from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+import FieldError from "../../../../../components/ui/FieldError.astro";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
 import {
@@ -26,21 +39,46 @@ const archiveResult = Astro.getActionResult(actions.dwellings.archive);
 
 const search = Astro.url.searchParams.get("search") ?? "";
 const includeArchived = Astro.url.searchParams.get("includeArchived") === "1";
-const page = Math.max(
+const requestedPage = Math.max(
   1,
   Number(Astro.url.searchParams.get("page") ?? "1") || 1
 );
 const pageSize = 25;
 
-const { organization, dwellings } = await withRequestDb(async (db) => ({
+const { organization, allDwellings } = await withRequestDb(async (db) => ({
   organization: await getOrganization(db, organizationId),
-  dwellings: await listDwellings(db, organizationId, {
+  allDwellings: await listDwellings(db, organizationId, {
     search: search || undefined,
     includeArchived,
-    limit: pageSize,
-    offset: (page - 1) * pageSize,
+    // ponytail: organization-sized directory (~1,000 users); move sorting/filtering into the query if scale grows.
+    limit: 2147483647,
   }),
 }));
+const typeFilter = Astro.url.searchParams.get("type") ?? "";
+const statusFilter = Astro.url.searchParams.get("status") ?? "";
+const types = ["APARTMENT", "COMMERCIAL_UNIT", "PARKING", "STORAGE", "OTHER"];
+const listPath = `/admin/o/${organizationId}/dwellings`;
+const filtered = allDwellings
+  .filter((d) => !types.includes(typeFilter) || d.type === typeFilter)
+  .filter((d) => {
+    if (statusFilter === "ACTIVE") return !d.archivedAt;
+    if (statusFilter === "ARCHIVED") return !!d.archivedAt;
+    return true;
+  })
+  .sort((a, b) => a.number.localeCompare(b.number, locale, { numeric: true }));
+const page = Math.min(
+  Math.floor(requestedPage),
+  Math.max(1, Math.ceil(filtered.length / pageSize))
+);
+const dwellings = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+const DWELLING_TYPE_ICONS: Record<string, IconName> = {
+  APARTMENT: "building",
+  COMMERCIAL_UNIT: "building",
+  PARKING: "car",
+  STORAGE: "box",
+  OTHER: "building-community",
+};
 ---
 
 <AdminLayout
@@ -49,112 +87,173 @@ const { organization, dwellings } = await withRequestDb(async (db) => ({
   organizationName={organization.name}
 >
   <div class="space-y-6">
-    <div class="flex items-center justify-between">
-      <h1 class="text-xl font-bold text-neutral-900">Dwellings</h1>
-      <div class="flex gap-3 text-sm">
-        <a
-          href={`/api/v1/admin/o/${organizationId}/dwellings/export`}
-          class="rounded-md border border-neutral-300 px-3 py-1.5 text-neutral-700 hover:bg-neutral-50"
-        >
-          Export CSV
-        </a>
-        <a
-          href={`/admin/o/${organizationId}/dwellings/import`}
-          class="rounded-md border border-neutral-300 px-3 py-1.5 text-neutral-700 hover:bg-neutral-50"
-        >
-          Import CSV
-        </a>
-      </div>
-    </div>
-
-    <form method="GET" class="flex flex-wrap items-end gap-3">
+    <nav class="breadcrumb" aria-label={t("Breadcrumb")}>
+      <a href={`/admin/o/${organizationId}/dashboard`}>{t("Dashboard")}</a>
+      <span aria-hidden="true">›</span>
+      <span aria-current="page">{t("Dwellings")}</span>
+    </nav>
+    <PageHeader
+      title={t("Dwellings")}
+      description={t("Manage dwelling details, occupants and resident access.")}
+      display
+    >
+      <a
+        class="btn-secondary"
+        href={"/api/v1/admin/o/" + organizationId + "/dwellings/export"}
+        >{t("Export CSV")}</a
+      ><a
+        class="btn-secondary"
+        href={"/admin/o/" + organizationId + "/dwellings/import"}
+        >{t("Import CSV")}</a
+      ><a
+        class="btn-primary"
+        href="#create-dwelling"
+        data-open-details="create-dwelling">{t("Create dwelling")}</a
+      ></PageHeader
+    >
+    <form method="GET" class="filter-bar" data-instant-filter>
       <div>
-        <label class="block text-sm font-medium text-neutral-700" for="search"
-          >Search</label
+        <label class="block text-label text-foreground" for="search"
+          >{t("Search")}</label
         >
         <input
           id="search"
           name="search"
           value={search}
-          placeholder="Number, name, occupant..."
-          class="mt-1 rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+          placeholder={t("Number, occupant, address...")}
+          autocomplete="off"
+          class="mt-1 rounded-control border border-border px-3 py-1.5 text-body-sm"
         />
       </div>
-      <label class="flex items-center gap-2 pb-2 text-sm text-neutral-700">
+      <div>
+        <label class="block text-label" for="type-filter">{t("Type")}</label
+        ><select
+          id="type-filter"
+          name="type"
+          class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+          ><option value="">{t("All types")}</option>{
+            types.map((type) => (
+              <option value={type} selected={type === typeFilter}>
+                {entityLabel(type, locale)}
+              </option>
+            ))
+          }</select
+        >
+      </div>
+      <div>
+        <label class="block text-label" for="status-filter">{t("Status")}</label
+        >
+        <select
+          id="status-filter"
+          name="status"
+          class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+        >
+          <option value="">{t("All statuses")}</option>
+          <option value="ACTIVE" selected={statusFilter === "ACTIVE"}>
+            {t("Active")}
+          </option>
+          <option value="ARCHIVED" selected={statusFilter === "ARCHIVED"}>
+            {t("Archived")}
+          </option>
+        </select>
+      </div>
+      <label class="flex items-center gap-2 pb-2 text-body-sm text-foreground">
         <input
           type="checkbox"
           name="includeArchived"
           value="1"
           checked={includeArchived}
         />
-        Show archived
+        {t("Show archived")}
       </label>
-      <button
-        type="submit"
-        class="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white"
-      >
-        Filter
-      </button>
+      {
+        (search || typeFilter || statusFilter || includeArchived) && (
+          <a href={listPath} class="clear-filters">
+            {t("Clear filters")}
+          </a>
+        )
+      }
     </form>
 
     {
       (createResult?.error || archiveResult?.error) && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
           {createResult?.error?.message ?? archiveResult?.error?.message}
         </p>
       )
     }
 
-    <div class="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
-      <table class="w-full text-left text-sm">
+    <div class="table-wrap">
+      <table class="w-full text-left text-body-sm">
         <thead
-          class="border-b border-neutral-200 bg-neutral-50 text-neutral-600"
+          class="border-b border-border bg-surface-hover text-muted"
         >
           <tr>
-            <th class="px-4 py-2">Number</th>
-            <th class="px-4 py-2">Type</th>
-            <th class="px-4 py-2">Occupant</th>
-            <th class="px-4 py-2">Area (m²)</th>
-            <th class="px-4 py-2">Residents</th>
-            <th class="px-4 py-2">Status</th>
-            <th class="px-4 py-2"></th>
+            <th class="px-4 py-2">
+              {t("Number")}
+              <span aria-hidden="true">↑</span>
+            </th>
+            <th class="px-4 py-2">{t("Type")}</th>
+            <th class="px-4 py-2">{t("Occupant")}</th>
+            <th class="px-4 py-2">{t("Address")}</th>
+            <th class="px-4 py-2 text-right">{t("Area (m²)")}</th>
+            <th class="px-4 py-2 text-right">{t("Residents")}</th>
+            <th class="px-4 py-2">{t("Status")}</th>
+            <th class="px-4 py-2 text-right">{t("Actions")}</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-neutral-100">
+        <tbody class="divide-y divide-border">
           {
             dwellings.map((d) => (
-              <tr>
+              <tr class="row-link">
                 <td class="px-4 py-2 font-medium">
                   <a
-                    href={`/admin/o/${organizationId}/dwellings/${d.id}`}
-                    class="hover:underline"
+                    class="row-link-target hover:underline"
+                    href={"/admin/o/" + organizationId + "/dwellings/" + d.id}
                   >
                     {d.number}
                   </a>
                 </td>
-                <td class="px-4 py-2">{d.type}</td>
-                <td class="px-4 py-2">{d.occupantName ?? "—"}</td>
-                <td class="px-4 py-2">{d.areaM2}</td>
-                <td class="px-4 py-2">{d.residentCount}</td>
                 <td class="px-4 py-2">
-                  {d.archivedAt ? "Archived" : "Active"}
+                  <span class="dwelling-type">
+                    <Icon
+                      name={DWELLING_TYPE_ICONS[d.type] ?? "building"}
+                      class="dwelling-type-icon"
+                    />
+                    {entityLabel(d.type, locale)}
+                  </span>
+                </td>
+                <td class="px-4 py-2">{d.occupantName ?? "—"}</td>
+                <td class="px-4 py-2">
+                  {d.type === "APARTMENT" || d.type === "COMMERCIAL_UNIT"
+                    ? `${organization.addressLine1} – ${d.number}`
+                    : organization.addressLine1}
                 </td>
                 <td class="px-4 py-2 text-right">
+                  {formatNumber(d.areaM2, locale, 2)}
+                </td>
+                <td class="px-4 py-2 text-right">{d.residentCount}</td>
+                <td class="px-4 py-2">
+                  <StatusBadge status={d.archivedAt ? "ARCHIVED" : "ACTIVE"} />
+                </td>
+                <td class="row-link-above px-4 py-2 text-right">
                   {!d.archivedAt && (
-                    <form method="POST" action={actions.dwellings.archive}>
-                      <input
-                        type="hidden"
-                        name="organizationId"
-                        value={organizationId}
-                      />
-                      <input type="hidden" name="dwellingId" value={d.id} />
-                      <button
-                        type="submit"
-                        class="text-red-700 hover:underline"
-                      >
-                        Archive
-                      </button>
-                    </form>
+                    <details class="row-menu">
+                      <summary aria-label={`${t("More actions")}: ${d.number}`}>
+                        •••
+                      </summary>
+                      <div>
+                        <form method="POST" action={actions.dwellings.archive}>
+                          <input
+                            type="hidden"
+                            name="organizationId"
+                            value={organizationId}
+                          />
+                          <input type="hidden" name="dwellingId" value={d.id} />
+                          <button type="submit">{t("Archive")}</button>
+                        </form>
+                      </div>
+                    </details>
                   )}
                 </td>
               </tr>
@@ -163,8 +262,8 @@ const { organization, dwellings } = await withRequestDb(async (db) => ({
           {
             dwellings.length === 0 && (
               <tr>
-                <td colspan="7" class="px-4 py-8 text-center text-neutral-500">
-                  No dwellings match this filter.
+                <td colspan="8" class="px-4 py-8 text-center text-muted">
+                  {t("No dwellings match this filter.")}
                 </td>
               </tr>
             )
@@ -173,26 +272,42 @@ const { organization, dwellings } = await withRequestDb(async (db) => ({
       </table>
     </div>
 
-    <div class="flex justify-between text-sm text-neutral-600">
+    <div class="pagination-bar">
       <a
-        href={`?search=${encodeURIComponent(search)}&includeArchived=${includeArchived ? "1" : "0"}&page=${Math.max(1, page - 1)}`}
+        href={`?search=${encodeURIComponent(search)}&includeArchived=${includeArchived ? "1" : "0"}&type=${encodeURIComponent(typeFilter)}&status=${encodeURIComponent(statusFilter)}&page=${Math.max(1, page - 1)}`}
+        class="btn-secondary btn-sm"
+        aria-disabled={page <= 1}
         class:list={{ "pointer-events-none opacity-40": page <= 1 }}
       >
-        ← Previous
+        <Icon name="arrow-left" size="sm" />
+        {t("Previous")}
       </a>
-      <span>Page {page}</span>
+      <span class="pagination-page">{t("Page")} {page}</span>
       <a
-        href={`?search=${encodeURIComponent(search)}&includeArchived=${includeArchived ? "1" : "0"}&page=${page + 1}`}
+        href={`?search=${encodeURIComponent(search)}&includeArchived=${includeArchived ? "1" : "0"}&type=${encodeURIComponent(typeFilter)}&status=${encodeURIComponent(statusFilter)}&page=${page + 1}`}
+        class="btn-secondary btn-sm"
+        aria-disabled={page * pageSize >= filtered.length}
         class:list={{
-          "pointer-events-none opacity-40": dwellings.length < pageSize,
+          "pointer-events-none opacity-40": page * pageSize >= filtered.length,
         }}
       >
-        Next →
+        {t("Next")}
+        <Icon name="arrow-right" size="sm" />
       </a>
     </div>
 
-    <section class="max-w-lg rounded-xl border border-neutral-200 bg-white p-6">
-      <h2 class="text-lg font-bold text-neutral-900">Add dwelling</h2>
+    <details
+      id="create-dwelling"
+      class="disclosure max-w-2xl"
+      open={!!createResult?.error}
+    >
+      <summary>{t("Add dwelling")}</summary><p class="text-sm text-muted">
+        {
+          t(
+            "New dwellings are included in future periods. Archive historically billed dwellings to preserve their invoices."
+          )
+        }
+      </p>
       <form
         method="POST"
         action={actions.dwellings.create}
@@ -200,54 +315,154 @@ const { organization, dwellings } = await withRequestDb(async (db) => ({
       >
         <input type="hidden" name="organizationId" value={organizationId} />
         <div class="col-span-2">
-          <label class="block text-sm font-medium text-neutral-700" for="number"
-            >Number</label
+          <label class="block text-sm font-medium text-foreground" for="number"
+            >{t("Number")}</label
           >
           <input
             id="number"
             name="number"
+            aria-describedby="number-error"
             required
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
+            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
+          /><FieldError name="number" error={createResult?.error} />
         </div>
         <div>
-          <label class="block text-sm font-medium text-neutral-700" for="type"
-            >Type</label
+          <label class="block text-sm font-medium text-foreground" for="type"
+            >{t("Type")}</label
           >
           <select
             id="type"
             name="type"
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            aria-describedby="type-error"
+            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
           >
-            <option value="APARTMENT">Apartment</option>
-            <option value="COMMERCIAL_UNIT">Commercial unit</option>
-            <option value="PARKING">Parking</option>
-            <option value="STORAGE">Storage</option>
-            <option value="OTHER">Other</option>
-          </select>
+            <option value="APARTMENT">{t("Apartment")}</option>
+            <option value="COMMERCIAL_UNIT">{t("Commercial unit")}</option>
+            <option value="PARKING">{t("Parking")}</option>
+            <option value="STORAGE">{t("Storage")}</option>
+            <option value="OTHER">{t("Other")}</option>
+          </select><FieldError name="type" error={createResult?.error} />
         </div>
         <div>
-          <label class="block text-sm font-medium text-neutral-700" for="areaM2"
-            >Area (m²)</label
+          <label class="block text-sm font-medium text-foreground" for="areaM2"
+            >{t("Area (m²)")}</label
           >
           <input
             id="areaM2"
             name="areaM2"
+            aria-describedby="areaM2-error"
             type="number"
             step="0.01"
             min="0"
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
+            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
+          /><FieldError name="areaM2" error={createResult?.error} />
         </div>
         <div class="col-span-2">
-          <button
-            type="submit"
-            class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-          >
-            Create
+          <button type="submit" class="btn-primary">
+            {t("Create")}
           </button>
         </div>
       </form>
-    </section>
+    </details>
   </div>
 </AdminLayout>
+
+<script>
+  const filterForm = document.querySelector<HTMLFormElement>(
+    "[data-instant-filter]"
+  );
+  const searchInput = document.querySelector<HTMLInputElement>("#search");
+  const typeSelect = document.querySelector("#type-filter");
+  const statusSelect = document.querySelector("#status-filter");
+  const archivedCheckbox = document.querySelector(
+    'input[name="includeArchived"]'
+  );
+  let searchTimer: number | undefined;
+  searchInput?.addEventListener("input", () => {
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(() => filterForm?.requestSubmit(), 300);
+  });
+  typeSelect?.addEventListener("change", () => filterForm?.requestSubmit());
+  statusSelect?.addEventListener("change", () => filterForm?.requestSubmit());
+  archivedCheckbox?.addEventListener("change", () =>
+    filterForm?.requestSubmit()
+  );
+</script>
+
+<style>
+  .dwelling-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .dwelling-type-icon {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex-shrink: 0;
+    color: var(--color-muted);
+  }
+  .pagination-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.875rem;
+    color: var(--color-muted);
+  }
+  .pagination-page {
+    font-weight: 600;
+  }
+  /* .row-link-above (below) gives each row's actions cell z-index:1 so its
+     button/menu clears the row-wide invisible link overlay -- but that
+     makes every row's actions cell its OWN stacking context at the same
+     z-index, so a later row's cell always paints over an earlier row's
+     open menu regardless of the menu's own z-index (a child z-index can
+     never escape its parent's stacking context). Promoting the whole
+     <tr> only while ITS menu is open fixes that without giving every row
+     a competing z-index. */
+  .row-link:has(.row-menu[open]) {
+    z-index: 2;
+  }
+  .row-menu {
+    position: relative;
+    display: inline-block;
+  }
+  .row-menu summary {
+    display: grid;
+    min-width: 2rem;
+    min-height: 2rem;
+    place-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-muted);
+    list-style: none;
+    cursor: pointer;
+  }
+  .row-menu summary::-webkit-details-marker {
+    display: none;
+  }
+  .row-menu > div {
+    position: absolute;
+    z-index: 100;
+    top: calc(100% + 0.35rem);
+    right: 0;
+    min-width: 9rem;
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    box-shadow: var(--elevation-1);
+  }
+  .row-menu button {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-badge);
+    color: var(--color-foreground);
+    font-size: 0.875rem;
+    text-align: left;
+  }
+  .row-menu button:hover {
+    background: var(--color-surface-hover);
+  }
+</style>

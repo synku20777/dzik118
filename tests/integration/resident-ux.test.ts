@@ -22,7 +22,40 @@ import { createRule } from "../../src/domain/billing/rules";
 import {
   generateInvoice,
   getInvoiceForDwellingPeriod,
+  prepareInvoice,
 } from "../../src/domain/billing/generation";
+import {
+  sendInvoice,
+  type SendInvoiceDeps,
+} from "../../src/domain/billing/sending";
+import { createSupabaseAdminClient } from "../../src/lib/supabase/admin";
+import type { EmailService } from "../../src/lib/email/service";
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
+if (!supabaseUrl || !supabaseSecretKey) {
+  throw new Error(
+    "SUPABASE_URL and SUPABASE_SECRET_KEY are required for integration tests"
+  );
+}
+const supabaseAdmin = createSupabaseAdminClient(supabaseUrl, supabaseSecretKey);
+
+function stubDeps(): SendInvoiceDeps {
+  const email: EmailService = {
+    sendInvoice: async () => ({
+      success: true,
+      provider: "smtp" as const,
+      providerMessageId: "stub",
+    }),
+  };
+  return {
+    renderPdf: async () => new TextEncoder().encode("%PDF-1.4 stub"),
+    supabaseAdmin,
+    emailService: email,
+    tokenSecret: "it-i-token-secret",
+    appBaseUrl: "https://billing.example.test",
+  };
+}
 
 let db: Db;
 let seedAdminId: string;
@@ -45,13 +78,23 @@ describe("resident dashboard read helpers", () => {
   it("getInvoiceForDwellingPeriod returns null before generation, then the invoice", async () => {
     const org = await createOrganization(
       db,
-      { name: "IT-I Org Invoice", addressLine1: "Addr 1" },
+      {
+        name: "IT-I Org Invoice",
+        addressLine1: "Addr 1",
+        bankName: "Test Bank",
+        iban: "LV80BANK0000435195001",
+      },
       seedAdminId
     );
     const dwelling = await createDwelling(
       db,
       org.id,
-      { number: "1" },
+      {
+        number: "1",
+        billingName: "Resident One",
+        billingEmail: "resident-one@example.test",
+        billingAddress: "Addr 1, Dwelling 1",
+      },
       seedAdminId
     );
     const period = await createPeriod(
@@ -95,6 +138,8 @@ describe("resident dashboard read helpers", () => {
       dwelling.id,
       seedAdminId
     );
+    await prepareInvoice(db, org.id, invoice.id, seedAdminId);
+    await sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId);
     const after = await getInvoiceForDwellingPeriod(db, dwelling.id, period.id);
     expect(after?.id).toBe(invoice.id);
 

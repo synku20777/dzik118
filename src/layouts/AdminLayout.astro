@@ -1,78 +1,151 @@
 ---
-// Phase D (Organizations/dwellings) / Phase H (Admin UX) / Phase J
-// (Payments) / Phase K (Messaging, spec Section 27 nav).
 import "../styles/global.css";
-
+import AppNavigation from "../components/ui/AppNavigation.astro";
+import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
+import ThemeToggle from "../components/ui/ThemeToggle.astro";
+import Icon from "../components/ui/Icon.astro";
+import { translate, uiLocale } from "../lib/ui/i18n";
 interface Props {
   title?: string;
   organizationId?: string;
   organizationName?: string;
 }
-
 const {
   title = "Admin - Property Billing",
   organizationId,
   organizationName,
 } = Astro.props;
-
-const navLinks = organizationId
-  ? [
-      { href: `/admin/o/${organizationId}/dashboard`, label: "Dashboard" },
-      { href: `/admin/o/${organizationId}/dwellings`, label: "Dwellings" },
-      { href: `/admin/o/${organizationId}/periods`, label: "Periods" },
-      { href: `/admin/o/${organizationId}/payments`, label: "Payments" },
-      { href: `/admin/o/${organizationId}/messages`, label: "Messages" },
-      { href: `/admin/o/${organizationId}/settings`, label: "Settings" },
-    ]
-  : [];
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={locale}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <script is:inline>
+      (function () {
+        try {
+          const stored = localStorage.getItem("color-scheme");
+          if (stored === "dark" || stored === "light") {
+            document.documentElement.setAttribute("data-theme", stored);
+            const meta = document.querySelector('meta[name="color-scheme"]');
+            if (meta) meta.content = stored;
+          }
+        } catch (e) {
+          void e;
+        }
+      })();
+    </script>
     <title>{title}</title>
   </head>
-  <body class="min-h-screen bg-neutral-50 text-neutral-900 antialiased">
-    <header class="border-b border-neutral-200 bg-white">
-      <div
-        class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3"
+  <body>
+    <a class="skip-link" href="#main-content">{t("Skip to content")}</a>
+    <aside class="admin-sidebar">
+      <a class="brand" href="/admin/organizations"
+        ><span class="brand-mark" aria-hidden="true">▥</span>{
+          t("Property Billing")
+        }</a
       >
-        <div class="flex items-center gap-6">
-          <a href="/admin/organizations" class="font-bold text-neutral-900"
-            >Property Billing</a
-          >
-          {
-            organizationName && (
-              <span class="text-sm text-neutral-500">{organizationName}</span>
-            )
-          }
-          <nav class="flex gap-4 text-sm">
-            {
-              navLinks.map((link) => (
-                <a
-                  href={link.href}
-                  class="text-neutral-600 hover:text-neutral-900"
-                >
-                  {link.label}
-                </a>
-              ))
-            }
-          </nav>
-        </div>
-        <form method="POST" action="/logout" class="inline">
-          <button
-            type="submit"
-            class="text-sm text-neutral-600 hover:text-neutral-900 bg-transparent border-none p-0 cursor-pointer"
-          >
-            Sign out
-          </button>
-        </form>
+      <div class="org-context">
+        <p class="eyebrow">{t("Administration")}</p><p
+          class="text-sm font-semibold"
+        >
+          {organizationName ?? t("Organization")}
+        </p><a
+          href="/admin/organizations"
+          class="mt-2 inline-block text-xs text-muted hover:underline"
+          >{t("Switch organization")} ↗</a
+        >
       </div>
+      {organizationId && <AppNavigation organizationId={organizationId} />}
+      <div class="sidebar-account">
+        <p class="mb-3 truncate text-muted">{Astro.locals.auth?.email}</p><div
+          class="flex items-center justify-between"
+        >
+          <form method="POST" action="/logout">
+            <button type="submit">{t("Sign out")}</button>
+          </form><div class="flex items-center gap-2">
+            <ThemeToggle /><LanguageSwitch />
+          </div>
+        </div>
+      </div>
+    </aside>
+    <header class="admin-mobile">
+      <span class="brand"
+        ><span class="brand-mark" aria-hidden="true">▥</span>{
+          t("Property Billing")
+        }</span
+      >
+      <button type="button" class="btn-secondary btn-sm" data-open-mobile-nav>
+        {t("Menu")} ☰
+      </button>
     </header>
-    <main class="mx-auto max-w-6xl px-4 py-8">
+    <dialog
+      id="mobile-nav-drawer"
+      class="context-drawer mobile-nav-drawer"
+      aria-labelledby="mobile-nav-drawer-title"
+    >
+      <header class="context-drawer-header">
+        <span class="brand" id="mobile-nav-drawer-title"
+          ><span class="brand-mark" aria-hidden="true">▥</span>{
+            t("Property Billing")
+          }</span
+        >
+        <button
+          type="button"
+          class="context-drawer-close"
+          data-close-mobile-nav
+          aria-label={t("Close menu")}
+        >
+          <Icon name="x" size="sm" />
+        </button>
+      </header>
+      <div class="context-drawer-body">
+        {organizationId && <AppNavigation organizationId={organizationId} />}
+        <div
+          class="mt-4 flex flex-wrap items-center gap-5 border-t border-border pt-4 text-sm"
+        >
+          <a href="/admin/organizations">{t("Switch organization")}</a><form
+            method="POST"
+            action="/logout"
+          >
+            <button type="submit">{t("Sign out")}</button>
+          </form><div class="ml-auto flex items-center gap-2">
+            <ThemeToggle /><LanguageSwitch />
+          </div>
+        </div>
+      </div>
+    </dialog>
+    <main id="main-content" tabindex="-1" class="admin-content app-content">
       <slot />
     </main>
+    <script>
+      import "../lib/ui/forms";
+
+      const mobileNavDialog =
+        document.querySelector<HTMLDialogElement>("#mobile-nav-drawer");
+      if (mobileNavDialog) {
+        document
+          .querySelector("[data-open-mobile-nav]")
+          ?.addEventListener("click", () => mobileNavDialog.showModal());
+        document
+          .querySelector("[data-close-mobile-nav]")
+          ?.addEventListener("click", () => mobileNavDialog.close());
+        mobileNavDialog.addEventListener("click", (event) => {
+          if (event.target === mobileNavDialog) mobileNavDialog.close();
+        });
+        // Navigating to a link inside the drawer should close it -- without
+        // this, a slow page load leaves the previous page's drawer open
+        // and dimmed behind whatever loads next.
+        mobileNavDialog
+          .querySelectorAll("a")
+          .forEach((link) =>
+            link.addEventListener("click", () => mobileNavDialog.close())
+          );
+      }
+    </script>
   </body>
 </html>

@@ -83,6 +83,7 @@ export function renderInvoiceHtml(
   th, td { padding: 6px 8px; border-bottom: 1px solid #e5e5e5; text-align: left; }
   .num { text-align: right; }
   tfoot td { border-top: 2px solid #171717; border-bottom: none; font-weight: bold; }
+  .summary { width: 52%; margin-left: auto; }
   .payment { margin-top: 1.5rem; color: #525252; }
 </style>
 </head>
@@ -108,8 +109,18 @@ export function renderInvoiceHtml(
     </thead>
     <tbody>${lineRows}</tbody>
     <tfoot>
-      <tr><td colspan="3"></td><td class="num">${escapeHtml(invoice.subtotal)}</td><td class="num">${escapeHtml(invoice.vatTotal)}</td><td class="num">${escapeHtml(invoice.total)} ${escapeHtml(invoice.currency)}</td></tr>
+      <tr><td colspan="3"></td><td class="num">${escapeHtml(invoice.subtotal)}</td><td class="num">${escapeHtml(invoice.vatTotal)}</td><td class="num">${escapeHtml(invoice.currentCharges)} ${escapeHtml(invoice.currency)}</td></tr>
     </tfoot>
+  </table>
+  <table class="summary">
+    <tbody>
+      <tr><td>Current charges</td><td class="num">${escapeHtml(invoice.currentCharges)} ${escapeHtml(invoice.currency)}</td></tr>
+      ${invoice.previousOutstanding !== "0.00" ? `<tr><td>Previous outstanding</td><td class="num">+${escapeHtml(invoice.previousOutstanding)} ${escapeHtml(invoice.currency)}</td></tr>` : ""}
+      ${invoice.previousCreditApplied !== "0.00" ? `<tr><td>Credit applied</td><td class="num">−${escapeHtml(invoice.previousCreditApplied)} ${escapeHtml(invoice.currency)}</td></tr>` : ""}
+      ${invoice.lateFeeApplied !== "0.00" ? `<tr><td>Late fee</td><td class="num">+${escapeHtml(invoice.lateFeeApplied)} ${escapeHtml(invoice.currency)}</td></tr>` : ""}
+      ${invoice.manualAdjustment !== "0.00" ? `<tr><td>Manual adjustment</td><td class="num">${escapeHtml(invoice.manualAdjustment)} ${escapeHtml(invoice.currency)}</td></tr>` : ""}
+    </tbody>
+    <tfoot><tr><td>Amount due</td><td class="num">${escapeHtml(invoice.amountDue)} ${escapeHtml(invoice.currency)}</td></tr></tfoot>
   </table>
   <div class="payment">
     ${payment.bankName ? `Bank: ${escapeHtml(payment.bankName)}<br />` : ""}

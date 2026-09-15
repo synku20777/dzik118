@@ -17,6 +17,7 @@ import { createSupabaseAdminClient } from "../../src/lib/supabase/admin";
 import {
   ConflictError,
   NotFoundError,
+  ValidationError,
   archiveDwelling,
   assignResident,
   createDwelling,
@@ -24,6 +25,7 @@ import {
   listDwellingResidents,
   listDwellings,
   updateDwelling,
+  updateInvoiceDeliveryPreferences,
 } from "../../src/domain/organizations/dwellings";
 import {
   addAdminMembership,
@@ -178,6 +180,53 @@ describe("dwellings (spec DWL-001/002/003)", () => {
 
     await cleanupOrg(orgA.id);
     await cleanupOrg(orgB.id);
+  });
+
+  it("invoice delivery: defaults to email-only, rejects turning both methods off, allows paper-only", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT Dwl Org Delivery", addressLine1: "Addr" },
+      seedAdminId
+    );
+    const dwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "1" },
+      seedAdminId
+    );
+    expect(dwelling.invoiceByEmail).toBe(true);
+    expect(dwelling.invoiceByPaper).toBe(false);
+
+    await expect(
+      updateInvoiceDeliveryPreferences(
+        db,
+        org.id,
+        dwelling.id,
+        { invoiceByEmail: false, invoiceByPaper: false },
+        seedAdminId
+      )
+    ).rejects.toBeInstanceOf(ValidationError);
+
+    const paperOnly = await updateInvoiceDeliveryPreferences(
+      db,
+      org.id,
+      dwelling.id,
+      { invoiceByEmail: false, invoiceByPaper: true },
+      seedAdminId
+    );
+    expect(paperOnly.invoiceByEmail).toBe(false);
+    expect(paperOnly.invoiceByPaper).toBe(true);
+
+    await expect(
+      createDwelling(
+        db,
+        org.id,
+        { number: "2", invoiceByEmail: false, invoiceByPaper: false },
+        seedAdminId
+      )
+    ).rejects.toBeInstanceOf(ValidationError);
+
+    await cleanupOrg(org.id);
   });
 
   it("DWL-002: archive hides from the active default list but keeps the row", async () => {

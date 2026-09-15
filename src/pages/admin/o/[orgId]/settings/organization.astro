@@ -1,6 +1,11 @@
 ---
+import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 // Phase D (Organizations/dwellings) - legal/bank/contact settings (spec
 // Section 9.2, 27, ORG-002).
+import FieldError from "../../../../../components/ui/FieldError.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
 import {
@@ -22,6 +27,12 @@ const updateResult = Astro.getActionResult(actions.organizations.update);
 const organization = await withRequestDb((db) =>
   getOrganization(db, organizationId)
 );
+
+const base = `/admin/o/${organizationId}`;
+const settingsHref = `${base}/settings`;
+const cityLine = [organization.city, organization.postalCode]
+  .filter(Boolean)
+  .join(", ");
 ---
 
 <AdminLayout
@@ -29,139 +40,486 @@ const organization = await withRequestDb((db) =>
   organizationId={organizationId}
   organizationName={organization.name}
 >
-  <div class="max-w-2xl space-y-6">
-    <a
-      href={`/admin/o/${organizationId}/settings`}
-      class="text-sm text-neutral-600 hover:underline"
-    >
-      ← Settings
+  <div class="org-settings-page">
+    <a href={settingsHref} class="back-link">
+      <span aria-hidden="true">←</span>
+      {t("Settings")}
     </a>
-    <h1 class="text-xl font-bold text-neutral-900">Organization</h1>
+
+    <header class="org-settings-header">
+      <div>
+        <h1 class="font-display">{t("Organization")}</h1>
+        <p class="page-description">
+          {t("Manage legal, contact, and bank details for this organization.")}
+        </p>
+      </div>
+      <a href={`${base}/guide`} class="btn-secondary settings-help">
+        <span class="settings-help-icon" aria-hidden="true">?</span>
+        {t("Need help?")}
+      </a>
+    </header>
+
     {
       updateResult?.error && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p class="notice notice-danger" role="alert">
           {updateResult.error.message}
         </p>
       )
     }
-    <form
-      method="POST"
-      action={actions.organizations.update}
-      class="grid grid-cols-2 gap-4 rounded-xl border border-neutral-200 bg-white p-6"
-    >
-      <input type="hidden" name="organizationId" value={organizationId} />
-      <div class="col-span-2">
-        <label class="block text-sm font-medium text-neutral-700" for="name"
-          >Name</label
-        >
-        <input
-          id="name"
-          name="name"
-          value={organization.name}
-          required
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div class="col-span-2">
-        <label
-          class="block text-sm font-medium text-neutral-700"
-          for="addressLine1">Address</label
-        >
-        <input
-          id="addressLine1"
-          name="addressLine1"
-          value={organization.addressLine1}
-          required
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-neutral-700" for="city"
-          >City</label
-        >
-        <input
-          id="city"
-          name="city"
-          value={organization.city ?? ""}
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label
-          class="block text-sm font-medium text-neutral-700"
-          for="postalCode">Postal code</label
-        >
-        <input
-          id="postalCode"
-          name="postalCode"
-          value={organization.postalCode ?? ""}
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-neutral-700" for="email"
-          >Email</label
-        >
-        <input
-          id="email"
-          name="email"
-          type="email"
-          value={organization.email ?? ""}
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-neutral-700" for="phone"
-          >Phone</label
-        >
-        <input
-          id="phone"
-          name="phone"
-          value={organization.phone ?? ""}
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-neutral-700" for="bankName"
-          >Bank name</label
-        >
-        <input
-          id="bankName"
-          name="bankName"
-          value={organization.bankName ?? ""}
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-neutral-700" for="iban"
-          >IBAN</label
-        >
-        <input
-          id="iban"
-          name="iban"
-          value={organization.iban ?? ""}
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-neutral-700" for="bic"
-          >BIC</label
-        >
-        <input
-          id="bic"
-          name="bic"
-          value={organization.bic ?? ""}
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div class="col-span-2">
-        <button
-          type="submit"
-          class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-        >
-          Save
-        </button>
-      </div>
-    </form>
+    {
+      updateResult?.data && (
+        <p class="notice" role="status">
+          {t("Saved successfully.")}
+        </p>
+      )
+    }
+
+    <div class="org-settings-split">
+      <form
+        method="POST"
+        action={actions.organizations.update}
+        class="org-settings-form"
+      >
+        <input type="hidden" name="organizationId" value={organizationId} />
+
+        <div class="org-info-banner">
+          <span class="org-info-icon" aria-hidden="true">i</span>
+          <p>
+            {
+              t(
+                "Keep your organization details up to date to ensure correct invoicing and communication."
+              )
+            }
+          </p>
+        </div>
+
+        <div class="org-settings-section">
+          <h2>{t("Legal and contact details")}</h2>
+          <p class="org-settings-section-desc">
+            {
+              t(
+                "This information is used on invoices and for official communication."
+              )
+            }
+          </p>
+
+          <div class="org-field">
+            <label for="name">{t("Name")}</label>
+            <input
+              id="name"
+              name="name"
+              aria-describedby="name-error"
+              value={organization.name}
+              required
+            />
+            <FieldError name="name" error={updateResult?.error} />
+          </div>
+
+          <div class="org-field">
+            <label for="addressLine1">{t("Address")}</label>
+            <input
+              id="addressLine1"
+              name="addressLine1"
+              aria-describedby="addressLine1-error"
+              value={organization.addressLine1}
+              required
+            />
+            <FieldError name="addressLine1" error={updateResult?.error} />
+          </div>
+
+          <div class="org-field-row">
+            <div class="org-field">
+              <label for="city">{t("City")}</label>
+              <input
+                id="city"
+                name="city"
+                aria-describedby="city-error"
+                value={organization.city ?? ""}
+              />
+              <FieldError name="city" error={updateResult?.error} />
+            </div>
+            <div class="org-field">
+              <label for="postalCode">{t("Postal code")}</label>
+              <input
+                id="postalCode"
+                name="postalCode"
+                aria-describedby="postalCode-error"
+                value={organization.postalCode ?? ""}
+              />
+              <FieldError name="postalCode" error={updateResult?.error} />
+            </div>
+          </div>
+
+          <div class="org-field-row">
+            <div class="org-field">
+              <label for="email">{t("Email")}</label>
+              <input
+                id="email"
+                name="email"
+                aria-describedby="email-error"
+                type="email"
+                value={organization.email ?? ""}
+              />
+              <FieldError name="email" error={updateResult?.error} />
+            </div>
+            <div class="org-field">
+              <label for="phone">{t("Phone")}</label>
+              <input
+                id="phone"
+                name="phone"
+                aria-describedby="phone-error"
+                value={organization.phone ?? ""}
+              />
+              <FieldError name="phone" error={updateResult?.error} />
+            </div>
+          </div>
+        </div>
+
+        <div class="org-settings-section">
+          <h2>{t("Bank details")}</h2>
+          <p class="org-settings-section-desc">
+            {t("This information is used for receiving payments.")}
+          </p>
+
+          <div class="org-field-row">
+            <div class="org-field">
+              <label for="bankName">{t("Bank name")}</label>
+              <input
+                id="bankName"
+                name="bankName"
+                aria-describedby="bankName-error"
+                value={organization.bankName ?? ""}
+              />
+              <FieldError name="bankName" error={updateResult?.error} />
+            </div>
+            <div class="org-field">
+              <label for="iban">IBAN</label>
+              <input
+                id="iban"
+                name="iban"
+                aria-describedby="iban-error"
+                value={organization.iban ?? ""}
+              />
+              <FieldError name="iban" error={updateResult?.error} />
+            </div>
+          </div>
+
+          <div class="org-field">
+            <label for="bic">BIC</label>
+            <input
+              id="bic"
+              name="bic"
+              aria-describedby="bic-error"
+              value={organization.bic ?? ""}
+            />
+            <FieldError name="bic" error={updateResult?.error} />
+          </div>
+        </div>
+
+        <div class="org-settings-actions">
+          <a href={settingsHref} class="btn-secondary">{t("Cancel")}</a>
+          <button type="submit" class="btn-primary">
+            {t("Save changes")}
+          </button>
+        </div>
+      </form>
+
+      <aside class="org-settings-sidebar">
+        <div class="org-summary-card">
+          <div class="org-summary-head">
+            <span class="org-summary-icon" aria-hidden="true">
+              <Icon name="building" size="lg" />
+            </span>
+            <div>
+              <h2>{t("Organization summary")}</h2>
+              <p>
+                {t("This is how your organization details appear on invoices.")}
+              </p>
+            </div>
+          </div>
+          <dl class="org-summary-list">
+            <div>
+              <dt>{t("Name")}</dt>
+              <dd>{organization.name}</dd>
+            </div>
+            <div>
+              <dt>{t("Address")}</dt>
+              <dd>
+                {organization.addressLine1}
+                {
+                  cityLine && (
+                    <>
+                      <br />
+                      {cityLine}
+                    </>
+                  )
+                }
+              </dd>
+            </div>
+            <div>
+              <dt>{t("Email")}</dt>
+              <dd>{organization.email ?? "—"}</dd>
+            </div>
+            <div>
+              <dt>{t("Phone")}</dt>
+              <dd>{organization.phone ?? "—"}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="org-tip-card">
+          <span class="org-tip-icon" aria-hidden="true">
+            <Icon name="bulb" size="lg" />
+          </span>
+          <div>
+            <h3>{t("Good to know")}</h3>
+            <p>
+              {
+                t(
+                  "Keep your details current so that invoices, payments, and official communication are processed without delays."
+                )
+              }
+            </p>
+          </div>
+        </div>
+      </aside>
+    </div>
   </div>
 </AdminLayout>
+
+<style>
+  .org-settings-page {
+    display: grid;
+    gap: 1.25rem;
+  }
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: fit-content;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .org-settings-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .org-settings-header h1 {
+    font-size: clamp(1.65rem, 3vw, 2.1rem);
+    font-weight: 700;
+  }
+  .org-settings-header .page-description {
+    margin-top: 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+  }
+  .settings-help {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .settings-help-icon {
+    display: grid;
+    width: 1.1rem;
+    height: 1.1rem;
+    place-items: center;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .org-settings-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+    gap: 1.25rem;
+    align-items: start;
+  }
+  .org-settings-form {
+    display: grid;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+  }
+  .org-info-banner {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    border-radius: var(--radius-panel);
+    background: var(--color-notice-bg);
+    color: var(--color-notice-text);
+  }
+  .org-info-icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 1.5rem;
+    height: 1.5rem;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-style: italic;
+  }
+  .org-info-banner p {
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+  .org-settings-section {
+    display: grid;
+    gap: 1rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .org-settings-section:first-of-type {
+    padding-top: 0;
+    border-top: 0;
+  }
+  .org-settings-section h2 {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .org-settings-section-desc {
+    margin-top: -0.75rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .org-field-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  .org-field label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .org-field input {
+    width: 100%;
+    padding: 0.75rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-foreground);
+    font: inherit;
+    font-size: 0.875rem;
+    box-sizing: border-box;
+  }
+  .org-field input:focus-visible {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  }
+  .org-settings-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .org-settings-sidebar {
+    display: grid;
+    gap: 1.25rem;
+  }
+  .org-summary-card {
+    padding: 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+  }
+  .org-summary-head {
+    display: flex;
+    gap: 0.75rem;
+  }
+  .org-summary-icon {
+    display: grid;
+    width: 3rem;
+    height: 3rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-foreground);
+  }
+  .org-summary-icon svg {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+  .org-summary-head h2 {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .org-summary-head p {
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .org-summary-list {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .org-summary-list dt {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .org-summary-list dd {
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    line-height: 1.45;
+  }
+  .org-tip-card {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1.25rem;
+    border-radius: var(--radius-panel);
+    background: var(--color-notice-bg);
+    color: var(--color-notice-text);
+  }
+  .org-tip-icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 2.25rem;
+    height: 2.25rem;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-surface);
+  }
+  .org-tip-icon svg {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+  .org-tip-card h3 {
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+  .org-tip-card p {
+    margin-top: 0.25rem;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
+  @media (max-width: 900px) {
+    .org-settings-split {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 640px) {
+    .org-field-row {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

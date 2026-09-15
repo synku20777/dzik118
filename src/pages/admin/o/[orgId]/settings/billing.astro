@@ -1,5 +1,11 @@
 ---
+import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 // Phase F (Billing) - billing automation settings (spec Section 9.2, 27).
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import FieldError from "../../../../../components/ui/FieldError.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
 import {
@@ -7,6 +13,7 @@ import {
   requireOrganizationAccess,
 } from "../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { getLatestLateFeePolicy } from "../../../../../domain/accounts/settings";
 import { withRequestDb } from "../../../../../lib/db-request";
 
 const organizationId = Astro.params.orgId!;
@@ -18,9 +25,33 @@ try {
 }
 
 const updateResult = Astro.getActionResult(actions.organizations.update);
-const organization = await withRequestDb((db) =>
-  getOrganization(db, organizationId)
-);
+const policyResult = Astro.getActionResult(actions.accounts.saveLateFeePolicy);
+const { organization, lateFeePolicy } = await withRequestDb(async (db) => ({
+  organization: await getOrganization(db, organizationId),
+  lateFeePolicy: await getLatestLateFeePolicy(db, organizationId),
+}));
+
+const base = `/admin/o/${organizationId}`;
+const settingsHref = `${base}/settings`;
+
+// Free-text fields in the database, presented as selects for a curated
+// set of common values -- the organization's current value is always
+// included so saving without touching the field never silently changes
+// it to whatever the first preset happens to be.
+const currencyOptions = [
+  ...new Set(["EUR", "USD", "GBP", organization.currency]),
+];
+const timezoneOptions = [
+  ...new Set([
+    "Europe/Riga",
+    "UTC",
+    "Europe/London",
+    "Europe/Berlin",
+    "America/New_York",
+    organization.timezone,
+  ]),
+];
+const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
 ---
 
 <AdminLayout
@@ -28,134 +59,819 @@ const organization = await withRequestDb((db) =>
   organizationId={organizationId}
   organizationName={organization.name}
 >
-  <div class="max-w-2xl space-y-6">
-    <a
-      href={`/admin/o/${organizationId}/settings`}
-      class="text-sm text-neutral-600 hover:underline"
-    >
-      ← Settings
+  <div class="billing-settings-page">
+    <a href={settingsHref} class="back-link">
+      <span aria-hidden="true">←</span>
+      {t("Settings")}
     </a>
-    <h1 class="text-xl font-bold text-neutral-900">Billing</h1>
-    {
-      updateResult?.error && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
-          {updateResult.error.message}
-        </p>
-      )
-    }
-    <form
-      method="POST"
-      action={actions.organizations.update}
-      class="grid grid-cols-2 gap-4 rounded-xl border border-neutral-200 bg-white p-6"
+
+    <PageHeader
+      title={t("Billing")}
+      description={t(
+        "Configure invoice defaults, automation, and late-payment rules."
+      )}
+      display
     >
-      <input type="hidden" name="organizationId" value={organizationId} />
-      <div>
-        <label class="block text-sm font-medium text-neutral-700" for="currency"
-          >Currency</label
+      <a href={`${base}/guide`} class="btn-secondary settings-help">
+        <span class="settings-help-icon" aria-hidden="true">?</span>
+        {t("Need help?")}
+      </a>
+    </PageHeader>
+
+    <div class="billing-settings-split">
+      <div class="billing-settings-main">
+        <form
+          method="POST"
+          action={actions.organizations.update}
+          class="billing-card"
+          id="billing-defaults-form"
         >
-        <input
-          id="currency"
-          name="currency"
-          value={organization.currency}
-          maxlength="3"
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
+          <input type="hidden" name="organizationId" value={organizationId} />
+
+          {
+            updateResult?.error && (
+              <p class="notice notice-danger" role="alert">
+                {updateResult.error.message}
+              </p>
+            )
+          }
+          {
+            updateResult?.data && (
+              <p class="notice" role="status">
+                {t("Saved successfully.")}
+              </p>
+            )
+          }
+
+          <div class="billing-card-head">
+            <span class="billing-card-icon" aria-hidden="true">
+              <Icon name="receipt-euro" size="lg" />
+            </span>
+            <div>
+              <h2>{t("Billing defaults")}</h2>
+              <p>{t("Core invoicing preferences for this organization.")}</p>
+            </div>
+          </div>
+
+          <div class="billing-field-row">
+            <div class="billing-field">
+              <label for="currency">{t("Currency")}</label>
+              <select
+                id="currency"
+                name="currency"
+                aria-describedby="currency-error"
+              >
+                {
+                  currencyOptions.map((c) => (
+                    <option value={c} selected={c === organization.currency}>
+                      {c}
+                    </option>
+                  ))
+                }
+              </select>
+              <FieldError name="currency" error={updateResult?.error} />
+            </div>
+            <div class="billing-field">
+              <label for="timezone">{t("Timezone")}</label>
+              <select
+                id="timezone"
+                name="timezone"
+                aria-describedby="timezone-error"
+              >
+                {
+                  timezoneOptions.map((tz) => (
+                    <option value={tz} selected={tz === organization.timezone}>
+                      {tz}
+                    </option>
+                  ))
+                }
+              </select>
+              <FieldError name="timezone" error={updateResult?.error} />
+            </div>
+          </div>
+
+          <div class="billing-field-row">
+            <div class="billing-field">
+              <label for="locale">{t("Locale")}</label>
+              <select id="locale" name="locale" aria-describedby="locale-error">
+                {
+                  localeOptions.map((l) => (
+                    <option value={l} selected={l === organization.locale}>
+                      {l}
+                    </option>
+                  ))
+                }
+              </select>
+              <FieldError name="locale" error={updateResult?.error} />
+            </div>
+            <div class="billing-field">
+              <label for="invoicePrefix">{t("Invoice number prefix")}</label>
+              <input
+                id="invoicePrefix"
+                name="invoicePrefix"
+                aria-describedby="invoicePrefix-error"
+                value={organization.invoicePrefix}
+              />
+              <p class="billing-field-hint">
+                {t("Prefix for newly generated invoice numbers.")}
+              </p>
+              <FieldError name="invoicePrefix" error={updateResult?.error} />
+            </div>
+          </div>
+
+          <div class="billing-field">
+            <label for="defaultDueDays">{t("Default due days")}</label>
+            <input
+              id="defaultDueDays"
+              name="defaultDueDays"
+              aria-describedby="defaultDueDays-error"
+              type="number"
+              min="0"
+              max="120"
+              value={organization.defaultDueDays}
+            />
+            <p class="billing-field-hint">
+              {t("Number of days after the invoice date.")}
+            </p>
+            <FieldError name="defaultDueDays" error={updateResult?.error} />
+          </div>
+        </form>
+
+        <div class="billing-card" id="automation-card">
+          <div class="billing-card-head">
+            <span class="billing-card-icon" aria-hidden="true">
+              <Icon name="settings" size="lg" />
+            </span>
+            <div>
+              <h2>{t("Automation")}</h2>
+              <p>{t("Control automatic invoice generation and sending.")}</p>
+            </div>
+          </div>
+
+          <label class="toggle-row" form="billing-defaults-form">
+            <span class="toggle-switch">
+              <input
+                type="checkbox"
+                name="autoGenerateEnabled"
+                checked={organization.autoGenerateEnabled}
+                form="billing-defaults-form"
+              />
+              <span class="toggle-switch-track" aria-hidden="true"></span>
+              <span class="toggle-switch-thumb" aria-hidden="true"></span>
+            </span>
+            <span class="toggle-row-text">
+              <span class="toggle-row-title"
+                >{t("Automatically generate invoices each period")}</span
+              >
+              <span class="toggle-row-desc"
+                >{
+                  t(
+                    "Creates draft invoices for all eligible accounts at the start of each period."
+                  )
+                }</span
+              >
+            </span>
+          </label>
+
+          <label class="toggle-row">
+            <span class="toggle-switch">
+              <input
+                type="checkbox"
+                id="autoSendEnabled"
+                name="autoSendEnabled"
+                checked={organization.autoSendEnabled}
+                form="billing-defaults-form"
+              />
+              <span class="toggle-switch-track" aria-hidden="true"></span>
+              <span class="toggle-switch-thumb" aria-hidden="true"></span>
+            </span>
+            <span class="toggle-row-text">
+              <span class="toggle-row-title"
+                >{t("Automatically send prepared invoices")}</span
+              >
+              <span class="toggle-row-desc"
+                >{t("Sends invoices to recipients automatically.")}</span
+              >
+            </span>
+          </label>
+
+          <div class="billing-field billing-subfield">
+            <label for="autoSendDay">{t("Auto-send day of month")}</label>
+            <input
+              id="autoSendDay"
+              name="autoSendDay"
+              aria-describedby="autoSendDay-error"
+              type="number"
+              min="1"
+              max="28"
+              value={organization.autoSendDay ?? ""}
+              disabled={!organization.autoSendEnabled}
+              form="billing-defaults-form"
+            />
+            <p class="billing-field-hint">
+              {t("Used only when automatic sending is enabled.")}
+            </p>
+            <FieldError name="autoSendDay" error={updateResult?.error} />
+          </div>
+
+          <div class="billing-form-actions">
+            <a href={settingsHref} class="btn-secondary">{t("Cancel")}</a>
+            <button
+              type="submit"
+              form="billing-defaults-form"
+              class="btn-primary"
+            >
+              {t("Save changes")}
+            </button>
+          </div>
+        </div>
+
+        <div class="billing-card">
+          <div class="billing-card-head">
+            <span class="billing-card-icon" aria-hidden="true">
+              <Icon name="percentage" size="lg" />
+            </span>
+            <div>
+              <h2>{t("Late-payment rules")}</h2>
+              <p>
+                {
+                  t(
+                    "Rules applied to future late-fee calculations. Existing invoices keep their original financial snapshot."
+                  )
+                }
+              </p>
+            </div>
+          </div>
+
+          {
+            policyResult?.error && (
+              <p class="notice notice-danger" role="alert">
+                {policyResult.error.message}
+              </p>
+            )
+          }
+          {
+            policyResult?.data && (
+              <p class="notice" role="status">
+                {t("Saved successfully.")}
+              </p>
+            )
+          }
+
+          <form
+            method="POST"
+            action={actions.accounts.saveLateFeePolicy}
+            id="late-fee-form"
+          >
+            <input type="hidden" name="organizationId" value={organizationId} />
+
+            <div class="billing-field-row">
+              <div class="billing-field">
+                <label for="late-effective">{t("Effective from")}</label>
+                <input
+                  id="late-effective"
+                  name="effectiveFrom"
+                  type="date"
+                  required
+                />
+              </div>
+              <label class="checkbox-row">
+                <input
+                  type="checkbox"
+                  name="enabled"
+                  checked={lateFeePolicy?.enabled ?? false}
+                />
+                <span>
+                  <span class="checkbox-row-title"
+                    >{t("Late fees enabled")}</span
+                  >
+                  <span class="checkbox-row-desc"
+                    >{t("Apply late fees to overdue invoices.")}</span
+                  >
+                </span>
+              </label>
+            </div>
+
+            <div class="billing-field-row">
+              <div class="billing-field">
+                <label for="late-rate">{t("Daily rate (%)")}</label>
+                <input
+                  id="late-rate"
+                  name="dailyRate"
+                  inputmode="decimal"
+                  value={lateFeePolicy?.dailyRate ?? "0.000000"}
+                  required
+                />
+                <p class="billing-field-hint">
+                  {t("Daily late fee rate as a percentage.")}
+                </p>
+              </div>
+              <div class="billing-field">
+                <label for="late-grace">{t("Grace period (days)")}</label>
+                <input
+                  id="late-grace"
+                  name="graceDays"
+                  type="number"
+                  min="0"
+                  value={lateFeePolicy?.graceDays ?? 0}
+                  required
+                />
+                <p class="billing-field-hint">
+                  {
+                    t(
+                      "Number of days after the due date before late fees apply."
+                    )
+                  }
+                </p>
+              </div>
+            </div>
+
+            <div class="billing-field-row">
+              <div class="billing-field">
+                <label for="late-cap">{t("Maximum total penalty (%)")}</label>
+                <input
+                  id="late-cap"
+                  name="maxPenaltyPercent"
+                  inputmode="decimal"
+                  value={lateFeePolicy?.maxPenaltyPercent ?? "10"}
+                  required
+                />
+                <p class="billing-field-hint">
+                  {t("Maximum penalty as a percentage of eligible principal.")}
+                </p>
+              </div>
+              <label class="checkbox-row">
+                <input
+                  type="checkbox"
+                  name="stopsAtCap"
+                  checked={lateFeePolicy?.stopsAtCap ?? true}
+                />
+                <span>
+                  <span class="checkbox-row-title"
+                    >{t("Stop accrual at cap")}</span
+                  >
+                  <span class="checkbox-row-desc"
+                    >{
+                      t(
+                        "Do not accrue additional fees once the maximum penalty is reached."
+                      )
+                    }</span
+                  >
+                </span>
+              </label>
+            </div>
+
+            <div class="billing-form-actions">
+              <a href={settingsHref} class="btn-secondary">{t("Cancel")}</a>
+              <button type="submit" class="btn-primary"
+                >{t("Save changes")}</button
+              >
+            </div>
+          </form>
+        </div>
       </div>
-      <div>
-        <label class="block text-sm font-medium text-neutral-700" for="timezone"
-          >Timezone</label
-        >
-        <input
-          id="timezone"
-          name="timezone"
-          value={organization.timezone}
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-neutral-700" for="locale"
-          >Locale</label
-        >
-        <input
-          id="locale"
-          name="locale"
-          value={organization.locale}
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label
-          class="block text-sm font-medium text-neutral-700"
-          for="invoicePrefix">Invoice number prefix</label
-        >
-        <input
-          id="invoicePrefix"
-          name="invoicePrefix"
-          value={organization.invoicePrefix}
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label
-          class="block text-sm font-medium text-neutral-700"
-          for="defaultDueDays">Default due days</label
-        >
-        <input
-          id="defaultDueDays"
-          name="defaultDueDays"
-          type="number"
-          min="0"
-          max="120"
-          value={organization.defaultDueDays}
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div class="col-span-2">
-        <label class="flex items-center gap-2 pb-2 text-sm text-neutral-700">
-          <input
-            type="checkbox"
-            name="autoGenerateEnabled"
-            checked={organization.autoGenerateEnabled}
-          />
-          Automatically generate invoices each period
-        </label>
-      </div>
-      <div class="col-span-2">
-        <label class="flex items-center gap-2 pb-2 text-sm text-neutral-700">
-          <input
-            type="checkbox"
-            name="autoSendEnabled"
-            checked={organization.autoSendEnabled}
-          />
-          Automatically send prepared invoices
-        </label>
-      </div>
-      <div>
-        <label
-          class="block text-sm font-medium text-neutral-700"
-          for="autoSendDay">Auto-send day of month (1-28)</label
-        >
-        <input
-          id="autoSendDay"
-          name="autoSendDay"
-          type="number"
-          min="1"
-          max="28"
-          value={organization.autoSendDay ?? ""}
-          class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-        />
-        <p class="mt-1 text-xs text-neutral-500">
-          Only applies when auto-send is enabled above.
-        </p>
-      </div>
-      <div class="col-span-2">
-        <button
-          type="submit"
-          class="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-        >
-          Save
-        </button>
-      </div>
-    </form>
+
+      <aside class="billing-sidebar">
+        <div class="billing-summary-card">
+          <div class="billing-summary-head">
+            <span class="billing-summary-icon" aria-hidden="true">
+              <Icon name="chart-bar" size="lg" />
+            </span>
+            <div>
+              <h2>{t("Billing summary")}</h2>
+              <p>{t("Current defaults for this organization.")}</p>
+            </div>
+          </div>
+          <dl class="billing-summary-list">
+            <div><dt>{t("Currency")}</dt><dd>{organization.currency}</dd></div>
+            <div><dt>{t("Timezone")}</dt><dd>{organization.timezone}</dd></div>
+            <div><dt>{t("Locale")}</dt><dd>{organization.locale}</dd></div>
+            <div>
+              <dt>{t("Invoice prefix")}</dt><dd>
+                {organization.invoicePrefix}
+              </dd>
+            </div>
+            <div>
+              <dt>{t("Due days")}</dt><dd>{organization.defaultDueDays}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="billing-tips">
+          <div class="billing-tips-head">
+            <span class="billing-info-icon" aria-hidden="true">i</span>
+            <div>
+              <h3>{t("Good to know")}</h3>
+              <p>{t("Important details about billing settings.")}</p>
+            </div>
+          </div>
+          <div class="billing-tip">
+            <span class="billing-tip-icon" aria-hidden="true">
+              <Icon name="receipt-euro" size="lg" />
+            </span>
+            <div>
+              <p class="billing-tip-title">{t("Invoice numbering")}</p>
+              <p>
+                {
+                  t(
+                    "The invoice number prefix is applied to newly generated invoices."
+                  )
+                }
+              </p>
+            </div>
+          </div>
+          <div class="billing-tip">
+            <span class="billing-tip-icon" aria-hidden="true">
+              <Icon name="settings" size="lg" />
+            </span>
+            <div>
+              <p class="billing-tip-title">{t("Automation scope")}</p>
+              <p>
+                {
+                  t(
+                    "Automatic generation and sending run only for eligible billing periods."
+                  )
+                }
+              </p>
+            </div>
+          </div>
+          <div class="billing-tip">
+            <span class="billing-tip-icon" aria-hidden="true">
+              <Icon name="percentage" size="lg" />
+            </span>
+            <div>
+              <p class="billing-tip-title">{t("Late-payment changes")}</p>
+              <p>
+                {
+                  t(
+                    "Changes to late-payment rules affect future calculations only. Existing invoices keep their original financial snapshot."
+                  )
+                }
+              </p>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
   </div>
 </AdminLayout>
+
+<script>
+  const autoSendCheckbox =
+    document.querySelector<HTMLInputElement>("#autoSendEnabled");
+  const autoSendDayInput =
+    document.querySelector<HTMLInputElement>("#autoSendDay");
+  autoSendCheckbox?.addEventListener("change", () => {
+    if (autoSendDayInput) autoSendDayInput.disabled = !autoSendCheckbox.checked;
+  });
+</script>
+
+<style>
+  .billing-settings-page {
+    display: grid;
+    gap: 1.25rem;
+  }
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: fit-content;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .settings-help {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .settings-help-icon {
+    display: grid;
+    width: 1.1rem;
+    height: 1.1rem;
+    place-items: center;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .billing-settings-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+    gap: 1.25rem;
+    align-items: start;
+  }
+  .billing-settings-main {
+    display: grid;
+    gap: 1.25rem;
+  }
+  .billing-card {
+    display: grid;
+    gap: 1rem;
+    padding: 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+  }
+  .billing-card-head {
+    display: flex;
+    gap: 0.75rem;
+  }
+  .billing-card-icon {
+    display: grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: var(--radius-panel);
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-foreground);
+  }
+  .billing-card-icon svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+  .billing-card-head h2 {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .billing-card-head p {
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .billing-field-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+  .billing-field label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .billing-field input,
+  .billing-field select {
+    width: 100%;
+    padding: 0.75rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-foreground);
+    font: inherit;
+    font-size: 0.875rem;
+    box-sizing: border-box;
+  }
+  .billing-field input:disabled,
+  .billing-field select:disabled {
+    background: var(--color-surface-hover);
+    color: var(--color-muted);
+    cursor: not-allowed;
+  }
+  .billing-field input:focus-visible,
+  .billing-field select:focus-visible {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  }
+  .billing-field-hint {
+    margin-top: 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+  .billing-subfield {
+    padding-left: 3.35rem;
+  }
+  .toggle-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    cursor: pointer;
+  }
+  .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 2.75rem;
+    height: 1.5rem;
+    flex: 0 0 auto;
+    margin-top: 0.1rem;
+  }
+  .toggle-switch input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .toggle-switch-track {
+    position: absolute;
+    inset: 0;
+    background: var(--color-border);
+    border-radius: 999px;
+    transition: background-color 150ms ease;
+  }
+  .toggle-switch-thumb {
+    position: absolute;
+    top: 0.15rem;
+    left: 0.15rem;
+    width: 1.2rem;
+    height: 1.2rem;
+    background: var(--color-control-thumb);
+    border-radius: 50%;
+    box-shadow: var(--shadow-control);
+    transition: transform 150ms ease;
+  }
+  .toggle-switch input:checked ~ .toggle-switch-track {
+    background: var(--color-primary);
+  }
+  .toggle-switch input:checked ~ .toggle-switch-thumb {
+    transform: translateX(1.25rem);
+  }
+  .toggle-switch input:focus-visible ~ .toggle-switch-track {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+  .toggle-row-text {
+    display: grid;
+    gap: 0.25rem;
+  }
+  .toggle-row-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .toggle-row-desc {
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .checkbox-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding-top: 1.6rem;
+    cursor: pointer;
+  }
+  .checkbox-row input {
+    margin-top: 0.25rem;
+    width: 1.05rem;
+    height: 1.05rem;
+    flex: 0 0 auto;
+  }
+  .checkbox-row-title {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .checkbox-row-desc {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .billing-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .billing-sidebar {
+    display: grid;
+    gap: 1.25rem;
+  }
+  .billing-summary-card {
+    padding: 1.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+  }
+  .billing-summary-head {
+    display: flex;
+    gap: 0.75rem;
+  }
+  .billing-summary-icon {
+    display: grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: var(--radius-panel);
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-foreground);
+  }
+  .billing-summary-icon svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+  .billing-summary-head h2 {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  .billing-summary-head p {
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .billing-summary-list {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .billing-summary-list div {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  .billing-summary-list dt {
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .billing-summary-list dd {
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .billing-tips {
+    padding: 1.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+  }
+  .billing-tips-head {
+    display: flex;
+    gap: 0.75rem;
+  }
+  .billing-info-icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 1.75rem;
+    height: 1.75rem;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    font-style: italic;
+  }
+  .billing-tips-head h3 {
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+  .billing-tips-head p {
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .billing-tip {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .billing-tip-icon {
+    display: grid;
+    flex: 0 0 auto;
+    width: 1.9rem;
+    height: 1.9rem;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-muted);
+  }
+  .billing-tip-icon svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+  .billing-tip-title {
+    font-size: 0.875rem;
+    font-weight: 650;
+  }
+  .billing-tip p:not(.billing-tip-title) {
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+
+  @media (max-width: 900px) {
+    .billing-settings-split {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 640px) {
+    .billing-field-row {
+      grid-template-columns: 1fr;
+    }
+    .billing-subfield {
+      padding-left: 0;
+    }
+  }
+</style>

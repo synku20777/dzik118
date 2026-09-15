@@ -1,6 +1,7 @@
 ---
 // Phase C (Auth/security) - Login entry (spec Section 9.1, 15.1, 15.2).
 import AuthLayout from "../layouts/AuthLayout.astro";
+import Ornament from "../components/ui/Ornament.astro";
 
 const sent = Astro.url.searchParams.get("sent") === "1";
 // Each code maps to a distinct, specific message rather than one generic
@@ -27,9 +28,13 @@ const unexpectedError = errorCode === "5";
 
 <AuthLayout title="Sign In - Property Billing">
   <div class="w-full max-w-md space-y-6">
+    <div class="mb-2 space-y-3 text-center">
+      <p class="font-display text-2xl font-semibold">Property Billing</p>
+      <Ornament />
+    </div>
     {
       noAccountError && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
           We couldn't find an account for that sign-in. If you believe this is a
           mistake, contact your administrator.
         </p>
@@ -37,26 +42,26 @@ const unexpectedError = errorCode === "5";
     }
     {
       rateLimitedError && (
-        <p class="rounded-md bg-red-50 p-3 text-sm text-red-800">
+        <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
           Too many sign-in attempts. Please wait a minute and try again.
         </p>
       )
     }
-    <div class="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm">
-      <h1 class="text-xl font-bold text-neutral-900">Resident sign in</h1>
-      <p class="mt-1 text-sm text-neutral-600">
+    <div class="rounded-panel border border-border bg-surface p-8">
+      <h1 class="text-xl font-bold text-foreground">Resident sign in</h1>
+      <p class="mt-1 text-sm text-muted">
         Enter your email and we'll send you a secure sign-in link.
       </p>
       {
         sent && (
-          <p class="mt-4 rounded-md bg-green-50 p-3 text-sm text-green-800">
+          <p class="mt-4 rounded-control bg-success-surface p-3 text-sm text-success">
             If that email is registered, a sign-in link is on its way.
           </p>
         )
       }
       {
         expiredLinkError && (
-          <p class="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-800">
+          <p class="mt-4 rounded-control bg-danger-surface p-3 text-sm text-destructive">
             This sign-in link is invalid or has expired. Request a new one
             below.
           </p>
@@ -69,7 +74,7 @@ const unexpectedError = errorCode === "5";
       >
         <div>
           <label
-            class="block text-sm font-medium text-neutral-700"
+            class="block text-sm font-medium text-foreground"
             for="resident-email"
           >
             Email
@@ -80,30 +85,27 @@ const unexpectedError = errorCode === "5";
             type="email"
             required
             autocomplete="email"
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
           />
         </div>
-        <button
-          type="submit"
-          class="w-full rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white"
-        >
+        <button type="submit" class="btn-primary w-full">
           Send sign-in link
         </button>
       </form>
     </div>
 
-    <div class="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm">
-      <h2 class="text-lg font-bold text-neutral-900">Admin sign in</h2>
+    <div class="rounded-panel border border-border bg-surface p-8">
+      <h2 class="text-lg font-bold text-foreground">Admin sign in</h2>
       {
         adminError && (
-          <p class="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-800">
+          <p class="mt-4 rounded-control bg-danger-surface p-3 text-sm text-destructive">
             Incorrect email or password.
           </p>
         )
       }
       {
         unexpectedError && (
-          <p class="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-800">
+          <p class="mt-4 rounded-control bg-danger-surface p-3 text-sm text-destructive">
             Something went wrong. Please try again.
           </p>
         )
@@ -116,7 +118,7 @@ const unexpectedError = errorCode === "5";
       >
         <div>
           <label
-            class="block text-sm font-medium text-neutral-700"
+            class="block text-sm font-medium text-foreground"
             for="admin-email"
           >
             Email
@@ -127,12 +129,12 @@ const unexpectedError = errorCode === "5";
             type="email"
             required
             autocomplete="email"
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
           />
         </div>
         <div>
           <label
-            class="block text-sm font-medium text-neutral-700"
+            class="block text-sm font-medium text-foreground"
             for="admin-password"
           >
             Password
@@ -143,15 +145,10 @@ const unexpectedError = errorCode === "5";
             type="password"
             required
             autocomplete="current-password"
-            class="mt-1 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
           />
         </div>
-        <button
-          type="submit"
-          class="w-full rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white"
-        >
-          Sign in
-        </button>
+        <button type="submit" class="btn-primary w-full">Sign in</button>
       </form>
     </div>
   </div>

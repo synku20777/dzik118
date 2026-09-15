@@ -16,12 +16,12 @@ import {
   type createSupabaseAdminClient,
 } from "../../lib/supabase/admin";
 import { isUniqueViolation } from "../../lib/db-errors";
-import { ConflictError, NotFoundError } from "./organizations";
+import { ConflictError, NotFoundError, ValidationError } from "./organizations";
 
 type SupabaseAdmin = ReturnType<typeof createSupabaseAdminClient>;
 type DwellingType = (typeof dwellingTypeEnum.enumValues)[number];
 
-export { ConflictError, NotFoundError };
+export { ConflictError, NotFoundError, ValidationError };
 
 export interface CreateDwellingInput {
   type?: DwellingType;
@@ -31,9 +31,27 @@ export interface CreateDwellingInput {
   billingName?: string;
   billingEmail?: string;
   billingAddress?: string;
+  invoiceByEmail?: boolean;
+  invoiceByPaper?: boolean;
   areaM2?: string;
   residentCount?: number;
   notes?: string;
+}
+
+// Shared by createDwelling and updateInvoiceDeliveryPreferences: a dwelling
+// with neither delivery method selected could never have its invoice marked
+// delivered (also enforced at the DB level by
+// dwellings_invoice_delivery_method_check -- this just turns that into a
+// friendly error instead of a raw constraint violation).
+function assertInvoiceDeliveryMethodSelected(
+  invoiceByEmail: boolean,
+  invoiceByPaper: boolean
+): void {
+  if (!invoiceByEmail && !invoiceByPaper) {
+    throw new ValidationError(
+      "Select at least one invoice delivery method (email or paper)"
+    );
+  }
 }
 
 // DWL-001: unique within org (enforced by the DB unique constraint, spec
@@ -44,6 +62,10 @@ export async function createDwelling(
   input: CreateDwellingInput,
   actorUserId: string
 ) {
+  assertInvoiceDeliveryMethodSelected(
+    input.invoiceByEmail ?? true,
+    input.invoiceByPaper ?? false
+  );
   try {
     return await db.transaction(async (tx) => {
       const [dwelling] = await tx
@@ -198,6 +220,61 @@ export async function updateDwelling(
       entityId: dwellingId,
       beforeData: before,
       afterData: after,
+    });
+    return after;
+  });
+}
+
+// Deliberately its own function/form/action rather than folded into
+// updateDwelling's general Overview form: an HTML checkbox's absence from a
+// submission is indistinguishable from "not part of this form" (Astro's
+// form-to-object coercion resolves either case to `false`), so a shared
+// action serving both this full on/off toggle and the drawer's smaller
+// partial billing-details form could never safely tell "admin unchecked
+// email" apart from "this submission never mentions email at all" -- the
+// drawer would silently clear both flags on every save. Keeping this as its
+// own always-both-fields-required action sidesteps that ambiguity entirely.
+export async function updateInvoiceDeliveryPreferences(
+  db: Db,
+  organizationId: string,
+  dwellingId: string,
+  input: { invoiceByEmail: boolean; invoiceByPaper: boolean },
+  actorUserId: string
+) {
+  assertInvoiceDeliveryMethodSelected(
+    input.invoiceByEmail,
+    input.invoiceByPaper
+  );
+  return db.transaction(async (tx) => {
+    const before = await getDwelling(tx, organizationId, dwellingId);
+    const [after] = await tx
+      .update(dwellings)
+      .set({
+        invoiceByEmail: input.invoiceByEmail,
+        invoiceByPaper: input.invoiceByPaper,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(dwellings.id, dwellingId),
+          eq(dwellings.organizationId, organizationId)
+        )
+      )
+      .returning();
+    await recordAuditEvent(tx, {
+      organizationId,
+      actorUserId,
+      action: "DWELLING_UPDATED",
+      entityType: "dwelling",
+      entityId: dwellingId,
+      beforeData: {
+        invoiceByEmail: before.invoiceByEmail,
+        invoiceByPaper: before.invoiceByPaper,
+      },
+      afterData: {
+        invoiceByEmail: after.invoiceByEmail,
+        invoiceByPaper: after.invoiceByPaper,
+      },
     });
     return after;
   });

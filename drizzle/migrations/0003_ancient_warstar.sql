@@ -1,0 +1,1 @@
+ALTER TYPE "public"."billing_case_status" ADD VALUE 'READY' BEFORE 'DRAFT';

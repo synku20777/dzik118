@@ -9,8 +9,9 @@ import {
 } from "../../db/schema/billing";
 import { dwellings, meters } from "../../db/schema/dwellings";
 import { invoices } from "../../db/schema/invoices";
+import { paymentAllocations } from "../../db/schema/accounts";
 import { organizations } from "../../db/schema/organizations";
-import { sumExact } from "../../lib/decimal2";
+import { maxExact, subtractExact, sumExact } from "../../lib/decimal2";
 import { getPeriod } from "./periods";
 
 export type CaseStatusCounts = Record<
@@ -28,6 +29,11 @@ export interface AttentionItem {
 export interface DashboardSummary {
   period: Awaited<ReturnType<typeof getPeriod>>;
   totalInvoiced: string;
+  currentCharges: string;
+  carriedOutstanding: string;
+  creditsApplied: string;
+  lateFees: string;
+  amountDue: string;
   totalPaid: string;
   totalOutstanding: string;
   coldWaterConsumption: string;
@@ -56,7 +62,12 @@ export async function getDashboardSummary(
 
   const allPeriodInvoices = await db
     .select({
-      total: invoices.total,
+      id: invoices.id,
+      currentCharges: invoices.currentCharges,
+      previousOutstanding: invoices.previousOutstanding,
+      previousCreditApplied: invoices.previousCreditApplied,
+      lateFeeApplied: invoices.lateFeeApplied,
+      amountDue: invoices.amountDue,
       paidAt: invoices.paidAt,
       currency: invoices.currency,
     })
@@ -76,13 +87,54 @@ export async function getDashboardSummary(
   const periodInvoices = allPeriodInvoices.filter(
     (i) => i.currency === org.currency
   );
-  const totalInvoiced = sumExact(periodInvoices.map((i) => i.total));
+  const allocations = await db
+    .select({
+      invoiceId: paymentAllocations.invoiceId,
+      amount: paymentAllocations.allocatedAmount,
+    })
+    .from(paymentAllocations)
+    .where(eq(paymentAllocations.organizationId, organizationId));
+  const allocatedByInvoice = new Map<string, string>();
+  for (const allocation of allocations) {
+    allocatedByInvoice.set(
+      allocation.invoiceId,
+      sumExact([
+        allocatedByInvoice.get(allocation.invoiceId) ?? "0.00",
+        allocation.amount,
+      ])
+    );
+  }
+  const currentCharges = sumExact(periodInvoices.map((i) => i.currentCharges));
+  const carriedOutstanding = sumExact(
+    periodInvoices.map((i) => i.previousOutstanding)
+  );
+  const creditsApplied = sumExact(
+    periodInvoices.map((i) => i.previousCreditApplied)
+  );
+  const lateFees = sumExact(periodInvoices.map((i) => i.lateFeeApplied));
+  const amountDue = sumExact(periodInvoices.map((i) => i.amountDue));
   const totalPaid = sumExact(
-    periodInvoices.filter((i) => i.paidAt).map((i) => i.total)
+    periodInvoices.map((invoice) => {
+      const allocated = allocatedByInvoice.get(invoice.id) ?? "0.00";
+      return invoice.paidAt && allocated === "0.00"
+        ? invoice.amountDue
+        : allocated;
+    })
   );
   const totalOutstanding = sumExact(
-    periodInvoices.filter((i) => !i.paidAt).map((i) => i.total)
+    periodInvoices.map((invoice) =>
+      maxExact(
+        subtractExact(
+          invoice.amountDue,
+          invoice.paidAt && !allocatedByInvoice.has(invoice.id)
+            ? invoice.amountDue
+            : (allocatedByInvoice.get(invoice.id) ?? "0.00")
+        ),
+        "0.00"
+      )
+    )
   );
+  const totalInvoiced = currentCharges;
 
   const readings = await db
     .select({
@@ -149,6 +201,11 @@ export async function getDashboardSummary(
   return {
     period,
     totalInvoiced,
+    currentCharges,
+    carriedOutstanding,
+    creditsApplied,
+    lateFees,
+    amountDue,
     totalPaid,
     totalOutstanding,
     coldWaterConsumption,
