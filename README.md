@@ -1,10 +1,37 @@
 # Property Billing Platform
 
-This is a multi-tenant property billing SaaS application. It serves apartment buildings, housing associations, cooperatives, and small property managers.
+Property Billing is a multi-tenant property billing application. It serves
+apartment buildings, housing associations, cooperatives, and small property
+managers.
 
-See the full product and engineering specification in [docs/product/ORCA_PROPERTY_BILLING_ASTRO_SPEC.md](docs/product/ORCA_PROPERTY_BILLING_ASTRO_SPEC.md).
+This README explains how to install the project and run it on your own
+machine. For everything else, see [Documentation](#documentation) below.
 
-To deploy this to a real Cloudflare/Supabase/AWS account, see [docs/deployment/DEPLOYMENT_RUNBOOK.md](docs/deployment/DEPLOYMENT_RUNBOOK.md). Before relying on any part of the system, read [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) for what's incomplete, deferred, or a deliberate trade-off rather than a bug.
+## Documentation
+
+- [Product specification](docs/product/ORCA_PROPERTY_BILLING_ASTRO_SPEC.md)
+  — the full product and engineering specification.
+- [Service design blueprint](docs/product/SERVICE_DESIGN_BLUEPRINT.md) —
+  maps the service across the admin and resident roles.
+- [User journeys](docs/product/USER_JOURNEYS.md) — step-by-step flows for
+  each role.
+- [UI specification](docs/product/UI_SPECIFICATION.md) — interface design
+  principles and rules.
+- [Full design specification](docs/product/FULL_DESIGN_SPECIFICATION.md) —
+  the brand identity and visual design system.
+- Decision records (`docs/decisions/`) — why the team made key
+  architecture and security choices.
+  - [0001: Tenant cross-reference integrity](docs/decisions/0001-tenant-cross-reference-integrity.md)
+  - [0002: Admin MFA (AAL2) boundary](docs/decisions/0002-admin-aal2-boundary.md)
+- [Known limitations](docs/KNOWN_LIMITATIONS.md) — incomplete items,
+  deferred work, and deliberate trade-offs. Read this before you rely on
+  any part of the system.
+- [Deployment runbook](docs/deployment/DEPLOYMENT_RUNBOOK.md) — how to
+  deploy to a real Cloudflare, Supabase, and AWS account.
+- [Supabase project setup](docs/deployment/supabase-setup.md) — manual
+  Supabase configuration the application does not automate.
+- [Testing environment setup](docs/TESTING.md) — how to install and run
+  the test suite.
 
 ## Technology stack
 
@@ -20,10 +47,15 @@ To deploy this to a real Cloudflare/Supabase/AWS account, see [docs/deployment/D
 
 ## Roles and access control
 
-- **ADMIN**: manages one organization. This covers buildings, dwellings, periods, meter readings, billing rules, invoices, payments, and messages.
-- **RESIDENT**: has access to one or more dwellings. A resident can submit readings and view their own invoices, payment history, and messages.
+- **ADMIN**: manages one organization. This covers buildings, dwellings,
+  periods, meter readings, billing rules, invoices, payments, and messages.
+- **RESIDENT**: has access to one or more dwellings. A resident can submit
+  readings and view their own invoices, payment history, and messages.
 
-An admin from one organization cannot see another organization's data. A resident cannot see another resident's dwelling. See [Edge cases to test](#edge-cases-to-test) for how to check this.
+An admin from one organization cannot see another organization's data. A
+resident cannot see another resident's dwelling. See
+[Edge cases to test](docs/TESTING.md#edge-cases-to-test) for how to check
+this.
 
 ## Prerequisites
 
@@ -50,7 +82,7 @@ Run these steps in order.
 
    The `start` command prints local URLs and keys. Keep this output. You need the API URL, the anon key, and the service role key in the next step.
 
-3. Turn on local SMTP delivery. Open `supabase/config.toml` and find the Mailpit block (search for `smtp_port`). Remove the comment mark from that line and set it to `smtp_port = 54325`. Then apply the change.
+3. Enable local SMTP delivery. Open `supabase/config.toml` and find the Mailpit block (search for `smtp_port`). Remove the comment mark from that line and set it to `smtp_port = 54325`. Then apply the change.
 
    ```bash
    npx supabase stop
@@ -65,7 +97,7 @@ Run these steps in order.
    cp .env.example .dev.vars
    ```
 
-   Edit `.dev.vars` and fill in `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `PUBLIC_SUPABASE_URL`, and `PUBLIC_SUPABASE_PUBLISHABLE_KEY` with the values `supabase start` printed in step 2. Set `APP_BASE_URL` to `http://localhost:4321`. Leave the `AWS_SES_*` fields blank so the app uses local SMTP instead of real email.
+   Edit `.dev.vars`. Set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `PUBLIC_SUPABASE_URL`, and `PUBLIC_SUPABASE_PUBLISHABLE_KEY` to the values `supabase start` printed in step 2. Set `APP_BASE_URL` to `http://localhost:4321`. Leave the `AWS_SES_*` fields blank so the app uses local SMTP instead of real email.
 
    The Cloudflare adapter reads `.dev.vars` for both `npm run dev` and `npm run build`.
 
@@ -112,7 +144,7 @@ Run these steps in order.
    npm run storage:setup
    ```
 
-9. In the Supabase Studio at [http://127.0.0.1:54323](http://127.0.0.1:54323), set the magic-link email template and the auth redirect allow-list. Follow the exact steps in [docs/deployment/supabase-setup.md](docs/deployment/supabase-setup.md). Skip this step and resident sign-in fails, even though the application code is correct.
+9. In the Supabase Studio at [http://127.0.0.1:54323](http://127.0.0.1:54323), set the magic-link email template and the auth redirect allow-list. Follow the exact steps in [Supabase project setup](docs/deployment/supabase-setup.md). Skip this step and resident sign-in fails, even though the application code is correct.
 
 10. Start the local development server.
 
@@ -134,78 +166,13 @@ The app has two sign-in forms on the same page, [http://localhost:4321/login](ht
 2. Open Mailpit at [http://127.0.0.1:54324](http://127.0.0.1:54324) and open the newest message.
 3. Click the sign-in link inside the email, then click the **Confirm sign-in** button on the page that opens.
 
-A successful sign-in redirects to `/portal`. The confirmation button exists on purpose: it stops email scanners from consuming the link before the real user clicks it.
+A successful sign-in redirects to `/portal`. The confirmation button exists on purpose. It stops email scanners from consuming the link before the real user clicks it.
 
 If a sign-in attempt fails, check that you created the matching Supabase Auth account (step 7) and that the email address matches exactly.
 
-## Testing the API
+## Testing
 
-Most business logic (create a dwelling, generate an invoice, send an invoice, import a bank statement, and so on) runs through Astro Actions. A browser form posts to these, not a plain JSON endpoint. The most direct way to exercise this logic outside a browser is the integration test suite, which calls the same domain functions the actions call, against a real local Postgres, Supabase Storage, and Mailpit.
-
-```bash
-npm run test:integration
-```
-
-This needs `DATABASE_URL`, `SUPABASE_URL`, and `SUPABASE_SECRET_KEY` set in your shell, the same as in setup step 5.
-
-A small number of routes are plain HTTP endpoints, and you can call these directly with `curl` or a tool like Postman:
-
-- `POST /api/v1/auth/request-link` — public. Sends a resident sign-in link. Limited to 5 requests per email per 60 seconds.
-- `GET /api/v1/admin/o/:orgId/dwellings/export` — admin only. Downloads a CSV of an organization's dwellings. Needs an admin session cookie.
-- `GET /api/v1/admin/o/:orgId/invoices/:invoiceId/pdf` — admin only. Downloads an invoice PDF.
-- `GET /api/v1/portal/invoices/:invoiceId/pdf?dwellingId=...` — resident only. Downloads an invoice PDF for the resident's own dwelling.
-- `GET /invoice/access/:token` — public. Shows one invoice, using the token an invoice email links to. No session needed.
-- `GET /invoice/access/:token/pdf` — public. Downloads the same invoice's PDF. Limited to 30 requests per IP per 60 seconds.
-
-To call an admin or resident endpoint with `curl`, sign in through the browser first, then copy the session cookie from your browser's developer tools into the request.
-
-## Testing the UI
-
-Run the automated end-to-end suite. Playwright builds the app and starts a local Cloudflare Worker for you.
-
-```bash
-npm run test:e2e
-```
-
-To test by hand, start a local server, then walk through the flows in [Logging in](#logging-in) above. Two ways to start a server:
-
-```bash
-npm run dev
-```
-
-This starts the Astro dev server at [http://localhost:4321](http://localhost:4321) with fast reloads. Good for most day-to-day UI work.
-
-```bash
-npm run build && npx wrangler dev --port 4321
-```
-
-This builds the app and serves it through a local Cloudflare Worker, the same runtime used in production. Use this to test anything that submits a form (Astro Actions), since some environments don't run these correctly under the plain dev server. If a form submit hangs or never completes under `npm run dev`, rebuild and test again with `wrangler dev` before assuming there's a bug.
-
-Either way, then check the main areas:
-
-- `/admin` and `/admin/organizations` — pick an organization, then manage its dwellings, billing periods, rules, and settings under `/admin/o/:orgId/...`.
-- `/portal` and `/portal/dwellings` — a resident's own dwellings and invoices.
-
-If every page fails to load or hangs with no response, see [Edge cases to test](#edge-cases-to-test) below.
-
-## Quality gates
-
-```bash
-npm run format:check  # check code formatting with Prettier
-npm run lint          # run ESLint
-npm run typecheck     # run the TypeScript strict compiler check
-npm run astro:check   # run the Astro diagnostic check
-npm run test          # run Vitest unit tests
-npm run test:integration  # run Vitest integration tests (needs a local Postgres/Supabase stack)
-npm run build         # verify the production build
-```
-
-## Edge cases to test
-
-- **Cross-tenant access.** Sign in as `admin.a@example.com` and try to open an organization, dwelling, or invoice ID that belongs to the second seeded organization. The app must deny this, and it must not reveal whether the ID exists.
-- **Cross-resident access.** Sign in as one resident and try to open another resident's dwelling or invoice by guessing its ID. The app returns a plain not-found result, not a message that hints the ID is valid.
-- **Missing meter readings.** A billing period can have a dwelling with no reading for that period. Its billing case shows `MISSING_DATA`, and the app blocks invoice generation for it until the reading exists.
-- **Double-clicking Send.** Sending an invoice is safe to repeat. Two clicks, or two people clicking at the same time, produce exactly one email and one delivery record, not two.
-- **Invoice link expiry and revocation.** A token-based invoice link (`/invoice/access/:token`) stops working 90 days after it was sent. An admin can also revoke it early from the invoice detail page. Either way, the link then returns a generic not-found page, never a reason.
-- **Rate limits.** The resident sign-in link endpoint allows 5 requests per email per 60 seconds. The public invoice-link endpoints allow 30 requests per IP per 60 seconds. Repeated manual testing can trip a 429 (too many requests) response. Wait 60 seconds and try again.
-- **Local dev server hangs on every request.** In some environments, declaring the Cloudflare Browser Rendering binding in `wrangler.jsonc` blocks every request to the local dev server, not only the ones that render a PDF. If this happens, comment out the `"browser"` block in `wrangler.jsonc`, restart the dev server, and confirm plain pages load again. Restore the binding before testing invoice sending or PDF downloads, and before committing.
+See [Testing environment setup](docs/TESTING.md) for how to install and
+run the test suite. That guide covers unit tests, integration tests,
+end-to-end tests, the quality gates, manual testing of the API and the UI,
+and edge cases to check by hand.

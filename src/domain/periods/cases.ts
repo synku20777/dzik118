@@ -7,10 +7,12 @@ import {
   billingCaseStatusEnum,
   billingCases,
   billingPeriods,
+  manualRuleInputs,
   meterReadings,
 } from "../../db/schema/billing";
 import { dwellings, meters } from "../../db/schema/dwellings";
 import { invoices } from "../../db/schema/invoices";
+import { getEffectiveRules } from "../billing/rules";
 
 // Spec Section 27's required default sort: status priority first, then
 // natural dwelling number. Sorted client-side (post-fetch) rather than with
@@ -166,6 +168,61 @@ export async function listMetersWithReadingForPeriod(
       )
     )
     .orderBy(meters.createdAt);
+}
+
+export interface ManualRuleInputForPeriod {
+  billingRuleId: string;
+  ruleName: string;
+  unit: string;
+  calculationType: "MANUAL_QUANTITY" | "MANUAL_AMOUNT";
+  value: string | null;
+}
+
+// Every effective MANUAL_QUANTITY/MANUAL_AMOUNT rule for this period
+// (applies to every dwelling unconditionally, same as FIXED/AREA/
+// RESIDENT_COUNT -- see case-readiness.ts) + this dwelling's existing input
+// value, if any -- the manual-input counterpart of
+// listMetersWithReadingForPeriod above, for the same drawer.
+export async function listManualRuleInputsForPeriod(
+  db: Db,
+  organizationId: string,
+  dwellingId: string,
+  periodId: string,
+  period: { startsOn: string; endsOn: string }
+): Promise<ManualRuleInputForPeriod[]> {
+  const rules = await getEffectiveRules(db, organizationId, period);
+  const manualRules = rules.filter(
+    (
+      r
+    ): r is typeof r & {
+      calculationType: "MANUAL_QUANTITY" | "MANUAL_AMOUNT";
+    } =>
+      r.calculationType === "MANUAL_QUANTITY" ||
+      r.calculationType === "MANUAL_AMOUNT"
+  );
+  if (manualRules.length === 0) return [];
+
+  const inputs = await db
+    .select({
+      billingRuleId: manualRuleInputs.billingRuleId,
+      value: manualRuleInputs.value,
+    })
+    .from(manualRuleInputs)
+    .where(
+      and(
+        eq(manualRuleInputs.periodId, periodId),
+        eq(manualRuleInputs.dwellingId, dwellingId)
+      )
+    );
+  const valueByRuleId = new Map(inputs.map((i) => [i.billingRuleId, i.value]));
+
+  return manualRules.map((r) => ({
+    billingRuleId: r.id,
+    ruleName: r.name,
+    unit: r.unit,
+    calculationType: r.calculationType,
+    value: valueByRuleId.get(r.id) ?? null,
+  }));
 }
 
 export interface ConsumptionHistoryEntry {

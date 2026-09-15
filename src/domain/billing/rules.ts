@@ -19,6 +19,7 @@ import { meterTypeEnum } from "../../db/schema/dwellings";
 import { isUniqueViolation } from "../../lib/db-errors";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
+import { recalculateCaseReadinessForOrganizationOpenPeriods } from "../periods/case-readiness";
 
 export { ConflictError, NotFoundError, ValidationError };
 
@@ -57,6 +58,19 @@ function validateRuleShape(input: {
   }
 }
 
+// Only these two calculation types can ever produce missing_data (spec
+// Section 18) -- FIXED/AREA/RESIDENT_COUNT/METER_CONSUMPTION are either
+// always derivable or already tracked via meters, so a create/update/
+// archive of one of those never needs the (org-wide, all-open-periods)
+// readiness recalculation below.
+function isManualCalculationType(
+  calculationType: string
+): calculationType is "MANUAL_QUANTITY" | "MANUAL_AMOUNT" {
+  return (
+    calculationType === "MANUAL_QUANTITY" || calculationType === "MANUAL_AMOUNT"
+  );
+}
+
 export async function createRule(
   db: Db,
   organizationId: string,
@@ -78,6 +92,16 @@ export async function createRule(
         entityId: rule.id,
         afterData: rule,
       });
+      // A new enabled manual rule immediately requires input on every open
+      // period's case -- without this, existing cases would keep showing
+      // READY/whatever they last computed until some unrelated write (a
+      // reading, a meter change) happened to recalculate them.
+      if (isManualCalculationType(rule.calculationType) && rule.enabled) {
+        await recalculateCaseReadinessForOrganizationOpenPeriods(
+          tx,
+          organizationId
+        );
+      }
       return rule;
     });
   } catch (err) {
@@ -176,6 +200,15 @@ export async function updateRule(
       beforeData: before,
       afterData: after,
     });
+    // enabled or the effective window can change whether a manual rule
+    // currently applies -- either direction (newly required, no longer
+    // required) needs every open case's missingData re-derived.
+    if (isManualCalculationType(after.calculationType)) {
+      await recalculateCaseReadinessForOrganizationOpenPeriods(
+        tx,
+        organizationId
+      );
+    }
     return after;
   });
 }
@@ -205,6 +238,12 @@ export async function archiveRule(
       entityType: "billing_rule",
       entityId: ruleId,
     });
+    if (isManualCalculationType(rule.calculationType)) {
+      await recalculateCaseReadinessForOrganizationOpenPeriods(
+        tx,
+        organizationId
+      );
+    }
     return rule;
   });
 }

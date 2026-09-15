@@ -3,7 +3,7 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../../src/db/client";
-import { invoices } from "../../src/db/schema/invoices";
+import { invoiceLines, invoices } from "../../src/db/schema/invoices";
 import {
   cleanupOrganization,
   createIntegrationDb,
@@ -19,6 +19,7 @@ import {
 import { createMeter } from "../../src/domain/organizations/meters";
 import { createPeriod, lockPeriod } from "../../src/domain/periods/periods";
 import { submitAdminReading } from "../../src/domain/periods/readings";
+import { submitManualRuleInput } from "../../src/domain/periods/manual-rule-inputs";
 import {
   ConflictError,
   createRule,
@@ -665,40 +666,98 @@ describe("invoice generation", () => {
     await cleanupOrg(org.id);
   });
 
-  it("a MANUAL_QUANTITY rule blocks generation loudly instead of silently underbilling", async () => {
+  it("a MANUAL_QUANTITY rule with no submitted input blocks generation as missing data, and generates correctly once supplied", async () => {
     const { org, dwelling, period } = await setupOrgAndPeriod(
       "IT-F Org 12",
       11
     );
-    await createRule(
-      db,
-      org.id,
-      {
-        name: "Fee",
-        code: "fee",
-        calculationType: "FIXED",
-        unit: "month",
-        unitPrice: "10.00",
-        effectiveFrom: "2025-01-01",
-      },
-      seedAdminId
-    );
-    await createRule(
+    const rule = await createRule(
       db,
       org.id,
       {
         name: "Special charge",
-        code: "manual",
+        code: "manual-qty",
         calculationType: "MANUAL_QUANTITY",
         unit: "unit",
-        unitPrice: "1.00",
+        unitPrice: "12.50",
         effectiveFrom: "2025-01-01",
       },
       seedAdminId
     );
+    // Same failure mode as a missing meter reading -- blocked as missing
+    // data, not a rule-specific error.
     await expect(
       generateInvoice(db, org.id, period.id, dwelling.id, seedAdminId)
-    ).rejects.toBeInstanceOf(ValidationError);
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    await submitManualRuleInput(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      rule.id,
+      "3",
+      seedAdminId
+    );
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    const lines = await db
+      .select()
+      .from(invoiceLines)
+      .where(eq(invoiceLines.invoiceId, invoice.id));
+    expect(lines).toHaveLength(1);
+    expect(lines[0].quantity).toBe("3.0000");
+    expect(lines[0].unitPrice).toBe("12.5000");
+    expect(lines[0].netAmount).toBe("37.50");
+    await cleanupOrg(org.id);
+  });
+
+  it("a MANUAL_AMOUNT rule's supplied value becomes the line's net amount directly (quantity=1)", async () => {
+    const { org, dwelling, period } = await setupOrgAndPeriod(
+      "IT-F Org 12b",
+      11
+    );
+    const rule = await createRule(
+      db,
+      org.id,
+      {
+        name: "One-time repair",
+        code: "manual-amt",
+        calculationType: "MANUAL_AMOUNT",
+        unit: "charge",
+        effectiveFrom: "2025-01-01",
+      },
+      seedAdminId
+    );
+    await submitManualRuleInput(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      rule.id,
+      "45.00",
+      seedAdminId
+    );
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    const lines = await db
+      .select()
+      .from(invoiceLines)
+      .where(eq(invoiceLines.invoiceId, invoice.id));
+    expect(lines).toHaveLength(1);
+    expect(lines[0].quantity).toBe("1.0000");
+    expect(lines[0].unitPrice).toBe("45.0000");
+    expect(lines[0].netAmount).toBe("45.00");
     await cleanupOrg(org.id);
   });
 

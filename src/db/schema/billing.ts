@@ -153,6 +153,49 @@ export const billingRules = pgTable(
   ]
 );
 
+// One admin-supplied value per (period, dwelling, rule) for the two
+// calculation types that can't be derived from anything else stored in the
+// system -- MANUAL_QUANTITY (a quantity, priced by the rule's unit_price
+// same as any other type) and MANUAL_AMOUNT (the value IS the line's net
+// amount; generation.ts treats it as quantity=1 x unitPrice=value). Mirrors
+// meter_readings' shape: one row per input per period, admin backfillable,
+// read at generation time, tracked as missing data until filled in.
+export const manualRuleInputs = pgTable(
+  "manual_rule_inputs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    periodId: uuid("period_id")
+      .notNull()
+      .references(() => billingPeriods.id),
+    dwellingId: uuid("dwelling_id")
+      .notNull()
+      .references(() => dwellings.id),
+    billingRuleId: uuid("billing_rule_id")
+      .notNull()
+      .references(() => billingRules.id),
+    value: numeric("value", { precision: 14, scale: 4 }).notNull(),
+    submittedByUserId: uuid("submitted_by_user_id").references(
+      () => appUsers.id
+    ),
+    submittedAt: timestamp("submitted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    note: text("note"),
+  },
+  (table) => [
+    unique("manual_rule_inputs_period_id_dwelling_id_billing_rule_id_key").on(
+      table.periodId,
+      table.dwellingId,
+      table.billingRuleId
+    ),
+    index("manual_rule_inputs_organization_id_idx").on(table.organizationId),
+    index("manual_rule_inputs_period_id_idx").on(table.periodId),
+  ]
+);
+
 // One billing_case per (period, dwelling); owns the monthly workflow status
 // independent of whether an invoice has been generated yet.
 export const billingCases = pgTable(

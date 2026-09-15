@@ -81,6 +81,7 @@ export async function cleanupOrganization(
     "delete from invoice_lines where organization_id = $1",
     "delete from invoices where organization_id = $1",
     "delete from meter_readings where organization_id = $1",
+    "delete from manual_rule_inputs where organization_id = $1",
     "delete from billing_cases where organization_id = $1",
     "delete from billing_periods where organization_id = $1",
     "delete from billing_rules where organization_id = $1",

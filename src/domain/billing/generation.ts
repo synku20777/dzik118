@@ -1,17 +1,18 @@
 // Phase F (Billing) - Invoice generation, bulk generation, prepare, and the
 // manual status override escape hatch (spec Section 19/20/21, INV-001/002/004).
 //
-// MANUAL_QUANTITY/MANUAL_AMOUNT rules (spec Section 18) need a per-case admin
-// input that has no persisted home anywhere in the schema yet (no UI or
-// table field captures "admin supplies quantity/amount for dwelling X,
-// period Y"). Building that input mechanism is real, undefined-by-spec
-// scope on its own; until it exists, those rules are skipped during
-// generation rather than guessed at.
+// MANUAL_QUANTITY/MANUAL_AMOUNT rules (spec Section 18) read their per-case
+// admin-supplied value from manual_rule_inputs (domain/periods/
+// manual-rule-inputs.ts); case-readiness.ts tracks its absence as missing
+// data the same way it tracks a missing meter reading, so a case can only
+// reach generation eligibility once every required manual input exists --
+// computeQuantity below can assume it's there.
 import { and, eq, inArray, like } from "drizzle-orm";
 import type { Db, Tx } from "../../db/client";
 import {
   billingCases,
   billingPeriods,
+  manualRuleInputs,
   meterReadings,
 } from "../../db/schema/billing";
 import { dwellings, meters } from "../../db/schema/dwellings";
@@ -81,13 +82,15 @@ async function nextInvoiceNumber(
 type EffectiveRule = Awaited<ReturnType<typeof getEffectiveRules>>[number];
 
 // Returns null when the rule doesn't apply to this dwelling at all (no
-// meter of the configured type during this period) -- the caller skips
-// the line entirely rather than billing a bogus zero. Throws for
-// MANUAL_QUANTITY/MANUAL_AMOUNT rather than silently skipping them: there
-// is nowhere yet that persists an admin-supplied per-case quantity/amount
-// for these (see the module-level comment), so silently omitting the line
-// would generate an invoice that looks complete but is missing a charge --
-// worse than blocking generation until the rule is disabled.
+// meter of the configured type during this period) -- the caller skips the
+// line entirely rather than billing a bogus zero. MANUAL_QUANTITY/
+// MANUAL_AMOUNT never return null: unlike METER_CONSUMPTION, a manual rule
+// applies to every dwelling unconditionally (same as FIXED/AREA/
+// RESIDENT_COUNT), so a missing input is a data problem, not a "doesn't
+// apply here" case -- case-readiness.ts's missingData guard (checked before
+// this function is ever called, see generateInvoice below) is what's
+// supposed to prevent that; the ConflictError here is a defensive backstop,
+// not the normal path.
 async function computeQuantity(
   tx: Tx,
   rule: EffectiveRule,
@@ -123,10 +126,25 @@ async function computeQuantity(
       return sumExact(active.map((r) => r.consumption));
     }
     case "MANUAL_QUANTITY":
-    case "MANUAL_AMOUNT":
-      throw new ValidationError(
-        `The rule "${rule.name}" requires a manually supplied ${rule.calculationType === "MANUAL_QUANTITY" ? "quantity" : "amount"}, which isn't supported by automatic generation yet; disable or archive this rule to generate this invoice`
-      );
+    case "MANUAL_AMOUNT": {
+      const [input] = await tx
+        .select({ value: manualRuleInputs.value })
+        .from(manualRuleInputs)
+        .where(
+          and(
+            eq(manualRuleInputs.periodId, period.id),
+            eq(manualRuleInputs.dwellingId, dwelling.id),
+            eq(manualRuleInputs.billingRuleId, rule.id)
+          )
+        )
+        .limit(1);
+      if (!input) {
+        throw new ConflictError(
+          `The rule "${rule.name}" is missing its manually supplied value for this dwelling; this should have been caught as missing data`
+        );
+      }
+      return input.value;
+    }
   }
 }
 
@@ -230,8 +248,17 @@ export async function generateInvoice(
     }
 
     const lines = lineInputs.map(({ rule, quantity }, index) => {
-      const unitPrice = rule.unitPrice ?? "0";
-      const netAmount = multiplyAndRound(quantity, unitPrice, 2);
+      // MANUAL_AMOUNT's manual_rule_inputs value IS the desired net amount,
+      // not a quantity to be priced -- validateRuleShape (rules.ts) doesn't
+      // even require a unit_price for this type. Reusing the same
+      // quantity x unitPrice formula with quantity pinned to "1" and
+      // unitPrice set to the supplied value keeps one formula for every
+      // calculation type instead of a separate net-amount code path, and
+      // reads naturally on the invoice ("1 x €45.00").
+      const isManualAmount = rule.calculationType === "MANUAL_AMOUNT";
+      const effectiveQuantity = isManualAmount ? "1" : quantity;
+      const unitPrice = isManualAmount ? quantity : (rule.unitPrice ?? "0");
+      const netAmount = multiplyAndRound(effectiveQuantity, unitPrice, 2);
       const vatAmount = percentOf(netAmount, rule.vatRate, 2);
       const grossAmount = addExact(netAmount, vatAmount);
       return {
@@ -241,7 +268,7 @@ export async function generateInvoice(
         calculationType: rule.calculationType,
         sourceSnapshot: rule,
         unit: rule.unit,
-        quantity,
+        quantity: effectiveQuantity,
         unitPrice,
         vatRate: rule.vatRate,
         netAmount,

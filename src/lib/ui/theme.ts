@@ -58,20 +58,23 @@ export function updateToggleButtons(theme?: "light" | "dark") {
   if (typeof document === "undefined") return;
   const current = theme ?? getEffectiveTheme();
   const isDark = current === "dark";
-  const isLv = document.documentElement.lang === "lv";
-  const nextActionLabel = isDark
-    ? isLv
-      ? "Pārslēgt uz gaišo motīvu"
-      : "Switch to light theme"
-    : isLv
-      ? "Pārslēgt uz tumšo motīvu"
-      : "Switch to dark theme";
 
   document
     .querySelectorAll<HTMLButtonElement>("[data-theme-toggle]")
     .forEach((button) => {
-      button.setAttribute("aria-label", nextActionLabel);
-      button.setAttribute("title", nextActionLabel);
+      // Pre-translated server-side (ThemeToggle.astro already has the
+      // request's locale via t()) and read back here instead of
+      // re-translating client-side -- a previous version hand-rolled an
+      // EN/LV-only ternary in this file, which left Russian (and any
+      // future locale) stuck on the English string, and importing the
+      // full i18n dictionary into this client bundle just for two labels
+      // would be its own regression.
+      const label = isDark
+        ? button.dataset.labelLight
+        : button.dataset.labelDark;
+      if (!label) return;
+      button.setAttribute("aria-label", label);
+      button.setAttribute("title", label);
     });
 }
 

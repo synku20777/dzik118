@@ -6,21 +6,37 @@
 // Phase F actually generates an invoice -- recalculateCaseReadiness never
 // touches a case that has already reached DRAFT or later, since at that
 // point "Regenerate invoice" is the mechanism for re-syncing it.
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { DbOrTx } from "../../db/client";
 import {
   billingCases,
   billingPeriods,
+  manualRuleInputs,
   meterReadings,
 } from "../../db/schema/billing";
 import { meters } from "../../db/schema/dwellings";
+import { getEffectiveRules } from "../billing/rules";
 
-export interface MissingDataItem {
+export interface MissingMeterReadingItem {
   meterId: string;
   meterType: string;
   label: string | null;
   reason: "NO_READING";
 }
+
+// MANUAL_QUANTITY/MANUAL_AMOUNT rules (spec Section 18) need a per-case
+// admin-supplied value the same way METER_CONSUMPTION needs a reading --
+// tracked as missing data until manual_rule_inputs has a row for this
+// (period, dwelling, rule).
+export interface MissingManualRuleInputItem {
+  billingRuleId: string;
+  ruleName: string;
+  unit: string;
+  reason: "NO_MANUAL_INPUT";
+}
+
+export type MissingDataItem =
+  MissingMeterReadingItem | MissingManualRuleInputItem;
 
 interface PeriodDateRange {
   startsOn: string;
@@ -68,6 +84,19 @@ async function requiredMetersForPeriod(
   return dwellingMeters.filter((m) => wasMeterActiveDuringPeriod(m, period));
 }
 
+async function requiredManualRulesForPeriod(
+  tx: DbOrTx,
+  organizationId: string,
+  period: PeriodDateRange
+) {
+  const rules = await getEffectiveRules(tx, organizationId, period);
+  return rules.filter(
+    (r) =>
+      r.calculationType === "MANUAL_QUANTITY" ||
+      r.calculationType === "MANUAL_AMOUNT"
+  );
+}
+
 export async function computeMissingData(
   tx: DbOrTx,
   organizationId: string,
@@ -81,7 +110,14 @@ export async function computeMissingData(
     dwellingId,
     period
   );
-  if (requiredMeters.length === 0) return [];
+  const requiredManualRules = await requiredManualRulesForPeriod(
+    tx,
+    organizationId,
+    period
+  );
+  if (requiredMeters.length === 0 && requiredManualRules.length === 0) {
+    return [];
+  }
 
   const readings = await tx
     .select({ meterId: meterReadings.meterId })
@@ -89,7 +125,7 @@ export async function computeMissingData(
     .where(eq(meterReadings.periodId, periodId));
   const readMeterIds = new Set(readings.map((r) => r.meterId));
 
-  return requiredMeters
+  const missingMeters: MissingDataItem[] = requiredMeters
     .filter((m) => !readMeterIds.has(m.id))
     .map((m) => ({
       meterId: m.id,
@@ -97,6 +133,34 @@ export async function computeMissingData(
       label: m.label,
       reason: "NO_READING" as const,
     }));
+
+  let missingManualInputs: MissingDataItem[] = [];
+  if (requiredManualRules.length > 0) {
+    const inputs = await tx
+      .select({ billingRuleId: manualRuleInputs.billingRuleId })
+      .from(manualRuleInputs)
+      .where(
+        and(
+          eq(manualRuleInputs.periodId, periodId),
+          eq(manualRuleInputs.dwellingId, dwellingId),
+          inArray(
+            manualRuleInputs.billingRuleId,
+            requiredManualRules.map((r) => r.id)
+          )
+        )
+      );
+    const suppliedRuleIds = new Set(inputs.map((i) => i.billingRuleId));
+    missingManualInputs = requiredManualRules
+      .filter((r) => !suppliedRuleIds.has(r.id))
+      .map((r) => ({
+        billingRuleId: r.id,
+        ruleName: r.name,
+        unit: r.unit,
+        reason: "NO_MANUAL_INPUT" as const,
+      }));
+  }
+
+  return [...missingMeters, ...missingManualInputs];
 }
 
 // The pre-invoice status derived purely from missingData -- shared by case
@@ -184,6 +248,36 @@ export async function recalculateCaseReadinessForOpenPeriods(
       )
     );
   for (const { periodId } of openCases) {
+    await recalculateCaseReadiness(tx, organizationId, dwellingId, periodId);
+  }
+}
+
+// Creating, enabling, disabling, archiving, or re-dating a billing rule
+// changes what's required for every OPEN period's case *across the whole
+// organization* -- unlike a meter, a rule isn't scoped to one dwelling
+// (spec Section 18: FIXED/AREA/RESIDENT_COUNT/MANUAL_* apply to every
+// dwelling unconditionally). Only MANUAL_QUANTITY/MANUAL_AMOUNT rules can
+// actually change missingData today (the other types have no missing-data
+// concept), but this runs for any rule change since it's cheap relative to
+// a rule edit and correct regardless of calculation type.
+export async function recalculateCaseReadinessForOrganizationOpenPeriods(
+  tx: DbOrTx,
+  organizationId: string
+) {
+  const openCases = await tx
+    .select({
+      periodId: billingCases.periodId,
+      dwellingId: billingCases.dwellingId,
+    })
+    .from(billingCases)
+    .innerJoin(billingPeriods, eq(billingPeriods.id, billingCases.periodId))
+    .where(
+      and(
+        eq(billingPeriods.organizationId, organizationId),
+        eq(billingPeriods.status, "OPEN")
+      )
+    );
+  for (const { periodId, dwellingId } of openCases) {
     await recalculateCaseReadiness(tx, organizationId, dwellingId, periodId);
   }
 }

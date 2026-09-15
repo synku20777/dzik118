@@ -252,7 +252,9 @@ const statuses = [
                     // label, reason} object (see the same fix in
                     // periods/[periodId]/index.astro).
                     const missing = c.missingData as (
-                      { label: string | null; meterType: string } | string
+                      | { label: string | null; meterType: string }
+                      | { billingRuleId: string; ruleName: string }
+                      | string
                     )[];
                     const overdue = c.status === "OVERDUE";
                     const href = overdue
@@ -281,8 +283,10 @@ const statuses = [
                                     .map((m) =>
                                       typeof m === "string"
                                         ? m
-                                        : (m.label ??
-                                          entityLabel(m.meterType, locale))
+                                        : "billingRuleId" in m
+                                          ? m.ruleName
+                                          : (m.label ??
+                                            entityLabel(m.meterType, locale))
                                     )
                                     .join(", ")
                                 : t(

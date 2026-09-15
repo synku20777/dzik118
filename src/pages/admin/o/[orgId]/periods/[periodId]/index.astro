@@ -502,7 +502,9 @@ function filterHref(status?: CaseStatus) {
             {
               cases.map((billingCase) => {
                 const missing = billingCase.missingData as (
-                  { label: string | null; meterType: string } | string
+                  | { label: string | null; meterType: string }
+                  | { billingRuleId: string; ruleName: string }
+                  | string
                 )[];
                 const issuer = (billingCase.invoiceIssuerSnapshot ??
                   {}) as Snapshot;
@@ -601,6 +603,20 @@ function filterHref(status?: CaseStatus) {
                                 {item.label ??
                                   entityLabel(item.meterType, locale)}{" "}
                                 — {t("missing")}
+                              </button>
+                            ) : item &&
+                              typeof item === "object" &&
+                              "billingRuleId" in item ? (
+                              <button
+                                type="button"
+                                class="readiness-item"
+                                data-tone="danger"
+                                data-open-drawer="readings"
+                                data-dwelling-id={billingCase.dwellingId}
+                                data-focus={`rule-${item.billingRuleId}`}
+                              >
+                                <Icon name="alert-triangle" size="xs" />
+                                {item.ruleName} — {t("missing")}
                               </button>
                             ) : (
                               <span class="readiness-item" data-tone="danger">

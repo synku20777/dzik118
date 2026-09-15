@@ -8,6 +8,8 @@ const t = (text: string) => translate(locale, text);
   type="button"
   class="theme-toggle"
   data-theme-toggle
+  data-label-light={t("Switch to light theme")}
+  data-label-dark={t("Switch to dark theme")}
   aria-label={t("Toggle theme")}
   title={t("Toggle theme")}
 >

@@ -78,6 +78,9 @@ const config = {
     calculatedConsumption: t("Calculated consumption"),
     readingsBannerTitle: t("Enter current meter readings for this period."),
     readingsBannerText: t("Consumption is calculated automatically."),
+    manualInputValue: t("Value"),
+    manualInputQuantityHelp: t("Enter the quantity for this period."),
+    manualInputAmountHelp: t("Enter the amount to charge for this period."),
     occupantName: t("Occupant name"),
     billingName: t("Billing name"),
     billingEmail: t("Billing email"),
@@ -269,6 +272,12 @@ const config = {
     color: var(--color-meter-heat-text);
   }
   .drawer-meter-icon[data-meter-type="OTHER"] {
+    background: var(--color-badge-neutral-bg);
+  }
+  /* Manual billing-rule input row (workbench-drawer.ts renderReadingsBody) --
+     reuses the meter-row icon chip shape for visual consistency, neutral
+     since there's no per-rule color the way there is per meter type. */
+  .drawer-meter-icon[data-meter-type="MANUAL"] {
     background: var(--color-badge-neutral-bg);
   }
   .drawer-meter-name {

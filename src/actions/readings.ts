@@ -6,6 +6,7 @@ import {
   requireDwellingAccess,
   requireOrganizationAccess,
 } from "../domain/authorization/guards";
+import { submitManualRuleInput } from "../domain/periods/manual-rule-inputs";
 import {
   submitAdminReading,
   submitResidentReading,
@@ -22,6 +23,14 @@ const decimal3 = z
   .regex(
     DECIMAL3_PATTERN,
     "Must be a non-negative number with at most 3 decimal places"
+  );
+
+// Matches manual_rule_inputs.value's numeric(14,4) column precision.
+const decimal4 = z
+  .string()
+  .regex(
+    /^\d{1,10}(\.\d{1,4})?$/,
+    "Must be a non-negative number with at most 4 decimal places"
   );
 
 export const readings = {
@@ -77,6 +86,40 @@ export const readings = {
             meterId,
             currentValue,
             locals.auth!.userId
+          )
+        );
+      }
+    ),
+  }),
+
+  // Admin-only: no resident-facing equivalent (spec Section 18 doesn't ask
+  // for one, and residents have no visibility into billing rules today).
+  adminSubmitManualRuleInput: defineAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      periodId: z.uuid(),
+      dwellingId: z.uuid(),
+      billingRuleId: z.uuid(),
+      value: decimal4,
+      note: z.string().max(500).optional(),
+    }),
+    handler: safeHandler(
+      async (
+        { organizationId, periodId, dwellingId, billingRuleId, value, note },
+        { locals }
+      ) => {
+        requireOrganizationAccess(locals.auth, organizationId);
+        return withDb((db) =>
+          submitManualRuleInput(
+            db,
+            organizationId,
+            periodId,
+            dwellingId,
+            billingRuleId,
+            value,
+            locals.auth!.userId,
+            { note }
           )
         );
       }

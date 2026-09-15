@@ -10,8 +10,10 @@ import { getDwelling } from "../domain/organizations/dwellings";
 import { getOrganization } from "../domain/organizations/organizations";
 import {
   listCasesForPeriod,
+  listManualRuleInputsForPeriod,
   listMetersWithReadingForPeriod,
 } from "../domain/periods/cases";
+import { getPeriod } from "../domain/periods/periods";
 import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
 
@@ -32,11 +34,19 @@ export const workbench = {
         return withDb(async (db) => {
           const dwelling = await getDwelling(db, organizationId, dwellingId);
           const organization = await getOrganization(db, organizationId);
+          const period = await getPeriod(db, organizationId, periodId);
           const meters = await listMetersWithReadingForPeriod(
             db,
             organizationId,
             dwellingId,
             periodId
+          );
+          const manualRuleInputs = await listManualRuleInputsForPeriod(
+            db,
+            organizationId,
+            dwellingId,
+            periodId,
+            period
           );
           const cases = await listCasesForPeriod(db, organizationId, periodId);
           const billingCase = cases.find((c) => c.dwellingId === dwellingId);
@@ -72,6 +82,7 @@ export const workbench = {
                 previousValue: m.previousValue,
                 consumption: m.consumption,
               })),
+            manualRuleInputs,
           };
         });
       }

@@ -619,7 +619,11 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
     padding: 0.75rem 0.75rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
-    background: var(--color-surface);
+    /* background-color, not the background shorthand -- the shorthand
+       resets background-image to none, wiping out the global select
+       chevron (src/styles/global.css) since this scoped style is
+       unlayered and always wins over that layered default. */
+    background-color: var(--color-surface);
     color: var(--color-foreground);
     font: inherit;
     font-size: 0.875rem;
@@ -627,7 +631,7 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
   }
   .billing-field input:disabled,
   .billing-field select:disabled {
-    background: var(--color-surface-hover);
+    background-color: var(--color-surface-hover);
     color: var(--color-muted);
     cursor: not-allowed;
   }

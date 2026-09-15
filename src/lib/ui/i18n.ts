@@ -930,6 +930,12 @@ const lv: Record<string, string> = {
     "Importēšana, eksportēšana un masveida atjaunināšana.",
   "Track important changes in your organization.":
     "Sekojiet līdzi svarīgām izmaiņām jūsu organizācijā.",
+
+  // Added: translation coverage pass 4 (manual billing rule input drawer)
+  Value: "Vērtība",
+  "Enter the quantity for this period.": "Ievadiet daudzumu šim periodam.",
+  "Enter the amount to charge for this period.":
+    "Ievadiet summu, kas jāiekasē par šo periodu.",
 };
 
 const ru: Record<string, string> = {
@@ -1851,6 +1857,12 @@ const ru: Record<string, string> = {
   "Import, export, and bulk updates.": "Импорт, экспорт и массовые обновления.",
   "Track important changes in your organization.":
     "Отслеживайте важные изменения в вашей организации.",
+
+  // Added: translation coverage pass 4 (manual billing rule input drawer)
+  Value: "Значение",
+  "Enter the quantity for this period.": "Введите количество за этот период.",
+  "Enter the amount to charge for this period.":
+    "Введите сумму к начислению за этот период.",
 };
 
 export function translate(locale: Locale, text: string): string {

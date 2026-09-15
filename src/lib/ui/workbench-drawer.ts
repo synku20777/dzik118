@@ -42,6 +42,13 @@ interface DrawerData {
     previousValue: string | null;
     consumption: string | null;
   }>;
+  manualRuleInputs: Array<{
+    billingRuleId: string;
+    ruleName: string;
+    unit: string;
+    calculationType: "MANUAL_QUANTITY" | "MANUAL_AMOUNT";
+    value: string | null;
+  }>;
 }
 
 interface StatusInfo {
@@ -419,6 +426,58 @@ if (dialogEl) {
       if (focus === meterTypeKey) firstInput = input;
     }
 
+    for (const rule of data.manualRuleInputs) {
+      const section = document.createElement("section");
+      section.className = "drawer-meter";
+
+      const head = document.createElement("div");
+      head.className = "drawer-meter-head";
+      const icon = document.createElement("span");
+      icon.className = "drawer-meter-icon";
+      icon.dataset.meterType = "MANUAL";
+      icon.setAttribute("aria-hidden", "true");
+      icon.appendChild(iconSvg("percentage"));
+      const nameWrap = document.createElement("div");
+      const heading = document.createElement("h3");
+      heading.className = "drawer-meter-name";
+      heading.textContent = rule.ruleName;
+      const sub = document.createElement("p");
+      sub.className = "drawer-meter-sub";
+      sub.textContent =
+        rule.calculationType === "MANUAL_QUANTITY"
+          ? s("manualInputQuantityHelp")
+          : s("manualInputAmountHelp");
+      appendAll(nameWrap, heading, sub);
+      appendAll(head, icon, nameWrap);
+
+      const inputId = `drawer-manual-input-${rule.billingRuleId}`;
+      const errorId = `${inputId}-error`;
+      const input = document.createElement("input");
+      input.id = inputId;
+      input.name = "value";
+      input.type = "text";
+      input.inputMode = "decimal";
+      input.required = true;
+      input.className = "drawer-input-box";
+      input.value = rule.value ?? "";
+      input.setAttribute("aria-describedby", errorId);
+      const err = errorNode(errorId);
+      const valueRow = fieldRow(
+        `${s("manualInputValue")} *`,
+        input,
+        rule.unit,
+        inputId
+      );
+      valueRow.appendChild(err);
+
+      appendAll(section, head, valueRow);
+      section.dataset.billingRuleId = rule.billingRuleId;
+      form.appendChild(section);
+
+      if (!firstInput) firstInput = input;
+      if (focus === `rule-${rule.billingRuleId}`) firstInput = input;
+    }
+
     const residentCard = renderResidentCard(data);
     bodyEl.replaceChildren(
       ...(residentCard ? [residentCard] : []),
@@ -453,6 +512,9 @@ if (dialogEl) {
     saveButton: HTMLButtonElement
   ) {
     const sections = [...form.querySelectorAll<HTMLElement>("[data-meter-id]")];
+    const ruleSections = [
+      ...form.querySelectorAll<HTMLElement>("[data-billing-rule-id]"),
+    ];
     saveButton.disabled = true;
     const originalLabel = saveButton.textContent;
     saveButton.textContent = s("saving");
@@ -478,6 +540,35 @@ if (dialogEl) {
         hadError = true;
         const message = isInputError(error)
           ? (error.fields.currentValue?.join(" ") ?? error.message)
+          : error.message;
+        errorEl.textContent = message;
+        errorEl.hidden = false;
+      }
+    }
+    for (const section of ruleSections) {
+      const billingRuleId = section.dataset.billingRuleId!;
+      const input = section.querySelector<HTMLInputElement>(
+        'input[name="value"]'
+      )!;
+      const errorEl = section.querySelector<HTMLElement>(
+        ".drawer-field-error"
+      )!;
+      errorEl.hidden = true;
+      const rule = data.manualRuleInputs.find(
+        (r) => r.billingRuleId === billingRuleId
+      )!;
+      if (input.value === (rule.value ?? "")) continue; // unchanged
+      const fd = new FormData();
+      fd.set("organizationId", config.organizationId);
+      fd.set("periodId", config.periodId);
+      fd.set("dwellingId", data.dwelling.id);
+      fd.set("billingRuleId", billingRuleId);
+      fd.set("value", input.value);
+      const { error } = await actions.readings.adminSubmitManualRuleInput(fd);
+      if (error) {
+        hadError = true;
+        const message = isInputError(error)
+          ? (error.fields.value?.join(" ") ?? error.message)
           : error.message;
         errorEl.textContent = message;
         errorEl.hidden = false;
