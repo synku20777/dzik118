@@ -2,6 +2,7 @@
 import "../styles/global.css";
 import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
 import ThemeToggle from "../components/ui/ThemeToggle.astro";
+import BrandMark from "../components/ui/BrandMark.astro";
 import { translate, uiLocale } from "../lib/ui/i18n";
 interface Props {
   title?: string;
@@ -42,10 +43,7 @@ const base = "/portal/dwellings/" + dwellingId;
     <a class="skip-link" href="#main-content">{t("Skip to content")}</a>
     <header class="resident-header">
       <div>
-        <a class="brand" href="/portal"
-          ><span class="brand-mark" aria-hidden="true">▥</span>{
-            t("Property Billing")
-          }</a
+        <a class="brand" href="/portal"><BrandMark />{t("Property Billing")}</a
         ><div class="flex items-center gap-3">
           <ThemeToggle />
           <LanguageSwitch /><a href="/portal/profile" class="text-sm text-muted"

@@ -1,30 +1,37 @@
 ---
-// Section 14's single reusable thin-line motif -- a shallow arch cut into
-// an otherwise straight rule. Reserved for the handful of surfaces the
+// Section 14's single reusable thin-line motif: curved ironwork around a
+// small gable-shaped keystone. Reserved for the handful of surfaces the
 // spec names (authentication, significant empty states); never used as
 // repeating page chrome or around ordinary cards/forms.
 ---
 
 <svg
   class="ornament"
-  viewBox="0 0 200 20"
+  viewBox="0 0 200 28"
   fill="none"
   aria-hidden="true"
   focusable="false"
 >
   <path
-    d="M0 10 H82 C92 10 92 17 100 17 C108 17 108 10 118 10 H200"
+    d="M1 14 H64 C77 14 77 23 88 23 H94 M106 23 H112 C123 23 123 14 136 14 H199 M76 7 C86 7 86 14 94 14 M106 14 C114 14 114 7 124 7"
     stroke="currentColor"
     stroke-width="1.5"
     stroke-linecap="round"></path>
+  <path
+    d="M96 11 L100 5 L104 11 V19 H96 Z"
+    fill="currentColor"
+    class="ornament-keystone"></path>
 </svg>
 
 <style is:global>
   .ornament {
     display: block;
-    width: 6.5rem;
+    width: 8.5rem;
     height: auto;
     margin-inline: auto;
     color: var(--color-border);
+  }
+  .ornament-keystone {
+    color: var(--color-secondary);
   }
 </style>

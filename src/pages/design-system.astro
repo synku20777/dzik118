@@ -7,6 +7,7 @@ import KpiCard from "../components/ui/KpiCard.astro";
 import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
 import Ornament from "../components/ui/Ornament.astro";
 import PageHeader from "../components/ui/PageHeader.astro";
+import BrandMark from "../components/ui/BrandMark.astro";
 import StatusBadge from "../components/ui/StatusBadge.astro";
 import ThemeToggle from "../components/ui/ThemeToggle.astro";
 
@@ -201,9 +202,7 @@ function rgb(hex: string) {
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
     <header class="ds-topbar">
-      <a class="brand" href="#overview"
-        ><span class="brand-mark" aria-hidden="true">▥</span>Riga system</a
-      >
+      <a class="brand" href="#overview"><BrandMark />Riga system</a>
       <div class="ds-top-actions">
         <span class="status-badge" data-tone="success">Internal artifact</span
         ><LanguageSwitch /><ThemeToggle />
@@ -545,6 +544,7 @@ function rgb(hex: string) {
               </div><code>src/components/ui</code>
             </div><div class="embedded-panel">
               <PageHeader
+                accent
                 title="Billing periods"
                 description="Prepare, issue, and reconcile monthly invoices."
                 eyebrow="September 2026"

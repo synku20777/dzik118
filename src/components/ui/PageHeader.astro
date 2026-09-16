@@ -1,4 +1,5 @@
 ---
+import FacadeAccent from "./FacadeAccent.astro";
 interface Props {
   title: string;
   description?: string;
@@ -7,8 +8,15 @@ interface Props {
   // default (most page titles stay plain Source Sans 3; see global.css's
   // .page-header h1.font-display comment for which pages this is for).
   display?: boolean;
+  accent?: boolean;
 }
-const { title, description, eyebrow, display = false } = Astro.props;
+const {
+  title,
+  description,
+  eyebrow,
+  display = false,
+  accent = display,
+} = Astro.props;
 ---
 
 <header class="page-header">
@@ -16,6 +24,7 @@ const { title, description, eyebrow, display = false } = Astro.props;
     {eyebrow && <p class="eyebrow">{eyebrow}</p>}
     <h1 class:list={{ "font-display": display }}>{title}</h1>
     {description && <p class="page-description">{description}</p>}
+    {accent && <FacadeAccent />}
   </div>
   <div class="page-actions"><slot /></div>
 </header>

@@ -32,11 +32,56 @@ const { title = "Sign In - Property Billing" } = Astro.props;
     <title>{title}</title>
   </head>
   <body class="min-h-screen bg-canvas text-foreground antialiased relative">
-    <header class="absolute top-4 right-4 flex items-center gap-2">
+    <div class="auth-architecture" aria-hidden="true">
+      <svg viewBox="0 0 260 640" fill="none" focusable="false">
+        <g stroke="currentColor" stroke-width="1">
+          <path
+            d="M30 610 V150 A100 100 0 0 1 230 150 V610 M46 610 V150 A84 84 0 0 1 214 150 V610"
+          ></path>
+          <path
+            d="M82 610 V156 A48 48 0 0 1 178 156 V610 M130 108 V610 M46 254 H214 M46 262 H214 M46 446 H214 M46 454 H214 M14 610 H246 M14 618 H246"
+          ></path>
+        </g>
+        <path
+          class="auth-keystone"
+          d="M123 49 L130 37 L137 49 V65 H123 Z"
+          fill="currentColor"></path>
+      </svg>
+    </div>
+    <header class="absolute top-4 right-4 z-10 flex items-center gap-2">
       <ThemeToggle />
     </header>
-    <main class="flex min-h-screen items-center justify-center p-4">
+    <main
+      class="relative flex min-h-screen items-center justify-center px-4 py-20"
+    >
       <slot />
     </main>
   </body>
 </html>
+
+<style>
+  .auth-architecture {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    color: var(--color-border);
+  }
+  .auth-architecture svg {
+    position: absolute;
+    width: clamp(12rem, 22vw, 22rem);
+    height: auto;
+    top: 50%;
+    right: calc(50% + 18rem);
+    transform: translateY(-50%);
+    opacity: 0.65;
+  }
+  .auth-keystone {
+    color: var(--color-secondary);
+  }
+  @media (max-width: 900px) {
+    .auth-architecture {
+      display: none;
+    }
+  }
+</style>

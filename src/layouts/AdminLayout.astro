@@ -1,6 +1,7 @@
 ---
 import "../styles/global.css";
 import AppNavigation from "../components/ui/AppNavigation.astro";
+import BrandMark from "../components/ui/BrandMark.astro";
 import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
 import ThemeToggle from "../components/ui/ThemeToggle.astro";
 import Icon from "../components/ui/Icon.astro";
@@ -45,9 +46,7 @@ const t = (text: string) => translate(locale, text);
     <a class="skip-link" href="#main-content">{t("Skip to content")}</a>
     <aside class="admin-sidebar">
       <a class="brand" href="/admin/organizations"
-        ><span class="brand-mark" aria-hidden="true">▥</span>{
-          t("Property Billing")
-        }</a
+        ><BrandMark />{t("Property Billing")}</a
       >
       <div class="org-context">
         <p class="eyebrow">{t("Administration")}</p><p
@@ -74,11 +73,7 @@ const t = (text: string) => translate(locale, text);
       </div>
     </aside>
     <header class="admin-mobile">
-      <span class="brand"
-        ><span class="brand-mark" aria-hidden="true">▥</span>{
-          t("Property Billing")
-        }</span
-      >
+      <span class="brand"><BrandMark />{t("Property Billing")}</span>
       <button type="button" class="btn-secondary btn-sm" data-open-mobile-nav>
         {t("Menu")} ☰
       </button>
@@ -90,9 +85,7 @@ const t = (text: string) => translate(locale, text);
     >
       <header class="context-drawer-header">
         <span class="brand" id="mobile-nav-drawer-title"
-          ><span class="brand-mark" aria-hidden="true">▥</span>{
-            t("Property Billing")
-          }</span
+          ><BrandMark />{t("Property Billing")}</span
         >
         <button
           type="button"

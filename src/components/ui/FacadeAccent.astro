@@ -1,0 +1,57 @@
+<div class="facade-background" aria-hidden="true">
+  <svg
+    class="facade-accent"
+    viewBox="0 0 144 32"
+    fill="none"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <g stroke="currentColor" stroke-width="1" stroke-linecap="round">
+      <path
+        d="M1 27 H143 M1 31 H89 M8 27 V15 A7 7 0 0 1 22 15 V27 M34 27 V11 A7 7 0 0 1 48 11 V27 M60 27 V15 A7 7 0 0 1 74 15 V27"
+      ></path>
+      <path d="M15 15 V27 M41 11 V27 M67 15 V27"></path>
+    </g>
+    <path
+      class="facade-accent-copper"
+      d="M38 5 L41 1 L44 5 V9 H38 Z"
+      fill="currentColor"></path>
+  </svg>
+</div>
+
+<style>
+  .facade-background {
+    position: absolute;
+    inset: -1rem 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: -1;
+  }
+  .facade-accent {
+    position: absolute;
+    inset-inline-end: 8%;
+    top: 50%;
+    transform: translateY(-50%);
+    display: block;
+    width: clamp(18rem, 45vw, 34rem);
+    height: auto;
+    color: var(--color-primary);
+    opacity: 0.12;
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 28%,
+      black 75%,
+      transparent
+    );
+    pointer-events: none;
+  }
+  .facade-accent-copper {
+    color: var(--color-secondary);
+  }
+  @media print {
+    .facade-background {
+      display: none;
+    }
+  }
+</style>
