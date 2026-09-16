@@ -37,11 +37,16 @@ flowchart TD
   O2 --> N
   N --> P[Import bank statement]
   P --> Q[Preview and confirm import]
-  Q --> R{Exact match proposed?}
-  R -- Yes --> S[Confirm match]
-  R -- No --> T[Review unmatched transaction]
-  S --> U[Invoice becomes paid]
-  U --> V[Review period and audit history]
+  Q --> R{Candidate match proposed against remaining balance?}
+  R -- Exact or Overpayment --> S1[Confirm match: invoice fully settled]
+  S1 --> S2{Overpayment excess?}
+  S2 -- Yes --> S3[Excess credited to dwelling account balance]
+  S2 -- No --> V[Review period, ledger and audit history]
+  S3 --> V
+  R -- Partial --> S4[Confirm match: partial allocation]
+  S4 --> S5[Invoice stays open with remaining balance due]
+  S5 --> V
+  R -- No match / Reject --> T[Review unmatched transaction]
 ```
 
 ### Journey stages
@@ -54,10 +59,10 @@ flowchart TD
 | Start period | Which month am I billing? | `/admin/o/:orgId/periods` | Create or open period | Open, locked, duplicate month |
 | Collect data | Which dwellings lack readings? | `/admin/o/:orgId/periods/:periodId` (readings drawer, opened per row) | Enter readings | Missing, submitted, invalid, ready, period locked |
 | Generate | Which cases are eligible? | Monthly workbench | Generate invoice | Eligible (missing data resolved or ready), blocked by missing data, locked |
-| Verify | Is the financial document correct? | Admin invoice detail, or billing details drawer for quick recipient fixes | Prepare invoice | Draft, incomplete recipient/issuer/payment data |
+| Verify | Is the financial document correct? | Admin invoice detail, or billing details drawer for quick recipient fixes | Prepare invoice | Draft, incomplete recipient/issuer/payment data; preparing posts charges to dwelling ledger |
 | Deliver | Is the invoice ready to send? | Admin invoice detail | Send invoice | Prepared, sent, delivery failed, resend, paper delivery recorded |
-| Reconcile | Which incoming payments match? | `/admin/o/:orgId/payments` | Confirm proposed match | Proposed, confirmed, rejected, unmatched |
-| Investigate | What happened for this dwelling or invoice? | Dwelling detail (overview/balance/meters/residents/messages/history panels), invoice, message, and audit views | Review or correct supported data | Archived dwelling, immutable sent invoice |
+| Reconcile | Which incoming payments match? | `/admin/o/:orgId/payments` | Confirm proposed match | Proposed (Exact, Partial, Overpayment), confirmed, rejected, unmatched |
+| Investigate | What happened for this dwelling or invoice? | Dwelling detail (overview/balance/meters/residents/messages/history panels), invoice, message, and audit views | Review or correct supported data | Archived dwelling, immutable sent invoice, dwelling ledger activity, manual adjustments |
 | Configure | Are billing and organization defaults correct? | `/admin/o/:orgId/settings`, dwelling invoice-delivery checkboxes | Save settings | Validation errors, automation enabled/disabled, at least one delivery method required |
 
 ### Admin recovery paths
@@ -68,9 +73,13 @@ flowchart TD
 - Send blocked: add the billing email, then send the prepared invoice.
 - No delivery method selected: a dwelling must have email, paper, or both enabled before its invoices can be delivered; enable at least one in the dwelling's invoice delivery settings.
 - Delivery failed: review the failure and retry with Resend when permitted.
-- Unmatched payment: keep it in the unmatched queue for manual review; do not mark the invoice paid without a confirmed match.
+- Partial payment received: confirm the proposed match; the incoming transaction is fully recorded in the dwelling account ledger, an allocation is posted to the invoice, and the invoice remains open with an updated remaining unpaid balance (`amountDue - allocated`). A subsequent payment can be matched to settle the remaining balance.
+- Overpayment received: confirm the proposed match; the full amount is posted to the dwelling account ledger, the invoice is fully settled and marked `PAID`, and the excess amount sits as dwelling account credit (`accountBalance < 0`) which automatically offsets future invoice statements.
+- Dwelling balance discrepancy: inspect the dwelling balance panel and account ledger entries. Post a manual adjustment (`CHARGE` or `CREDIT`) with an administrative reason to adjust the balance without mutating historical invoices.
+- Late-fee disputes: review the applied late fee on a prepared invoice; adjust the fee via manual late-fee adjustment before sending the invoice.
+- Unmatched payment: keep it in the unmatched queue for manual review or reject candidate proposals; do not confirm an allocation without a verified match.
 - Locked period: inspect historical data; normal reading edits and invoice regeneration remain unavailable.
-- Sent invoice error: preserve the immutable invoice and correct the issue through a later supported billing record.
+- Sent invoice error: preserve the immutable invoice and its ledger debit; correct the discrepancy via compensating manual adjustments or future period statements.
 
 ## Resident journey
 
@@ -88,7 +97,7 @@ flowchart TD
   F --> E
   D -- None --> G[No-access guidance]
   E --> H{Current invoice available?}
-  H -- Yes --> I[Review amount, status and due date]
+  H -- Yes --> I[Review amount due, remaining balance, and credit applied]
   I --> J[Open invoice detail]
   J --> K[Download PDF or print]
   H -- No --> L[See current billing context]
@@ -110,7 +119,7 @@ flowchart TD
 | Sign in | How do I access my billing information? | `/login` | Request sign-in link | Neutral response, expired link, rate limited |
 | Confirm | Is this sign-in request mine? | `/auth/confirm` | Confirm sign-in | Valid, expired, already used |
 | Select dwelling | Which dwelling do I want to view? | `/portal/dwellings` | Open dwelling | Automatic redirect for one dwelling, selector for multiple |
-| Understand current bill | What do I owe and when? | `/portal/dwellings/:dwellingId` | Review invoice | No invoice, sent, paid, overdue; portal stays fully available even when the dwelling receives paper (not email) delivery |
+| Understand current bill | What do I owe and when? | `/portal/dwellings/:dwellingId` | Review invoice | No invoice, sent, partially paid (remaining balance due), fully paid, overdue; shows previous debt or credit carried forward; portal stays fully available even when the dwelling receives paper (not email) delivery |
 | Submit readings | Does the administrator need a reading? | Dwelling dashboard | Submit reading | Missing, received, deadline passed, period locked |
 | Review invoice | How was this total calculated? | `/portal/invoices/:invoiceId` | Download PDF or print | Lines, VAT, total, payment details |
 | Review history | What was billed previously? | `/portal/dwellings/:dwellingId/invoices` | Open invoice | Empty history, paid, sent, overdue |
@@ -125,7 +134,7 @@ flowchart TD
 - Reading rejected: correct the decimal value or contact the administrator if it is lower than the previous reading.
 - Reading deadline passed: view the existing state and message the administrator.
 - No current invoice: continue to view readings, consumption, messages, and available invoice history.
-- Invoice overdue: review the invoice and contact the administrator if payment reconciliation appears incorrect.
+- Invoice overdue or partially paid: review remaining unpaid balance, previous carried balance, and credit applied; contact administrator if payment reconciliation or account credit appears incorrect.
 - Resolved conversation: start a new conversation when a new issue arises.
 
 ## Experience distinction

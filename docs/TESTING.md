@@ -38,6 +38,11 @@ Unit tests need no extra setup.
 npm run test
 ```
 
+The unit test suite covers core mathematical and domain rules, including:
+- **Statement balance resolution** (`tests/unit/account-balance.test.ts`): Verifies `calculateStatementBalance`, ensuring outstanding debt is carried forward, available account credits offset new charges, amount due is floored at zero, and late fees / manual adjustments are incorporated.
+- **Late-fee calculation** (`tests/unit/account-balance.test.ts`): Verifies `calculateLateFee`, verifying grace period evaluation, daily rate accrual, percentage caps, and zero fee behavior for settled accounts.
+- **Invoice line item calculation** (`tests/unit/billing-calculation.test.ts`): Verifies decimal precision, VAT rates, and meter consumption formulas.
+
 ## Integration tests
 
 Integration tests call the same domain functions the Astro Actions call.
@@ -56,6 +61,20 @@ They run against a real local Postgres, Supabase Storage, and Mailpit.
    ```bash
    npm run test:integration
    ```
+
+### Financial reconciliation & payment coverage in integration tests
+
+The integration test suite (`tests/integration/payments.test.ts`) verifies:
+- **Bank CSV statement import**: Duplicate import hash prevention, invalid header handling, and transaction row ingestion.
+- **Exact payment matching**: Candidate matching against invoice payment reference, match proposal confirmation, transaction and invoice status updates.
+- **Idempotency and concurrency**: Repeated match confirmation idempotency, rejection handling, and double-claim prevention across concurrent match attempts.
+
+*Recommended test additions for complete financial coverage:*
+While implemented in the domain services and database schema, the following financial workflows should be added to the integration suite to ensure ongoing regression safety:
+- **Partial payment reconciliation**: Matching a transaction where `amount < remainingBalance`, verifying that the transaction is fully credited to the dwelling ledger, an allocation is posted for the partial amount, the invoice remains open (`paidAt` is null), and a second payment can subsequently match against the remaining balance to mark the invoice `PAID`.
+- **Overpayment reconciliation**: Matching a transaction where `amount > remainingBalance`, verifying that the invoice is marked `PAID`, allocation is capped at remaining balance, and the excess amount is held as unallocated dwelling account credit (`NEGATIVE` account balance).
+- **Credit carry-forward cycle**: Verifying that unallocated dwelling credit from an overpayment is automatically consumed in `prepareInvoice` for the next billing period to reduce the new invoice's `amountDue`.
+- **Append-only ledger triggers**: Verifying that executing an `UPDATE` or `DELETE` query against `account_entries`, `payment_allocations`, or `late_fee_adjustments` fails with a PostgreSQL trigger exception.
 
 ## End-to-end tests
 
@@ -174,6 +193,26 @@ If every page fails to load or hangs with no response, see
 - **Missing meter readings.** A billing period can have a dwelling with no
   reading for that period. Its billing case shows `MISSING_DATA`, and the
   app blocks invoice generation for it until the reading exists.
+- **Partial payment reconciliation.** Import a bank statement with a transaction
+  amount less than an invoice's `amount_due`. Confirm the proposed match.
+  Verify that an allocation is posted for the partial amount, the dwelling
+  ledger is credited for the payment, and the invoice remains open (`paid_at`
+  is null) with remaining balance due. Match a second transaction for the
+  remainder and verify the invoice transitions to `PAID`.
+- **Overpayment and credit carry-forward.** Import a transaction exceeding
+  an invoice's remaining balance. Confirm the match. Verify that the invoice
+  is marked `PAID`, the allocation is capped at the unpaid balance, and the
+  excess creates dwelling account credit (`accountBalance < 0`). In the
+  subsequent billing period, generate an invoice and verify that the credit
+  is automatically applied to reduce the new `amount_due`.
+- **Financial history immutability.** Attempt to execute an SQL `UPDATE` or
+  `DELETE` on `account_entries`, `payment_allocations`, or
+  `late_fee_adjustments`. Verify that the database trigger
+  `prevent_financial_history_mutation` blocks the operation.
+- **Late-fee adjustment.** On a prepared invoice with an accrued late fee,
+  record an administrative adjustment before delivery. Verify the invoice
+  snapshot reflects the adjustment and a corresponding record is created in
+  `late_fee_adjustments`.
 - **Double-clicking Send.** Sending an invoice is safe to repeat. Two
   clicks, or two people clicking at the same time, produce exactly one
   email and one delivery record, not two.

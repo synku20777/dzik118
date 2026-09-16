@@ -2,7 +2,10 @@
 
 Property Billing is a multi-tenant property billing application. It serves
 apartment buildings, housing associations, cooperatives, and small property
-managers.
+managers. It supports monthly billing cycles, dwelling-level financial accounts
+with an append-only transaction ledger, bank payment reconciliation against
+remaining invoice balances (handling exact, partial, and overpayments), credit
+and debt carry-forward, automated late-fee policies, and resident self-service.
 
 This README explains how to install the project and run it on your own
 machine. For everything else, see [Documentation](#documentation) below.
@@ -23,6 +26,7 @@ machine. For everything else, see [Documentation](#documentation) below.
   architecture and security choices.
   - [0001: Tenant cross-reference integrity](docs/decisions/0001-tenant-cross-reference-integrity.md)
   - [0002: Admin MFA (AAL2) boundary](docs/decisions/0002-admin-aal2-boundary.md)
+  - [0003: Dwelling account ledger and payment allocation](docs/decisions/0003-dwelling-account-ledger-and-payment-allocation.md)
 - [Known limitations](docs/KNOWN_LIMITATIONS.md) — incomplete items,
   deferred work, and deliberate trade-offs. Read this before you rely on
   any part of the system.
@@ -48,9 +52,11 @@ machine. For everything else, see [Documentation](#documentation) below.
 ## Roles and access control
 
 - **ADMIN**: manages one organization. This covers buildings, dwellings,
-  periods, meter readings, billing rules, invoices, payments, and messages.
+  dwelling account balances and adjustments, periods, meter readings,
+  billing rules, invoices, payments, and messages.
 - **RESIDENT**: has access to one or more dwellings. A resident can submit
-  readings and view their own invoices, payment history, and messages.
+  readings and view their own invoices, outstanding balance, payment history,
+  and messages.
 
 An admin from one organization cannot see another organization's data. A
 resident cannot see another resident's dwelling. See

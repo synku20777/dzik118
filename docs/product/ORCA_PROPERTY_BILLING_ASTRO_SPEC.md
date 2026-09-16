@@ -75,16 +75,47 @@ Canonical hierarchy:
 
 ```text
 Organization
-  └── Dwelling
-       ├── Resident access
-       ├── Meters
-       └── Billing Case per Period
-              ├── Readings
-              └── Invoice
-                    ├── Invoice lines
-                    ├── PDF
-                    ├── Deliveries
-                    └── Payment match
+└── Dwelling
+    ├── Resident access
+    ├── Meters
+    ├── Billing periods / billing cases
+    │   ├── Readings / manual rule inputs
+    │   └── Generated charges
+    │
+    ├── Invoices
+    │   ├── Current charges
+    │   ├── Previous outstanding balance
+    │   ├── Credit applied
+    │   ├── Late fees & adjustments
+    │   ├── Manual adjustments
+    │   ├── Amount due
+    │   ├── Balance & penalty snapshots
+    │   ├── Invoice lines
+    │   ├── Canonical PDF
+    │   └── Deliveries
+    │
+    └── Financial account
+        └── Append-only ledger (account_entries)
+            ├── Opening balance
+            ├── Invoice charges
+            ├── Payments (from bank transactions)
+            ├── Payment allocations (payment_allocations)
+            ├── Late fees & adjustments
+            ├── Manual adjustments
+            ├── Credit carry-forward
+            └── Debt carry-forward
+```
+
+Reconciliation flow:
+
+```text
+Bank transaction
+    ↓
+Payment match (propose against invoice remaining balance)
+    ↓
+Payment allocation (allocated portion) + Dwelling ledger payment credit (full amount)
+    ↓
+Invoice settlement (PAID only if fully settled) & Account credit (excess payment)
 ```
 
 The public B118 guide confirms the reference workflow of organization → objects → monthly periods → readings → invoice preparation → sending → bank CSV reconciliation, as well as owner-only object access and owner-submitted water readings.
@@ -98,36 +129,53 @@ The public B118 guide confirms the reference workflow of organization → object
 The application is complete when a seeded organization can execute a full monthly billing cycle:
 
 1. create/select a billing period;
-2. collect missing readings;
+2. collect missing readings and manual rule inputs;
 3. calculate invoice lines;
-4. generate invoices;
-5. prepare invoices;
+4. generate invoices with statement balance resolution;
+5. prepare invoices, snapshotting financial state and posting charges to the dwelling ledger;
 6. generate canonical PDF;
-7. email invoices;
+7. email invoices according to dwelling delivery preferences;
 8. resident opens own invoice;
 9. admin imports bank CSV;
-10. system proposes exact matches;
-11. admin confirms payment;
-12. invoice becomes paid;
+10. system proposes matches against remaining invoice balances (exact, partial, or overpayment);
+11. admin confirms match, creating dwelling ledger payment entries and payment allocations;
+12. invoice becomes paid if fully settled (or retains remaining unpaid balance if partial; excess becomes account credit if overpaid);
 13. history remains reproducible and auditable.
 
-## 2.2 non-goals
+## 2.2 Supported financial scope vs. non-goals
+
+### Supported financial accounting scope
+
+The v1 application implements a dwelling-level financial account model with:
+
+- **Dwelling-scoped append-only ledger (`account_entries`)**: Tracks debits, credits, and running balance per dwelling and currency; immutable via database trigger;
+- **Payment matching against remaining balance**: Matches bank transactions against the invoice's unpaid remainder (`amount_due - sum(allocated_amount)`) rather than original face value;
+- **Partial payment allocation**: Partial payments allocate against the open invoice, reducing its unpaid balance while leaving the invoice and case unsettled until fully paid;
+- **Overpayment and account credit**: Payments exceeding the remaining invoice balance settle the invoice and retain the excess on the dwelling account as an available credit balance;
+- **Debt carry-forward**: Outstanding unpaid balances from prior periods carry forward into the next invoice's `previous_outstanding` field;
+- **Credit carry-forward**: Available dwelling credit carries forward into the next invoice's `previous_credit_applied` field, reducing the net `amount_due`;
+- **Late-fee engine**: Configurable organization policy (`daily_rate`, `grace_days`, `start_rule: DAY_AFTER_DUE_DATE`, `max_penalty_percent`, `stops_at_cap`) calculated on oldest unpaid overdue invoice principal;
+- **Late-fee adjustments & waivers**: Explicit auditable adjustments (`late_fee_adjustments`) with structured reason codes and optional notes;
+- **Manual financial adjustments**: Dwelling-level manual adjustments (`createDwellingAccountAdjustment`) and draft invoice adjustments (`setInvoiceManualAdjustment`);
+- **Immutable invoice financial snapshots**: Invoices snapshot `current_charges`, `previous_outstanding`, `previous_credit_applied`, `late_fee_applied`, `manual_adjustment`, `amount_due`, `remaining_credit`, `balance_snapshot`, and `penalty_snapshot` upon preparation.
+
+### Non-goals
 
 Do NOT implement in v1:
 
 - native mobile applications;
 - online card payments;
-- open banking;
-- automated bank sync;
+- open banking / automated bank sync (manual CSV statement import is supported);
 - IoT meter integration;
 - OCR meter photos;
 - maintenance/work orders;
 - building access control;
-- ERP/accounting integrations;
-- partial payment allocation;
-- refunds/credit notes;
-- debt collection;
-- complex late-fee engines;
+- general-ledger / double-entry ERP accounting integrations (the ledger is dwelling-scoped for tenant billing, not an enterprise general ledger);
+- arbitrary multi-invoice allocation ordering or automated multi-invoice splitting from a single transaction;
+- direct payment reversals or refunds (unwinding confirmed bank payments is not supported; corrections require compensating manual adjustment entries);
+- debt collection workflows or legal recovery cases;
+- compounding interest or statutory tiered penalty schedule engines (late fees follow a single-rate policy with grace days and percentage caps);
+- debt write-off workflows;
 - arbitrary workflow builders;
 - drag-and-drop invoice layout builder;
 - separate owner/tenant/landlord roles;
@@ -610,6 +658,9 @@ export const server = {
   invoices,
   payments,
   messages,
+  accounts,
+  workbench,
+  invoiceTemplates,
 };
 ```
 
@@ -624,31 +675,38 @@ dwellings.update
 dwellings.archive
 dwellings.assignResident
 dwellings.removeResident
+dwellings.updateInvoiceDelivery
 
 periods.create
 periods.lock
 
 meters.create
-meters.update
 meters.archive
 
 readings.submitAdmin
 readings.submitResident
 
-billingRules.create
-billingRules.update
-billingRules.archive
+billing.createRule
+billing.updateRule
+billing.archiveRule
+billing.generate
+billing.bulkGenerate
+billing.prepare
+billing.bulkPrepare
+billing.overrideStatus
 
-invoices.generate
-invoices.generateBulk
-invoices.prepare
 invoices.send
 invoices.resend
-invoices.overrideStatus
+invoices.bulkSend
+invoices.revokeAccess
 
-payments.importCsv
 payments.confirmMatch
 payments.rejectMatch
+
+accounts.saveLateFeePolicy
+accounts.adjustLateFee
+accounts.setInvoiceManualAdjustment
+accounts.createAdjustment
 
 messages.createConversation
 messages.reply
@@ -783,6 +841,7 @@ reading_source
 
 billing_case_status
   MISSING_DATA
+  READY
   DRAFT
   PREPARED
   SENT
@@ -796,6 +855,10 @@ billing_calculation_type
   METER_CONSUMPTION
   MANUAL_QUANTITY
   MANUAL_AMOUNT
+
+delivery_method
+  EMAIL
+  PAPER
 
 conversation_status
   NEW
@@ -811,6 +874,38 @@ payment_match_type
   AUTO_EXACT
   AUTO_PROBABLE
   MANUAL
+
+payment_result_type
+  EXACT
+  PARTIAL
+  OVERPAYMENT
+
+payment_allocation_method
+  EXACT
+  PARTIAL
+  OVERPAYMENT
+  MANUAL
+
+account_entry_type
+  OPENING_BALANCE
+  INVOICE_CHARGE
+  PAYMENT
+  LATE_FEE
+  LATE_FEE_ADJUSTMENT
+  MANUAL_ADJUSTMENT
+  CREDIT_CARRY_FORWARD
+  DEBT_CARRY_FORWARD
+
+late_fee_start_rule
+  DAY_AFTER_DUE_DATE
+
+late_fee_adjustment_reason
+  BANK_PROCESSING_DELAY
+  BILLING_DISPUTE
+  METER_ISSUE
+  AGREEMENT_WITH_RESIDENT
+  ADMIN_WAIVER
+  OTHER
 ```
 
 ## 13.2 organizations
@@ -1003,25 +1098,40 @@ invoices
 - dwelling_id uuid FK
 - period_id uuid FK
 - invoice_number text NOT NULL
-- issue_date date
-- due_date date
-- currency char(3)
-- subtotal numeric(14,2)
-- vat_total numeric(14,2)
-- total numeric(14,2)
-- issuer_snapshot jsonb
-- recipient_snapshot jsonb
-- payment_snapshot jsonb
-- template_snapshot jsonb
-- version integer DEFAULT 1
+- issue_date date NOT NULL
+- due_date date NOT NULL
+- currency char(3) NOT NULL
+- subtotal numeric(14,2) NOT NULL
+- vat_total numeric(14,2) NOT NULL
+- total numeric(14,2) NOT NULL
+- current_charges numeric(14,2) NOT NULL DEFAULT 0
+- previous_outstanding numeric(14,2) NOT NULL DEFAULT 0
+- previous_credit_applied numeric(14,2) NOT NULL DEFAULT 0
+- late_fee_calculated numeric(14,2) NOT NULL DEFAULT 0
+- late_fee_adjustment numeric(14,2) NOT NULL DEFAULT 0
+- late_fee_applied numeric(14,2) NOT NULL DEFAULT 0
+- manual_adjustment numeric(14,2) NOT NULL DEFAULT 0
+- amount_due numeric(14,2) NOT NULL DEFAULT 0
+- remaining_credit numeric(14,2) NOT NULL DEFAULT 0
+- balance_snapshot jsonb NOT NULL DEFAULT {}
+- penalty_snapshot jsonb NOT NULL DEFAULT {}
+- manual_adjustment_snapshot jsonb NOT NULL DEFAULT {}
+- issuer_snapshot jsonb NOT NULL
+- recipient_snapshot jsonb NOT NULL
+- payment_snapshot jsonb NOT NULL
+- template_snapshot jsonb NOT NULL
+- version integer NOT NULL DEFAULT 1
 - prepared_at timestamptz NULL
 - sent_at timestamptz NULL
 - paid_at timestamptz NULL
 - pdf_object_key text NULL
 - pdf_sha256 text NULL
-- created_at
-- updated_at
+- created_at timestamptz NOT NULL
+- updated_at timestamptz NOT NULL
 UNIQUE (organization_id, invoice_number)
+CHECK (current_charges >= 0 and previous_outstanding >= 0 and previous_credit_applied >= 0 and late_fee_calculated >= 0 and late_fee_applied >= 0 and amount_due >= 0 and remaining_credit >= 0)
+CHECK (late_fee_applied = late_fee_calculated + late_fee_adjustment)
+CHECK (amount_due = greatest(current_charges + previous_outstanding - previous_credit_applied + late_fee_applied + manual_adjustment, 0))
 ```
 
 ## 13.12 invoice_lines
@@ -1067,7 +1177,8 @@ invoice_deliveries
 - id uuid PK
 - organization_id uuid
 - invoice_id uuid
-- destination_email text
+- method delivery_method NOT NULL DEFAULT EMAIL
+- destination_email text NULL
 - provider text
 - provider_message_id text NULL
 - status text
@@ -1128,15 +1239,17 @@ bank_transactions
 ```text
 payment_matches
 - id uuid PK
-- organization_id uuid
-- bank_transaction_id uuid
-- invoice_id uuid
-- match_type enum
-- status enum DEFAULT PROPOSED
+- organization_id uuid FK
+- bank_transaction_id uuid FK
+- invoice_id uuid FK
+- match_type payment_match_type NOT NULL
+- result_type payment_result_type NOT NULL DEFAULT EXACT
+- proposed_allocation_amount numeric(14,2) NOT NULL DEFAULT 0
+- status payment_match_status NOT NULL DEFAULT PROPOSED
 - confidence numeric(5,4) NULL
-- confirmed_by_user_id uuid NULL
+- confirmed_by_user_id uuid FK NULL
 - confirmed_at timestamptz NULL
-- created_at
+- created_at timestamptz NOT NULL
 UNIQUE (bank_transaction_id, invoice_id)
 ```
 
@@ -1184,9 +1297,118 @@ audit_logs
 Index:
 `(organization_id, created_at DESC)`
 
+## 13.21 account_entries
+
+Append-only journal of financial movements scoped to a dwelling.
+
+```text
+account_entries
+- id uuid PK
+- organization_id uuid FK
+- dwelling_id uuid FK
+- effective_date date NOT NULL
+- type account_entry_type NOT NULL
+- debit numeric(14,2) NOT NULL DEFAULT 0
+- credit numeric(14,2) NOT NULL DEFAULT 0
+- currency char(3) NOT NULL
+- invoice_id uuid FK NULL
+- bank_transaction_id uuid FK NULL
+- reason text NULL
+- description text NOT NULL
+- actor_user_id uuid FK NULL
+- metadata jsonb NOT NULL DEFAULT {}
+- idempotency_key text NOT NULL UNIQUE
+- created_at timestamptz NOT NULL
+UNIQUE (idempotency_key)
+CHECK ((debit > 0 and credit = 0) or (credit > 0 and debit = 0))
+```
+
+Indexes:
+- `(organization_id, dwelling_id, effective_date, created_at)`
+- `(invoice_id)`
+- `(bank_transaction_id)`
+
+Trigger: `account_entries_append_only` prevents UPDATE and DELETE.
+
+## 13.22 payment_allocations
+
+Append-only link recording which portion of a bank transaction settled an invoice.
+
+```text
+payment_allocations
+- id uuid PK
+- organization_id uuid FK
+- dwelling_id uuid FK
+- bank_transaction_id uuid FK
+- invoice_id uuid FK
+- allocated_amount numeric(14,2) NOT NULL
+- allocation_date timestamptz NOT NULL DEFAULT now()
+- method payment_allocation_method NOT NULL
+- actor_user_id uuid FK NULL
+- idempotency_key text NOT NULL UNIQUE
+- created_at timestamptz NOT NULL
+UNIQUE (idempotency_key)
+UNIQUE (bank_transaction_id, invoice_id)
+CHECK (allocated_amount > 0)
+```
+
+Index: `(organization_id, invoice_id)`
+
+Trigger: `payment_allocations_append_only` prevents UPDATE and DELETE.
+
+## 13.23 late_fee_policies
+
+Organization-level policy defining daily penalty rates, grace periods, and caps.
+
+```text
+late_fee_policies
+- id uuid PK
+- organization_id uuid FK
+- effective_from date NOT NULL
+- enabled boolean NOT NULL DEFAULT false
+- daily_rate numeric(9,6) NOT NULL DEFAULT 0
+- grace_days integer NOT NULL DEFAULT 0
+- start_rule late_fee_start_rule NOT NULL DEFAULT DAY_AFTER_DUE_DATE
+- max_penalty_percent numeric(7,4) NOT NULL DEFAULT 0
+- stops_at_cap boolean NOT NULL DEFAULT true
+- actor_user_id uuid FK NULL
+- created_at timestamptz NOT NULL
+UNIQUE (organization_id, effective_from)
+CHECK (daily_rate >= 0 and grace_days >= 0 and max_penalty_percent >= 0)
+```
+
+Index: `(organization_id, effective_from DESC)`
+
+## 13.24 late_fee_adjustments
+
+Append-only record of admin waivers and adjustments to invoice late fees.
+
+```text
+late_fee_adjustments
+- id uuid PK
+- organization_id uuid FK
+- invoice_id uuid FK
+- calculated_amount numeric(14,2) NOT NULL
+- prior_applied_amount numeric(14,2) NOT NULL
+- new_applied_amount numeric(14,2) NOT NULL
+- adjustment_amount numeric(14,2) NOT NULL
+- reason late_fee_adjustment_reason NOT NULL
+- note text NULL
+- actor_user_id uuid FK NOT NULL
+- created_at timestamptz NOT NULL
+CHECK (calculated_amount >= 0 and prior_applied_amount >= 0 and new_applied_amount >= 0 and adjustment_amount = new_applied_amount - prior_applied_amount)
+CHECK (reason <> 'OTHER' or length(trim(coalesce(note, ''))) > 0)
+```
+
+Index: `(organization_id, invoice_id, created_at DESC)`
+
+Trigger: `late_fee_adjustments_append_only` prevents UPDATE and DELETE.
+
 ---
 
-# 14. Database access policy
+# 14. Database access policy and financial invariants
+
+## 14.1 Repository tenant scoping
 
 Use repositories that require tenant scope explicitly.
 
@@ -1216,12 +1438,40 @@ getResidentInvoice({
 
 Repository calls that retrieve organization-owned resources without a tenant/access parameter should be exceptional and private to narrowly controlled domain code.
 
+## 14.2 Append-only financial ledger semantics
+
+The database enforces append-only semantics for financial journals at the engine level:
+
+- The PostgreSQL function `prevent_financial_history_mutation()` raises an exception on any attempt to execute `UPDATE` or `DELETE` against:
+  - `account_entries`
+  - `payment_allocations`
+  - `late_fee_adjustments`
+- Financial corrections are never made by editing existing rows. Instead, compensating entries with fresh idempotency keys must be inserted:
+  - Dwelling account corrections: Post a `MANUAL_ADJUSTMENT` debit or credit entry via `createDwellingAccountAdjustment`.
+  - Invoice late-fee adjustments: Recorded as `late_fee_adjustments` before preparation/issuance.
+- Single-sided invariant: Every `account_entries` row must have exactly one non-zero side (`(debit > 0 and credit = 0) or (credit > 0 and debit = 0)`).
+
+## 14.3 Database financial constraints and identities
+
+The database schema enforces financial integrity via PostgreSQL `CHECK` constraints:
+
+1. **Non-negative components**:
+   `CHECK (current_charges >= 0 and previous_outstanding >= 0 and previous_credit_applied >= 0 and late_fee_calculated >= 0 and late_fee_applied >= 0 and amount_due >= 0 and remaining_credit >= 0)`
+2. **Late-fee reconciliation**:
+   `CHECK (late_fee_applied = late_fee_calculated + late_fee_adjustment)`
+3. **Amount due formula**:
+   `CHECK (amount_due = greatest(current_charges + previous_outstanding - previous_credit_applied + late_fee_applied + manual_adjustment, 0))`
+4. **Late-fee adjustment delta**:
+   `CHECK (adjustment_amount = new_applied_amount - prior_applied_amount)`
+5. **Positive allocation amount**:
+   `CHECK (allocated_amount > 0)`
+
 Use database transactions for:
 
 - invoice numbering + generation;
-- invoice status changes with financial side effects;
-- payment confirmation;
-- import commit;
+- invoice preparation, snapshotting, and ledger posting;
+- payment match confirmation, dwelling ledger crediting, and allocation;
+- bank statement import;
 - access assignment where account provisioning is involved.
 
 ---
@@ -1398,88 +1648,150 @@ Canonical `billing_case.status`:
 ```text
 MISSING_DATA
      │
-     │ inputs complete + invoice generated
+     │ readings & manual inputs complete
+     ▼
+   READY
+     │
+     │ generate invoice
      ▼
    DRAFT
      │
-     │ prepare
+     │ prepare (resolves financials, snapshots statement, posts ledger charges)
      ▼
- PREPARED
+  PREPARED
      │
-     │ at least one successful delivery
+     │ at least one successful delivery (email or paper)
      ▼
     SENT
-   ┌─┴────────────┐
-   │              │
-payment       due date passes
-   │              │
-   ▼              ▼
- PAID          OVERDUE
-                  │
-               payment
-                  │
-                  ▼
-                 PAID
+   ┌─┴────────────────────────┐
+   │                          │
+payment allocated       due date passes
+   │                          │
+   ▼                          ▼
+(fully settled?)           OVERDUE
+ ├── Yes → PAID               │
+ └── No  → remains SENT       │ payment allocated
+                              ▼
+                       (fully settled?)
+                        ├── Yes → PAID
+                        └── No  → remains OVERDUE
 ```
 
 Rules:
 
-- `MISSING_DATA`: invoice cannot be generated.
-- `DRAFT`: invoice exists and may be regenerated.
-- `PREPARED`: invoice approved for sending.
-- `SENT`: at least one send succeeded.
-- `OVERDUE`: sent, unpaid and local due date passed.
-- `PAID`: confirmed full payment or explicit audited admin action.
+- `MISSING_DATA`: required meter readings or manual rule inputs are missing; invoice cannot be generated.
+- `READY`: all required inputs exist; eligible for generation.
+- `DRAFT`: invoice exists and may be regenerated; late fee and manual adjustments may be set.
+- `PREPARED`: invoice is finalized and approved for sending:
+  - Statement financials are re-resolved against the dwelling account ledger and effective late-fee policy;
+  - `balance_snapshot` and `penalty_snapshot` are frozen;
+  - `current_charges` are debited to the dwelling account (`INVOICE_CHARGE`);
+  - `late_fee_applied` is debited to the dwelling account (`LATE_FEE`), if greater than zero;
+  - `manual_adjustment` is posted to the dwelling account (`MANUAL_ADJUSTMENT`), if non-zero;
+  - Once prepared, financial fields can no longer be edited.
+- `SENT`: at least one delivery method (email or paper) succeeded.
+- `OVERDUE`: sent, unpaid (`paid_at IS NULL`), and local due date has passed.
+- `PAID`: confirmed payment allocations equal the invoice's `amount_due`, or an explicit audited admin status override is recorded.
 
-Manual admin status override is allowed but must require confirmation and audit. Non-normal transitions require a reason.
+Partial payment rule:
+When a payment allocation is less than the invoice's remaining unpaid balance, the allocation reduces the outstanding balance, but the invoice and case **remain in `SENT` or `OVERDUE`** until full settlement.
+
+Manual admin status override is allowed but requires confirmation, an audited reason, and does not bypass ledger constraints.
 
 ---
 
-# 20. Invoice generation
+# 20. Invoice generation and statement balance resolution
+
+Invoice generation calculates current-period line items and resolves statement financials against the dwelling's financial account:
+
+## 20.1 Generation workflow
 
 Generation must:
 
 1. authorize admin organization;
-2. lock billing case/invoice-number sequence appropriately;
-3. validate all required data;
-4. select effective billing rules;
-5. calculate all lines using Decimal;
-6. snapshot dwelling/recipient;
-7. snapshot issuer/bank details;
-8. snapshot rule/input data;
-9. generate unique invoice number;
-10. persist invoice + lines transactionally;
-11. set billing case `DRAFT`;
-12. audit event.
+2. lock the billing case and organization row to serialize invoice-number sequencing;
+3. validate that no missing data remains for the dwelling;
+4. select effective billing rules for the period;
+5. calculate line items using Decimal (`current_charges = subtotal + vat_total`);
+6. resolve statement financials against the dwelling account ledger (`resolveStatementFinancials`);
+7. snapshot dwelling/recipient, issuer, payment, and template configurations;
+8. allocate a unique, monotonic invoice number (`{PREFIX}-{YYYY}{MM}-{SEQUENCE}`);
+9. persist invoice + lines transactionally;
+10. update billing case to `DRAFT`;
+11. audit event (`INVOICE_GENERATED` or `INVOICE_REGENERATED`).
 
-Default invoice number:
+Generation is idempotent. Regenerating a draft invoice replaces lines and updates snapshots in place without changing the invoice number or ID.
+
+## 20.2 Statement balance calculation
+
+Statement financials are derived by `calculateStatementBalance` using exact decimal arithmetic:
 
 ```text
-{PREFIX}-{YYYY}{MM}-{SEQUENCE}
-INV-202609-00042
+accountBalance = sum(debit - credit) from account_entries for dwelling and currency
+previousOutstanding = max(accountBalance, 0.00)
+availableCredit = max(-accountBalance, 0.00)
+
+beforeCredit = currentCharges + previousOutstanding + lateFee + manualAdjustment
+positiveBeforeCredit = max(beforeCredit, 0.00)
+
+previousCreditApplied = min(availableCredit, positiveBeforeCredit)
+amountDue = max(positiveBeforeCredit - previousCreditApplied, 0.00)
+
+adjustmentCredit = max(-beforeCredit, 0.00)
+remainingCredit = (availableCredit - previousCreditApplied) + adjustmentCredit
 ```
 
-Sequence:
-- organization-local;
-- monotonic;
-- concurrency-safe.
+Financial invariant enforced in the database:
+`amount_due = greatest(current_charges + previous_outstanding - previous_credit_applied + late_fee_applied + manual_adjustment, 0)`
 
-Generation must be idempotent.
+## 20.3 Late-fee calculation
+
+Late fees are calculated by `calculateLateFee` when an organization has an active `late_fee_policies` row:
+
+- **Principal**: `max(accountBalance, 0.00)` (the dwelling's outstanding debt).
+- **Overdue anchor**: Due date of the oldest unpaid invoice in `PREPARED`, `SENT`, or `OVERDUE` status where `due_date < issue_date`.
+- **First penalty date**: `due_date + grace_days + 1 day`.
+- **Overdue days**: Days elapsed from first penalty date to `issue_date` (minimum 0).
+- **Raw penalty**: `percentForDays(principal, daily_rate, overdueDays, 2)`.
+- **Cap amount**: `percentOf(principal, max_penalty_percent, 2)`.
+- **Applied amount**: `stops_at_cap ? min(rawAmount, capAmount) : rawAmount`.
 
 ---
 
-# 21. Invoice immutability
+# 21. Invoice immutability and financial snapshots
 
-At generation, persist snapshots sufficient to reproduce the invoice.
+## 21.1 Snapshot rationale
 
-After `SENT`:
+Invoices are legal and fiscal instruments. Once prepared and sent to residents:
 
-- financial fields immutable;
-- invoice lines immutable;
-- canonical PDF immutable;
-- changing dwelling, organization or tariffs does not alter sent invoice;
-- status/payment/delivery metadata may still change;
-- correction requires a future correction document, not mutation.
+- Financial fields and line items are **immutable**;
+- The canonical PDF is frozen in private storage;
+- Subsequent tariff changes, dwelling configuration edits, or organization updates do not alter past invoices;
+- Later payments or account adjustments affect the dwelling ledger, but **never rewrite past invoice snapshots**.
+
+## 21.2 Financial snapshot fields
+
+The `invoices` table stores explicit snapshot fields:
+
+- `current_charges`: Total gross charges for the period lines (`subtotal + vat_total`);
+- `previous_outstanding`: Unpaid debt carried forward at preparation time;
+- `previous_credit_applied`: Dwelling credit consumed by this statement;
+- `late_fee_calculated`, `late_fee_adjustment`, `late_fee_applied`: Policy penalty and admin adjustment;
+- `manual_adjustment`: Specific manual adjustment attached to this invoice before preparation;
+- `amount_due`: Net payable total on this invoice;
+- `remaining_credit`: Credit balance remaining on the dwelling account after applying credit to this invoice;
+- `balance_snapshot`: Structured JSON snapshot `{ accountBalance, previousOutstanding, previousCreditApplied, remainingCredit, sourceInvoice }`;
+- `penalty_snapshot`: Structured JSON snapshot of policy configuration and penalty breakdown;
+- `manual_adjustment_snapshot`: Structured JSON snapshot `{ reason, note, actorUserId }`.
+
+## 21.3 Distinguishing account balance concepts
+
+The domain strictly distinguishes:
+
+1. **Dwelling Account Current Balance**: Live sum of debits minus credits across all ledger entries (`getDwellingAccountBalance`). A positive balance represents debt owed; a negative balance represents available credit.
+2. **Invoice Historical Financial Snapshot**: Fixed financial state frozen on the invoice row when prepared.
+3. **Invoice Remaining Unpaid Balance**: `amount_due - sum(allocated_amount)` from `payment_allocations` for this invoice. Indicates what is currently owed specifically on this invoice document.
+4. **Available Account Credit**: Excess credit on the dwelling account (`max(-accountBalance, 0.00)`), carried forward to reduce future statements.
 
 Integration test must prove:
 
@@ -1590,19 +1902,17 @@ Resident authenticated portal access remains separate.
 
 ---
 
-# 25. Bank CSV reconciliation
+# 25. Bank CSV reconciliation and payment allocation
 
 Import workflow:
 
 ```text
-Upload
-→ parse
-→ column mapping/normalization
-→ validation
-→ preview
-→ confirm
-→ persist
-→ propose matches
+Upload CSV
+→ parse & validate headers
+→ preview row statuses (OK / ERROR)
+→ confirm import
+→ persist bank_import & bank_transactions
+→ propose payment matches
 ```
 
 Never write immediately on file selection.
@@ -1619,33 +1929,64 @@ payer_account?
 reference?
 ```
 
-Exact-match rule:
+## 25.1 Matching proposals against remaining balance
 
-1. currency equals invoice currency;
-2. amount equals invoice total exactly;
-3. normalized reference contains exact invoice number;
-4. invoice is not paid;
-5. transaction has no confirmed payment match.
+Matching evaluates bank transactions against the **remaining unpaid balance** of candidate invoices, not merely their original face value:
 
-Then propose `AUTO_EXACT`.
+1. **Candidate selection**:
+   - Matches organization and currency;
+   - Invoice is unpaid (`paid_at IS NULL`);
+   - Billing case status is in `PREPARED`, `SENT`, or `OVERDUE`;
+   - Remaining balance is positive: `remaining = amount_due - sum(allocated_amount) > 0`.
+2. **Reference matching**:
+   - Case-insensitive and whitespace-insensitive: `normalize(txn.reference)` contains `normalize(invoice.invoice_number)`;
+   - Must match exactly one candidate invoice (ambiguous references remain unmatched).
+3. **Result type classification**:
+   - `txn.amount == remaining`: `EXACT` (match type `AUTO_EXACT`, confidence 1.0000);
+   - `txn.amount < remaining`: `PARTIAL` (match type `AUTO_PROBABLE`, confidence 0.9000);
+   - `txn.amount > remaining`: `OVERPAYMENT` (match type `AUTO_PROBABLE`, confidence 0.9000).
+4. **Proposed allocation amount**:
+   `proposed_allocation_amount = min(txn.amount, remaining)`.
 
-Admin confirms proposal.
+Transactions with no reference or no unique matching candidate remain in the unmatched pool (`listUnmatchedTransactions`).
 
-Confirmation transaction:
+## 25.2 Confirmation and allocation lifecycle
+
+Admin confirms proposed or manual matches transactionally:
 
 ```text
-lock match + invoice
-→ confirm match
-→ set invoice paid_at
-→ set billing case PAID
-→ audit
+lock match + bank transaction + invoice
+→ verify invoice not already paid and remaining balance > 0
+→ post full transaction credit to dwelling ledger (account_entries, type PAYMENT)
+→ insert payment_allocations record for min(txn.amount, remaining)
+→ update payment_matches to CONFIRMED
+→ if fully settled (allocated_amount == remaining):
+    set invoice paid_at = now()
+    set billing case status = PAID
+→ audit event (PAYMENT_MATCH_CONFIRMED, PAYMENT_PARTIALLY_ALLOCATED, or PAYMENT_OVERPAYMENT_ALLOCATED)
+→ if overpayment: emit ACCOUNT_CREDIT_CREATED for excess credit
 → commit
 ```
 
-Partial payments are out of scope.
+### Partial payments
+
+- The allocated amount reduces the invoice's remaining unpaid balance (`amount_due - sum(allocated_amount)`).
+- The invoice `paid_at` column remains `NULL`.
+- The billing case status remains in `SENT` or `OVERDUE`.
+- Subsequent bank transactions referencing the invoice will be matched against the updated remaining balance until fully settled.
+
+### Overpayments
+
+- The invoice is allocated up to its remaining balance and transitions to `paid_at = now()` and case `PAID`.
+- Because the dwelling ledger is credited with the full transaction amount (`type: PAYMENT`), the excess unallocated funds (`txn.amount - allocated_amount`) remain on the dwelling account as an available credit balance (`accountBalance < 0`).
+- This credit is carried forward and automatically consumed by future invoices (`previous_credit_applied`).
+
+### Match rejection
+
+An admin may reject a proposed match (`rejectMatch`). An already-confirmed match cannot be rejected (unwinding confirmed payments is not supported; corrections require compensating manual adjustment entries).
 
 Duplicate bank files:
-`UNIQUE (organization_id, file_sha256)`.
+Enforced via `UNIQUE (organization_id, file_sha256)`.
 
 ---
 
@@ -1745,6 +2086,7 @@ List:
 
 Detail:
 - overview;
+- account balance (balance KPI card, total debits/credits, append-only journal table with running balance, and manual adjustment action);
 - resident access;
 - meters;
 - billing history;
@@ -1756,10 +2098,10 @@ Do not hard-delete a dwelling with financial history.
 ## Settings
 
 Provide:
-- organization;
-- billing;
+- organization (legal/tax/bank details);
+- billing (currency, timezone, locale, and late-fee policy configuration: daily rate, grace days, penalty cap);
 - tariffs/rules;
-- invoice template;
+- invoice template (branding, notes, instructions);
 - users/access;
 - data/import/export.
 
@@ -1767,10 +2109,16 @@ Provide:
 
 Show:
 - imports;
-- unmatched;
-- proposed matches;
-- confirmed;
-- rejected;
+- unmatched transactions;
+- proposed matches with:
+  - match type (`AUTO_EXACT`, `AUTO_PROBABLE`, `MANUAL`);
+  - result type (`EXACT`, `PARTIAL`, `OVERPAYMENT`);
+  - proposed allocation amount;
+  - remaining invoice balance after allocation;
+  - credit created;
+  - confirm and reject actions;
+- confirmed matches;
+- rejected matches;
 - import detail.
 
 ## Messages
@@ -1801,8 +2149,13 @@ show dwelling selector.
 Show:
 - dwelling number/address;
 - current period;
-- current invoice;
-- due date/status;
+- current invoice:
+  - outstanding payable balance (net of partial payment allocations);
+  - previous balance carried forward;
+  - credit applied;
+  - late fee applied;
+  - remaining account credit;
+  - due date and status badge;
 - cold/hot reading state;
 - submission form when allowed;
 - consumption history;
@@ -1811,7 +2164,7 @@ Show:
 
 ## Invoice history
 
-Show period, number, amount, due date, status.
+Show period, number, amount due, due date, status.
 
 ## Invoice detail
 
@@ -1819,11 +2172,11 @@ Show:
 - issuer;
 - recipient;
 - invoice metadata;
-- calculation lines;
-- totals;
-- download;
+- line items;
+- statement financial breakdown (current charges, previous outstanding, credit applied, late fee, manual adjustment, amount due);
+- payment bank details;
+- download PDF;
 - print.
-
 No admin controls.
 
 ---
@@ -1928,9 +2281,19 @@ INVOICE_RESENT
 BILLING_STATUS_OVERRIDDEN
 
 BANK_IMPORT_CREATED
+PAYMENT_MATCH_PROPOSED
 PAYMENT_MATCH_CONFIRMED
+PAYMENT_MATCH_REJECTED
+PAYMENT_PARTIALLY_ALLOCATED
+PAYMENT_OVERPAYMENT_ALLOCATED
+ACCOUNT_CREDIT_CREATED
+
+LATE_FEE_POLICY_CREATED
+LATE_FEE_ADJUSTED
+ACCOUNT_ADJUSTMENT_CREATED
 
 CONVERSATION_CREATED
+MESSAGE_SENT
 CONVERSATION_RESOLVED
 ```
 
@@ -2260,22 +2623,65 @@ Accept:
 - raw normalized rows retained;
 - duplicate file hash blocked/warned.
 
-## PAY-002 Exact proposal
+## PAY-002 Proposal matching against remaining balance
 
 Accept:
-- invoice number + exact amount + currency;
-- paid invoice excluded;
+- reference normalized contains invoice number;
+- candidate invoice must have remaining balance (`amountDue - allocated > 0`) and be in `PREPARED`, `SENT`, or `OVERDUE`;
+- fully paid invoices excluded;
+- classified as `EXACT` (`amount == remaining`), `PARTIAL` (`amount < remaining`), or `OVERPAYMENT` (`amount > remaining`);
+- proposed allocation amount is `min(txn.amount, remaining)`;
+- ambiguous reference (matching multiple candidate invoices) remains unmatched;
 - no reference -> unmatched.
 
-## PAY-003 Confirm
+## PAY-003 Confirm and allocate
 
 Accept:
-- transaction;
-- match confirmed;
-- paid_at set;
-- case PAID;
-- audit;
-- repeat idempotent.
+- executed transactionally with row locks;
+- dwelling ledger receives full transaction credit (`type: PAYMENT`);
+- allocation record created in `payment_allocations` (`allocated_amount = min(txn.amount, remaining)`);
+- match marked `CONFIRMED`;
+- invoice `paid_at` set and case set to `PAID` ONLY IF fully settled (`allocated_amount == remaining`);
+- partial payment leaves invoice and case unsettled with remaining balance;
+- overpayment excess remains as credit on the dwelling account ledger and emits `ACCOUNT_CREDIT_CREATED`;
+- audit event recorded (`PAYMENT_MATCH_CONFIRMED`, `PAYMENT_PARTIALLY_ALLOCATED`, or `PAYMENT_OVERPAYMENT_ALLOCATED`);
+- repeat confirmation is idempotent;
+- confirmed match cannot be rejected.
+
+---
+
+## ACC-001 Dwelling account ledger
+
+Accept:
+- dwelling account tracks debits, credits, and running balance;
+- append-only: database trigger rejects `UPDATE` and `DELETE`;
+- single-sided check: either `debit > 0 and credit = 0` or `credit > 0 and debit = 0`;
+- unique idempotency keys on every entry.
+
+## ACC-002 Statement balance resolution & snapshots
+
+Accept:
+- invoice generation resolves dwelling account balance and active late-fee policy;
+- previous outstanding balance carried forward;
+- available dwelling credit automatically applied to reduce amount due;
+- invoice preparation freezes `balance_snapshot` and `penalty_snapshot`;
+- preparation debits `current_charges` and `late_fee_applied` to dwelling ledger;
+- sent invoice snapshots remain immutable after subsequent payments.
+
+## ACC-003 Late-fee policies and adjustments
+
+Accept:
+- organization policy defines `daily_rate`, `grace_days`, and penalty cap;
+- calculated on oldest unpaid overdue invoice principal;
+- admin can adjust or waive fee with structured reason before invoice preparation;
+- adjustments recorded in append-only `late_fee_adjustments` with audit log.
+
+## ACC-004 Manual account adjustments
+
+Accept:
+- admin can post manual `CHARGE` or `CREDIT` adjustments to a dwelling account with reason and date;
+- creates `MANUAL_ADJUSTMENT` ledger entry;
+- adjustments immediately update dwelling account balance.
 
 ---
 
@@ -2386,7 +2792,8 @@ Mandatory:
 - invoice numbering;
 - token hashing;
 - bank reference normalization;
-- exact match algorithm.
+- statement balance arithmetic (credit application, debt carry-forward, non-negative amount due);
+- late-fee calculation (daily rate, grace days, penalty cap).
 
 ## Integration
 
@@ -2395,9 +2802,17 @@ Mandatory:
 - organization-scoped repositories;
 - resident-scoped repositories;
 - invoice generation transaction;
+- invoice preparation (statement snapshotting, charges/penalties debited to ledger);
 - invoice snapshot immutability;
-- duplicate bank import;
-- payment idempotency;
+- append-only trigger enforcement on financial tables (`account_entries`, `payment_allocations`, `late_fee_adjustments`);
+- duplicate bank import rejection;
+- payment reconciliation lifecycle:
+  - exact payment (invoice fully settled, marked PAID);
+  - partial payment (allocation applied, invoice remains open with remaining balance);
+  - second payment completing a partial invoice;
+  - overpayment (invoice settled, excess sitting as dwelling account credit);
+  - payment match idempotency and rejection protections;
+- dwelling account adjustments and running balance evolution;
 - auth/role checks.
 
 ## E2E
@@ -2412,7 +2827,7 @@ login
 → create period
 → enter reading
 → generate
-→ prepare
+→ prepare (financial statement snapshotted)
 → send
 ```
 
@@ -2422,7 +2837,7 @@ login
 magic-link/session fixture
 → own dwelling
 → submit reading
-→ view invoice
+→ view invoice (with statement breakdown and remaining balance)
 → download PDF
 → send message
 ```
@@ -2431,9 +2846,10 @@ magic-link/session fixture
 
 ```text
 import CSV
-→ inspect proposal
-→ confirm
-→ PAID
+→ inspect proposed matches (exact, partial, overpayment)
+→ confirm match
+→ allocation recorded + ledger credited
+→ invoice PAID only when fully settled (or remaining balance / credit retained)
 ```
 
 ### Security
@@ -2884,13 +3300,14 @@ Deliver all admin routes using stable domain/actions.
 
 Deliver all portal routes, mobile-first.
 
-## J — Payments
+## J — Payments & Accounts
 
 Deliver:
 - CSV normalization;
 - preview;
-- exact matching;
-- confirmation.
+- remaining-balance matching & classification (exact, partial, overpayment);
+- confirmation, dwelling ledger crediting, and allocation;
+- dwelling account ledger journal and adjustments.
 
 ## K — Messaging/data
 

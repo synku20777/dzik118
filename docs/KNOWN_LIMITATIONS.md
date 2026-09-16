@@ -12,11 +12,29 @@ Merely declaring the Cloudflare Browser Rendering binding in `wrangler.jsonc` ma
 
 Neither `wrangler dev --test-scheduled`'s `/__scheduled` route nor the `/cdn-cgi/local/scheduled` route invokes the real `scheduled` handler for this project. This was diagnosed empirically (both routes silently no-op) and by reading Wrangler's own bundler source; the working theory is that the Astro Cloudflare adapter's `no_bundle: true` setting skips the middleware-injection step Wrangler needs to wire either route to a real handler, though no single file in this repo states that explanation outright. To verify the scheduler locally, call `POST /api/v1/internal/scheduled-jobs` directly with the correct `INTERNAL_CRON_SECRET`. Real Cloudflare Cron Triggers work correctly in production, so this is a local Wrangler tooling limitation only.
 
+## Financial accounting boundaries
+
+### Single-invoice allocation per transaction (no arbitrary multi-invoice splits)
+
+Candidate payment matching matches an incoming bank transaction to a single candidate invoice, allocating up to `min(transaction.amount, invoice.amountDue - allocated)`. Arbitrary manual multi-invoice split allocations (e.g., splitting one payment across three older invoices) are not supported. If a resident's payment exceeds the target invoice's remaining balance, the transaction is fully credited to the dwelling's ledger, the invoice is marked `PAID`, and the surplus becomes an unallocated dwelling account credit (`NEGATIVE` ledger balance). This credit is automatically carried forward and applied to reduce the next generated invoice statement.
+
+### Simple daily late-fee model (no compounding or statutory penalty schedules)
+
+The late-fee calculation engine (`src/domain/accounts/late-fees.ts`) applies a configurable daily percentage rate (`daily_rate_percent`), grace period (`grace_days`), and maximum cap (`max_fee_percent`) calculated as simple interest against the overdue balance. It does not implement compounding interest, variable national reference rate tables, or tiered statutory interest schedules (such as Polish statutory delay interest, *odsetki ustawowe za opóźnienie*).
+
+### Append-only auditability requiring compensating adjustments (no direct financial mutations)
+
+The financial history (`account_entries`, `payment_allocations`, and `late_fee_adjustments`) is strictly immutable and protected by PostgreSQL database triggers (`prevent_financial_history_mutation`). There are no direct delete, edit, or void operations on posted financial records. Correcting billing errors, settling disputes, or waiving fees requires posting compensating entries: either a manual adjustment (`CHARGE` or `CREDIT`) via `accounts.createAdjustment` or a manual late-fee adjustment via `invoices.adjustLateFee` prior to invoice delivery.
+
+### Single-entity dwelling ledger (no double-entry ERP or tax export)
+
+Dwelling accounts track net debits and credits per dwelling for property management operations. The platform does not implement double-entry chart-of-accounts bookkeeping (assets, liabilities, equity) or native export integration with external Polish enterprise accounting software (e.g., Comarch Optima, Symfonia, JPK_V7).
+
 ## Deferred features and refactors
 
-### Manual quantity and amount billing rules unsupported in generation
+### Resolved: Manual quantity and amount billing rules now supported
 
-Although `MANUAL_QUANTITY` and `MANUAL_AMOUNT` calculation types exist in the schema, automatic invoice generation does not support them. As noted in `src/domain/billing/generation.ts`, there is currently no persisted place for an admin to supply a per-dwelling, per-period quantity or amount, and building that input mechanism is undefined-by-spec scope. Enabling such a rule blocks invoice generation with a loud `ValidationError` rather than silently generating an incomplete or incorrect invoice. This was a deliberate choice to fail loud rather than allow silent underbilling.
+Earlier specification drafts deferred `MANUAL_QUANTITY` and `MANUAL_AMOUNT` billing rules. These were subsequently implemented in migration `0005` via the `manual_rule_inputs` table, allowing admins to record per-dwelling, per-period quantity or amount values that are verified during case readiness and applied during invoice generation.
 
 ### Retry-safety gap in sendInvoice idempotency protocol
 
