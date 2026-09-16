@@ -196,20 +196,28 @@ Do not substitute another framework or primary database without an ADR and expli
 - **Astro**, current stable release compatible with Cloudflare adapter
 - **SSR / `output: "server"`**
 - **TypeScript**, `strict: true`
-- **Tailwind CSS 4**
-- **React islands** only where client interaction materially benefits from React
-- **shadcn/ui** / Radix-derived accessible primitives where useful
+- **Tailwind CSS 4** via `@tailwindcss/vite`
+- **Astro components** as default UI presentation layer
 - **Astro Actions** for internal typed mutations
+- **Targeted client-side TypeScript** for browser-heavy interaction modules (`src/lib/ui/`)
+- **Specialized client libraries** where justified (e.g. SortableJS for drag-and-drop reordering)
 - Astro API endpoints only for public callbacks, file/token access, webhooks and external-style endpoints
 
 Principle:
 
 ```text
-Astro = application framework
-React = optional interactive island layer
+server-rendered by default (Astro components)
+        ↓
+small browser enhancement when needed (client-side TypeScript)
+        ↓
+specialized client library if useful (e.g. SortableJS)
+        ↓
+additional UI framework only through deliberate architectural decision (ADR)
 ```
 
-Do not turn the application into a full React SPA.
+### Framework introduction invariant
+
+Astro + TypeScript is the default UI architecture. A second frontend framework such as React should only be introduced when a concrete feature demonstrates state-management or component-composition complexity that materially outweighs the additional runtime, dependency, maintenance, and cognitive cost. A future introduction of React or any other UI framework requires an Architecture Decision Record (ADR) and explicit coordinator approval.
 
 ## 3.2 persistence
 
@@ -344,18 +352,21 @@ Representative configuration:
 // astro.config.ts
 import { defineConfig } from "astro/config";
 import cloudflare from "@astrojs/cloudflare";
-import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   output: "server",
   adapter: cloudflare(),
-  integrations: [react()],
+  security: {
+    checkOrigin: true,
+  },
   vite: {
     plugins: [tailwindcss()],
   },
 });
 ```
+
+Tailwind CSS 4 is configured directly through the official Vite plugin (`@tailwindcss/vite`). No secondary UI framework integrations are required.
 
 If current Astro/Tailwind integration differs, use the current official Astro setup rather than forcing stale syntax.
 
@@ -476,6 +487,7 @@ The Supabase service/secret key is server-only and must never be prefixed `PUBLI
 │   │   ├── storage/
 │   │   ├── pdf/
 │   │   ├── decimal/
+│   │   ├── ui/
 │   │   └── logging/
 │   │
 │   ├── middleware.ts
@@ -518,7 +530,7 @@ The Supabase service/secret key is server-only and must never be prefixed `PUBLI
 └── .env.example
 ```
 
-Business rules belong in `src/domain/`, not Astro pages or React components.
+Business rules belong in `src/domain/`, not Astro pages, components, or client-side scripts.
 
 Astro Actions call the domain layer. The domain layer calls scoped repositories.
 
@@ -2338,13 +2350,14 @@ No admin controls.
 
 # 29. UI architecture
 
-Use Astro server-rendered components for most UI.
+Use Astro server-rendered components for all pages, layouts, and presentation UI. Server-side rendering ensures fast initial paint, low bundle overhead on Cloudflare Workers, and clean separation of concerns.
 
-Good Astro candidates:
+Core Astro layout and UI components:
 
 ```text
 AdminLayout.astro
 ResidentLayout.astro
+AuthLayout.astro
 Sidebar.astro
 Breadcrumbs.astro
 KpiCard.astro
@@ -2354,29 +2367,22 @@ DwellingSummary.astro
 EmptyState.astro
 ```
 
-Use React islands for interaction-heavy pieces:
+Where user interaction is required beyond standard HTML forms and links, use targeted, progressive client-side TypeScript modules located in `src/lib/ui/`:
 
 ```text
-BillingWorkbenchTable.tsx
-BulkInvoiceToolbar.tsx
-StatusFilter.tsx
-MeterReadingEditor.tsx
-ConsumptionChart.tsx
-CsvImportMapper.tsx
-PaymentMatchReview.tsx
-Dialog/Combobox components
+src/lib/ui/
+├── workbench-drawer.ts          # Slide-over drawer for reading entry and dwelling details (focus trap, DOM APIs)
+├── invoice-template-editor.ts   # Structured invoice template composer (reorder, move, preview sync, zoom)
+├── theme.ts                     # Light/dark theme toggle and persistence
+└── forms.ts                     # Progressive form enhancements and validation helpers
 ```
 
-Hydration directives must be intentional.
+Client-side interaction principles:
 
-Prefer:
-- `client:visible`
-- `client:idle`
-- `client:load`
-
-only when appropriate.
-
-Do not hydrate static text/layout.
+1. **Astro + Vanilla TypeScript**: No secondary component framework runtime (such as React, Preact, Vue, or Svelte). There are zero `client:` hydration directives and zero `.tsx` island components.
+2. **Modular Client Scripts**: Client-side logic is bundled into discrete TypeScript modules under `src/lib/ui/`, imported and initialized by the hosting Astro page or layout via standard `<script>` tags.
+3. **Specialized Libraries**: Focused, external browser libraries are used only when justified by non-trivial UX requirements that would otherwise require substantial custom code (e.g. `SortableJS` for robust pointer/touch drag-and-drop reordering in the template editor).
+4. **HTML-First Workflows**: Standard forms, query parameters, Astro Actions, and server redirects handle mutations and state transitions wherever possible. Client scripts enhance UX (e.g., inline calculation feedback, drawer transitions, instant preview updates) without replacing core HTTP flows.
 
 ---
 
@@ -3162,7 +3168,7 @@ Still enforce:
 ## Phase A — Foundation
 
 - Astro Cloudflare scaffold
-- TypeScript/Tailwind/React
+- TypeScript/Tailwind 4
 - design primitives
 - Vitest/Playwright
 - Drizzle
@@ -3252,9 +3258,10 @@ Primary:
 ## Antigravity
 
 Primary:
-- Astro page implementation;
+- Astro page and component implementation;
 - Tailwind;
-- React islands;
+- client-side TypeScript interactions (`src/lib/ui/`);
+- specialized browser library integrations (e.g. SortableJS);
 - responsive UI;
 - accessibility implementation;
 - browser/visual QA;
@@ -3390,8 +3397,7 @@ Always prefer fixed/current Orca behavior over preserving a workaround once upst
 Deliver:
 - Astro SSR project;
 - Cloudflare adapter;
-- Tailwind;
-- React;
+- Tailwind 4;
 - base layouts;
 - testing;
 - CI;
@@ -3547,7 +3553,7 @@ First:
 5. create an Orca Run and shallow task DAG matching Sections 42–47.
 
 Architecture is locked to:
-Astro SSR + TypeScript + Tailwind 4 + selective React islands;
+Astro SSR + TypeScript + Tailwind 4 + client-side TypeScript;
 Cloudflare Workers;
 Supabase Auth + PostgreSQL + private Storage in Frankfurt;
 Drizzle + pg through Hyperdrive;
@@ -3563,7 +3569,7 @@ Sent invoices are immutable.
 
 Assign shared contracts to one worker at a time.
 Prefer Claude for architecture/auth/security review, Codex/OpenAI for DB/domain/tests,
-and Antigravity for Astro/Tailwind/React UI after contracts stabilize.
+and Antigravity for Astro/Tailwind/TypeScript UI after contracts stabilize.
 
 Do not treat `tui-idle` or prompt injection as completion.
 For supervised work, wait for a valid `worker_done`, then inspect diff and run acceptance tests.

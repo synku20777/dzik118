@@ -43,7 +43,7 @@ machine. For everything else, see [Documentation](#documentation) below.
 - **Framework**: [Astro](https://astro.build) (SSR, `output: "server"`)
 - **Runtime**: [Cloudflare Workers](https://workers.cloudflare.com) (`@astrojs/cloudflare`)
 - **Styling**: [Tailwind CSS 4](https://tailwindcss.com) (`@tailwindcss/vite`)
-- **Interactivity**: [React](https://react.dev) islands (`@astrojs/react`)
+- **Interactivity**: Progressive client-side TypeScript and focused libraries (e.g. [SortableJS](https://sortablejs.github.io/Sortable/))
 - **Database and ORM**: PostgreSQL through [Drizzle ORM](https://orm.drizzle.team)
 - **Auth and storage**: [Supabase](https://supabase.com) (Auth SSR and private invoice storage)
 - **Email**: Amazon SES in production, local SMTP to Mailpit in development

@@ -1,7 +1,7 @@
 // Phase D (Organizations/dwellings) - Dwelling CSV import/export (spec
 // Section 26, DWL-004). No interactive column-mapping UI: the header row
 // must use the exact logical column names from Section 26. Freeform mapping
-// (spec Section 29's CsvImportMapper.tsx) can be added if a real need for
+// (spec Section 29's CSV import mapper) can be added if a real need for
 // non-standard headers shows up; nothing in DWL-004's acceptance criteria
 // requires it.
 import Papa from "papaparse";
