@@ -109,58 +109,31 @@ Run these steps in order.
 
    The Cloudflare adapter reads `.dev.vars` for both `npm run dev` and `npm run build`.
 
-5. Export the database and Supabase variables in your shell. The migration, seed, and storage scripts read these directly and do not read `.dev.vars`.
+5. Add `DATABASE_URL` to `.dev.vars` (the other Supabase variables are already there):
 
    ```bash
-   export DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-   export SUPABASE_URL="http://127.0.0.1:54321"
-   export SUPABASE_SECRET_KEY="<the service role key from step 2>"
+   DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
    ```
 
    On Windows PowerShell, use `$env:DATABASE_URL = "..."` instead of `export`.
 
-6. Run the database migrations, then load the seed data.
+6. Reset and bootstrap the complete demo (database, Auth users, and private invoice storage):
 
    ```bash
-   npm run db:migrate
-   npm run db:seed
+   npm run demo:reset
    ```
 
-   The seed data creates two organizations, a set of dwellings, and both an admin user and several resident users in the app's own `app_users` table. It does not yet create matching Supabase Auth accounts. Step 7 does that.
+   This command deliberately drops and recreates the database's `public` schema. Use it only for a disposable demo/local database. It reads `.dev.vars`, creates the matching Supabase Auth identities, and is safe to re-run against the same local Supabase project.
 
-7. Create Supabase Auth accounts that match the seed data. The seed script fixes these IDs so that Supabase Auth and `app_users` agree on who each person is. Read `scripts/seed.ts` for the full list. The two accounts below are enough to sign in and explore the app.
+7. In the Supabase Studio at [http://127.0.0.1:54323](http://127.0.0.1:54323), set the magic-link email template and the auth redirect allow-list. Follow the exact steps in [Supabase project setup](docs/deployment/supabase-setup.md). Skip this step and resident sign-in fails, even though the application code is correct.
+
+8. Start the local development server.
 
    ```bash
-   # Admin for the main demo organization (sign in with a password)
-   curl -X POST "$SUPABASE_URL/auth/v1/admin/users" \
-     -H "apikey: $SUPABASE_SECRET_KEY" \
-     -H "Authorization: Bearer $SUPABASE_SECRET_KEY" \
-     -H "Content-Type: application/json" \
-     -d '{"id":"10000000-0000-4000-8000-0000000000a1","email":"admin.a@example.com","password":"ChangeMe123!","email_confirm":true}'
-
-   # Resident for dwelling 1 in the main demo organization (sign in with a magic link, no password)
-   curl -X POST "$SUPABASE_URL/auth/v1/admin/users" \
-     -H "apikey: $SUPABASE_SECRET_KEY" \
-     -H "Authorization: Bearer $SUPABASE_SECRET_KEY" \
-     -H "Content-Type: application/json" \
-     -d '{"id":"20000000-0000-4000-8000-000000000001","email":"resident1@example.com","email_confirm":true}'
+   npm run dev
    ```
 
-8. Create the private invoice storage bucket.
-
-   ```bash
-   npm run storage:setup
-   ```
-
-9. In the Supabase Studio at [http://127.0.0.1:54323](http://127.0.0.1:54323), set the magic-link email template and the auth redirect allow-list. Follow the exact steps in [Supabase project setup](docs/deployment/supabase-setup.md). Skip this step and resident sign-in fails, even though the application code is correct.
-
-10. Start the local development server.
-
-    ```bash
-    npm run dev
-    ```
-
-    Open [http://localhost:4321](http://localhost:4321).
+   Open [http://localhost:4321](http://localhost:4321).
 
 ## Logging in
 

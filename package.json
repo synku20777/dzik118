@@ -23,6 +23,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "vite-node scripts/seed.ts",
     "db:migrate:fresh": "vite-node scripts/db-migrate-fresh.ts",
+    "demo:auth": "vite-node scripts/setup-demo-auth.ts",
+    "demo:reset": "vite-node scripts/demo-reset.ts",
     "storage:setup": "vite-node scripts/setup-storage.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test"

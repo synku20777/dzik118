@@ -12,6 +12,7 @@ describe("theme management", () => {
   let store: Record<string, string> = {};
   let rootAttributes: Record<string, string> = {};
   let buttonAttributes: Record<string, string> = {};
+  let buttonDataset: Record<string, string> = {};
   let metaAttributes: Record<string, string> = {};
   let clickListener: (() => void) | null = null;
   let mediaListener: ((e: { matches: boolean }) => void) | null = null;
@@ -20,6 +21,10 @@ describe("theme management", () => {
     store = {};
     rootAttributes = {};
     buttonAttributes = {};
+    buttonDataset = {
+      labelLight: "Switch to light theme",
+      labelDark: "Switch to dark theme",
+    };
     metaAttributes = {};
     clickListener = null;
     mediaListener = null;
@@ -53,7 +58,7 @@ describe("theme management", () => {
     };
 
     const mockButton = {
-      dataset: {} as Record<string, string>,
+      dataset: buttonDataset,
       setAttribute(name: string, val: string) {
         buttonAttributes[name] = val;
       },
@@ -150,7 +155,8 @@ describe("theme management", () => {
   });
 
   it("localizes button labels for Latvian locale", () => {
-    document.documentElement.lang = "lv";
+    buttonDataset.labelLight = "Pārslēgt uz gaišo motīvu";
+    buttonDataset.labelDark = "Pārslēgt uz tumšo motīvu";
     updateToggleButtons("light");
     expect(buttonAttributes["aria-label"]).toBe("Pārslēgt uz tumšo motīvu");
     updateToggleButtons("dark");

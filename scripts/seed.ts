@@ -30,7 +30,9 @@ import {
   invoiceLines,
   invoiceAccessTokens,
   invoiceDeliveries,
+  invoiceTemplates,
 } from "../src/db/schema/invoices";
+import { accountEntries, paymentAllocations } from "../src/db/schema/accounts";
 import {
   bankImports,
   bankTransactions,
@@ -38,6 +40,10 @@ import {
 } from "../src/db/schema/payments";
 import { conversations, messages } from "../src/db/schema/messaging";
 import { auditLogs } from "../src/db/schema/audit";
+import {
+  buildInvoiceTemplateSnapshot,
+  createDefaultInvoiceTemplateConfig,
+} from "../src/domain/billing/invoice-template-schema";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const sha256 = (input: string) =>
@@ -180,6 +186,13 @@ async function main() {
         displayName: `${d.type === "APARTMENT" ? "Apt" : d.type === "PARKING" ? "Parking" : "Storage"} ${d.number}`,
         occupantName:
           d.type === "APARTMENT" ? `Resident household ${d.number}` : null,
+        billingName:
+          d.type === "APARTMENT" ? `Resident household ${d.number}` : orgA.name,
+        billingEmail:
+          d.type === "APARTMENT" && Number(d.number) <= RESIDENT_IDS.length
+            ? `resident${d.number}@example.com`
+            : orgA.email,
+        billingAddress: `${orgA.addressLine1}, ${orgA.city}, ${orgA.postalCode}`,
         areaM2: d.area,
         residentCount: d.residentCount,
       }))
@@ -248,7 +261,9 @@ async function main() {
     .values([
       {
         organizationId: orgA.id,
-        name: "Maintenance Fee",
+        name: "Apsaimniekošanas maksa",
+        nameEn: "Maintenance fee",
+        nameRu: "Плата за обслуживание",
         code: "MAINT",
         calculationType: "FIXED",
         unit: "month",
@@ -258,7 +273,9 @@ async function main() {
       },
       {
         organizationId: orgA.id,
-        name: "Common Area Maintenance",
+        name: "Koplietošanas telpu uzturēšana",
+        nameEn: "Common area maintenance",
+        nameRu: "Содержание общих помещений",
         code: "AREA_FEE",
         calculationType: "AREA",
         unit: "m2",
@@ -268,7 +285,9 @@ async function main() {
       },
       {
         organizationId: orgA.id,
-        name: "Cold Water",
+        name: "Aukstais ūdens",
+        nameEn: "Cold water",
+        nameRu: "Холодная вода",
         code: "COLD_WATER",
         calculationType: "METER_CONSUMPTION",
         meterType: "COLD_WATER",
@@ -279,7 +298,9 @@ async function main() {
       },
       {
         organizationId: orgA.id,
-        name: "Hot Water",
+        name: "Karstais ūdens",
+        nameEn: "Hot water",
+        nameRu: "Горячая вода",
         code: "HOT_WATER",
         calculationType: "METER_CONSUMPTION",
         meterType: "HOT_WATER",
@@ -290,6 +311,18 @@ async function main() {
       },
     ])
     .returning();
+
+  const [template] = await db
+    .insert(invoiceTemplates)
+    .values({
+      organizationId: orgA.id,
+      headerText: orgA.name,
+      paymentInstructions: "Maksājuma mērķī norādiet rēķina numuru.",
+      footerText: "Paldies par savlaicīgu apmaksu.",
+      config: createDefaultInvoiceTemplateConfig(),
+    })
+    .returning();
+  const templateSnapshot = buildInvoiceTemplateSnapshot(template);
 
   // --- Billing periods: previous month (complete/paid), current month (mixed) ---
   // Fixed, not derived from the real current date: spec Section 36 requires a
@@ -317,7 +350,11 @@ async function main() {
   };
 
   const prev = monthBounds(PREVIOUS_PERIOD);
-  const cur = monthBounds(CURRENT_PERIOD);
+  const cur = {
+    ...monthBounds(CURRENT_PERIOD),
+    issueDate: "2026-09-01",
+    dueDate: "2026-09-29",
+  };
   const yyyymm = (year: number, month: number) =>
     `${year}${String(month).padStart(2, "0")}`;
 
@@ -443,7 +480,14 @@ async function main() {
 
     const addLine = (
       sortOrder: number,
-      rule: { id: string; unit: string },
+      rule: {
+        id: string;
+        unit: string;
+        code: string;
+        name: string;
+        nameEn: string | null;
+        nameRu: string | null;
+      },
       description: string,
       calculationType: "FIXED" | "AREA" | "METER_CONSUMPTION",
       quantity: number,
@@ -456,7 +500,13 @@ async function main() {
         sortOrder,
         description,
         calculationType,
-        sourceSnapshot: { quantity, unitPrice },
+        sourceSnapshot: {
+          code: rule.code,
+          nameEn: rule.nameEn,
+          nameRu: rule.nameRu,
+          quantity,
+          unitPrice,
+        },
         unit: rule.unit,
         quantity: quantity.toFixed(4),
         unitPrice: unitPrice.toFixed(4),
@@ -467,20 +517,13 @@ async function main() {
       });
     };
 
-    addLine(0, maintenanceRule, "Monthly maintenance fee", "FIXED", 1, 15.0);
-    addLine(
-      1,
-      areaRule,
-      "Common area maintenance",
-      "AREA",
-      Number(d.areaM2),
-      0.35
-    );
+    addLine(0, maintenanceRule, maintenanceRule.name, "FIXED", 1, 15.0);
+    addLine(1, areaRule, areaRule.name, "AREA", Number(d.areaM2), 0.35);
     if (consumption) {
       addLine(
         2,
         coldRule,
-        "Cold water consumption",
+        coldRule.name,
         "METER_CONSUMPTION",
         Number(consumption.cold),
         1.2
@@ -488,7 +531,7 @@ async function main() {
       addLine(
         3,
         hotRule,
-        "Hot water consumption",
+        hotRule.name,
         "METER_CONSUMPTION",
         Number(consumption.hot),
         5.8
@@ -541,7 +584,7 @@ async function main() {
       : null;
     const paidAt =
       status === "PAID"
-        ? new Date(`${period.invoiceIssueDate}T00:00:00Z`)
+        ? new Date(`${period.invoiceIssueDate}T11:00:00Z`)
         : null;
     // OVERDUE requires a due date already in the past (spec Section 19); the
     // period's normal due date (the 14th) is not guaranteed to have passed,
@@ -562,17 +605,36 @@ async function main() {
         subtotal: subtotal.toFixed(2),
         vatTotal: vatTotal.toFixed(2),
         total: total.toFixed(2),
-        issuerSnapshot: { name: orgA.name, iban: orgA.iban, bic: orgA.bic },
+        currentCharges: total.toFixed(2),
+        amountDue: total.toFixed(2),
+        issuerSnapshot: {
+          name: orgA.name,
+          registrationNumber: orgA.registrationNumber,
+          vatNumber: orgA.vatNumber,
+          addressLine1: orgA.addressLine1,
+          city: orgA.city,
+          postalCode: orgA.postalCode,
+          countryCode: orgA.countryCode,
+          email: orgA.email,
+          phone: orgA.phone,
+        },
         recipientSnapshot: {
           dwellingNumber: dwelling.number,
+          displayName: dwelling.displayName,
+          occupantName: dwelling.occupantName,
           billingName: dwelling.billingName,
+          billingEmail: dwelling.billingEmail,
+          billingAddress: dwelling.billingAddress,
+          invoiceByEmail: dwelling.invoiceByEmail,
+          invoiceByPaper: dwelling.invoiceByPaper,
         },
         paymentSnapshot: {
+          bankName: orgA.bankName,
           iban: orgA.iban,
           bic: orgA.bic,
-          reference: invoiceNumber,
+          currency: orgA.currency,
         },
-        templateSnapshot: { headerText: orgA.name },
+        templateSnapshot,
         preparedAt,
         sentAt,
         paidAt,
@@ -597,6 +659,22 @@ async function main() {
         grossAmount: l.grossAmount.toFixed(2),
       }))
     );
+
+    if (preparedAt) {
+      await db.insert(accountEntries).values({
+        organizationId: orgA.id,
+        dwellingId: dwelling.id,
+        effectiveDate: invoice.issueDate,
+        type: "INVOICE_CHARGE",
+        debit: invoice.currentCharges,
+        credit: "0.00",
+        currency: invoice.currency,
+        invoiceId: invoice.id,
+        description: `Current charges ${invoice.invoiceNumber}`,
+        metadata: { invoiceNumber: invoice.invoiceNumber },
+        idempotencyKey: `invoice:${invoice.id}:current-charges`,
+      });
+    }
 
     if (sentAt) {
       await db.insert(invoiceDeliveries).values({
@@ -721,15 +799,44 @@ async function main() {
         })
         .returning();
 
-      await db.insert(paymentMatches).values({
+      const [match] = await db
+        .insert(paymentMatches)
+        .values({
+          organizationId: orgA.id,
+          bankTransactionId: txn.id,
+          invoiceId: e.invoice.id,
+          matchType: "AUTO_EXACT",
+          status: "CONFIRMED",
+          confidence: "1.0000",
+          resultType: "EXACT",
+          proposedAllocationAmount: e.invoice.amountDue,
+          confirmedByUserId: ADMIN_A_ID,
+          confirmedAt: new Date(),
+        })
+        .returning();
+      await db.insert(accountEntries).values({
         organizationId: orgA.id,
+        dwellingId: e.invoice.dwellingId,
+        effectiveDate: txn.bookingDate,
+        type: "PAYMENT",
+        debit: "0.00",
+        credit: txn.amount,
+        currency: txn.currency,
+        invoiceId: e.invoice.id,
+        bankTransactionId: txn.id,
+        description: `Bank payment ${txn.reference}`,
+        metadata: { allocatedAmount: e.invoice.amountDue, resultType: "EXACT" },
+        idempotencyKey: `bank-transaction:${txn.id}:payment`,
+      });
+      await db.insert(paymentAllocations).values({
+        organizationId: orgA.id,
+        dwellingId: e.invoice.dwellingId,
         bankTransactionId: txn.id,
         invoiceId: e.invoice.id,
-        matchType: "AUTO_EXACT",
-        status: "CONFIRMED",
-        confidence: "1.0000",
-        confirmedByUserId: ADMIN_A_ID,
-        confirmedAt: new Date(),
+        allocatedAmount: e.invoice.amountDue,
+        method: "EXACT",
+        actorUserId: ADMIN_A_ID,
+        idempotencyKey: `payment-match:${match.id}:allocation`,
       });
     }
   }
