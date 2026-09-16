@@ -30,6 +30,18 @@ The financial history (`account_entries`, `payment_allocations`, and `late_fee_a
 
 Dwelling accounts track net debits and credits per dwelling for property management operations. The platform does not implement double-entry chart-of-accounts bookkeeping (assets, liabilities, equity) or native export integration with external Polish enterprise accounting software (e.g., Comarch Optima, Symfonia, JPK_V7).
 
+## Invoice template boundaries
+
+### Structured template composer (no arbitrary HTML, CSS, or freeform canvas)
+
+The invoice template editor (`/admin/o/[orgId]/settings/invoice-template`) is a structured document composer rather than an unrestricted WYSIWYG or canvas page builder:
+- **Constrained section model**: Only the 6 predefined block types (`meta`, `parties`, `line-items`, `payment`, `default-note`, `footer`) and custom `text` blocks are supported. Freeform canvas placement, arbitrary pixel coordinates, multi-column dragging, and custom widget components are not supported.
+- **Maximum block count**: The server schema (`invoiceTemplateConfigV1Schema`) and client editor enforce a strict cap of 30 blocks per template to prevent document bloat and browser rendering issues.
+- **Formatting scope**: Bold weight and text alignment (`left`, `center`, `right`) are configurable on custom text blocks and charges table row overrides (`visible`, `bold`, `spacingBefore`), but built-in text fields (header, footer, payment instructions, default note) render plain escaped text with preserved newlines. Custom font families, font sizes, colors, and arbitrary CSS classes are not configurable.
+- **Strict charges table preservation**: The line items charges table (`line-items`) must remain present and visible on every invoice layout; hiding or duplicating the charges table is rejected by the schema.
+- **No arbitrary row reordering**: Reordering applies to document section blocks. Individual fee rows inside the charges table are generated in deterministic billing rule sort order; dragging or reordering individual charge rows is not supported.
+- **Security & XSS protection**: Administrators cannot inject raw HTML, inline CSS attributes, `<style>` tags, or JavaScript. All user-entered text is passed through `escapeHtml()` during HTML and PDF rendering.
+
 ## Deferred features and refactors
 
 ### Resolved: Manual quantity and amount billing rules now supported

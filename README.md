@@ -5,7 +5,8 @@ apartment buildings, housing associations, cooperatives, and small property
 managers. It supports monthly billing cycles, dwelling-level financial accounts
 with an append-only transaction ledger, bank payment reconciliation against
 remaining invoice balances (handling exact, partial, and overpayments), credit
-and debt carry-forward, automated late-fee policies, and resident self-service.
+and debt carry-forward, automated late-fee policies, structured invoice template
+customization, and resident self-service.
 
 This README explains how to install the project and run it on your own
 machine. For everything else, see [Documentation](#documentation) below.
@@ -53,7 +54,7 @@ machine. For everything else, see [Documentation](#documentation) below.
 
 - **ADMIN**: manages one organization. This covers buildings, dwellings,
   dwelling account balances and adjustments, periods, meter readings,
-  billing rules, invoices, payments, and messages.
+  billing rules, invoice templates, invoices, payments, and messages.
 - **RESIDENT**: has access to one or more dwellings. A resident can submit
   readings and view their own invoices, outstanding balance, payment history,
   and messages.

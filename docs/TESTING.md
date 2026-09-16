@@ -42,6 +42,8 @@ The unit test suite covers core mathematical and domain rules, including:
 - **Statement balance resolution** (`tests/unit/account-balance.test.ts`): Verifies `calculateStatementBalance`, ensuring outstanding debt is carried forward, available account credits offset new charges, amount due is floored at zero, and late fees / manual adjustments are incorporated.
 - **Late-fee calculation** (`tests/unit/account-balance.test.ts`): Verifies `calculateLateFee`, verifying grace period evaluation, daily rate accrual, percentage caps, and zero fee behavior for settled accounts.
 - **Invoice line item calculation** (`tests/unit/billing-calculation.test.ts`): Verifies decimal precision, VAT rates, and meter consumption formulas.
+- **Invoice template schema & snapshot validation** (`tests/unit/invoice-template-schema.test.ts`): Verifies `createDefaultInvoiceTemplateConfig`, rejection of duplicate block IDs, rejection of missing or hidden `line-items`, lenient read-path fallback on malformed JSON or future schema versions via `parseInvoiceTemplateConfig`, and versioned snapshot construction via `buildInvoiceTemplateSnapshot`.
+- **Deterministic invoice rendering & XSS defense** (`tests/unit/invoice-html.test.ts`): Verifies `renderInvoiceHtml`, validating section block reordering, visibility overrides, custom text blocks with multiline `<br />` conversion, bold emphasis and text alignment, charges table row overrides (`visible`, `bold`, `spacingBefore`) keyed by stable rule code with fallback to line ID, fallback to legacy layout on missing/corrupted snapshots, and strict XSS defense (preventing attribute breakout from custom align strings).
 
 ## Integration tests
 
@@ -75,6 +77,17 @@ While implemented in the domain services and database schema, the following fina
 - **Overpayment reconciliation**: Matching a transaction where `amount > remainingBalance`, verifying that the invoice is marked `PAID`, allocation is capped at remaining balance, and the excess amount is held as unallocated dwelling account credit (`NEGATIVE` account balance).
 - **Credit carry-forward cycle**: Verifying that unallocated dwelling credit from an overpayment is automatically consumed in `prepareInvoice` for the next billing period to reduce the new invoice's `amountDue`.
 - **Append-only ledger triggers**: Verifying that executing an `UPDATE` or `DELETE` query against `account_entries`, `payment_allocations`, or `late_fee_adjustments` fails with a PostgreSQL trigger exception.
+
+### Invoice template & snapshot coverage in integration tests
+
+The integration test suite (`tests/integration/billing.test.ts`) verifies:
+- **Template snapshot immutability across updates**: Verifies that updating an organization's invoice template (`updateInvoiceTemplate`) after an invoice has been generated does not alter the rendered HTML (`renderInvoiceHtml`) of the existing invoice (`htmlAfter === htmlBefore`), preserving historical document integrity.
+
+*Recommended test additions for complete template coverage:*
+While supported by domain services, the following tests should be added to extend coverage:
+- **Maximum block count rejection**: Verifying that attempting to save a template with >30 blocks via `actions.invoiceTemplates.update` returns a validation error.
+- **Cross-tenant authorization check**: Verifying that an admin cannot update another organization's template.
+- **Reset to default template execution**: Verifying that resetting layout properly clears custom blocks and row overrides in database storage.
 
 ## End-to-end tests
 
@@ -213,6 +226,14 @@ If every page fails to load or hangs with no response, see
   record an administrative adjustment before delivery. Verify the invoice
   snapshot reflects the adjustment and a corresponding record is created in
   `late_fee_adjustments`.
+- **Invoice template customization and snapshot immutability.** Update the
+  organization's invoice template under `/admin/o/:orgId/settings/invoice-template`
+  (reorder section blocks, toggle visibility, add custom text, configure row
+  formatting). Generate an invoice and verify that the new structure renders on
+  the invoice view, resident portal, and PDF. Then modify the organization's
+  template again (e.g. delete the custom text or change section order). Re-open
+  the previously generated invoice and verify that its rendered HTML and
+  content remain completely unchanged, proving snapshot immutability.
 - **Double-clicking Send.** Sending an invoice is safe to repeat. Two
   clicks, or two people clicking at the same time, produce exactly one
   email and one delivery record, not two.

@@ -63,7 +63,7 @@ flowchart TD
 | Deliver | Is the invoice ready to send? | Admin invoice detail | Send invoice | Prepared, sent, delivery failed, resend, paper delivery recorded |
 | Reconcile | Which incoming payments match? | `/admin/o/:orgId/payments` | Confirm proposed match | Proposed (Exact, Partial, Overpayment), confirmed, rejected, unmatched |
 | Investigate | What happened for this dwelling or invoice? | Dwelling detail (overview/balance/meters/residents/messages/history panels), invoice, message, and audit views | Review or correct supported data | Archived dwelling, immutable sent invoice, dwelling ledger activity, manual adjustments |
-| Configure | Are billing and organization defaults correct? | `/admin/o/:orgId/settings`, dwelling invoice-delivery checkboxes | Save settings | Validation errors, automation enabled/disabled, at least one delivery method required |
+| Configure | Are billing, template, and organization defaults correct? | `/admin/o/:orgId/settings` (organization, billing, rules, invoice-template), dwelling invoice-delivery checkboxes | Save settings or template | Validation errors, automation enabled/disabled, at least one delivery method required, dirty-form detection in template editor |
 
 ### Admin recovery paths
 
@@ -73,6 +73,7 @@ flowchart TD
 - Send blocked: add the billing email, then send the prepared invoice.
 - No delivery method selected: a dwelling must have email, paper, or both enabled before its invoices can be delivered; enable at least one in the dwelling's invoice delivery settings.
 - Delivery failed: review the failure and retry with Resend when permitted.
+- Invoice template configuration: Configure the organization's invoice layout under `/admin/o/:orgId/settings/invoice-template` (reorder sections via drag-and-drop or Move up/down buttons, toggle visibility, add custom text blocks, configure row formatting/spacing, and inspect via live preview). Saving updates the organization template for future invoice generation; already-prepared and sent invoices retain their frozen template snapshots.
 - Partial payment received: confirm the proposed match; the incoming transaction is fully recorded in the dwelling account ledger, an allocation is posted to the invoice, and the invoice remains open with an updated remaining unpaid balance (`amountDue - allocated`). A subsequent payment can be matched to settle the remaining balance.
 - Overpayment received: confirm the proposed match; the full amount is posted to the dwelling account ledger, the invoice is fully settled and marked `PAID`, and the excess amount sits as dwelling account credit (`accountBalance < 0`) which automatically offsets future invoice statements.
 - Dwelling balance discrepancy: inspect the dwelling balance panel and account ledger entries. Post a manual adjustment (`CHARGE` or `CREDIT`) with an administrative reason to adjust the balance without mutating historical invoices.

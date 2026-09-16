@@ -157,7 +157,8 @@ The v1 application implements a dwelling-level financial account model with:
 - **Late-fee engine**: Configurable organization policy (`daily_rate`, `grace_days`, `start_rule: DAY_AFTER_DUE_DATE`, `max_penalty_percent`, `stops_at_cap`) calculated on oldest unpaid overdue invoice principal;
 - **Late-fee adjustments & waivers**: Explicit auditable adjustments (`late_fee_adjustments`) with structured reason codes and optional notes;
 - **Manual financial adjustments**: Dwelling-level manual adjustments (`createDwellingAccountAdjustment`) and draft invoice adjustments (`setInvoiceManualAdjustment`);
-- **Immutable invoice financial snapshots**: Invoices snapshot `current_charges`, `previous_outstanding`, `previous_credit_applied`, `late_fee_applied`, `manual_adjustment`, `amount_due`, `remaining_credit`, `balance_snapshot`, and `penalty_snapshot` upon preparation.
+- **Structured invoice template composer**: Constrained, reorderable template configuration (`/admin/o/[orgId]/settings/invoice-template`) supporting predefined section blocks, drag-and-drop and keyboard reordering, visibility toggles, section titles, line-item row overrides, custom text blocks (with bold emphasis and alignment), deterministic spacing controls, static text fields (header, footer, payment instructions, default note), reset to defaults, live preview rendering through the canonical renderer, and immutable `template_snapshot` persistence;
+- **Immutable invoice financial and template snapshots**: Invoices snapshot `current_charges`, `previous_outstanding`, `previous_credit_applied`, `late_fee_applied`, `manual_adjustment`, `amount_due`, `remaining_credit`, `balance_snapshot`, `penalty_snapshot`, and `template_snapshot` upon generation/preparation.
 
 ### Non-goals
 
@@ -177,7 +178,7 @@ Do NOT implement in v1:
 - compounding interest or statutory tiered penalty schedule engines (late fees follow a single-rate policy with grace days and percentage caps);
 - debt write-off workflows;
 - arbitrary workflow builders;
-- drag-and-drop invoice layout builder;
+- arbitrary freeform invoice layout or WYSIWYG canvas editing beyond the supported structured invoice template editor (e.g. no arbitrary pixel positioning, user-supplied HTML/CSS/JS injection, unrestricted WYSIWYG authoring, custom document rendering engines, or arbitrary geometry systems);
 - separate owner/tenant/landlord roles;
 - a third customer role;
 - structured Latvian B2B e-invoice transport.
@@ -620,7 +621,7 @@ Never authorize by matching email strings alone.
 | `/admin/o/[orgId]/settings/organization` | legal/bank/contact |
 | `/admin/o/[orgId]/settings/billing` | billing automation |
 | `/admin/o/[orgId]/settings/rules` | tariffs/rules |
-| `/admin/o/[orgId]/settings/invoice-template` | invoice appearance |
+| `/admin/o/[orgId]/settings/invoice-template` | structured invoice template editor |
 | `/admin/o/[orgId]/settings/users` | admin + resident access |
 | `/admin/o/[orgId]/settings/data` | import/export |
 | `/admin/o/[orgId]/audit` | audit history |
@@ -707,6 +708,8 @@ accounts.saveLateFeePolicy
 accounts.adjustLateFee
 accounts.setInvoiceManualAdjustment
 accounts.createAdjustment
+
+invoiceTemplates.update
 
 messages.createConversation
 messages.reply
@@ -1192,15 +1195,42 @@ invoice_deliveries
 ```text
 invoice_templates
 - id uuid PK
-- organization_id uuid UNIQUE
+- organization_id uuid UNIQUE FK organizations.id
 - logo_object_key text NULL
 - header_text text NULL
 - footer_text text NULL
 - payment_instructions text NULL
 - default_note text NULL
-- config jsonb DEFAULT {}
-- updated_at
+- config jsonb DEFAULT '{}' NOT NULL
+- updated_at timestamptz NOT NULL DEFAULT now()
 ```
+
+Each organization maintains at most one mutable template record (`organization_id` is UNIQUE) that defines the current layout and static text for future invoices.
+
+### Field semantics
+
+- `header_text`: Multiline text rendered directly beneath invoice metadata in the `meta` section block (max 500 characters).
+- `footer_text`: Multiline closing text rendered at the bottom in the `footer` section block (max 1000 characters).
+- `payment_instructions`: Multiline instructions/notes rendered alongside banking credentials in the `payment` section block (max 1000 characters).
+- `default_note`: Multiline administrative notice rendered in the `default-note` section block (max 1000 characters).
+- `config`: Versioned JSONB document (`InvoiceTemplateConfigV1`, `version: 1`) containing the structured document configuration used by the canonical invoice renderer:
+  - `version`: Integer schema version (`1`).
+  - `document.blocks`: Ordered array of 1 to 30 section blocks. Each block specifies:
+    - `id`: Unique block identifier (string, max 100 chars);
+    - `type`: Built-in block type (`meta`, `parties`, `line-items`, `payment`, `default-note`, `footer`) or custom `text`;
+    - `visible`: Boolean visibility toggle;
+    - `title`: Optional editor-only display label (max 100 chars; never rendered into client invoice documents);
+    - `presentation`: Optional spacing settings (`spacingBefore`: 0..4 scale mapped to deterministic CSS rem values);
+    - For `type: "text"`: `text` (max 5000 chars), `emphasis` (`normal` | `bold`), and `align` (`left` | `center` | `right`).
+  - `rowOverrides`: Dictionary mapping stable billing rule codes (falling back to line IDs) to line-item presentation settings: `visible` (boolean), `bold` (boolean), and `spacingBefore` (0..4 scale).
+
+### Schema invariants
+
+- Every built-in block type must appear exactly once;
+- Block IDs must be strictly unique across the document;
+- The `line-items` block must always be present and `visible: true` (the charges table cannot be hidden or duplicated);
+- Total blocks across built-in and custom text blocks cannot exceed 30;
+- All text fields are strictly escaped (`escapeHtml()`) during rendering; user-supplied HTML, CSS classes, and scripts are rejected.
 
 ## 13.16 bank_imports
 
@@ -1782,7 +1812,8 @@ The `invoices` table stores explicit snapshot fields:
 - `remaining_credit`: Credit balance remaining on the dwelling account after applying credit to this invoice;
 - `balance_snapshot`: Structured JSON snapshot `{ accountBalance, previousOutstanding, previousCreditApplied, remainingCredit, sourceInvoice }`;
 - `penalty_snapshot`: Structured JSON snapshot of policy configuration and penalty breakdown;
-- `manual_adjustment_snapshot`: Structured JSON snapshot `{ reason, note, actorUserId }`.
+- `manual_adjustment_snapshot`: Structured JSON snapshot `{ reason, note, actorUserId }`;
+- `template_snapshot`: Versioned, frozen invoice template configuration (`InvoiceTemplateSnapshotV1`, `version: 1`), captured from `invoice_templates` at invoice generation/regeneration. Captures `version`, `headerText`, `footerText`, `paymentInstructions`, `defaultNote`, and the complete `config` (`document.blocks` and `rowOverrides`).
 
 ## 21.3 Distinguishing account balance concepts
 
@@ -1793,49 +1824,165 @@ The domain strictly distinguishes:
 3. **Invoice Remaining Unpaid Balance**: `amount_due - sum(allocated_amount)` from `payment_allocations` for this invoice. Indicates what is currently owed specifically on this invoice document.
 4. **Available Account Credit**: Excess credit on the dwelling account (`max(-accountBalance, 0.00)`), carried forward to reduce future statements.
 
+## 21.4 Template snapshot lifecycle and immutability
+
+The template configuration follows a strict preparation boundary:
+
+```text
+Organization template (invoice_templates) = mutable configuration for future invoices
+
+                 ↓ generation/preparation boundary
+
+Invoice templateSnapshot (invoices.template_snapshot) = historical immutable rendering configuration for that invoice
+```
+
+- **Future invoices**: Editing the organization's invoice template under `/admin/o/[orgId]/settings/invoice-template` takes effect on future invoices generated or regenerated while in `DRAFT`.
+- **Historical invoices**: Invoices that have been prepared or sent retain their historical `template_snapshot` indefinitely. Even if an administrator changes section order, hides sections, or alters footer notes, historical invoices continue to render using their original frozen layout.
+- **Lenient fallback**: When reading back legacy or corrupted snapshot JSON from historical invoices, the parser (`normalizeTemplateSnapshot`) falls back to the default document configuration instead of crashing or leaking untrusted attributes into rendered HTML.
+
 Integration test must prove:
 
 ```text
 send invoice
-→ change tariff
+→ change tariff or invoice template
 → reload old invoice
 → line amounts unchanged
+→ rendered HTML unchanged
 → PDF hash unchanged
 ```
 
 ---
 
-# 22. PDF generation
+# 22. Invoice rendering and structured template architecture
 
-Use a deterministic server-side invoice HTML template.
+## 22.1 Canonical single-renderer architecture
+
+The application enforces a single source of truth for invoice presentation: `renderInvoiceHtml(invoice, lines)` in `src/domain/billing/invoice-html.ts`.
+
+```text
+InvoiceTemplateConfig
+        │
+        ├───────────────┐
+        ▼               ▼
+Admin live preview   Prepared invoice snapshot
+        │               │
+        └──────┬────────┘
+               ▼
+       renderInvoiceHtml()
+               │
+        ┌──────┴───────┐
+        ▼              ▼
+ portal/public HTML    PDF generation
+```
+
+Architectural invariant:
+There must not be one template renderer for the editor live preview and another renderer for actual invoices.
+The editor's client-side preview imports and invokes `renderInvoiceHtml()` unmodified, ensuring that the live preview in the template editor, the admin invoice view, the resident portal view, the public token view, and Cloudflare Browser Rendering PDF generation produce visually and structurally identical output.
+
+## 22.2 Structured invoice template model
+
+The template system is a structured document composer, not a freeform canvas designer. It is modeled as:
+
+```text
+Organization
+└── Invoice template (invoice_templates)
+    ├── static text fields
+    │   ├── header_text (max 500 chars)
+    │   ├── footer_text (max 1000 chars)
+    │   ├── payment_instructions (max 1000 chars)
+    │   └── default_note (max 1000 chars)
+    │
+    └── structured document configuration (config)
+        ├── version: 1
+        ├── document.blocks (1..30 ordered sections)
+        │   ├── meta (Invoice details: title, number, dates, header_text)
+        │   ├── parties (Issuer and recipient billing details)
+        │   ├── line-items (Mandatory charges table and financial breakdown summary)
+        │   ├── payment (Bank details and payment_instructions)
+        │   ├── default-note (default_note notice)
+        │   ├── footer (footer_text sign-off)
+        │   └── text (Custom text block: text, bold emphasis, text alignment)
+        └── rowOverrides (Record<string, InvoiceRowPresentation>)
+            ├── visible: boolean
+            ├── bold: boolean
+            └── spacingBefore: 0..4 scale
+```
+
+Each block in `document.blocks` carries:
+- `id`: Unique string identifier (1..100 characters);
+- `type`: Built-in type (`meta`, `parties`, `line-items`, `payment`, `default-note`, `footer`) or `text`;
+- `visible`: Boolean visibility toggle;
+- `title`: Optional editor-only display label (max 100 chars);
+- `presentation.spacingBefore`: Optional spacing scale (0..4 mapped to CSS rem values: `0: 0`, `1: 0.375rem`, `2: 0.75rem`, `3: 1.125rem`, `4: 1.5rem`).
+
+Custom text blocks (`type: "text"`) additionally support:
+- `text`: Multiline content (max 5000 characters);
+- `emphasis`: Text weight (`normal` | `bold`);
+- `align`: Text alignment (`left` | `center` | `right`).
+
+Row overrides (`rowOverrides`) allow per-line formatting in the charges table:
+- Keyed by stable billing rule code (`sourceSnapshot.code`), falling back to line ID. This ensures overrides persist across billing periods even if rule descriptions or period line IDs change;
+- Supports toggling row visibility, applying bold weight, and adding top spacing.
+
+## 22.3 Supported editor capabilities
+
+The structured invoice template editor (`/admin/o/[orgId]/settings/invoice-template`) provides:
+
+1. **Predefined block reordering**: Drag-and-drop section reordering using SortableJS, with keyboard-accessible Move up and Move down button alternatives with focus management;
+2. **Block visibility toggles**: Hide or show individual sections (e.g. hiding `parties` or `default-note`). The `line-items` charges table is mandatory and cannot be hidden;
+3. **Custom section titles**: Rename block labels in the editor block list for organizational clarity;
+4. **Custom text blocks**: Add, duplicate, and delete custom text blocks up to a total limit of 30 blocks across the document;
+5. **Text formatting and alignment**: Configure bold emphasis and left/center/right alignment on custom text blocks;
+6. **Row-level presentation overrides**: Hide specific charge rows, bold specific rows, or add top spacing;
+7. **Spacing controls**: Select deterministic spacing before any section or row (0 to 4 scale);
+8. **Static text configuration**: Edit header text (500 chars), footer text (1000 chars), payment instructions (1000 chars), and default notes (1000 chars);
+9. **Reset to default layout**: Revert block ordering, custom text, and row overrides back to standard defaults while preserving static text fields;
+10. **Real-time live preview**: Instant iframe rendering reflecting edits using the latest organization invoice or deterministic sample data;
+11. **Preview zoom controls**: View preview at scaled zoom levels (0.75x, 1x, 1.25x) with properly calculated scrolling wrappers;
+12. **Dirty state detection**: Warns the administrator if navigating away with unsaved template changes (`beforeunload`).
+
+## 22.4 Constrained editor invariants and security
+
+The invoice template system enforces strict architectural constraints:
+
+> **Invariant**: Invoice templates are configuration over a controlled document schema. Administrators may reorder and configure supported sections but may not inject arbitrary HTML, CSS, JavaScript, or unrestricted layout primitives.
+
+1. **No arbitrary HTML/CSS injection**: All text fields (`headerText`, `footerText`, `paymentInstructions`, `defaultNote`, custom block `text`, line descriptions) are passed through `escapeHtml()` during rendering. Newlines are safely converted to `<br />`.
+2. **Strict write-path validation**: The action `actions.invoiceTemplates.update` enforces `invoiceTemplateConfigV1Schema`:
+   - Maximum 30 blocks;
+   - All built-in blocks must be present exactly once;
+   - Block IDs must be unique;
+   - The `line-items` block must be present and `visible: true`;
+   - JSON payload length is capped at 200 KB UTF-8.
+3. **Lenient read-path fallback**: `parseInvoiceTemplateConfig` and `normalizeTemplateSnapshot` fall back to the default document configuration if malformed JSON, unknown versions, or broken invariants are detected, ensuring that corrupted or legacy data never crashes invoice rendering.
+4. **No remote asset loading**: Invoice templates do not allow remote `<img src="https://...">` or external stylesheets. All styles are inline, preventing server-side request forgery (SSRF) during Cloudflare Browser Rendering PDF generation.
+
+## 22.5 PDF generation pipeline
 
 Flow:
 
 ```text
-invoice snapshot
+invoice snapshot (including template_snapshot)
       ↓
-render controlled HTML
+renderInvoiceHtml()
       ↓
-Cloudflare Browser Run /pdf
+Cloudflare Browser Rendering /pdf
       ↓
 PDF bytes
       ↓
-SHA-256
+SHA-256 hash calculation
       ↓
 Supabase private Storage
       ↓
-pdf_object_key + pdf_sha256
+pdf_object_key + pdf_sha256 saved on invoice
 ```
 
 Requirements:
-
-- do not render arbitrary user-provided remote URLs;
-- invoice HTML must not execute untrusted script;
-- canonical sent invoice PDF generated from persisted snapshot;
-- private bucket;
-- no guessable public URL;
-- authenticated downloads authorize first;
-- email token access resolves only its specific invoice.
+- Canonical sent invoice PDF generated exclusively from persisted snapshots;
+- Private bucket with no guessable public URLs;
+- Authenticated downloads authorize against dwelling/organization access first;
+- Email token access resolves only its specific invoice;
+- Deterministic rendering ensures identical bytes across environments.
 
 Preferred storage layout:
 
@@ -2101,7 +2248,15 @@ Provide:
 - organization (legal/tax/bank details);
 - billing (currency, timezone, locale, and late-fee policy configuration: daily rate, grace days, penalty cap);
 - tariffs/rules;
-- invoice template (branding, notes, instructions);
+- invoice template:
+  - template structure and block reordering;
+  - visibility toggles and custom display titles for supported sections;
+  - line-item row presentation overrides (show/hide, bold, spacing);
+  - custom text sections (with bold emphasis and alignment controls);
+  - header, footer, payment instructions, and default note text;
+  - deterministic section and row spacing controls;
+  - real-time live preview with zoom controls;
+  - reset to default layout;
 - users/access;
 - data/import/export.
 
@@ -2291,6 +2446,9 @@ ACCOUNT_CREDIT_CREATED
 LATE_FEE_POLICY_CREATED
 LATE_FEE_ADJUSTED
 ACCOUNT_ADJUSTMENT_CREATED
+
+INVOICE_TEMPLATE_CREATED
+INVOICE_TEMPLATE_UPDATED
 
 CONVERSATION_CREATED
 MESSAGE_SENT
@@ -2793,7 +2951,9 @@ Mandatory:
 - token hashing;
 - bank reference normalization;
 - statement balance arithmetic (credit application, debt carry-forward, non-negative amount due);
-- late-fee calculation (daily rate, grace days, penalty cap).
+- late-fee calculation (daily rate, grace days, penalty cap);
+- invoice template configuration validation and lenient fallback (`invoiceTemplateConfigV1Schema`, `parseInvoiceTemplateConfig`);
+- invoice HTML rendering with block reordering, visibility overrides, row overrides, and text escaping (`renderInvoiceHtml`).
 
 ## Integration
 
@@ -2803,7 +2963,9 @@ Mandatory:
 - resident-scoped repositories;
 - invoice generation transaction;
 - invoice preparation (statement snapshotting, charges/penalties debited to ledger);
-- invoice snapshot immutability;
+- invoice template settings persistence (`updateInvoiceTemplate`);
+- invoice generation capturing frozen `template_snapshot`;
+- invoice snapshot immutability (updating organization template or tariffs leaves previously generated/sent invoices and rendered HTML unchanged);
 - append-only trigger enforcement on financial tables (`account_entries`, `payment_allocations`, `late_fee_adjustments`);
 - duplicate bank import rejection;
 - payment reconciliation lifecycle:
@@ -2863,8 +3025,9 @@ Admin A → known Org B invoice UUID → denied
 
 ```text
 send
-→ edit tariff
+→ edit tariff or organization invoice template
 → old invoice unchanged
+→ rendered HTML unchanged
 → PDF hash unchanged
 ```
 

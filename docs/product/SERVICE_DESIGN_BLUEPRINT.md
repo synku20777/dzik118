@@ -138,6 +138,7 @@ sequenceDiagram
 | Organization and dwelling data | Organization ADMIN | Scoped PostgreSQL records and audit log |
 | Meter readings | RESIDENT or organization ADMIN | Period, meter, and validation rules |
 | Billing calculation | Property Billing domain service | Effective rules, exact-decimal helpers, and account balance resolution |
+| Invoice template configuration | Organization ADMIN | Structured template editor, live preview, block reordering, and template snapshotting |
 | Invoice approval | Organization ADMIN | Snapshot validation, ledger debit posting, and workflow state machine |
 | PDF and email delivery | Property Billing delivery service | Browser Rendering, private Storage, SES or SMTP |
 | Payment reconciliation | Organization ADMIN | Bank CSV import, remaining-balance matching, payment allocation, and dwelling ledger accounting |
@@ -160,4 +161,4 @@ These signals can be calculated from data already supported by the product. They
 
 ## Blueprint scope boundary
 
-The blueprint does not add card payments, payment gateways (e.g. Stripe, PayU), live automated bank feed synchronization (Open Banking / AISP), automated direct bank refunds, arbitrary multi-invoice manual splits, double-entry general ledger ERP exports, maintenance workflows, extra user roles, or other out-of-scope services. Those would require separate product and service design work before implementation.
+The blueprint does not add card payments, payment gateways (e.g. Stripe, PayU), live automated bank feed synchronization (Open Banking / AISP), automated direct bank refunds, arbitrary multi-invoice manual splits, double-entry general ledger ERP exports, arbitrary freeform document layout or WYSIWYG canvas editors beyond the supported structured invoice template editor, maintenance workflows, extra user roles, or other out-of-scope services. Those would require separate product and service design work before implementation.
