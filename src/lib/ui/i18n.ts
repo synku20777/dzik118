@@ -936,6 +936,48 @@ const lv: Record<string, string> = {
   "Enter the quantity for this period.": "Ievadiet daudzumu šim periodam.",
   "Enter the amount to charge for this period.":
     "Ievadiet summu, kas jāiekasē par šo periodu.",
+
+  // Added: translation coverage pass 5 (invoice template editor)
+  "Template structure": "Veidnes struktūra",
+  "Add, remove and configure sections. Drag to reorder.":
+    "Pievienojiet, noņemiet un konfigurējiet sadaļas. Velciet, lai mainītu secību.",
+  "Live preview": "Priekšskatījums reāllaikā",
+  "This preview reflects your current template configuration.":
+    "Šis priekšskatījums atspoguļo jūsu pašreizējo veidnes konfigurāciju.",
+  "Section title": "Sadaļas nosaukums",
+  "Line items": "Rindas",
+  "Zoom level": "Tuvinājuma līmenis",
+  "Expand section": "Izvērst sadaļu",
+  "Collapse section": "Sakļaut sadaļu",
+  "More options": "Citas iespējas",
+  "Control what appears on generated invoices, in what order, and how each section looks.":
+    "Kontrolējiet, kas parādās uz izveidotajiem rēķiniem, kādā secībā un kā katra sadaļa izskatās.",
+  "Add text block": "Pievienot teksta bloku",
+  "Reset layout": "Atiestatīt izkārtojumu",
+  "Invoice sections": "Rēķina sadaļas",
+  "Invoice preview": "Rēķina priekšskatījums",
+  "Sample resident": "Parauga iedzīvotājs",
+  "Sample Street 1, Riga, LV-1010": "Parauga iela 1, Rīga, LV-1010",
+  "Maintenance fee": "Apsaimniekošanas maksa",
+  "Invoice details": "Rēķina informācija",
+  "Sender and recipient": "Izdevējs un saņēmējs",
+  "Charges table": "Maksājumu tabula",
+  "Payment details": "Maksājuma dati",
+  "Default note": "Noklusējuma piezīme",
+  Footer: "Kājene",
+  "Custom text": "Pielāgots teksts",
+  Show: "Rādīt",
+  Bold: "Treknraksts",
+  Spacing: "Atstarpe",
+  Align: "Līdzinājums",
+  "Move up": "Pārvietot uz augšu",
+  "Move down": "Pārvietot uz leju",
+  Duplicate: "Dublēt",
+  Delete: "Dzēst",
+  "Reset the invoice layout to the default template? Custom text blocks, section titles, and any per-row formatting will be removed. Your header, footer, payment instructions, and note text are kept.":
+    "Atiestatīt rēķina izkārtojumu uz noklusējuma veidni? Pielāgotie teksta bloki, sadaļu nosaukumi un jebkurš rindu formatējums tiks noņemts. Jūsu galvenes, kājenes, maksājuma instrukciju un piezīmes teksts tiks saglabāts.",
+  "This invoice layout has reached the maximum of 30 sections.":
+    "Šis rēķina izkārtojums ir sasniedzis maksimālo 30 sadaļu skaitu.",
 };
 
 const ru: Record<string, string> = {
@@ -1863,6 +1905,48 @@ const ru: Record<string, string> = {
   "Enter the quantity for this period.": "Введите количество за этот период.",
   "Enter the amount to charge for this period.":
     "Введите сумму к начислению за этот период.",
+
+  // Added: translation coverage pass 5 (invoice template editor)
+  "Template structure": "Структура шаблона",
+  "Add, remove and configure sections. Drag to reorder.":
+    "Добавляйте, удаляйте и настраивайте разделы. Перетаскивайте, чтобы изменить порядок.",
+  "Live preview": "Предпросмотр в реальном времени",
+  "This preview reflects your current template configuration.":
+    "Этот предпросмотр отражает текущую конфигурацию вашего шаблона.",
+  "Section title": "Название раздела",
+  "Line items": "Позиции",
+  "Zoom level": "Уровень масштабирования",
+  "Expand section": "Развернуть раздел",
+  "Collapse section": "Свернуть раздел",
+  "More options": "Другие параметры",
+  "Control what appears on generated invoices, in what order, and how each section looks.":
+    "Управляйте тем, что отображается в сформированных счетах, в каком порядке и как выглядит каждый раздел.",
+  "Add text block": "Добавить текстовый блок",
+  "Reset layout": "Сбросить макет",
+  "Invoice sections": "Разделы счета",
+  "Invoice preview": "Предпросмотр счета",
+  "Sample resident": "Образец жильца",
+  "Sample Street 1, Riga, LV-1010": "Образцовая улица 1, Рига, LV-1010",
+  "Maintenance fee": "Плата за обслуживание",
+  "Invoice details": "Данные счета",
+  "Sender and recipient": "Отправитель и получатель",
+  "Charges table": "Таблица начислений",
+  "Payment details": "Платежные реквизиты",
+  "Default note": "Примечание по умолчанию",
+  Footer: "Нижний колонтитул",
+  "Custom text": "Произвольный текст",
+  Show: "Показать",
+  Bold: "Жирный",
+  Spacing: "Отступ",
+  Align: "Выравнивание",
+  "Move up": "Переместить вверх",
+  "Move down": "Переместить вниз",
+  Duplicate: "Дублировать",
+  Delete: "Удалить",
+  "Reset the invoice layout to the default template? Custom text blocks, section titles, and any per-row formatting will be removed. Your header, footer, payment instructions, and note text are kept.":
+    "Сбросить макет счета к шаблону по умолчанию? Пользовательские текстовые блоки, названия разделов и любое форматирование строк будут удалены. Текст верхнего колонтитула, нижнего колонтитула, платежных инструкций и примечания будет сохранен.",
+  "This invoice layout has reached the maximum of 30 sections.":
+    "В этом макете счета достигнут максимум в 30 разделов.",
 };
 
 export function translate(locale: Locale, text: string): string {

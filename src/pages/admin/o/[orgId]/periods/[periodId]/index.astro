@@ -588,7 +588,7 @@ function filterHref(status?: CaseStatus) {
                             // of crashing on a missing meterType.
                             item &&
                             typeof item === "object" &&
-                            item.meterType ? (
+                            "meterType" in item ? (
                               <button
                                 type="button"
                                 class="readiness-item"

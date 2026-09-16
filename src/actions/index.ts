@@ -12,6 +12,7 @@ import { payments } from "./payments";
 import { messages } from "./messages";
 import { accounts } from "./accounts";
 import { workbench } from "./workbench";
+import { invoiceTemplates } from "./invoice-templates";
 
 export const server = {
   organizations,
@@ -25,4 +26,5 @@ export const server = {
   messages,
   accounts,
   workbench,
+  invoiceTemplates,
 };

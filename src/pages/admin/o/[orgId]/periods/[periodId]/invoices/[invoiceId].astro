@@ -1,10 +1,13 @@
 ---
 // Phase F (Billing) - invoice detail (spec Section 9.2, INV-001/003/004).
-// Full formatted/branded preview + PDF is Phase G; this shows the raw
-// persisted snapshot/line data, which is exactly what spec Section 21
-// requires stay unchanged after SENT -- a useful thing to see directly.
-import InvoiceDocument from "../../../../../../../components/ui/InvoiceDocument.astro";
+// Renders through the same renderInvoiceHtml() the PDF and the public
+// token link use (Phase G, invoice template editor) -- so what an admin
+// sees here always matches what actually gets sent, including the org's
+// invoice template layout, and never a live join back to the org's
+// *current* template (spec Section 21: an already-generated invoice's
+// snapshot stays frozen even after the template is edited later).
 import StatusBadge from "../../../../../../../components/ui/StatusBadge.astro";
+import { renderInvoiceHtml } from "../../../../../../../domain/billing/invoice-html";
 import {
   translate,
   uiLocale,
@@ -70,6 +73,7 @@ const recipientIncomplete =
   !recipient.billingAddress;
 const organizationIncomplete =
   !issuer.name || !issuer.addressLine1 || !payment.iban || !payment.bankName;
+const invoiceHtml = renderInvoiceHtml(invoice, lines);
 ---
 
 <AdminLayout
@@ -291,11 +295,12 @@ const organizationIncomplete =
         </section>
       )
     }
-    <InvoiceDocument
-      invoice={invoice}
-      lines={lines}
-      paid={caseStatus === "PAID"}
-    />
+    <div class="invoice-preview-frame-wrap">
+      <iframe
+        class="invoice-preview-frame"
+        title={t("Invoice")}
+        srcdoc={invoiceHtml}></iframe>
+    </div>
 
     {
       deliveries.length > 0 && (
@@ -329,9 +334,7 @@ const organizationIncomplete =
                         <span class="text-destructive">{t("Failed")}</span>
                       )}
                     </td>
-                    <td class="px-4 py-2 text-muted">
-                      {d.errorCode ?? "—"}
-                    </td>
+                    <td class="px-4 py-2 text-muted">{d.errorCode ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -342,3 +345,20 @@ const organizationIncomplete =
     }
   </div>
 </AdminLayout>
+
+<style>
+  .invoice-preview-frame-wrap {
+    background: var(--color-surface-hover);
+    border-radius: var(--radius-panel);
+    padding: 1rem;
+  }
+  .invoice-preview-frame {
+    display: block;
+    width: min(210mm, 100%);
+    height: 70vh;
+    margin-inline: auto;
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: 0.25rem;
+  }
+</style>

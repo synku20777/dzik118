@@ -1,5 +1,4 @@
 ---
-import InvoiceDocument from "../../../components/ui/InvoiceDocument.astro";
 import StatusBadge from "../../../components/ui/StatusBadge.astro";
 import { translate, uiLocale } from "../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
@@ -10,6 +9,7 @@ import {
   requireDwellingAccess,
 } from "../../../domain/authorization/guards";
 import { getInvoiceForResident } from "../../../domain/billing/generation";
+import { renderInvoiceHtml } from "../../../domain/billing/invoice-html";
 import { withRequestDb } from "../../../lib/db-request";
 
 const invoiceId = Astro.params.invoiceId!;
@@ -35,6 +35,7 @@ try {
 } catch {
   return Astro.redirect(`/portal/dwellings/${dwellingId}/invoices`);
 }
+const invoiceHtml = renderInvoiceHtml(invoice, lines);
 ---
 
 <ResidentLayout title={invoice.invoiceNumber}>
@@ -70,17 +71,38 @@ try {
         }
       </div>
 
-      <InvoiceDocument
-        invoice={invoice}
-        lines={lines}
-        paid={caseStatus === "PAID"}
-      />
+      <div class="invoice-preview-frame-wrap">
+        <iframe
+          id="invoice-preview-frame"
+          class="invoice-preview-frame"
+          title={t("Invoice")}
+          srcdoc={invoiceHtml}></iframe>
+      </div>
     </div>
   </div>
 </ResidentLayout>
 
 <script>
-  document
-    .querySelector("#print-invoice")
-    ?.addEventListener("click", () => window.print());
+  document.querySelector("#print-invoice")?.addEventListener("click", () => {
+    const frame = document.querySelector<HTMLIFrameElement>(
+      "#invoice-preview-frame"
+    );
+    frame?.contentWindow?.print();
+  });
 </script>
+
+<style>
+  .invoice-preview-frame-wrap {
+    background: var(--color-surface-hover);
+    border-radius: var(--radius-panel);
+    padding: 1rem;
+  }
+  .invoice-preview-frame {
+    display: block;
+    width: 100%;
+    height: 70vh;
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: 0.25rem;
+  }
+</style>

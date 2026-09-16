@@ -1,16 +1,31 @@
 ---
-// TODO: Phase G (Invoices/delivery) - invoice template/appearance settings
+// Phase G (Invoices/delivery) - invoice template editor (spec Section 22,
+// 27 "invoice template"). A visual, document-style editor rather than a
+// plain settings form: the admin controls which invoice sections appear,
+// their order, per-row visibility/emphasis, spacing, and custom text
+// blocks, with a live preview that reuses the exact same renderer the real
+// PDF/portal pages use (src/domain/billing/invoice-html.ts) -- see
+// src/lib/ui/invoice-template-editor.ts for the client-side half.
 import { translate, uiLocale } from "../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import { actions } from "astro:actions";
 import {
   ForbiddenError,
   requireOrganizationAccess,
 } from "../../../../../domain/authorization/guards";
-
 import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { getLatestInvoiceForOrganization } from "../../../../../domain/billing/generation";
+import { getResolvedInvoiceTemplate } from "../../../../../domain/billing/invoice-templates";
+import type {
+  InvoiceHtmlInvoice,
+  InvoiceHtmlLine,
+} from "../../../../../domain/billing/invoice-html";
 import { withRequestDb } from "../../../../../lib/db-request";
+
 const organizationId = Astro.params.orgId!;
 try {
   requireOrganizationAccess(Astro.locals.auth, organizationId);
@@ -18,27 +33,680 @@ try {
   if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
   throw err;
 }
-const organization = await withRequestDb((db) =>
-  getOrganization(db, organizationId)
+
+const updateResult = Astro.getActionResult(actions.invoiceTemplates.update);
+
+const { organization, template, latestInvoice } = await withRequestDb(
+  async (db) => ({
+    organization: await getOrganization(db, organizationId),
+    template: await getResolvedInvoiceTemplate(db, organizationId),
+    latestInvoice: await getLatestInvoiceForOrganization(db, organizationId),
+  })
 );
+
+const base = `/admin/o/${organizationId}`;
+const settingsHref = `${base}/settings`;
+
+// Deterministic sample data for the preview when this organization hasn't
+// generated an invoice yet -- never mutates anything, purely illustrative.
+const sampleInvoice: InvoiceHtmlInvoice = latestInvoice
+  ? latestInvoice.invoice
+  : {
+      invoiceNumber: "INV-SAMPLE-00001",
+      issueDate: "2026-01-01",
+      dueDate: "2026-01-15",
+      currency: organization.currency,
+      subtotal: "90.00",
+      vatTotal: "18.90",
+      currentCharges: "108.90",
+      previousOutstanding: "0.00",
+      previousCreditApplied: "0.00",
+      lateFeeApplied: "0.00",
+      manualAdjustment: "0.00",
+      amountDue: "108.90",
+      issuerSnapshot: {
+        name: organization.name,
+        addressLine1: organization.addressLine1,
+        addressLine2: organization.addressLine2,
+        city: organization.city,
+        postalCode: organization.postalCode,
+      },
+      recipientSnapshot: {
+        billingName: t("Sample resident"),
+        dwellingNumber: "1",
+        billingAddress: t("Sample Street 1, Riga, LV-1010"),
+      },
+      paymentSnapshot: {
+        bankName: organization.bankName,
+        iban: organization.iban,
+        bic: organization.bic,
+        currency: organization.currency,
+      },
+      templateSnapshot: null,
+    };
+const sampleLines: InvoiceHtmlLine[] = latestInvoice
+  ? latestInvoice.lines
+  : [
+      {
+        id: "sample-1",
+        description: t("Maintenance fee"),
+        quantity: "1",
+        unit: "month",
+        unitPrice: "45.0000",
+        netAmount: "45.00",
+        vatAmount: "9.45",
+        grossAmount: "54.45",
+        sourceSnapshot: { code: "maintenance" },
+      },
+      {
+        id: "sample-2",
+        description: t("Cold water"),
+        quantity: "5.000",
+        unit: "m3",
+        unitPrice: "3.0000",
+        netAmount: "15.00",
+        vatAmount: "3.15",
+        grossAmount: "18.15",
+        sourceSnapshot: { code: "cold_water" },
+      },
+      {
+        id: "sample-3",
+        description: t("Hot water"),
+        quantity: "3.000",
+        unit: "m3",
+        unitPrice: "10.0000",
+        netAmount: "30.00",
+        vatAmount: "6.30",
+        grossAmount: "36.30",
+        sourceSnapshot: { code: "hot_water" },
+      },
+    ];
+
+const bootstrap = {
+  headerText: template.headerText,
+  footerText: template.footerText,
+  paymentInstructions: template.paymentInstructions,
+  defaultNote: template.defaultNote,
+  config: template.config,
+  sampleInvoice,
+  sampleLines,
+  strings: {
+    "Template structure": t("Template structure"),
+    "Add, remove and configure sections. Drag to reorder.": t(
+      "Add, remove and configure sections. Drag to reorder."
+    ),
+    "Live preview": t("Live preview"),
+    "This preview reflects your current template configuration.": t(
+      "This preview reflects your current template configuration."
+    ),
+    "Section title": t("Section title"),
+    "Line items": t("Line items"),
+    "Zoom level": t("Zoom level"),
+    "Expand section": t("Expand section"),
+    "Collapse section": t("Collapse section"),
+    "More options": t("More options"),
+    "Invoice details": t("Invoice details"),
+    "Sender and recipient": t("Sender and recipient"),
+    "Charges table": t("Charges table"),
+    "Payment details": t("Payment details"),
+    "Default note": t("Default note"),
+    Footer: t("Footer"),
+    "Custom text": t("Custom text"),
+    Show: t("Show"),
+    Bold: t("Bold"),
+    Spacing: t("Spacing"),
+    Align: t("Align"),
+    "Move up": t("Move up"),
+    "Move down": t("Move down"),
+    Duplicate: t("Duplicate"),
+    Delete: t("Delete"),
+    "Reset the invoice layout to the default template? Custom text blocks, section titles, and any per-row formatting will be removed. Your header, footer, payment instructions, and note text are kept.":
+      t(
+        "Reset the invoice layout to the default template? Custom text blocks, section titles, and any per-row formatting will be removed. Your header, footer, payment instructions, and note text are kept."
+      ),
+    "This invoice layout has reached the maximum of 30 sections.": t(
+      "This invoice layout has reached the maximum of 30 sections."
+    ),
+  },
+};
 ---
 
 <AdminLayout
-  title="Invoice template"
+  title={`${t("Invoice template")} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
 >
-  <a
-    href={`/admin/o/${organizationId}/settings`}
-    class="text-body-sm text-muted hover:underline"
-  >
-    ← {t("Settings")}
-  </a>
-  <h1 class="mt-6">{t("Invoice template")}</h1><p class="notice mt-4">
+  <div class="space-y-6">
+    <nav class="breadcrumb" aria-label={t("Breadcrumb")}>
+      <a href={`${base}/settings`}>{t("Settings")}</a>
+      <span aria-hidden="true">›</span>
+      <span aria-current="page">{t("Invoice template")}</span>
+    </nav>
+
+    <PageHeader
+      title={t("Invoice template")}
+      description={t(
+        "Control what appears on generated invoices, in what order, and how each section looks."
+      )}
+      display
+    >
+      <div class="header-actions">
+        <a href={`${base}/guide`} class="btn-secondary settings-help">
+          <span class="settings-help-icon" aria-hidden="true">?</span>
+          {t("Need help?")}
+        </a>
+        <div class="header-action-buttons">
+          <a href={settingsHref} class="btn-secondary">{t("Cancel")}</a>
+          <button type="submit" form="template-editor-form" class="btn-primary">
+            {t("Save changes")}
+          </button>
+        </div>
+      </div>
+    </PageHeader>
+
     {
-      t(
-        "Settings are not available yet. Existing invoice documents remain available from billing periods."
+      updateResult?.error && (
+        <p class="notice notice-danger" role="alert">
+          {updateResult.error.message}
+        </p>
       )
     }
-  </p>
+    {
+      updateResult?.data && (
+        <p class="notice" role="status">
+          {t("Saved successfully.")}
+        </p>
+      )
+    }
+
+    <form
+      method="POST"
+      action={actions.invoiceTemplates.update}
+      id="template-editor-form"
+    >
+      <input type="hidden" name="organizationId" value={organizationId} />
+      <input type="hidden" name="headerText" />
+      <input type="hidden" name="footerText" />
+      <input type="hidden" name="paymentInstructions" />
+      <input type="hidden" name="defaultNote" />
+      <input type="hidden" name="config" />
+
+      <div id="template-editor" class="tpl-editor">
+        <script
+          is:inline
+          type="application/json"
+          id="template-editor-bootstrap"
+          set:html={JSON.stringify(bootstrap).replace(/</g, "\\u003c")}
+        />
+
+        <div class="tpl-editor-layout">
+          <div class="tpl-editor-column">
+            <div class="tpl-column-header">
+              <h2 class="tpl-column-title">{t("Template structure")}</h2>
+              <p class="tpl-column-subtitle">
+                {t("Add, remove and configure sections. Drag to reorder.")}
+              </p>
+            </div>
+
+            <div class="tpl-editor-toolbar">
+              <button
+                type="button"
+                id="tpl-add-text"
+                class="btn-secondary btn-sm"
+              >
+                <Icon name="plus" size="sm" />
+                <span>{t("Add text block")}</span>
+              </button>
+              <button
+                type="button"
+                id="tpl-reset-layout"
+                class="btn-secondary btn-sm"
+              >
+                {t("Reset layout")}
+              </button>
+            </div>
+
+            <ul
+              id="tpl-blocks"
+              class="tpl-blocks"
+              aria-label={t("Invoice sections")}
+            >
+            </ul>
+          </div>
+
+          <div class="tpl-editor-column">
+            <div class="tpl-column-header tpl-preview-header">
+              <div>
+                <h2 class="tpl-column-title">{t("Live preview")}</h2>
+                <p class="tpl-column-subtitle">
+                  {
+                    t(
+                      "This preview reflects your current template configuration."
+                    )
+                  }
+                </p>
+              </div>
+              <div class="tpl-zoom-control">
+                <select
+                  id="tpl-zoom-select"
+                  class="tpl-zoom-select"
+                  aria-label={t("Zoom level")}
+                >
+                  <option value="0.75">75%</option>
+                  <option value="1" selected>100%</option>
+                  <option value="1.25">125%</option>
+                  <option value="1.5">150%</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="tpl-preview-container" class="tpl-editor-canvas">
+              <div id="tpl-preview-zoom-wrap" class="tpl-preview-zoom-wrap">
+                <iframe
+                  id="tpl-preview"
+                  class="tpl-preview"
+                  title={t("Invoice preview")}></iframe>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
 </AdminLayout>
+
+<script>
+  import "../../../../../lib/ui/invoice-template-editor";
+</script>
+
+<style is:global>
+  /* is:global, not Astro's default scoped style: almost everything below
+     (.tpl-block, .tpl-toggle, .tpl-popover, etc.) is created client-side
+     by invoice-template-editor.ts via document.createElement, which never
+     receives Astro's scoping attribute -- a scoped style would silently
+     fail to match any of it. Same reasoning as
+     src/components/ui/AdminContextDrawer.astro's own is:global, which has
+     the identical DOM-API-built-content shape. Every selector below uses
+     this page's own tpl- and header-action- prefixes, so there is no
+     collision risk with other pages' global styles. */
+  .header-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+  }
+  .header-action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .tpl-editor-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 24rem) minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .tpl-editor-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .tpl-column-header {
+    margin-bottom: 0.75rem;
+  }
+  .tpl-column-title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--color-foreground);
+  }
+  .tpl-column-subtitle {
+    margin: 0.25rem 0 0;
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+  }
+  .tpl-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .tpl-zoom-control {
+    flex: 0 0 auto;
+  }
+  .tpl-zoom-select {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-foreground);
+    cursor: pointer;
+  }
+  .tpl-zoom-select:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+  .tpl-editor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .tpl-editor-toolbar button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .tpl-blocks {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+  }
+  .tpl-block {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    transition: border-color 0.15s ease;
+  }
+  .tpl-block:hover {
+    border-color: var(--color-muted);
+  }
+  .tpl-block-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 0.75rem;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tpl-block-header:hover {
+    background: var(--color-surface-hover);
+  }
+  .tpl-drag-handle {
+    flex: 0 0 auto;
+    cursor: grab;
+    color: var(--color-muted);
+    padding: 0.125rem 0.25rem;
+    user-select: none;
+  }
+  .tpl-drag-handle:active {
+    cursor: grabbing;
+  }
+  .tpl-block-num {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--color-muted);
+    flex: 0 0 auto;
+  }
+  .tpl-block-name {
+    flex: 1 1 auto;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--color-foreground);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tpl-block-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+  .tpl-accordion-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    padding: 0.25rem;
+    color: var(--color-muted);
+    cursor: pointer;
+    border-radius: var(--radius-control);
+    flex: 0 0 auto;
+  }
+  .tpl-accordion-btn:hover {
+    color: var(--color-foreground);
+    background: var(--color-surface-hover);
+  }
+  .tpl-chevron-icon {
+    transition: transform 0.2s ease;
+  }
+  .tpl-accordion-btn[aria-expanded="true"] .tpl-chevron-icon {
+    transform: rotate(90deg);
+  }
+  .tpl-block-detail {
+    padding: 0 0.75rem 0.75rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .tpl-block-detail[hidden] {
+    display: none !important;
+  }
+  .tpl-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-top: 0.75rem;
+  }
+  .tpl-field label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--color-muted);
+  }
+  .tpl-input,
+  .tpl-select {
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background-color: var(--color-surface);
+    color: var(--color-foreground);
+    font: inherit;
+    font-size: 0.8125rem;
+    box-sizing: border-box;
+  }
+  .tpl-input:focus,
+  .tpl-select:focus,
+  .tpl-textarea:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+  .tpl-textarea {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background-color: var(--color-surface);
+    color: var(--color-foreground);
+    font: inherit;
+    font-size: 0.8125rem;
+    box-sizing: border-box;
+    resize: vertical;
+  }
+  .tpl-sub-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--color-foreground);
+    margin: 0.75rem 0 0.25rem;
+  }
+  .tpl-block-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .tpl-icon-button {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-foreground);
+    font-size: 0.7rem;
+    padding: 0.2rem 0.45rem;
+    cursor: pointer;
+  }
+  .tpl-icon-button:hover {
+    background: var(--color-surface-hover);
+  }
+  .tpl-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding: 0;
+    list-style: none;
+  }
+  .tpl-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.625rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+  }
+  .tpl-drag-handle-static {
+    flex: 0 0 auto;
+    color: var(--color-muted);
+    cursor: default;
+    user-select: none;
+    opacity: 0.5;
+    padding: 0.125rem 0.25rem;
+  }
+  .tpl-row-title {
+    flex: 1 1 auto;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tpl-row-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+  .tpl-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--color-muted);
+  }
+  .tpl-row-overflow {
+    position: relative;
+    display: inline-flex;
+  }
+  .tpl-overflow-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.2rem 0.35rem;
+    cursor: pointer;
+    list-style: none;
+  }
+  .tpl-overflow-btn::-webkit-details-marker,
+  .tpl-overflow-btn::marker {
+    display: none;
+  }
+  .tpl-popover {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    z-index: 30;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 0.5rem;
+    min-width: 7rem;
+  }
+  .tpl-popover .tpl-field {
+    margin-top: 0;
+  }
+  .tpl-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    flex: 0 0 auto;
+  }
+  .tpl-toggle-input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+  }
+  .tpl-toggle-track {
+    width: 2.25rem;
+    height: 1.25rem;
+    border-radius: 9999px;
+    background: var(--color-border);
+    transition: background 0.15s ease;
+    display: inline-block;
+    position: relative;
+  }
+  .tpl-toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.15s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  }
+  .tpl-toggle-input:checked + .tpl-toggle-track {
+    background: var(--color-primary);
+  }
+  .tpl-toggle-input:checked + .tpl-toggle-track .tpl-toggle-thumb {
+    transform: translateX(1rem);
+  }
+  .tpl-toggle-input:focus-visible + .tpl-toggle-track {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+  .tpl-editor-canvas {
+    background: var(--color-surface-hover);
+    border-radius: var(--radius-panel);
+    padding: 1.25rem;
+    overflow: auto;
+  }
+  /* Sized to the iframe's actual scaled dimensions via JS (applyZoom()),
+     not just visually transformed -- a CSS transform never changes an
+     element's layout size, so a plain `transform: scale()` on the iframe
+     alone would visually overflow this container without the ancestor's
+     `overflow: auto` ever growing scrollbars to reach it. This wrapper's
+     real box always matches the visible scaled size, so scrolling (in
+     both directions) actually reaches the whole document at any zoom
+     level, and centering via margin works correctly at zoom < 100% too. */
+  .tpl-preview-zoom-wrap {
+    margin-inline: auto;
+    position: relative;
+  }
+  .tpl-preview {
+    display: block;
+    width: min(210mm, 100%);
+    height: 80vh;
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: 0.25rem;
+    transform-origin: top left;
+    transition: transform 0.15s ease;
+  }
+</style>

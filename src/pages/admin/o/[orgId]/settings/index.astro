@@ -1,7 +1,9 @@
 ---
 // Phase D (Organizations/dwellings) - settings index (spec Section 9.2, 27
-// "Settings"). Billing/rules/invoice-template/data are later phases (F/G) --
-// linked here as stubs so the nav is complete, not implemented yet.
+// "Settings"). Billing/rules/invoice-template/data were later phases (F/G),
+// originally linked here as stubs so the nav was complete before they
+// shipped -- all are implemented now; each card's `ready` flag must flip to
+// true once its page actually works, or the link stays disabled forever.
 import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
 import type { IconName } from "../../../../../lib/ui/icons";
@@ -75,7 +77,7 @@ const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
         icon: "file-description",
         label: "Invoice template",
         desc: "Invoice appearance and document settings.",
-        ready: false,
+        ready: true,
       },
       {
         href: `${base}/settings/data`,

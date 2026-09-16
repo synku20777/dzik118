@@ -33,6 +33,9 @@ import {
   getInvoice,
   prepareInvoice,
 } from "../../src/domain/billing/generation";
+import { updateInvoiceTemplate } from "../../src/domain/billing/invoice-templates";
+import { createDefaultInvoiceTemplateConfig } from "../../src/domain/billing/invoice-template-schema";
+import { renderInvoiceHtml } from "../../src/domain/billing/invoice-html";
 
 let db: Db;
 let seedAdminId: string;
@@ -804,6 +807,74 @@ describe("invoice generation", () => {
     await expect(
       generateInvoice(db, org.id, period.id, dwelling.id, seedAdminId)
     ).rejects.toBeInstanceOf(ConflictError);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Section 21/22: editing the organization's invoice template after generation never changes an already-generated invoice's rendered output", async () => {
+    const { org, dwelling, period } = await setupOrgAndPeriod("IT-F Org 14", 7);
+    await createRule(
+      db,
+      org.id,
+      {
+        name: "Fee",
+        code: "fee",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "10.00",
+        vatRate: "21.0000",
+        effectiveFrom: "2025-01-01",
+      },
+      seedAdminId
+    );
+
+    await updateInvoiceTemplate(
+      db,
+      org.id,
+      {
+        headerText: "Original header",
+        footerText: "",
+        paymentInstructions: "",
+        defaultNote: "",
+        config: createDefaultInvoiceTemplateConfig(),
+      },
+      seedAdminId
+    );
+
+    const generated = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    const before = await getInvoice(db, org.id, generated.id);
+    const htmlBefore = renderInvoiceHtml(before.invoice, before.lines);
+    expect(htmlBefore).toContain("Original header");
+
+    const hiddenConfig = createDefaultInvoiceTemplateConfig();
+    hiddenConfig.document.blocks = hiddenConfig.document.blocks.map((b) =>
+      b.type === "parties" ? { ...b, visible: false } : b
+    );
+    await updateInvoiceTemplate(
+      db,
+      org.id,
+      {
+        headerText: "Changed header",
+        footerText: "New footer",
+        paymentInstructions: "",
+        defaultNote: "",
+        config: hiddenConfig,
+      },
+      seedAdminId
+    );
+
+    const after = await getInvoice(db, org.id, generated.id);
+    const htmlAfter = renderInvoiceHtml(after.invoice, after.lines);
+    expect(htmlAfter).toBe(htmlBefore);
+    expect(htmlAfter).toContain("Original header");
+    expect(htmlAfter).not.toContain("Changed header");
+    expect(htmlAfter).not.toContain("New footer");
 
     await cleanupOrg(org.id);
   });
