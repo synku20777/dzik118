@@ -18,12 +18,19 @@ import {
   requireOrganizationAccess,
 } from "../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
-import { getLatestInvoiceForOrganization } from "../../../../../domain/billing/generation";
 import { getResolvedInvoiceTemplate } from "../../../../../domain/billing/invoice-templates";
-import type {
-  InvoiceHtmlInvoice,
-  InvoiceHtmlLine,
-} from "../../../../../domain/billing/invoice-html";
+import { getEffectiveRules } from "../../../../../domain/billing/rules";
+import {
+  getCurrentOpenPeriod,
+  listPeriods,
+} from "../../../../../domain/periods/periods";
+import {
+  buildPreviewLines,
+  buildPreviewTotals,
+  previewPeriodDateRange,
+  resolvePreviewPeriod,
+} from "../../../../../domain/billing/invoice-template-preview";
+import type { InvoiceHtmlInvoice } from "../../../../../domain/billing/invoice-html";
 import { withRequestDb } from "../../../../../lib/db-request";
 
 const organizationId = Astro.params.orgId!;
@@ -35,92 +42,74 @@ try {
 }
 
 const updateResult = Astro.getActionResult(actions.invoiceTemplates.update);
+const requestedPeriodId = Astro.url.searchParams.get("previewPeriodId");
 
-const { organization, template, latestInvoice } = await withRequestDb(
-  async (db) => ({
-    organization: await getOrganization(db, organizationId),
-    template: await getResolvedInvoiceTemplate(db, organizationId),
-    latestInvoice: await getLatestInvoiceForOrganization(db, organizationId),
-  })
-);
+const { organization, template, periods, previewPeriod, sampleLines } =
+  await withRequestDb(async (db) => {
+    const periods = await listPeriods(db, organizationId);
+    const currentOpenPeriod = await getCurrentOpenPeriod(db, organizationId);
+    const previewPeriod = resolvePreviewPeriod({
+      periods,
+      requestedPeriodId,
+      currentOpenPeriod,
+    });
+    const rules = await getEffectiveRules(
+      db,
+      organizationId,
+      previewPeriodDateRange(previewPeriod)
+    );
+    return {
+      organization: await getOrganization(db, organizationId),
+      template: await getResolvedInvoiceTemplate(db, organizationId),
+      periods,
+      previewPeriod,
+      sampleLines: buildPreviewLines(rules),
+    };
+  });
 
 const base = `/admin/o/${organizationId}`;
 const settingsHref = `${base}/settings`;
 
-// Deterministic sample data for the preview when this organization hasn't
-// generated an invoice yet -- never mutates anything, purely illustrative.
-const sampleInvoice: InvoiceHtmlInvoice = latestInvoice
-  ? latestInvoice.invoice
-  : {
-      invoiceNumber: "INV-SAMPLE-00001",
-      issueDate: "2026-01-01",
-      dueDate: "2026-01-15",
-      currency: organization.currency,
-      subtotal: "90.00",
-      vatTotal: "18.90",
-      currentCharges: "108.90",
-      previousOutstanding: "0.00",
-      previousCreditApplied: "0.00",
-      lateFeeApplied: "0.00",
-      manualAdjustment: "0.00",
-      amountDue: "108.90",
-      issuerSnapshot: {
-        name: organization.name,
-        addressLine1: organization.addressLine1,
-        addressLine2: organization.addressLine2,
-        city: organization.city,
-        postalCode: organization.postalCode,
-      },
-      recipientSnapshot: {
-        billingName: t("Sample resident"),
-        dwellingNumber: "1",
-        billingAddress: t("Sample Street 1, Riga, LV-1010"),
-      },
-      paymentSnapshot: {
-        bankName: organization.bankName,
-        iban: organization.iban,
-        bic: organization.bic,
-        currency: organization.currency,
-      },
-      templateSnapshot: null,
-    };
-const sampleLines: InvoiceHtmlLine[] = latestInvoice
-  ? latestInvoice.lines
-  : [
-      {
-        id: "sample-1",
-        description: t("Maintenance fee"),
-        quantity: "1",
-        unit: "month",
-        unitPrice: "45.0000",
-        netAmount: "45.00",
-        vatAmount: "9.45",
-        grossAmount: "54.45",
-        sourceSnapshot: { code: "maintenance" },
-      },
-      {
-        id: "sample-2",
-        description: t("Cold water"),
-        quantity: "5.000",
-        unit: "m3",
-        unitPrice: "3.0000",
-        netAmount: "15.00",
-        vatAmount: "3.15",
-        grossAmount: "18.15",
-        sourceSnapshot: { code: "cold_water" },
-      },
-      {
-        id: "sample-3",
-        description: t("Hot water"),
-        quantity: "3.000",
-        unit: "m3",
-        unitPrice: "10.0000",
-        netAmount: "30.00",
-        vatAmount: "6.30",
-        grossAmount: "36.30",
-        sourceSnapshot: { code: "hot_water" },
-      },
-    ];
+const previewTotals = buildPreviewTotals(sampleLines);
+
+// Deterministic sample invoice for the preview -- issuer/payment come from
+// the organization's real settings (so payment details in the preview
+// match what a real invoice would show), the recipient is a clearly
+// illustrative placeholder, and the charges/totals are derived from the
+// live effective-rules-driven sampleLines above, never hardcoded.
+const sampleInvoice: InvoiceHtmlInvoice = {
+  invoiceNumber: "INV-SAMPLE-00001",
+  issueDate: previewPeriod?.invoiceIssueDate ?? "2026-01-01",
+  dueDate: previewPeriod?.invoiceDueDate ?? "2026-01-15",
+  currency: organization.currency,
+  subtotal: previewTotals.subtotal,
+  vatTotal: previewTotals.vatTotal,
+  currentCharges: previewTotals.currentCharges,
+  previousOutstanding: "0.00",
+  previousCreditApplied: "0.00",
+  lateFeeApplied: "0.00",
+  manualAdjustment: "0.00",
+  amountDue: previewTotals.currentCharges,
+  issuerSnapshot: {
+    name: organization.name,
+    addressLine1: organization.addressLine1,
+    addressLine2: organization.addressLine2,
+    city: organization.city,
+    postalCode: organization.postalCode,
+  },
+  recipientSnapshot: {
+    billingName: t("Sample resident"),
+    dwellingNumber: "1",
+    billingAddress: t("Sample Street 1, Riga, LV-1010"),
+  },
+  paymentSnapshot: {
+    bankName: organization.bankName,
+    iban: organization.iban,
+    bic: organization.bic,
+    currency: organization.currency,
+  },
+  templateSnapshot: null,
+};
 
 const bootstrap = {
   headerText: template.headerText,
@@ -219,6 +208,13 @@ const bootstrap = {
       )
     }
 
+    <!-- Standalone GET form, deliberately outside template-editor-form below
+         (forms cannot be nested) -- the period <select> inside the
+         "Template structure" column associates with this via its `form`
+         attribute so choosing a period is a plain navigation, no client
+         script required (spec's own "HTML-first workflows" principle). -->
+    <form method="GET" id="preview-period-form"></form>
+
     <form
       method="POST"
       action={actions.invoiceTemplates.update}
@@ -247,6 +243,41 @@ const bootstrap = {
                 {t("Add, remove and configure sections. Drag to reorder.")}
               </p>
             </div>
+
+            {
+              periods.length > 0 ? (
+                <div class="tpl-period-select">
+                  <label for="tpl-preview-period">{t("Preview period")}</label>
+                  <select
+                    id="tpl-preview-period"
+                    name="previewPeriodId"
+                    form="preview-period-form"
+                  >
+                    {periods.map((p) => (
+                      <option
+                        value={p.id}
+                        selected={p.id === previewPeriod?.id}
+                      >
+                        {p.year}-{String(p.month).padStart(2, "0")}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="submit"
+                    form="preview-period-form"
+                    class="btn-secondary btn-sm"
+                  >
+                    {t("Preview")}
+                  </button>
+                </div>
+              ) : (
+                <p class="tpl-period-note">
+                  {t(
+                    "No billing periods yet — showing tariffs effective today."
+                  )}
+                </p>
+              )
+            }
 
             <div class="tpl-editor-toolbar">
               <button
@@ -285,8 +316,31 @@ const bootstrap = {
                     )
                   }
                 </p>
+                <p class="tpl-column-subtitle tpl-preview-illustrative-note">
+                  {
+                    t(
+                      "Charge quantities shown here are illustrative (always 1) and do not reflect any real resident's bill."
+                    )
+                  }
+                </p>
+                <p class="tpl-column-subtitle">
+                  {
+                    t(
+                      "Latvian is the canonical invoice language. English and Russian are optional translations; a missing translation falls back to Latvian."
+                    )
+                  }
+                </p>
               </div>
-              <div class="tpl-zoom-control">
+              <div class="tpl-preview-controls">
+                <select
+                  id="tpl-locale-select"
+                  class="tpl-zoom-select"
+                  aria-label={t("Editing language")}
+                >
+                  <option value="lv" selected>Latviešu</option>
+                  <option value="en">English</option>
+                  <option value="ru">Русский</option>
+                </select>
                 <select
                   id="tpl-zoom-select"
                   class="tpl-zoom-select"
@@ -367,11 +421,41 @@ const bootstrap = {
   }
   .tpl-preview-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
   }
-  .tpl-zoom-control {
+  .tpl-preview-illustrative-note {
+    font-style: italic;
+  }
+  .tpl-period-select {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.8125rem;
+  }
+  .tpl-period-select label {
+    font-weight: 600;
+    color: var(--color-muted);
+  }
+  .tpl-period-select select {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.8125rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-foreground);
+  }
+  .tpl-period-note {
+    margin: 0 0 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+  }
+  .tpl-preview-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
     flex: 0 0 auto;
   }
   .tpl-zoom-select {

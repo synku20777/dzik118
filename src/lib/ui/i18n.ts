@@ -697,6 +697,10 @@ const lv: Record<string, string> = {
   // Added: translation coverage pass (settings/rules/billing/messages/guide/dashboard)
   "-- none --": "-- nav --",
   "A descriptive name for this rule.": "Šī noteikuma aprakstošais nosaukums.",
+  "English invoice label": "Angļu valodas nosaukums rēķinā",
+  "Russian invoice label": "Krievu valodas nosaukums rēķinā",
+  "Optional -- falls back to the Latvian name":
+    "Neobligāti -- ja nav norādīts, tiek izmantots latviešu nosaukums",
   "Add a new tariff or billing rule. Fill in the details below.":
     "Pievienojiet jaunu tarifu vai norēķinu noteikumu. Aizpildiet informāciju zemāk.",
   "Add a note about this dwelling…": "Pievienojiet piezīmi par šo īpašumu…",
@@ -950,6 +954,17 @@ const lv: Record<string, string> = {
   "Expand section": "Izvērst sadaļu",
   "Collapse section": "Sakļaut sadaļu",
   "More options": "Citas iespējas",
+  "Preview period": "Priekšskatījuma periods",
+  "No billing periods yet — showing tariffs effective today.":
+    "Vēl nav norēķinu periodu — tiek rādīti šodien spēkā esošie tarifi.",
+  "Charge quantities shown here are illustrative (always 1) and do not reflect any real resident's bill.":
+    "Šeit redzamie daudzumi ir ilustratīvi (vienmēr 1) un neatspoguļo neviena konkrēta iemītnieka rēķinu.",
+  "Latvian is the canonical invoice language. English and Russian are optional translations; a missing translation falls back to Latvian.":
+    "Latviešu valoda ir rēķina kanoniskā valoda. Angļu un krievu valoda ir neobligāti tulkojumi; ja tulkojuma nav, tiek izmantots latviešu teksts.",
+  "Editing language": "Rediģēšanas valoda",
+  "Latvian is the canonical invoice document. English and Russian are optional translated copies of the same invoice — not separate invoices.":
+    "Latviešu valoda ir rēķina kanoniskais dokuments. Angļu un krievu valoda ir šī paša rēķina neobligātas tulkotas kopijas — ne atsevišķi rēķini.",
+  "Document language": "Dokumenta valoda",
   "Control what appears on generated invoices, in what order, and how each section looks.":
     "Kontrolējiet, kas parādās uz izveidotajiem rēķiniem, kādā secībā un kā katra sadaļa izskatās.",
   "Add text block": "Pievienot teksta bloku",
@@ -1668,6 +1683,10 @@ const ru: Record<string, string> = {
   // Added: translation coverage pass (settings/rules/billing/messages/guide/dashboard)
   "-- none --": "-- нет --",
   "A descriptive name for this rule.": "Понятное название этого правила.",
+  "English invoice label": "Английское название в счёте",
+  "Russian invoice label": "Русское название в счёте",
+  "Optional -- falls back to the Latvian name":
+    "Необязательно -- если не указано, используется латышское название",
   "Add a new tariff or billing rule. Fill in the details below.":
     "Добавьте новый тариф или правило расчёта. Заполните данные ниже.",
   "Add a note about this dwelling…": "Добавьте примечание об этом помещении…",
@@ -1919,6 +1938,17 @@ const ru: Record<string, string> = {
   "Expand section": "Развернуть раздел",
   "Collapse section": "Свернуть раздел",
   "More options": "Другие параметры",
+  "Preview period": "Период предпросмотра",
+  "No billing periods yet — showing tariffs effective today.":
+    "Расчётных периодов пока нет — показаны тарифы, действующие сегодня.",
+  "Charge quantities shown here are illustrative (always 1) and do not reflect any real resident's bill.":
+    "Указанные здесь количества являются иллюстративными (всегда 1) и не отражают счёт какого-либо конкретного жителя.",
+  "Latvian is the canonical invoice language. English and Russian are optional translations; a missing translation falls back to Latvian.":
+    "Латышский язык является каноническим языком счёта. Английский и русский — необязательные переводы; при отсутствии перевода используется латышский текст.",
+  "Editing language": "Язык редактирования",
+  "Latvian is the canonical invoice document. English and Russian are optional translated copies of the same invoice — not separate invoices.":
+    "Латышский язык — канонический документ счёта. Английский и русский — необязательные переведённые копии того же счёта, а не отдельные счета.",
+  "Document language": "Язык документа",
   "Control what appears on generated invoices, in what order, and how each section looks.":
     "Управляйте тем, что отображается в сформированных счетах, в каком порядке и как выглядит каждый раздел.",
   "Add text block": "Добавить текстовый блок",

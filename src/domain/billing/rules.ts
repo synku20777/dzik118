@@ -25,6 +25,10 @@ export { ConflictError, NotFoundError, ValidationError };
 
 export interface CreateBillingRuleInput {
   name: string;
+  // Optional translated invoice labels -- `name` is the Latvian canonical
+  // label; a missing translation falls back to it at render time.
+  nameEn?: string | null;
+  nameRu?: string | null;
   code: string;
   description?: string;
   calculationType: (typeof billingCalculationTypeEnum.enumValues)[number];
@@ -151,6 +155,8 @@ export async function listRules(
 
 export interface UpdateBillingRuleInput {
   name?: string;
+  nameEn?: string | null;
+  nameRu?: string | null;
   description?: string | null;
   unitPrice?: string | null;
   vatRate?: string;

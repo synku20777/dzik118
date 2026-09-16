@@ -365,6 +365,30 @@ const RULE_ICON_BODIES: Record<string, string> = {
                           />
                           <input type="hidden" name="ruleId" value={rule.id} />
                           <div>
+                            <label for={`nameEn-${rule.id}`}>
+                              {t("English invoice label")}
+                            </label>
+                            <input
+                              id={`nameEn-${rule.id}`}
+                              type="text"
+                              name="nameEn"
+                              maxlength="200"
+                              value={rule.nameEn ?? ""}
+                            />
+                          </div>
+                          <div>
+                            <label for={`nameRu-${rule.id}`}>
+                              {t("Russian invoice label")}
+                            </label>
+                            <input
+                              id={`nameRu-${rule.id}`}
+                              type="text"
+                              name="nameRu"
+                              maxlength="200"
+                              value={rule.nameRu ?? ""}
+                            />
+                          </div>
+                          <div>
                             <label for={`unitPrice-${rule.id}`}>
                               {t("Unit price")}
                             </label>
@@ -494,6 +518,29 @@ const RULE_ICON_BODIES: Record<string, string> = {
               <p class="rule-field-hint">
                 {t("Unique identifier (e.g. cold_water).")}
               </p>
+            </div>
+          </div>
+
+          <div class="rule-field-row">
+            <div class="rule-field">
+              <label for="nameEn">{t("English invoice label")}</label>
+              <input
+                id="nameEn"
+                name="nameEn"
+                type="text"
+                maxlength="200"
+                placeholder={t("Optional -- falls back to the Latvian name")}
+              />
+            </div>
+            <div class="rule-field">
+              <label for="nameRu">{t("Russian invoice label")}</label>
+              <input
+                id="nameRu"
+                name="nameRu"
+                type="text"
+                maxlength="200"
+                placeholder={t("Optional -- falls back to the Latvian name")}
+              />
             </div>
           </div>
 

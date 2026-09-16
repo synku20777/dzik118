@@ -35,12 +35,25 @@ Dwelling accounts track net debits and credits per dwelling for property managem
 ### Structured template composer (no arbitrary HTML, CSS, or freeform canvas)
 
 The invoice template editor (`/admin/o/[orgId]/settings/invoice-template`) is a structured document composer rather than an unrestricted WYSIWYG or canvas page builder:
-- **Constrained section model**: Only the 6 predefined block types (`meta`, `parties`, `line-items`, `payment`, `default-note`, `footer`) and custom `text` blocks are supported. Freeform canvas placement, arbitrary pixel coordinates, multi-column dragging, and custom widget components are not supported.
-- **Maximum block count**: The server schema (`invoiceTemplateConfigV1Schema`) and client editor enforce a strict cap of 30 blocks per template to prevent document bloat and browser rendering issues.
-- **Formatting scope**: Bold weight and text alignment (`left`, `center`, `right`) are configurable on custom text blocks and charges table row overrides (`visible`, `bold`, `spacingBefore`), but built-in text fields (header, footer, payment instructions, default note) render plain escaped text with preserved newlines. Custom font families, font sizes, colors, and arbitrary CSS classes are not configurable.
-- **Strict charges table preservation**: The line items charges table (`line-items`) must remain present and visible on every invoice layout; hiding or duplicating the charges table is rejected by the schema.
+- **Constrained section model**: Only the 6 predefined block types (`meta`, `parties`, `line-items`, `payment` -- mandatory; `default-note`, `footer` -- optional) and custom `text` blocks are supported. Freeform canvas placement, arbitrary pixel coordinates, multi-column dragging, and custom widget components are not supported.
+- **Maximum block count**: The server schema (`invoiceTemplateConfigV2Schema`) and client editor enforce a strict cap of 30 blocks per template to prevent document bloat and browser rendering issues.
+- **Formatting scope**: Bold weight and text alignment (`left`, `center`, `right`) are configurable on custom text blocks; charges table row overrides support bold weight and spacing only (no visibility override -- see below). Built-in text fields (header, footer, payment instructions, default note) render plain escaped text with preserved newlines, with optional EN/RU translations. Custom font families, font sizes, colors, and arbitrary CSS classes are not configurable.
+- **Mandatory sections cannot be hidden**: `meta`, `parties`, `line-items`, and `payment` always render and have no visibility toggle, in the editor UI or the schema. Only `default-note` and `footer` are genuinely optional (may be entirely absent, not just hidden).
+- **No row-hiding**: A charges-table row that contributes to the invoice total cannot be hidden by template configuration -- the `visible` row-override field that existed in the V1 schema was removed entirely (not merely deprecated), so this is enforced by the type system and the renderer, not just a UI restriction.
 - **No arbitrary row reordering**: Reordering applies to document section blocks. Individual fee rows inside the charges table are generated in deterministic billing rule sort order; dragging or reordering individual charge rows is not supported.
-- **Security & XSS protection**: Administrators cannot inject raw HTML, inline CSS attributes, `<style>` tags, or JavaScript. All user-entered text is passed through `escapeHtml()` during HTML and PDF rendering.
+- **Security & XSS protection**: Administrators cannot inject raw HTML, inline CSS attributes, `<style>` tags, or JavaScript. All user-entered text (including every EN/RU translation) is passed through `escapeHtml()` during HTML and PDF rendering.
+
+### SEPA QR: BIC required, not the full EEA domestic-transfer exemption
+
+The EPC069-12 standard allows omitting the BIC for domestic transfers within certain EEA corridors. This app instead requires an organization to have a BIC on file at all before it will generate a QR code for that organization's invoices; if the BIC field is empty, the QR is silently omitted (the human-readable bank name/IBAN text still renders normally). This is a deliberate simplification of the EEA-domestic-optional-BIC determination logic, not a bug -- implementing the full country/corridor determination was judged unnecessary complexity for this app's actual usage.
+
+### SEPA QR: IBAN country registry is not exhaustive
+
+`src/domain/billing/sepa-qr.ts`'s per-country IBAN length table covers SEPA/EEA countries and the European microstates that also issue IBANs -- the set an organization using this app could realistically hold a bank account in. An IBAN from a country outside that list is rejected outright (not skip-checked), so the QR is omitted, again with the human-readable IBAN text still rendering normally.
+
+### EN/RU PDF copies are generated on demand, not cached
+
+Downloading an invoice as an English or Russian PDF re-renders and re-generates the PDF via Cloudflare Browser Rendering on every request; unlike the canonical Latvian PDF, it is never uploaded to storage or reused across requests. This keeps the data model simple (exactly one persisted PDF artifact per invoice) at the cost of a fresh render on every translated-copy download. If this becomes a meaningful cost or latency concern in practice, a per-locale cache could be added later without changing the canonical-PDF guarantee.
 
 ## Deferred features and refactors
 

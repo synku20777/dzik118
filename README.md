@@ -6,7 +6,8 @@ managers. It supports monthly billing cycles, dwelling-level financial accounts
 with an append-only transaction ledger, bank payment reconciliation against
 remaining invoice balances (handling exact, partial, and overpayments), credit
 and debt carry-forward, automated late-fee policies, structured invoice template
-customization, and resident self-service.
+customization with SEPA QR payment codes and Latvian-canonical/English/Russian
+invoice language copies, and resident self-service.
 
 This README explains how to install the project and run it on your own
 machine. For everything else, see [Documentation](#documentation) below.

@@ -42,8 +42,12 @@ The unit test suite covers core mathematical and domain rules, including:
 - **Statement balance resolution** (`tests/unit/account-balance.test.ts`): Verifies `calculateStatementBalance`, ensuring outstanding debt is carried forward, available account credits offset new charges, amount due is floored at zero, and late fees / manual adjustments are incorporated.
 - **Late-fee calculation** (`tests/unit/account-balance.test.ts`): Verifies `calculateLateFee`, verifying grace period evaluation, daily rate accrual, percentage caps, and zero fee behavior for settled accounts.
 - **Invoice line item calculation** (`tests/unit/billing-calculation.test.ts`): Verifies decimal precision, VAT rates, and meter consumption formulas.
-- **Invoice template schema & snapshot validation** (`tests/unit/invoice-template-schema.test.ts`): Verifies `createDefaultInvoiceTemplateConfig`, rejection of duplicate block IDs, rejection of missing or hidden `line-items`, lenient read-path fallback on malformed JSON or future schema versions via `parseInvoiceTemplateConfig`, and versioned snapshot construction via `buildInvoiceTemplateSnapshot`.
-- **Deterministic invoice rendering & XSS defense** (`tests/unit/invoice-html.test.ts`): Verifies `renderInvoiceHtml`, validating section block reordering, visibility overrides, custom text blocks with multiline `<br />` conversion, bold emphasis and text alignment, charges table row overrides (`visible`, `bold`, `spacingBefore`) keyed by stable rule code with fallback to line ID, fallback to legacy layout on missing/corrupted snapshots, and strict XSS defense (preventing attribute breakout from custom align strings).
+- **Invoice template schema & snapshot validation** (`tests/unit/invoice-template-schema.test.ts`): Verifies `createDefaultInvoiceTemplateConfig`, the mandatory-block repair pipeline (dedupe, force-visible, insert-missing, revalidate, fall back to default only if repair itself fails), rejection of duplicate block IDs, strict write-path rejection of legacy V1-shaped payloads, and versioned snapshot construction via `buildInvoiceTemplateSnapshot`.
+- **Deterministic invoice rendering & XSS defense** (`tests/unit/invoice-html.test.ts`): Verifies `renderInvoiceHtml`, validating section block reordering, mandatory blocks always rendering regardless of a stored config's visibility flag, optional block hiding, custom text blocks with multiline `<br />` conversion and EN/RU translation fallback, bold emphasis and text alignment, charges table row overrides (`bold`, `spacingBefore` -- no `visible`, so a financially charged row can never disappear even from an obsolete V1-shaped stored config), locale-aware label/tariff/template-text rendering across `lv`/`en`/`ru` with identical financial figures in every locale, inline SEPA QR embedding and graceful omission for non-EUR/zero-due/missing-BIC/malformed-IBAN cases, and strict XSS defense (preventing attribute breakout from custom align strings).
+- **Invoice/tariff localization** (`tests/unit/invoice-i18n.test.ts`): Verifies the versioned system-label dictionary (`translateInvoiceLabel`, including fallback for an unrecognized `labelSetVersion`), `pickLocalizedText`'s blank/missing-translation fallback to Latvian, and `parseInvoiceLocale`'s lenient query-param parsing.
+- **Invoice template preview sync** (`tests/unit/invoice-template-preview.test.ts`): Verifies the editor's live-preview line/total builder reuses the same `decimal2.ts` arithmetic primitives `generateInvoice()` itself calls (never a duplicated formula), and `resolvePreviewPeriod`'s period-selection precedence.
+- **SEPA QR** (`tests/unit/sepa-qr.test.ts`, `tests/unit/sepa-qr-generator-failure.test.ts`): Verifies the EPC069-12 payload builder (field order/count, LF separators, no trailing separator, IBAN mod-97 + structural validation against a known-country registry, BIC 8/11-char format, amount range and boundary values, 70-char beneficiary name and 140-char remittance limits with rejection rather than truncation, 331-byte UTF-8 payload limit, control-character rejection, `Rēķins {invoiceNumber}` remittance construction), correct UTF-8 byte encoding of the generated QR (not the QR library's lossy default), deterministic payload/SVG generation, and that the renderer wrapper never throws -- including when the QR library itself throws internally (simulated via a mocked module).
+- **On-demand invoice PDF copies** (`tests/unit/invoice-pdf-response.test.ts`): Verifies the canonical-PDF 404 "not generated yet" branch, the shared "not ready" response used to gate translated copies, and the EN/RU copy response's locale-suffixed filename, content type, and header passthrough.
 
 ## Integration tests
 
@@ -82,6 +86,11 @@ While implemented in the domain services and database schema, the following fina
 
 The integration test suite (`tests/integration/billing.test.ts`) verifies:
 - **Template snapshot immutability across updates**: Verifies that updating an organization's invoice template (`updateInvoiceTemplate`) after an invoice has been generated does not alter the rendered HTML (`renderInvoiceHtml`) of the existing invoice (`htmlAfter === htmlBefore`), preserving historical document integrity.
+- **Tariff/template synchronization**: Verifies that the template editor's preview (via `buildPreviewLines(getEffectiveRules(...))`) excludes disabled, archived, and foreign-organization billing rules through the real `getEffectiveRules()` boundary -- not a mocked/bypassed version of it.
+- **Tariff label translation immutability**: Generates an invoice, renames a billing rule's `nameEn`/`nameRu` via `updateRule`, re-fetches the invoice from the database, and confirms its LV/EN/RU rendered output still shows the original labels -- because the full rule row was already snapshotted onto the invoice line at generation time.
+- **Template text translation immutability**: Generates an invoice with a translated header, then changes the organization's current template translation via `updateInvoiceTemplate`, re-fetches the invoice, and confirms its frozen `headerText.en` (and rendered output) is unaffected.
+
+These, like the rest of `tests/integration/`, require the real local Postgres/Supabase Storage stack described under "Integration tests" above -- they cannot run in an environment without one.
 
 *Recommended test additions for complete template coverage:*
 While supported by domain services, the following tests should be added to extend coverage:
@@ -228,12 +237,31 @@ If every page fails to load or hangs with no response, see
   `late_fee_adjustments`.
 - **Invoice template customization and snapshot immutability.** Update the
   organization's invoice template under `/admin/o/:orgId/settings/invoice-template`
-  (reorder section blocks, toggle visibility, add custom text, configure row
-  formatting). Generate an invoice and verify that the new structure renders on
-  the invoice view, resident portal, and PDF. Then modify the organization's
-  template again (e.g. delete the custom text or change section order). Re-open
-  the previously generated invoice and verify that its rendered HTML and
-  content remain completely unchanged, proving snapshot immutability.
+  (reorder section blocks, toggle visibility on the optional Default note/Footer
+  sections, add custom text, configure row formatting). Confirm the four
+  mandatory sections (Invoice details, Sender and recipient, Charges table,
+  Payment details) have no Show/Hide control and cannot be removed. Generate an
+  invoice and verify that the new structure renders on the invoice view,
+  resident portal, and PDF. Then modify the organization's template again (e.g.
+  delete the custom text or change section order). Re-open the previously
+  generated invoice and verify that its rendered HTML and content remain
+  completely unchanged, proving snapshot immutability.
+- **Tariff sync and invoice language copies.** Create a new active billing
+  rule with an English and Russian label, then open the invoice template
+  editor: confirm the new tariff appears in the live preview automatically
+  (no separate activation step), and switch the editor's document-language
+  selector to English/Russian to confirm the tariff's translated label shows,
+  falling back to the Latvian name for any tariff without a translation.
+  Generate and send an invoice, then view it from the admin invoice detail
+  page, the resident portal, and a public invoice link, switching each one's
+  document-language selector between Latvian/English/Russian. Verify the
+  amount, invoice number, and status never change across languages, that
+  Latvian is the default, and that the payment block shows a scannable SEPA
+  QR code next to the bank/IBAN/BIC text (for a EUR invoice with a valid IBAN
+  and BIC on file) whose remittance reference always reads `Rēķins
+  {invoiceNumber}` regardless of the selected document language. Confirm
+  downloading the English/Russian PDF works and never changes the invoice's
+  canonical (Latvian) stored PDF hash.
 - **Double-clicking Send.** Sending an invoice is safe to repeat. Two
   clicks, or two people clicking at the same time, produce exactly one
   email and one delivery record, not two.

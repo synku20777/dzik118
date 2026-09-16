@@ -22,9 +22,13 @@ import { submitAdminReading } from "../../src/domain/periods/readings";
 import { submitManualRuleInput } from "../../src/domain/periods/manual-rule-inputs";
 import {
   ConflictError,
+  archiveRule,
   createRule,
   getEffectiveRules,
+  updateRule,
 } from "../../src/domain/billing/rules";
+import { buildPreviewLines } from "../../src/domain/billing/invoice-template-preview";
+import { rowPresentationKey } from "../../src/domain/billing/invoice-html";
 import {
   NotFoundError,
   ValidationError,
@@ -163,6 +167,81 @@ describe("billing rules", () => {
       )
     ).rejects.toBeInstanceOf(ConflictError);
     await cleanupOrg(org.id);
+  });
+
+  it("the invoice template preview's charge rows come only from active, effective, same-org rules -- same resolver generateInvoice() uses", async () => {
+    const { org, period } = await setupOrgAndPeriod("IT-F Org 15", 8);
+    const other = await createOrganization(
+      db,
+      { name: "IT-F Org 15 Other", addressLine1: "Addr 1" },
+      seedAdminId
+    );
+
+    const active = await createRule(
+      db,
+      org.id,
+      {
+        name: "Active fee",
+        code: "active-fee",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "10.00",
+        vatRate: "21.0000",
+        effectiveFrom: "2025-01-01",
+      },
+      seedAdminId
+    );
+    const disabled = await createRule(
+      db,
+      org.id,
+      {
+        name: "Disabled fee",
+        code: "disabled-fee",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "20.00",
+        effectiveFrom: "2025-01-01",
+      },
+      seedAdminId
+    );
+    await updateRule(db, org.id, disabled.id, { enabled: false }, seedAdminId);
+    const toArchive = await createRule(
+      db,
+      org.id,
+      {
+        name: "Archived fee",
+        code: "archived-fee",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "30.00",
+        effectiveFrom: "2025-01-01",
+      },
+      seedAdminId
+    );
+    await archiveRule(db, org.id, toArchive.id, seedAdminId);
+    await createRule(
+      db,
+      other.id,
+      {
+        name: "Other org's fee",
+        code: "other-org-fee",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "40.00",
+        effectiveFrom: "2025-01-01",
+      },
+      seedAdminId
+    );
+
+    const effective = await getEffectiveRules(db, org.id, period);
+    const previewLines = buildPreviewLines(effective);
+
+    expect(previewLines).toHaveLength(1);
+    expect(previewLines[0].description).toBe("Active fee");
+    expect(rowPresentationKey(previewLines[0])).toBe(active.code);
+
+    await cleanupOrg(org.id);
+    await cleanupOrg(other.id);
   });
 });
 
@@ -853,8 +932,11 @@ describe("invoice generation", () => {
     expect(htmlBefore).toContain("Original header");
 
     const hiddenConfig = createDefaultInvoiceTemplateConfig();
+    // `footer` is optional and hideable; `parties` (and the other mandatory
+    // blocks) can no longer be hidden at all -- updateInvoiceTemplate would
+    // reject a config that tried.
     hiddenConfig.document.blocks = hiddenConfig.document.blocks.map((b) =>
-      b.type === "parties" ? { ...b, visible: false } : b
+      b.type === "footer" ? { ...b, visible: false } : b
     );
     await updateInvoiceTemplate(
       db,
@@ -875,6 +957,140 @@ describe("invoice generation", () => {
     expect(htmlAfter).toContain("Original header");
     expect(htmlAfter).not.toContain("Changed header");
     expect(htmlAfter).not.toContain("New footer");
+
+    await cleanupOrg(org.id);
+  });
+});
+
+describe("multilingual invoice rendering", () => {
+  it("a tariff's EN/RU labels are snapshotted at generation time and survive a later rename, unaffected across locales' totals", async () => {
+    const { org, dwelling, period } = await setupOrgAndPeriod("IT-F Org 16", 9);
+    const rule = await createRule(
+      db,
+      org.id,
+      {
+        name: "Ūdens",
+        nameEn: "Water",
+        nameRu: "Вода",
+        code: "water",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "10.00",
+        vatRate: "21.0000",
+        effectiveFrom: "2025-01-01",
+      },
+      seedAdminId
+    );
+
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+
+    // Rename the tariff's translations *after* generation -- the already-
+    // generated invoice's snapshot must still show the labels captured at
+    // generation time (spec Section 21 immutability), not today's edit.
+    await updateRule(
+      db,
+      org.id,
+      rule.id,
+      { nameEn: "Water supply", nameRu: "Водоснабжение" },
+      seedAdminId
+    );
+
+    // Re-fetch from the database *after* the rename -- rendering a
+    // still-in-memory object from before the mutation would prove nothing
+    // about whether the stored snapshot itself is actually immutable.
+    const { invoice: loaded, lines } = await getInvoice(db, org.id, invoice.id);
+
+    const lv = renderInvoiceHtml(loaded, lines, "lv");
+    const en = renderInvoiceHtml(loaded, lines, "en");
+    const ru = renderInvoiceHtml(loaded, lines, "ru");
+
+    expect(lv).toContain("Ūdens");
+    expect(en).toContain("Water");
+    expect(en).not.toContain("Water supply");
+    expect(ru).toContain("Вода");
+    expect(ru).not.toContain("Водоснабжение");
+
+    // Financial identity is unchanged across locales: same invoice number,
+    // same amount due, same line count.
+    for (const html of [lv, en, ru]) {
+      expect(html).toContain(invoice.invoiceNumber);
+      expect(html).toContain(invoice.amountDue);
+    }
+    expect((lv.match(/<tr/g) ?? []).length).toBe(
+      (en.match(/<tr/g) ?? []).length
+    );
+
+    await cleanupOrg(org.id);
+  });
+
+  it("an invoice's template textTranslations are frozen at generation time -- editing the org's template translations afterward never changes the EN/RU render of an already-generated invoice", async () => {
+    const { org, dwelling, period } = await setupOrgAndPeriod(
+      "IT-F Org 17",
+      10
+    );
+    await createRule(
+      db,
+      org.id,
+      {
+        name: "Fee",
+        code: "fee",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "10.00",
+        effectiveFrom: "2025-01-01",
+      },
+      seedAdminId
+    );
+
+    const config = createDefaultInvoiceTemplateConfig();
+    config.textTranslations = { headerText: { en: "Welcome" } };
+    await updateInvoiceTemplate(
+      db,
+      org.id,
+      {
+        headerText: "Sveicināti",
+        footerText: "",
+        paymentInstructions: "",
+        defaultNote: "",
+        config,
+      },
+      seedAdminId
+    );
+
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+
+    // Edit the org's *current* template translation after generation.
+    const updatedConfig = createDefaultInvoiceTemplateConfig();
+    updatedConfig.textTranslations = { headerText: { en: "Welcome aboard" } };
+    await updateInvoiceTemplate(
+      db,
+      org.id,
+      {
+        headerText: "Sveicināti",
+        footerText: "",
+        paymentInstructions: "",
+        defaultNote: "",
+        config: updatedConfig,
+      },
+      seedAdminId
+    );
+
+    const { invoice: loaded, lines } = await getInvoice(db, org.id, invoice.id);
+    const en = renderInvoiceHtml(loaded, lines, "en");
+    expect(en).toContain("Welcome");
+    expect(en).not.toContain("Welcome aboard");
 
     await cleanupOrg(org.id);
   });

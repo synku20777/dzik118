@@ -42,11 +42,25 @@ import {
 } from "../../domain/billing/invoice-html";
 import {
   createDefaultInvoiceTemplateConfig,
+  MANDATORY_BLOCK_TYPES,
   SPACING_VALUES,
   type InvoiceTemplateBlock,
-  type InvoiceTemplateConfigV1,
+  type InvoiceTemplateConfigV2,
   type SpacingValue,
 } from "../../domain/billing/invoice-template-schema";
+import type { InvoiceLocale } from "../../domain/billing/invoice-i18n";
+
+// A field whose Latvian value is canonical/required and whose EN/RU values
+// are optional translated copies -- one small interface lets a single
+// localizedTextField() helper handle every translatable field (the 4
+// built-in text fields below, plus a custom text block's own text)
+// uniformly, rather than four near-duplicate render functions.
+interface LocalizedField {
+  getLv(): string;
+  setLv(value: string): void;
+  getTranslation(locale: "en" | "ru"): string | undefined;
+  setTranslation(locale: "en" | "ru", value: string): void;
+}
 
 interface SampleRow {
   key: string;
@@ -58,7 +72,7 @@ interface EditorBootstrap {
   footerText: string;
   paymentInstructions: string;
   defaultNote: string;
-  config: InvoiceTemplateConfigV1;
+  config: InvoiceTemplateConfigV2;
   sampleInvoice: InvoiceHtmlInvoice;
   sampleLines: InvoiceHtmlLine[];
   strings: Record<string, string>;
@@ -91,6 +105,13 @@ if (root) {
   // never saved to the form/config.
   const expandedBlockIds = new Set<string>();
 
+  // Which language the preview renders in AND which language's text the
+  // translatable fields below show/edit -- one control drives both (a
+  // design-review correction: separate per-field language tabs were judged
+  // likely to overload the editor). Purely local UI state: switching it
+  // never mutates saved data, only what's currently displayed.
+  let editingLocale: InvoiceLocale = "lv";
+
   const form = document.querySelector<HTMLFormElement>(
     "#template-editor-form"
   )!;
@@ -105,6 +126,9 @@ if (root) {
   // lib.dom.d.ts collision (see the longer note further down this file).
   const zoomSelect = root.querySelector(
     "#tpl-zoom-select"
+  ) as unknown as HTMLSelectElement;
+  const localeSelect = root.querySelector(
+    "#tpl-locale-select"
   ) as unknown as HTMLSelectElement;
   const addTextButton = root.querySelector<HTMLButtonElement>("#tpl-add-text")!;
   const resetButton =
@@ -126,7 +150,7 @@ if (root) {
     const draftInvoice: InvoiceHtmlInvoice = {
       ...bootstrap.sampleInvoice,
       templateSnapshot: {
-        version: 1,
+        version: 2,
         headerText: state.headerText || null,
         footerText: state.footerText || null,
         paymentInstructions: state.paymentInstructions || null,
@@ -136,9 +160,18 @@ if (root) {
     };
     previewFrame.srcdoc = renderInvoiceHtml(
       draftInvoice,
-      bootstrap.sampleLines
+      bootstrap.sampleLines,
+      editingLocale
     );
   }
+
+  localeSelect.addEventListener("change", () => {
+    editingLocale = localeSelect.value as InvoiceLocale;
+    // Re-render the block list too, not just the preview: translatable
+    // fields must now show/edit the newly selected language's text.
+    renderBlockList();
+    refreshPreview();
+  });
 
   function applyZoom() {
     const zoom = Number(zoomSelect.value) || 1;
@@ -342,18 +375,9 @@ if (root) {
     const controls = document.createElement("div");
     controls.className = "tpl-row-controls";
 
-    controls.appendChild(
-      toggle(
-        override.visible ?? true,
-        `${s("Show")}: ${row.label}`,
-        (checked) => {
-          state.config.rowOverrides[row.key] = {
-            ...state.config.rowOverrides[row.key],
-            visible: checked,
-          };
-        }
-      )
-    );
+    // No Show/hide toggle here: a row that contributes to the invoice
+    // total can never be hidden (spec requirement B) -- only bold/spacing
+    // presentation overrides exist for a charge row.
     controls.appendChild(
       labeled(
         s("Bold"),
@@ -412,6 +436,118 @@ if (root) {
     return textarea;
   }
 
+  // Shows/edits whichever language is currently selected (editingLocale).
+  // In Latvian mode this behaves exactly like textField() above (editing
+  // the canonical value directly). In EN/RU mode it edits the translation
+  // only, with the Latvian text shown as a placeholder -- so an empty
+  // translation visibly falls back to Latvian rather than looking like a
+  // blank required field.
+  function localizedTextField(
+    localizedField: LocalizedField,
+    maxLength: number
+  ): HTMLTextAreaElement {
+    if (editingLocale === "lv") {
+      return textField(localizedField.getLv(), localizedField.setLv, maxLength);
+    }
+    const locale = editingLocale;
+    const textarea = document.createElement("textarea");
+    textarea.className = "tpl-textarea";
+    textarea.rows = 2;
+    textarea.value = localizedField.getTranslation(locale) ?? "";
+    textarea.placeholder = localizedField.getLv();
+    textarea.maxLength = maxLength;
+    textarea.addEventListener("input", () => {
+      localizedField.setTranslation(locale, textarea.value);
+      markDirty();
+      refreshPreview();
+    });
+    return textarea;
+  }
+
+  function headerTextField(): LocalizedField {
+    return {
+      getLv: () => state.headerText,
+      setLv: (v) => (state.headerText = v),
+      getTranslation: (locale) =>
+        state.config.textTranslations?.headerText?.[locale],
+      setTranslation: (locale, v) => {
+        state.config.textTranslations ??= {};
+        state.config.textTranslations.headerText ??= {};
+        state.config.textTranslations.headerText[locale] = v;
+      },
+    };
+  }
+
+  function footerTextField(): LocalizedField {
+    return {
+      getLv: () => state.footerText,
+      setLv: (v) => (state.footerText = v),
+      getTranslation: (locale) =>
+        state.config.textTranslations?.footerText?.[locale],
+      setTranslation: (locale, v) => {
+        state.config.textTranslations ??= {};
+        state.config.textTranslations.footerText ??= {};
+        state.config.textTranslations.footerText[locale] = v;
+      },
+    };
+  }
+
+  function paymentInstructionsField(): LocalizedField {
+    return {
+      getLv: () => state.paymentInstructions,
+      setLv: (v) => (state.paymentInstructions = v),
+      getTranslation: (locale) =>
+        state.config.textTranslations?.paymentInstructions?.[locale],
+      setTranslation: (locale, v) => {
+        state.config.textTranslations ??= {};
+        state.config.textTranslations.paymentInstructions ??= {};
+        state.config.textTranslations.paymentInstructions[locale] = v;
+      },
+    };
+  }
+
+  function defaultNoteField(): LocalizedField {
+    return {
+      getLv: () => state.defaultNote,
+      setLv: (v) => (state.defaultNote = v),
+      getTranslation: (locale) =>
+        state.config.textTranslations?.defaultNote?.[locale],
+      setTranslation: (locale, v) => {
+        state.config.textTranslations ??= {};
+        state.config.textTranslations.defaultNote ??= {};
+        state.config.textTranslations.defaultNote[locale] = v;
+      },
+    };
+  }
+
+  function customTextField(blockId: string): LocalizedField {
+    return {
+      getLv: () => {
+        const block = state.config.document.blocks.find(
+          (b) => b.id === blockId
+        );
+        return block?.type === "text" ? block.text : "";
+      },
+      setLv: (v) =>
+        updateBlock(blockId, (b) => {
+          if (b.type === "text") b.text = v;
+        }),
+      getTranslation: (locale) => {
+        const block = state.config.document.blocks.find(
+          (b) => b.id === blockId
+        );
+        if (block?.type !== "text") return undefined;
+        return locale === "en" ? block.textEn : block.textRu;
+      },
+      setTranslation: (locale, v) =>
+        updateBlock(blockId, (b) => {
+          if (b.type !== "text") return;
+          if (locale === "en") b.textEn = v;
+          else b.textRu = v;
+        }),
+    };
+  }
+
   function textInput(
     value: string,
     placeholder: string,
@@ -462,8 +598,10 @@ if (root) {
     const headerActions = document.createElement("div");
     headerActions.className = "tpl-block-header-actions";
 
-    // spec: the charges table can never be hidden entirely.
-    if (block.type !== "line-items") {
+    // Invoice details, Sender and recipient, Charges table, and Payment
+    // details can never be hidden -- enforced in the schema
+    // (MANDATORY_BLOCK_TYPES), not just by omitting this toggle.
+    if (!(MANDATORY_BLOCK_TYPES as readonly string[]).includes(block.type)) {
       const showToggle = toggle(
         block.visible,
         `${s("Show")}: ${block.title || defaultLabel}`,
@@ -526,48 +664,28 @@ if (root) {
 
     if (block.type === "meta") {
       detail.appendChild(
-        field(
-          s("Invoice details"),
-          textField(state.headerText, (v) => (state.headerText = v), 500)
-        )
+        field(s("Invoice details"), localizedTextField(headerTextField(), 500))
       );
     } else if (block.type === "payment") {
       detail.appendChild(
         field(
           s("Payment details"),
-          textField(
-            state.paymentInstructions,
-            (v) => (state.paymentInstructions = v),
-            1000
-          )
+          localizedTextField(paymentInstructionsField(), 1000)
         )
       );
     } else if (block.type === "default-note") {
       detail.appendChild(
-        field(
-          s("Default note"),
-          textField(state.defaultNote, (v) => (state.defaultNote = v), 1000)
-        )
+        field(s("Default note"), localizedTextField(defaultNoteField(), 1000))
       );
     } else if (block.type === "footer") {
       detail.appendChild(
-        field(
-          s("Footer"),
-          textField(state.footerText, (v) => (state.footerText = v), 1000)
-        )
+        field(s("Footer"), localizedTextField(footerTextField(), 1000))
       );
     } else if (block.type === "text") {
       detail.appendChild(
         field(
           s("Custom text"),
-          textField(
-            block.text,
-            (v) =>
-              updateBlock(block.id, (b) => {
-                if (b.type === "text") b.text = v;
-              }),
-            5000
-          )
+          localizedTextField(customTextField(block.id), 5000)
         )
       );
       detail.appendChild(
@@ -717,7 +835,13 @@ if (root) {
     ) {
       return;
     }
+    // The confirmation promises header/footer/payment-instructions/note
+    // TEXT is kept -- that must include their EN/RU translations too, not
+    // just the Latvian value. Custom text blocks' own translations are
+    // correctly lost, since the blocks themselves are removed by the reset.
+    const textTranslations = state.config.textTranslations;
     state.config = createDefaultInvoiceTemplateConfig();
+    if (textTranslations) state.config.textTranslations = textTranslations;
     expandedBlockIds.clear();
     markDirty();
     renderBlockList();

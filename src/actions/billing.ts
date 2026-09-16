@@ -33,6 +33,18 @@ export const billing = {
     input: z.object({
       organizationId: z.uuid(),
       name: z.string().min(1).max(200),
+      // Optional translated invoice labels -- Latvian (`name` above) is
+      // canonical; a missing translation falls back to it at render time
+      // (src/domain/billing/invoice-i18n.ts's pickLocalizedText).
+      // `.nullable()` WITHOUT `.optional()` deliberately: the form always
+      // submits this field (even blank), and Astro's own form-to-object
+      // conversion maps a blank value on an `.optional()` field to
+      // `undefined` (which updateRule then treats as "don't touch this
+      // column"), not `null` -- there would be no way to ever clear an
+      // existing translation. A `.nullable()`-only field maps a blank
+      // value to `null` instead, which does clear it.
+      nameEn: z.string().max(200).nullable(),
+      nameRu: z.string().max(200).nullable(),
       code: z.string().min(1).max(50),
       description: z.string().max(1000).optional(),
       calculationType: z.enum(billingCalculationTypeEnum.enumValues),
@@ -64,6 +76,10 @@ export const billing = {
       organizationId: z.uuid(),
       ruleId: z.uuid(),
       name: z.string().min(1).max(200).optional(),
+      // See the identical comment on createRule's input above -- `.nullable()`
+      // without `.optional()` so a cleared field actually clears the column.
+      nameEn: z.string().max(200).nullable(),
+      nameRu: z.string().max(200).nullable(),
       description: z.string().max(1000).nullable().optional(),
       unitPrice: z
         .string()

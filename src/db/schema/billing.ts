@@ -123,6 +123,9 @@ export const billingRules = pgTable(
       .notNull()
       .references(() => organizations.id),
     name: text("name").notNull(),
+    // "name" is the Latvian canonical tariff label (required); nameEn/nameRu are optional translated invoice labels, nullable meaning "no translation yet, fall back to the Latvian name at render time."
+    nameEn: text("name_en"),
+    nameRu: text("name_ru"),
     code: text("code").notNull(),
     description: text("description"),
     calculationType: billingCalculationTypeEnum("calculation_type").notNull(),

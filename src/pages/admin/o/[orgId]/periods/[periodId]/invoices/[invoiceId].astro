@@ -26,6 +26,10 @@ import { getOrganization } from "../../../../../../../domain/organizations/organ
 import { getPeriod } from "../../../../../../../domain/periods/periods";
 import { getInvoice } from "../../../../../../../domain/billing/generation";
 import { listDeliveries } from "../../../../../../../domain/billing/sending";
+import {
+  parseInvoiceLocale,
+  INVOICE_LOCALES,
+} from "../../../../../../../domain/billing/invoice-i18n";
 import { withRequestDb } from "../../../../../../../lib/db-request";
 
 const organizationId = Astro.params.orgId!;
@@ -73,7 +77,16 @@ const recipientIncomplete =
   !recipient.billingAddress;
 const organizationIncomplete =
   !issuer.name || !issuer.addressLine1 || !payment.iban || !payment.bankName;
-const invoiceHtml = renderInvoiceHtml(invoice, lines);
+const docLocale = parseInvoiceLocale(Astro.url.searchParams.get("docLocale"));
+const invoiceHtml = renderInvoiceHtml(invoice, lines, docLocale);
+const pdfHref =
+  `/api/v1/admin/o/${organizationId}/invoices/${invoice.id}/pdf` +
+  (docLocale === "lv" ? "" : `?locale=${docLocale}`);
+const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
+  lv: "Latviešu",
+  en: "English",
+  ru: "Русский",
+};
 ---
 
 <AdminLayout
@@ -110,7 +123,7 @@ const invoiceHtml = renderInvoiceHtml(invoice, lines);
         {
           invoice.pdfObjectKey && (
             <a
-              href={`/api/v1/admin/o/${organizationId}/invoices/${invoice.id}/pdf`}
+              href={pdfHref}
               target="_blank"
               class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
             >
@@ -295,6 +308,36 @@ const invoiceHtml = renderInvoiceHtml(invoice, lines);
         </section>
       )
     }
+    <div class="invoice-doc-locale-bar">
+      <p class="text-sm text-muted">
+        {
+          t(
+            "Latvian is the canonical invoice document. English and Russian are optional translated copies of the same invoice — not separate invoices."
+          )
+        }
+      </p>
+      <form method="GET" class="invoice-doc-locale-form">
+        <label for="doc-locale-select" class="text-sm text-muted">
+          {t("Document language")}
+        </label>
+        <select
+          id="doc-locale-select"
+          name="docLocale"
+          class="invoice-doc-locale-select"
+        >
+          {
+            INVOICE_LOCALES.map((l) => (
+              <option value={l} selected={l === docLocale}>
+                {localeNames[l]}
+              </option>
+            ))
+          }
+        </select>
+        <button type="submit" class="btn-secondary btn-sm">
+          {t("Preview")}
+        </button>
+      </form>
+    </div>
     <div class="invoice-preview-frame-wrap">
       <iframe
         class="invoice-preview-frame"
@@ -347,6 +390,28 @@ const invoiceHtml = renderInvoiceHtml(invoice, lines);
 </AdminLayout>
 
 <style>
+  .invoice-doc-locale-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .invoice-doc-locale-form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 0 0 auto;
+  }
+  .invoice-doc-locale-select {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.8125rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-foreground);
+  }
   .invoice-preview-frame-wrap {
     background: var(--color-surface-hover);
     border-radius: var(--radius-panel);

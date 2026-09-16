@@ -7,7 +7,7 @@
 // data the same way it tracks a missing meter reading, so a case can only
 // reach generation eligibility once every required manual input exists --
 // computeQuantity below can assume it's there.
-import { and, desc, eq, inArray, like } from "drizzle-orm";
+import { and, eq, inArray, like } from "drizzle-orm";
 import type { Db, Tx } from "../../db/client";
 import {
   billingCases,
@@ -526,24 +526,6 @@ async function loadInvoiceAndLines(
     .where(eq(billingCases.id, invoice.billingCaseId))
     .limit(1);
   return { invoice, lines, caseStatus: billingCase?.status ?? null };
-}
-
-// Sample data for the invoice template editor's live preview (settings/
-// invoice-template.astro): a real recent invoice reads more naturally than
-// synthetic data, when one exists. Read-only, never referenced by any
-// financial flow.
-export async function getLatestInvoiceForOrganization(
-  db: Db,
-  organizationId: string
-) {
-  const [invoice] = await db
-    .select()
-    .from(invoices)
-    .where(eq(invoices.organizationId, organizationId))
-    .orderBy(desc(invoices.createdAt))
-    .limit(1);
-  if (!invoice) return null;
-  return loadInvoiceAndLines(db, invoice);
 }
 
 export async function getInvoice(

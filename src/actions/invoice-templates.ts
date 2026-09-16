@@ -17,7 +17,7 @@ export const invoiceTemplates = {
       footerText: z.string().max(1000).optional(),
       paymentInstructions: z.string().max(1000).optional(),
       defaultNote: z.string().max(1000).optional(),
-      // JSON-stringified InvoiceTemplateConfigV1 -- the editor sends its
+      // JSON-stringified InvoiceTemplateConfigV2 -- the editor sends its
       // whole document state as one field rather than dozens of individual
       // form fields. Parsed and strictly re-validated server-side in
       // updateInvoiceTemplate; client-side validation is convenience only.

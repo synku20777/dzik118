@@ -43,6 +43,13 @@
       "when": 1789482492272,
       "tag": "0005_remarkable_goliath",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789566066058,
+      "tag": "0006_same_stephen_strange",
+      "breakpoints": true
     }
   ]
 }

@@ -17,13 +17,19 @@
 // exactly what makes it safe to also bundle into the client-side editor.
 import { escapeHtml } from "../../lib/html-escape";
 import {
-  createDefaultInvoiceTemplateConfig,
-  invoiceTemplateSnapshotV1Schema,
+  pickLocalizedText,
+  translateInvoiceLabel,
+  type InvoiceLocale,
+} from "./invoice-i18n";
+import { tryBuildSepaQrSvg } from "./sepa-qr";
+import {
+  normalizeInvoiceTemplateSnapshot,
   SPACING_CSS,
   type InvoiceTemplateBlock,
-  type InvoiceTemplateSnapshotV1,
   type SpacingValue,
 } from "./invoice-template-schema";
+
+export type { InvoiceLocale };
 
 // Narrow structural types (not the full Drizzle row types) -- this file has
 // no server-only runtime dependency as a result, which is what makes it
@@ -90,10 +96,63 @@ interface PaymentSnapshot {
   currency?: string;
 }
 
+// The full billing_rules row is already snapshotted onto every line's
+// sourceSnapshot at generation time (generation.ts), which -- now that
+// billing_rules carries nameEn/nameRu -- means a rule's translated labels
+// are already frozen there too, for free: no separate snapshot plumbing
+// needed for tariff-label historical immutability.
+interface RuleSourceSnapshot {
+  code?: string;
+  nameEn?: string | null;
+  nameRu?: string | null;
+}
+
 // Escapes first (the XSS boundary), then turns admin-entered newlines into
 // <br /> -- same treatment for every free-text template field.
 function escapeMultiline(text: string): string {
   return escapeHtml(text).replace(/\n/g, "<br />");
+}
+
+// LV (line.description, the canonical value stored at generation time) is
+// always the fallback -- a missing/blank translation never renders blank
+// content, per pickLocalizedText's own contract.
+function localizedLineDescription(
+  line: InvoiceHtmlLine,
+  locale: InvoiceLocale
+): string {
+  const source = line.sourceSnapshot as RuleSourceSnapshot | null;
+  return pickLocalizedText(
+    locale,
+    line.description,
+    source?.nameEn,
+    source?.nameRu
+  );
+}
+
+function localizedTemplateText(
+  value: string | null,
+  translations: { en?: string; ru?: string } | undefined,
+  locale: InvoiceLocale
+): string | null {
+  // Bails out only when there is truly nothing to show in this locale --
+  // NOT just because the Latvian value is blank. An admin who set an
+  // English header but left the Latvian one empty must still see that
+  // English header when rendering in English; checking `!value` alone
+  // (before AG-3's review fix) would have hidden it even though a real
+  // translation existed.
+  const translationForLocale =
+    locale === "en"
+      ? translations?.en
+      : locale === "ru"
+        ? translations?.ru
+        : undefined;
+  if (!value && !translationForLocale?.trim()) return null;
+  return pickLocalizedText(
+    locale,
+    value ?? "",
+    translations?.en,
+    translations?.ru
+  );
 }
 
 function spacingStyle(spacing: SpacingValue | undefined): string {
@@ -101,37 +160,12 @@ function spacingStyle(spacing: SpacingValue | undefined): string {
   return ` style="margin-top: ${SPACING_CSS[spacing]};"`;
 }
 
-// A pre-feature invoice's snapshot is `{}` or an old ad-hoc shape (no
-// `version`/`config`), and a corrupted/hand-edited jsonb value could claim
-// `version: 1` without actually satisfying the schema (unknown block type,
-// invalid `align`/`emphasis`, duplicate ids, a missing/hidden line-items
-// block, etc.). Either case falls back to the default config + empty text
-// fields, which renders through the exact same block loop below and
-// produces byte-identical output to what this file always rendered --
-// deliberately NOT the organization's *current* template (spec Section 21:
-// an old invoice must never change because someone edited the template
-// later). Full schema validation here (not a shallow duck-type check) is
-// what keeps an untrusted/corrupted snapshot from ever reaching the block
-// loop below with an unvalidated `align`/`emphasis`/block shape.
-function normalizeTemplateSnapshot(raw: unknown): InvoiceTemplateSnapshotV1 {
-  const result = invoiceTemplateSnapshotV1Schema.safeParse(raw);
-  if (result.success) return result.data;
-  return {
-    version: 1,
-    headerText: null,
-    footerText: null,
-    paymentInstructions: null,
-    defaultNote: null,
-    config: createDefaultInvoiceTemplateConfig(),
-  };
-}
-
 // billing_rules.code (already snapshotted onto every line's source_snapshot
 // at generation time, see generation.ts) is a stable, admin-chosen
 // identifier -- unlike invoiceLine.id (regenerated every period) or the
 // line's human-readable description (changes on rename), it survives a
-// tariff rename and stays the same across periods, so a saved "hide this
-// row" override keeps applying to the right row indefinitely.
+// tariff rename and stays the same across periods, so a saved bold/spacing
+// override keeps applying to the right row indefinitely.
 export function rowPresentationKey(line: InvoiceHtmlLine): string {
   const source = line.sourceSnapshot as { code?: string } | null;
   return source?.code ?? line.id;
@@ -139,17 +173,58 @@ export function rowPresentationKey(line: InvoiceHtmlLine): string {
 
 export function renderInvoiceHtml(
   invoice: InvoiceHtmlInvoice,
-  lines: InvoiceHtmlLine[]
+  lines: InvoiceHtmlLine[],
+  locale: InvoiceLocale = "lv"
 ): string {
   const issuer = invoice.issuerSnapshot as IssuerSnapshot;
   const recipient = invoice.recipientSnapshot as RecipientSnapshot;
   const payment = invoice.paymentSnapshot as PaymentSnapshot;
-  const template = normalizeTemplateSnapshot(invoice.templateSnapshot);
+  const template = normalizeInvoiceTemplateSnapshot(invoice.templateSnapshot);
+  const label = (key: Parameters<typeof translateInvoiceLabel>[1]) =>
+    translateInvoiceLabel(locale, key, template.labelSetVersion);
+  const headerText = localizedTemplateText(
+    template.headerText,
+    template.config.textTranslations?.headerText,
+    locale
+  );
+  const footerText = localizedTemplateText(
+    template.footerText,
+    template.config.textTranslations?.footerText,
+    locale
+  );
+  const paymentInstructions = localizedTemplateText(
+    template.paymentInstructions,
+    template.config.textTranslations?.paymentInstructions,
+    locale
+  );
+  const defaultNote = localizedTemplateText(
+    template.defaultNote,
+    template.config.textTranslations?.defaultNote,
+    locale
+  );
+  // Derived from the exact same fields the payment block already prints
+  // below (issuer name, IBAN, BIC) plus the invoice's own snapshotted
+  // amount due and invoice number -- never a second, independently
+  // editable "QR data" source. tryBuildSepaQrSvg never throws: a
+  // non-EUR/zero-due/missing-BIC/malformed-IBAN invoice (including old
+  // historical data) simply renders without a QR.
+  const qrSvg = tryBuildSepaQrSvg({
+    beneficiaryName: issuer.name ?? "",
+    iban: payment.iban ?? "",
+    bic: payment.bic ?? null,
+    currency: invoice.currency,
+    amountDue: invoice.amountDue,
+    invoiceNumber: invoice.invoiceNumber,
+  });
 
+  // No `visible` check here (V1 had one): a row that contributes to the
+  // invoice total is never hideable, in the schema and here alike -- see
+  // invoice-template-schema.ts's header comment for why. Only the tariff
+  // LABEL changes per locale (localizedLineDescription); every financial
+  // figure below is rendered identically regardless of locale.
   const lineRows = lines
     .map((line) => {
       const override = template.config.rowOverrides[rowPresentationKey(line)];
-      if (override?.visible === false) return "";
       const trStyle = override?.bold ? ` style="font-weight: 700;"` : "";
       // Spacing goes on each <td>, not the <tr>: table-row boxes don't
       // support margin under normal table layout (browsers silently
@@ -160,7 +235,7 @@ export function renderInvoiceHtml(
         : "";
       return `
         <tr${trStyle}>
-          <td${cellStyle}>${escapeHtml(line.description)}</td>
+          <td${cellStyle}>${escapeHtml(localizedLineDescription(line, locale))}</td>
           <td class="num"${cellStyle}>${escapeHtml(line.quantity)} ${escapeHtml(line.unit)}</td>
           <td class="num"${cellStyle}>${escapeHtml(line.unitPrice ?? "—")}</td>
           <td class="num"${cellStyle}>${escapeHtml(line.netAmount)}</td>
@@ -177,9 +252,9 @@ export function renderInvoiceHtml(
       case "meta":
         return `
   <div${spacing}>
-    <h1>Invoice ${escapeHtml(invoice.invoiceNumber)}</h1>
-    <p class="meta">Issued ${escapeHtml(invoice.issueDate)} &middot; Due ${escapeHtml(invoice.dueDate)}</p>
-    ${template.headerText ? `<div class="header-text">${escapeMultiline(template.headerText)}</div>` : ""}
+    <h1>${label("invoice")} ${escapeHtml(invoice.invoiceNumber)}</h1>
+    <p class="meta">${label("issued")} ${escapeHtml(invoice.issueDate)} &middot; ${label("due")} ${escapeHtml(invoice.dueDate)}</p>
+    ${headerText ? `<div class="header-text">${escapeMultiline(headerText)}</div>` : ""}
   </div>`;
       case "parties":
         return `
@@ -192,7 +267,7 @@ export function renderInvoiceHtml(
     </div>
     <div>
       <strong>${escapeHtml(recipient.billingName ?? recipient.occupantName ?? "")}</strong><br />
-      Dwelling ${escapeHtml(recipient.dwellingNumber)}<br />
+      ${label("dwelling")} ${escapeHtml(recipient.dwellingNumber)}<br />
       ${recipient.billingAddress ? escapeHtml(recipient.billingAddress) : ""}
     </div>
   </div>`;
@@ -201,7 +276,7 @@ export function renderInvoiceHtml(
   <div${spacing}>
     <table class="invoice-line-items">
       <thead>
-        <tr><th>Description</th><th class="num">Quantity</th><th class="num">Unit price</th><th class="num">Net</th><th class="num">VAT</th><th class="num">Gross</th></tr>
+        <tr><th>${label("description")}</th><th class="num">${label("quantity")}</th><th class="num">${label("unitPrice")}</th><th class="num">${label("net")}</th><th class="num">${label("vat")}</th><th class="num">${label("gross")}</th></tr>
       </thead>
       <tbody>${lineRows}</tbody>
       <tfoot>
@@ -210,30 +285,40 @@ export function renderInvoiceHtml(
     </table>
     <table class="summary">
       <tbody>
-        <tr><td>Current charges</td><td class="num">${escapeHtml(invoice.currentCharges)} ${escapeHtml(invoice.currency)}</td></tr>
-        ${invoice.previousOutstanding !== "0.00" ? `<tr><td>Previous outstanding</td><td class="num">+${escapeHtml(invoice.previousOutstanding)} ${escapeHtml(invoice.currency)}</td></tr>` : ""}
-        ${invoice.previousCreditApplied !== "0.00" ? `<tr><td>Credit applied</td><td class="num">−${escapeHtml(invoice.previousCreditApplied)} ${escapeHtml(invoice.currency)}</td></tr>` : ""}
-        ${invoice.lateFeeApplied !== "0.00" ? `<tr><td>Late fee</td><td class="num">+${escapeHtml(invoice.lateFeeApplied)} ${escapeHtml(invoice.currency)}</td></tr>` : ""}
-        ${invoice.manualAdjustment !== "0.00" ? `<tr><td>Manual adjustment</td><td class="num">${escapeHtml(invoice.manualAdjustment)} ${escapeHtml(invoice.currency)}</td></tr>` : ""}
+        <tr><td>${label("currentCharges")}</td><td class="num">${escapeHtml(invoice.currentCharges)} ${escapeHtml(invoice.currency)}</td></tr>
+        ${invoice.previousOutstanding !== "0.00" ? `<tr><td>${label("previousOutstanding")}</td><td class="num">+${escapeHtml(invoice.previousOutstanding)} ${escapeHtml(invoice.currency)}</td></tr>` : ""}
+        ${invoice.previousCreditApplied !== "0.00" ? `<tr><td>${label("creditApplied")}</td><td class="num">−${escapeHtml(invoice.previousCreditApplied)} ${escapeHtml(invoice.currency)}</td></tr>` : ""}
+        ${invoice.lateFeeApplied !== "0.00" ? `<tr><td>${label("lateFee")}</td><td class="num">+${escapeHtml(invoice.lateFeeApplied)} ${escapeHtml(invoice.currency)}</td></tr>` : ""}
+        ${invoice.manualAdjustment !== "0.00" ? `<tr><td>${label("manualAdjustment")}</td><td class="num">${escapeHtml(invoice.manualAdjustment)} ${escapeHtml(invoice.currency)}</td></tr>` : ""}
       </tbody>
-      <tfoot><tr><td>Amount due</td><td class="num">${escapeHtml(invoice.amountDue)} ${escapeHtml(invoice.currency)}</td></tr></tfoot>
+      <tfoot><tr><td>${label("amountDue")}</td><td class="num">${escapeHtml(invoice.amountDue)} ${escapeHtml(invoice.currency)}</td></tr></tfoot>
     </table>
   </div>`;
       case "payment":
         return `
   <div class="payment"${spacing}>
-    ${payment.bankName ? `Bank: ${escapeHtml(payment.bankName)}<br />` : ""}
-    ${payment.iban ? `IBAN: ${escapeHtml(payment.iban)}` : ""}
-    ${payment.bic ? ` &middot; BIC: ${escapeHtml(payment.bic)}` : ""}
-    ${template.paymentInstructions ? `<p>${escapeMultiline(template.paymentInstructions)}</p>` : ""}
+    <div class="payment-text">
+      ${payment.bankName ? `${label("bank")}: ${escapeHtml(payment.bankName)}<br />` : ""}
+      ${payment.iban ? `${label("iban")}: ${escapeHtml(payment.iban)}` : ""}
+      ${payment.bic ? ` &middot; ${label("bic")}: ${escapeHtml(payment.bic)}` : ""}
+      ${paymentInstructions ? `<p>${escapeMultiline(paymentInstructions)}</p>` : ""}
+    </div>
+    ${
+      qrSvg
+        ? `<div class="payment-qr">
+      ${qrSvg.replace("<svg ", `<svg role="img" aria-label="${escapeHtml(label("scanToPay"))}" `)}
+      <p class="qr-caption">${label("scanToPay")}</p>
+    </div>`
+        : ""
+    }
   </div>`;
       case "default-note":
-        return template.defaultNote
-          ? `<div class="note"${spacing}>${escapeMultiline(template.defaultNote)}</div>`
+        return defaultNote
+          ? `<div class="note"${spacing}>${escapeMultiline(defaultNote)}</div>`
           : "";
       case "footer":
-        return template.footerText
-          ? `<div class="footer-text"${spacing}>${escapeMultiline(template.footerText)}</div>`
+        return footerText
+          ? `<div class="footer-text"${spacing}>${escapeMultiline(footerText)}</div>`
           : "";
       case "text": {
         const align = block.align ?? "left";
@@ -246,7 +331,13 @@ export function renderInvoiceHtml(
         ]
           .filter(Boolean)
           .join(" ");
-        return `<div class="custom-text" style="${style}">${escapeMultiline(block.text)}</div>`;
+        const text = pickLocalizedText(
+          locale,
+          block.text,
+          block.textEn,
+          block.textRu
+        );
+        return `<div class="custom-text" style="${style}">${escapeMultiline(text)}</div>`;
       }
     }
   }
@@ -254,7 +345,7 @@ export function renderInvoiceHtml(
   const body = template.config.document.blocks.map(renderBlock).join("");
 
   return `<!doctype html>
-<html lang="en">
+<html lang="${locale}">
 <head>
 <meta charset="UTF-8" />
 <title>${escapeHtml(invoice.invoiceNumber)}</title>
@@ -270,7 +361,11 @@ export function renderInvoiceHtml(
   .num { text-align: right; }
   tfoot td { border-top: 2px solid #171717; border-bottom: none; font-weight: bold; }
   .summary { width: 52%; margin-left: auto; }
-  .payment { margin-top: 1.5rem; color: #525252; }
+  .payment { margin-top: 1.5rem; color: #525252; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 1.5rem; }
+  .payment-text { flex: 1 1 12rem; min-width: 0; }
+  .payment-qr { flex: 0 0 auto; text-align: center; }
+  .payment-qr svg { display: block; }
+  .qr-caption { margin: 4px 0 0; font-size: 10px; color: #737373; }
   .note { margin-top: 0.75rem; color: #525252; }
   .footer-text { margin-top: 2rem; padding-top: 0.75rem; border-top: 1px solid #e5e5e5; color: #525252; }
   .custom-text { margin-top: 0.75rem; }

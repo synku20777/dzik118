@@ -1221,28 +1221,47 @@ Each organization maintains at most one mutable template record (`organization_i
 
 ### Field semantics
 
-- `header_text`: Multiline text rendered directly beneath invoice metadata in the `meta` section block (max 500 characters).
-- `footer_text`: Multiline closing text rendered at the bottom in the `footer` section block (max 1000 characters).
-- `payment_instructions`: Multiline instructions/notes rendered alongside banking credentials in the `payment` section block (max 1000 characters).
-- `default_note`: Multiline administrative notice rendered in the `default-note` section block (max 1000 characters).
-- `config`: Versioned JSONB document (`InvoiceTemplateConfigV1`, `version: 1`) containing the structured document configuration used by the canonical invoice renderer:
-  - `version`: Integer schema version (`1`).
+- `header_text`: Multiline Latvian (canonical) text rendered directly beneath invoice metadata in the `meta` section block (max 500 characters). EN/RU translations live in `config.textTranslations.headerText`, not a separate column.
+- `footer_text`: Multiline Latvian closing text rendered at the bottom in the `footer` section block (max 1000 characters).
+- `payment_instructions`: Multiline Latvian instructions/notes rendered alongside banking credentials in the `payment` section block (max 1000 characters).
+- `default_note`: Multiline Latvian administrative notice rendered in the `default-note` section block (max 1000 characters).
+- `config`: Versioned JSONB document (`InvoiceTemplateConfigV2`, `version: 2`) containing the structured document configuration used by the canonical invoice renderer:
+  - `version`: Integer schema version (`2`).
   - `document.blocks`: Ordered array of 1 to 30 section blocks. Each block specifies:
     - `id`: Unique block identifier (string, max 100 chars);
-    - `type`: Built-in block type (`meta`, `parties`, `line-items`, `payment`, `default-note`, `footer`) or custom `text`;
-    - `visible`: Boolean visibility toggle;
+    - `type`: Built-in block type (`meta`, `parties`, `line-items`, `payment` -- **mandatory**; `default-note`, `footer` -- **optional**) or custom `text`;
+    - `visible`: Boolean visibility toggle. **Mandatory block types are always forced `true`** -- there is no visibility control for them in the editor UI, and the schema itself repairs a stored `false` back to `true` on read (see Schema invariants);
     - `title`: Optional editor-only display label (max 100 chars; never rendered into client invoice documents);
     - `presentation`: Optional spacing settings (`spacingBefore`: 0..4 scale mapped to deterministic CSS rem values);
-    - For `type: "text"`: `text` (max 5000 chars), `emphasis` (`normal` | `bold`), and `align` (`left` | `center` | `right`).
-  - `rowOverrides`: Dictionary mapping stable billing rule codes (falling back to line IDs) to line-item presentation settings: `visible` (boolean), `bold` (boolean), and `spacingBefore` (0..4 scale).
+    - For `type: "text"`: `text` (max 5000 chars, Latvian canonical), `textEn`/`textRu` (optional translations, same length cap), `emphasis` (`normal` | `bold`), and `align` (`left` | `center` | `right`).
+  - `rowOverrides`: Dictionary mapping stable billing rule codes (falling back to line IDs) to line-item presentation settings: `bold` (boolean) and `spacingBefore` (0..4 scale). **There is no `visible` override** -- a row that contributes to the invoice total can never be hidden by template configuration, in the schema or the renderer (see Schema invariants).
+  - `textTranslations`: Optional EN/RU translations for the four built-in text fields (`headerText`, `footerText`, `paymentInstructions`, `defaultNote`), each `{ en?, ru? }`. Latvian is always the value in the column above; a missing/blank translation falls back to the Latvian text, never to blank content.
+
+### Localization model (invoice document language)
+
+Latvian is the canonical, default invoice document language -- independent of the admin's own UI chrome language. English and Russian are optional **derived translated copies of the same financial invoice**: same invoice number, same amounts, same ledger/account-credit effects, same status. Producing or viewing an EN/RU copy never creates a new invoice, never re-numbers, and never mutates the invoice.
+
+- **System-generated labels** ("Invoice", "Amount due", "IBAN", etc.) are translated via a frozen, versioned dictionary (`invoice-i18n.ts`'s `INVOICE_LABELS_V1`, `lv`/`en`/`ru`). Each invoice snapshot pins a `labelSetVersion` at generation time, so a later wording fix can never retroactively change how an already-generated invoice's EN/RU copy renders.
+- **Tariff (billing rule) labels**: `billing_rules.name` is the Latvian canonical label (no data migration -- existing names are treated as already-Latvian); `billing_rules.name_en`/`name_ru` are optional translations, admin-editable on the Tariffs & Rules settings page, nullable (clearing a translation is supported). Because the full `billing_rules` row is already snapshotted onto every invoice line's `source_snapshot` at generation time, a tariff's translated labels are automatically frozen into every invoice line's history for free -- renaming a tariff's EN/RU label later never changes a historical invoice's rendered text.
+- **Configurable template text** (header/footer/payment instructions/default note/custom text blocks) follows the same LV-required/EN-RU-optional/LV-fallback model via `config.textTranslations` and each custom block's `textEn`/`textRu`, captured in the frozen `template_snapshot` at generation time -- editing a translation afterward never changes an already-generated invoice.
+- **Rendering**: `renderInvoiceHtml(invoice, lines, locale)` takes an explicit `InvoiceLocale` (`"lv" | "en" | "ru"`, default `"lv"`) and sets `<html lang>` to match. The canonical PDF (`invoices.pdf_object_key`/`pdf_sha256`) is always rendered and stored in Latvian; EN/RU PDF copies are rendered fresh on every request via the same `renderPdf()` call and are **never uploaded to storage or written to the database** -- there is exactly one persisted PDF artifact per invoice, in Latvian.
+- **Viewer surfaces**: the admin invoice detail page, resident portal invoice page, and the public token-access page each offer a document-language selector (a `?docLocale=`/`?locale=` query parameter) that switches only the rendered document language, never the underlying financial data. This is a distinct choice from each surface's own UI chrome language.
+
+### SEPA QR payment code
+
+The mandatory `payment` block renders an inline, server-generated EPC069-12 v3.1-compatible QR code (`src/domain/billing/sepa-qr.ts`) alongside the existing human-readable bank name/IBAN/BIC text, when all of the following hold: the invoice currency is `EUR`, the organization has both an IBAN and a BIC on file, the IBAN passes ISO 13616 mod-97 validation against a known country-length registry, and `invoice.amount_due` is greater than zero. Any other case (non-EUR, missing BIC, invalid/historical IBAN, zero-due invoice) silently omits the QR -- rendering never throws because of QR generation.
+
+- The QR payload always derives from the exact same snapshot fields the adjacent printed text uses (issuer name as beneficiary, `payment_snapshot.iban`/`bic`, `invoice.amount_due`, `invoice.invoice_number`) -- there is no second, independently editable "QR data" source.
+- The remittance/reference field is always `Rēķins {invoiceNumber}`, in that exact Latvian form, regardless of which document-language copy is being rendered -- it is never localized and the invoice number is never truncated.
+- Generation is fully server-side and deterministic (the `qrcode-generator` npm library, configured for real UTF-8 byte encoding); there is no external QR-image service and no client-side QR data source.
 
 ### Schema invariants
 
-- Every built-in block type must appear exactly once;
+- The four mandatory block types (`meta`, `parties`, `line-items`, `payment`) must each appear exactly once and `visible: true`; the optional block types (`default-note`, `footer`) may appear at most once and may be entirely absent (not just hidden);
 - Block IDs must be strictly unique across the document;
-- The `line-items` block must always be present and `visible: true` (the charges table cannot be hidden or duplicated);
 - Total blocks across built-in and custom text blocks cannot exceed 30;
-- All text fields are strictly escaped (`escapeHtml()`) during rendering; user-supplied HTML, CSS classes, and scripts are rejected.
+- All text fields are strictly escaped (`escapeHtml()`) during rendering; user-supplied HTML, CSS classes, and scripts are rejected;
+- A malformed or legacy (V1-shaped) stored config is repaired -- not rejected -- into a valid V2 config on read (dedupe duplicate blocks, force mandatory blocks visible, insert any missing mandatory block from the default layout), falling back to the full default configuration only if repair itself cannot produce a valid document. This is why a row's obsolete stored `visible: false` (from before that override was removed) or a pre-feature invoice's `{}` snapshot both still render every financially-charged row and every mandatory section today.
 
 ## 13.16 bank_imports
 
@@ -1825,7 +1844,7 @@ The `invoices` table stores explicit snapshot fields:
 - `balance_snapshot`: Structured JSON snapshot `{ accountBalance, previousOutstanding, previousCreditApplied, remainingCredit, sourceInvoice }`;
 - `penalty_snapshot`: Structured JSON snapshot of policy configuration and penalty breakdown;
 - `manual_adjustment_snapshot`: Structured JSON snapshot `{ reason, note, actorUserId }`;
-- `template_snapshot`: Versioned, frozen invoice template configuration (`InvoiceTemplateSnapshotV1`, `version: 1`), captured from `invoice_templates` at invoice generation/regeneration. Captures `version`, `headerText`, `footerText`, `paymentInstructions`, `defaultNote`, and the complete `config` (`document.blocks` and `rowOverrides`).
+- `template_snapshot`: Versioned, frozen invoice template configuration (`InvoiceTemplateSnapshotV2`, `version: 2`), captured from `invoice_templates` at invoice generation/regeneration. Captures `version`, `headerText`, `footerText`, `paymentInstructions`, `defaultNote`, `labelSetVersion` (pins the system-label dictionary version used for this invoice's EN/RU rendering), and the complete `config` (`document.blocks`, `rowOverrides`, `textTranslations`).
 
 ## 21.3 Distinguishing account balance concepts
 
@@ -1850,7 +1869,8 @@ Invoice templateSnapshot (invoices.template_snapshot) = historical immutable ren
 
 - **Future invoices**: Editing the organization's invoice template under `/admin/o/[orgId]/settings/invoice-template` takes effect on future invoices generated or regenerated while in `DRAFT`.
 - **Historical invoices**: Invoices that have been prepared or sent retain their historical `template_snapshot` indefinitely. Even if an administrator changes section order, hides sections, or alters footer notes, historical invoices continue to render using their original frozen layout.
-- **Lenient fallback**: When reading back legacy or corrupted snapshot JSON from historical invoices, the parser (`normalizeTemplateSnapshot`) falls back to the default document configuration instead of crashing or leaking untrusted attributes into rendered HTML.
+- **Lenient fallback**: When reading back legacy or corrupted snapshot JSON from historical invoices, the parser (`normalizeInvoiceTemplateSnapshot`) repairs what it safely can and falls back to the default document configuration only when repair itself fails, instead of crashing or leaking untrusted attributes into rendered HTML.
+- **Translation immutability**: A tariff's or template's EN/RU translation is captured into the invoice/line snapshot at generation time exactly like every other financial field -- renaming a tariff's translated label or editing a template's translated text later never changes how an already-generated invoice's EN/RU copy renders (see 30. Localization).
 
 Integration test must prove:
 
@@ -1869,7 +1889,7 @@ send invoice
 
 ## 22.1 Canonical single-renderer architecture
 
-The application enforces a single source of truth for invoice presentation: `renderInvoiceHtml(invoice, lines)` in `src/domain/billing/invoice-html.ts`.
+The application enforces a single source of truth for invoice presentation: `renderInvoiceHtml(invoice, lines, locale)` in `src/domain/billing/invoice-html.ts`. `locale` (`"lv" | "en" | "ru"`, default `"lv"`) selects the rendered document language only -- it never affects any financial figure, line count, or invoice identity (see 30. Localization).
 
 ```text
 InvoiceTemplateConfig
@@ -1905,51 +1925,52 @@ Organization
     │   └── default_note (max 1000 chars)
     │
     └── structured document configuration (config)
-        ├── version: 1
+        ├── version: 2
         ├── document.blocks (1..30 ordered sections)
-        │   ├── meta (Invoice details: title, number, dates, header_text)
-        │   ├── parties (Issuer and recipient billing details)
-        │   ├── line-items (Mandatory charges table and financial breakdown summary)
-        │   ├── payment (Bank details and payment_instructions)
-        │   ├── default-note (default_note notice)
-        │   ├── footer (footer_text sign-off)
-        │   └── text (Custom text block: text, bold emphasis, text alignment)
-        └── rowOverrides (Record<string, InvoiceRowPresentation>)
-            ├── visible: boolean
-            ├── bold: boolean
-            └── spacingBefore: 0..4 scale
+        │   ├── meta (mandatory -- Invoice details: title, number, dates, header_text)
+        │   ├── parties (mandatory -- Issuer and recipient billing details)
+        │   ├── line-items (mandatory -- charges table and financial breakdown summary)
+        │   ├── payment (mandatory -- Bank details, payment_instructions, SEPA QR)
+        │   ├── default-note (optional -- default_note notice)
+        │   ├── footer (optional -- footer_text sign-off)
+        │   └── text (Custom text block: text/textEn/textRu, bold emphasis, text alignment)
+        ├── rowOverrides (Record<string, InvoiceRowPresentation>)
+        │   ├── bold: boolean
+        │   └── spacingBefore: 0..4 scale
+        └── textTranslations (optional EN/RU for the four built-in text fields)
 ```
 
 Each block in `document.blocks` carries:
 - `id`: Unique string identifier (1..100 characters);
-- `type`: Built-in type (`meta`, `parties`, `line-items`, `payment`, `default-note`, `footer`) or `text`;
-- `visible`: Boolean visibility toggle;
+- `type`: Mandatory type (`meta`, `parties`, `line-items`, `payment`) or optional type (`default-note`, `footer`) or custom `text`;
+- `visible`: Boolean visibility toggle. **Forced `true` for mandatory types** -- the editor UI has no Show/Hide control for them, and the schema's repair pass corrects a stored `false` back to `true` on read;
 - `title`: Optional editor-only display label (max 100 chars);
 - `presentation.spacingBefore`: Optional spacing scale (0..4 mapped to CSS rem values: `0: 0`, `1: 0.375rem`, `2: 0.75rem`, `3: 1.125rem`, `4: 1.5rem`).
 
 Custom text blocks (`type: "text"`) additionally support:
-- `text`: Multiline content (max 5000 characters);
+- `text`: Multiline Latvian canonical content (max 5000 characters);
+- `textEn`/`textRu`: Optional translations (same length cap), falling back to `text` when absent/blank;
 - `emphasis`: Text weight (`normal` | `bold`);
 - `align`: Text alignment (`left` | `center` | `right`).
 
-Row overrides (`rowOverrides`) allow per-line formatting in the charges table:
+Row overrides (`rowOverrides`) allow per-line **presentation-only** formatting in the charges table:
 - Keyed by stable billing rule code (`sourceSnapshot.code`), falling back to line ID. This ensures overrides persist across billing periods even if rule descriptions or period line IDs change;
-- Supports toggling row visibility, applying bold weight, and adding top spacing.
+- Supports applying bold weight and adding top spacing only. **There is no visibility override** -- a financially charged row can never be hidden by template configuration, in the schema (the field does not exist) or the renderer (there is no conditional check).
 
 ## 22.3 Supported editor capabilities
 
 The structured invoice template editor (`/admin/o/[orgId]/settings/invoice-template`) provides:
 
-1. **Predefined block reordering**: Drag-and-drop section reordering using SortableJS, with keyboard-accessible Move up and Move down button alternatives with focus management;
-2. **Block visibility toggles**: Hide or show individual sections (e.g. hiding `parties` or `default-note`). The `line-items` charges table is mandatory and cannot be hidden;
+1. **Predefined block reordering**: Drag-and-drop section reordering using SortableJS, with keyboard-accessible Move up and Move down button alternatives with focus management, for both mandatory and optional blocks;
+2. **Optional block visibility toggles**: Hide, show, or entirely omit `default-note`/`footer`. The four mandatory blocks (`meta`, `parties`, `line-items`, `payment`) have no visibility control at all -- they always render;
 3. **Custom section titles**: Rename block labels in the editor block list for organizational clarity;
-4. **Custom text blocks**: Add, duplicate, and delete custom text blocks up to a total limit of 30 blocks across the document;
+4. **Custom text blocks**: Add, duplicate, and delete custom text blocks up to a total limit of 30 blocks across the document, with optional EN/RU translations;
 5. **Text formatting and alignment**: Configure bold emphasis and left/center/right alignment on custom text blocks;
-6. **Row-level presentation overrides**: Hide specific charge rows, bold specific rows, or add top spacing;
+6. **Row-level presentation overrides**: Bold specific rows or add top spacing (no hide option);
 7. **Spacing controls**: Select deterministic spacing before any section or row (0 to 4 scale);
-8. **Static text configuration**: Edit header text (500 chars), footer text (1000 chars), payment instructions (1000 chars), and default notes (1000 chars);
-9. **Reset to default layout**: Revert block ordering, custom text, and row overrides back to standard defaults while preserving static text fields;
-10. **Real-time live preview**: Instant iframe rendering reflecting edits using the latest organization invoice or deterministic sample data;
+8. **Static text configuration**: Edit header text (500 chars), footer text (1000 chars), payment instructions (1000 chars), and default notes (1000 chars), each with an EN/RU translation via a single document-language selector that switches which language the four built-in fields and custom text blocks show/edit;
+9. **Reset to default layout**: Revert block ordering, custom text, and row overrides back to standard defaults while preserving static text fields and their translations;
+10. **Real-time live preview**: Instant iframe rendering reflecting edits and the selected preview language, using live effective tariffs (via the same `getEffectiveRules()` resolver `generateInvoice()` uses -- a newly-activated tariff appears in the preview automatically, an archived one disappears automatically, with no separate "tariff activation" step) for a selected billing period, or deterministic sample data if the organization has none yet;
 11. **Preview zoom controls**: View preview at scaled zoom levels (0.75x, 1x, 1.25x) with properly calculated scrolling wrappers;
 12. **Dirty state detection**: Warns the administrator if navigating away with unsaved template changes (`beforeunload`).
 
@@ -1959,15 +1980,14 @@ The invoice template system enforces strict architectural constraints:
 
 > **Invariant**: Invoice templates are configuration over a controlled document schema. Administrators may reorder and configure supported sections but may not inject arbitrary HTML, CSS, JavaScript, or unrestricted layout primitives.
 
-1. **No arbitrary HTML/CSS injection**: All text fields (`headerText`, `footerText`, `paymentInstructions`, `defaultNote`, custom block `text`, line descriptions) are passed through `escapeHtml()` during rendering. Newlines are safely converted to `<br />`.
-2. **Strict write-path validation**: The action `actions.invoiceTemplates.update` enforces `invoiceTemplateConfigV1Schema`:
+1. **No arbitrary HTML/CSS injection**: All text fields (`headerText`, `footerText`, `paymentInstructions`, `defaultNote` and their translations, custom block `text`/`textEn`/`textRu`, line descriptions and their tariff translations) are passed through `escapeHtml()` during rendering. Newlines are safely converted to `<br />`.
+2. **Strict write-path validation**: The action `actions.invoiceTemplates.update` enforces `invoiceTemplateConfigV2Schema` (without the V1-coercion helper the lenient read path uses, so a hand-crafted legacy-shaped payload is rejected outright, not silently upgraded):
    - Maximum 30 blocks;
-   - All built-in blocks must be present exactly once;
+   - Every mandatory block type must be present exactly once and `visible: true`; every optional block type at most once;
    - Block IDs must be unique;
-   - The `line-items` block must be present and `visible: true`;
    - JSON payload length is capped at 200 KB UTF-8.
-3. **Lenient read-path fallback**: `parseInvoiceTemplateConfig` and `normalizeTemplateSnapshot` fall back to the default document configuration if malformed JSON, unknown versions, or broken invariants are detected, ensuring that corrupted or legacy data never crashes invoice rendering.
-4. **No remote asset loading**: Invoice templates do not allow remote `<img src="https://...">` or external stylesheets. All styles are inline, preventing server-side request forgery (SSRF) during Cloudflare Browser Rendering PDF generation.
+3. **Lenient read-path repair, not reject-to-default**: `parseInvoiceTemplateConfig` and `normalizeInvoiceTemplateSnapshot` repair a malformed, legacy V1-shaped, or otherwise broken stored config (dedupe blocks, force mandatory blocks visible, insert a missing mandatory block from the default layout) before falling back to the full default configuration only if repair itself cannot produce a valid document -- ensuring that corrupted or legacy data never crashes invoice rendering and never silently loses a financially-relevant section.
+4. **No remote asset loading**: Invoice templates do not allow remote `<img src="https://...">` or external stylesheets. All styles are inline, preventing server-side request forgery (SSRF) during Cloudflare Browser Rendering PDF generation. The SEPA QR is an inline server-generated `<svg>`, not an image request.
 
 ## 22.5 PDF generation pipeline
 
@@ -2388,19 +2408,32 @@ Client-side interaction principles:
 
 # 30. Localization
 
-Initial UI languages:
+There are two, deliberately separate localization systems:
 
-- Latvian (`lv`)
-- English (`en`)
+1. **UI chrome language** (`src/lib/ui/i18n.ts`, `Locale = "en" | "lv" | "ru"`): the admin/resident application's own interface language, chosen by cookie/query param (`uiLocale()`), applied via `translate()`. Covers navigation, buttons, form labels, validation messages, locale-aware currency and date formatting. Never changes organization or invoice data.
+2. **Invoice document language** (`src/domain/billing/invoice-i18n.ts`, `InvoiceLocale = "lv" | "en" | "ru"`): which language a specific rendered invoice document is in. **Latvian is always the canonical, default document language, independent of the viewer's own UI chrome language.** English and Russian are optional, on-demand translated *copies* of the same financial invoice -- never a second invoice, never re-numbered, never a new ledger/account-credit entry, never a change to invoice status or reconciliation.
 
 Internal identifiers/code remain English.
+
+## 30.1 Invoice document language
+
+- `renderInvoiceHtml(invoice, lines, locale)` accepts an explicit `InvoiceLocale` (default `"lv"`) and sets `<html lang>` to match. Locale never affects any financial figure, line count, or invoice identity -- only which language labels, tariff descriptions, and configurable template text render in.
+- **System-generated labels** ("Invoice", "Amount due", "IBAN", etc.) come from a frozen, versioned dictionary (`INVOICE_LABELS_V1` in `invoice-i18n.ts`), never a generic enterprise translation platform. Each invoice snapshot pins a `labelSetVersion` at generation time, so a later wording correction never retroactively changes an already-generated invoice's rendered text.
+- **Tariff labels**: `billing_rules.name` is the Latvian canonical label; `name_en`/`name_ru` are optional, nullable, admin-editable translations. A missing translation falls back to the Latvian name, never to blank content. Because the full rule row is already snapshotted onto every invoice line at generation time, a tariff's translated labels are frozen into invoice history automatically.
+- **Configurable template text** (header/footer/payment instructions/default note/custom text blocks) follows the same Latvian-required/EN-RU-optional/Latvian-fallback model (`invoice_templates.config.textTranslations`, and each custom block's `textEn`/`textRu`), captured in the frozen `template_snapshot` at generation time.
+- **PDF storage**: the canonical PDF (`invoices.pdf_object_key`/`pdf_sha256`) is generated once, in Latvian, on first send, and is never regenerated or overwritten. English/Russian PDF copies are rendered fresh on every download request and are never uploaded to storage or written to the database -- there is exactly one persisted PDF artifact per invoice.
+- **Viewer surfaces**: the admin invoice detail page, resident portal invoice page, and public token-access page each expose a document-language selector (`?docLocale=`/`?locale=` query parameter) that switches only the rendered document language. This is visually and mechanically distinct from each surface's own UI chrome language selector.
+- **SEPA QR remittance** (see 22.4/13.15) is never localized -- it is always the Latvian `Rēķins {invoiceNumber}`, identical across every language copy of the same invoice, since it is a payment reference, not display text.
+
+## 30.2 UI chrome
+
+Initial UI languages: Latvian (`lv`), English (`en`), Russian (`ru`).
 
 Requirements:
 - locale-aware currency;
 - organization timezone-aware dates;
 - translated billing statuses;
-- translated validation messages where practical;
-- invoices may select organization/default recipient language later.
+- translated validation messages where practical.
 
 Do not hardcode Latvia-specific display strings directly throughout components.
 
@@ -2958,8 +2991,9 @@ Mandatory:
 - bank reference normalization;
 - statement balance arithmetic (credit application, debt carry-forward, non-negative amount due);
 - late-fee calculation (daily rate, grace days, penalty cap);
-- invoice template configuration validation and lenient fallback (`invoiceTemplateConfigV1Schema`, `parseInvoiceTemplateConfig`);
-- invoice HTML rendering with block reordering, visibility overrides, row overrides, and text escaping (`renderInvoiceHtml`).
+- invoice template configuration validation, mandatory-block repair, and lenient fallback (`invoiceTemplateConfigV2Schema`, `parseInvoiceTemplateConfig`, `validateInvoiceTemplateConfig`);
+- invoice HTML rendering with block reordering, row presentation overrides, locale-aware labels/tariff descriptions/template text, and text escaping (`renderInvoiceHtml`);
+- SEPA QR payload construction and validation (IBAN/BIC/amount/remittance boundaries, deterministic generation, non-throwing degradation) (`sepa-qr.ts`).
 
 ## Integration
 
@@ -2971,7 +3005,8 @@ Mandatory:
 - invoice preparation (statement snapshotting, charges/penalties debited to ledger);
 - invoice template settings persistence (`updateInvoiceTemplate`);
 - invoice generation capturing frozen `template_snapshot`;
-- invoice snapshot immutability (updating organization template or tariffs leaves previously generated/sent invoices and rendered HTML unchanged);
+- invoice snapshot immutability (updating organization template or tariffs -- including renaming a tariff's or template's EN/RU translation -- leaves previously generated/sent invoices and rendered HTML, in every language, unchanged);
+- tariff/template synchronization (the template editor's preview reflects the same `getEffectiveRules()` result `generateInvoice()` uses -- a newly-active tariff appears without a separate activation step, a disabled/archived/foreign-org tariff does not);
 - append-only trigger enforcement on financial tables (`account_entries`, `payment_allocations`, `late_fee_adjustments`);
 - duplicate bank import rejection;
 - payment reconciliation lifecycle:

@@ -13,9 +13,9 @@ import { invoiceTemplates } from "../../db/schema/invoices";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { ValidationError } from "../errors";
 import {
-  createDefaultInvoiceTemplateConfig,
-  invoiceTemplateConfigV1Schema,
-  type InvoiceTemplateConfigV1,
+  parseInvoiceTemplateConfig,
+  validateInvoiceTemplateConfig,
+  type InvoiceTemplateConfigV2,
 } from "./invoice-template-schema";
 
 export { ValidationError };
@@ -34,11 +34,14 @@ export interface ResolvedInvoiceTemplate {
   footerText: string;
   paymentInstructions: string;
   defaultNote: string;
-  config: InvoiceTemplateConfigV1;
+  config: InvoiceTemplateConfigV2;
 }
 
 // Always returns a complete object, whether or not a row exists yet, so the
-// settings page/editor never special-cases "no row yet".
+// settings page/editor never special-cases "no row yet". Reads through
+// parseInvoiceTemplateConfig's repair pipeline (not a raw strict parse), so
+// an organization's old V1 config -- or one saved before `payment` became
+// mandatory -- shows up in the editor already normalized, not rejected.
 export async function getResolvedInvoiceTemplate(
   db: Db,
   organizationId: string
@@ -49,10 +52,7 @@ export async function getResolvedInvoiceTemplate(
     footerText: template?.footerText ?? "",
     paymentInstructions: template?.paymentInstructions ?? "",
     defaultNote: template?.defaultNote ?? "",
-    config: template
-      ? (invoiceTemplateConfigV1Schema.safeParse(template.config).data ??
-        createDefaultInvoiceTemplateConfig())
-      : createDefaultInvoiceTemplateConfig(),
+    config: parseInvoiceTemplateConfig(template?.config),
   };
 }
 
@@ -74,7 +74,7 @@ export async function updateInvoiceTemplate(
   input: InvoiceTemplateInput,
   actorUserId: string
 ) {
-  const configResult = invoiceTemplateConfigV1Schema.safeParse(input.config);
+  const configResult = validateInvoiceTemplateConfig(input.config);
   if (!configResult.success) {
     throw new ValidationError(
       configResult.error.issues[0]?.message ?? "Invalid template layout"
