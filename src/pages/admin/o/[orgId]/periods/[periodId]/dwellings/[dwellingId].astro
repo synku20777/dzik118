@@ -5,6 +5,7 @@ import {
   translate,
   uiLocale,
   entityLabel,
+  friendlyActionErrorMessage,
 } from "../../../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
@@ -71,7 +72,7 @@ try {
     {
       submitResult?.error && (
         <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
-          {submitResult.error.message}
+          {friendlyActionErrorMessage(submitResult.error, locale)}
         </p>
       )
     }

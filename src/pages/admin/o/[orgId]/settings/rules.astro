@@ -1,5 +1,9 @@
 ---
-import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+import {
+  translate,
+  uiLocale,
+  friendlyActionErrorMessage,
+} from "../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 // Phase F (Billing configuration) - tariffs/rules settings (spec Section
@@ -21,7 +25,7 @@ try {
   throw err;
 }
 
-import { actions } from "astro:actions";
+import { actions, isInputError } from "astro:actions";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { listRules } from "../../../../../domain/billing/rules";
 import { withRequestDb } from "../../../../../lib/db-request";
@@ -29,6 +33,17 @@ import { withRequestDb } from "../../../../../lib/db-request";
 const createResult = Astro.getActionResult(actions.billing.createRule);
 const updateResult = Astro.getActionResult(actions.billing.updateRule);
 const archiveResult = Astro.getActionResult(actions.billing.archiveRule);
+
+// Field-level annotation is only unambiguous on the single create form --
+// the edit form is repeated per rule row with no submitted-ruleId echo to
+// know which row's panel an updateRule error belongs to, so that one keeps
+// the translated top-of-form banner only (see below).
+const createUnitPriceError = isInputError(createResult?.error)
+  ? createResult.error.fields.unitPrice?.[0]
+  : undefined;
+const createVatRateError = isInputError(createResult?.error)
+  ? createResult.error.fields.vatRate?.[0]
+  : undefined;
 
 const base = `/admin/o/${organizationId}`;
 const settingsHref = `${base}/settings`;
@@ -186,9 +201,10 @@ const RULE_ICON_BODIES: Record<string, string> = {
     {
       (createResult?.error || updateResult?.error || archiveResult?.error) && (
         <p class="notice notice-danger" role="alert">
-          {createResult?.error?.message ??
-            updateResult?.error?.message ??
-            archiveResult?.error?.message}
+          {friendlyActionErrorMessage(
+            createResult?.error ?? updateResult?.error ?? archiveResult?.error,
+            locale
+          )}
         </p>
       )
     }
@@ -594,18 +610,46 @@ const RULE_ICON_BODIES: Record<string, string> = {
                 name="unitPrice"
                 type="text"
                 placeholder="0.0000"
+                aria-invalid={createUnitPriceError ? "true" : undefined}
+                aria-describedby={createUnitPriceError
+                  ? "unitPrice-error"
+                  : undefined}
               />
-              <p class="rule-field-hint">{t("Price per unit (excl. VAT).")}</p>
+              {
+                createUnitPriceError ? (
+                  <p id="unitPrice-error" class="rule-field-error" role="alert">
+                    {t(createUnitPriceError)}
+                  </p>
+                ) : (
+                  <p class="rule-field-hint">
+                    {t("Price per unit (excl. VAT).")}
+                  </p>
+                )
+              }
             </div>
             <div class="rule-field">
               <label for="vatRate">{t("VAT %")} *</label>
               <input
                 id="vatRate"
                 name="vatRate"
+                aria-invalid={createVatRateError ? "true" : undefined}
+                aria-describedby={createVatRateError
+                  ? "vatRate-error"
+                  : undefined}
                 type="text"
                 placeholder="21.0000"
               />
-              <p class="rule-field-hint">{t("Value added tax percentage.")}</p>
+              {
+                createVatRateError ? (
+                  <p id="vatRate-error" class="rule-field-error" role="alert">
+                    {t(createVatRateError)}
+                  </p>
+                ) : (
+                  <p class="rule-field-hint">
+                    {t("Value added tax percentage.")}
+                  </p>
+                )
+              }
             </div>
           </div>
 
@@ -1129,6 +1173,15 @@ const RULE_ICON_BODIES: Record<string, string> = {
     margin-top: 0.5rem;
     color: var(--color-muted);
     font-size: 0.75rem;
+  }
+  .rule-field-error {
+    margin-top: 0.5rem;
+    color: var(--color-destructive);
+    font-size: 0.75rem;
+  }
+  .rule-field input[aria-invalid="true"],
+  .rule-field select[aria-invalid="true"] {
+    border-color: var(--color-destructive);
   }
   .rule-form-actions {
     display: flex;

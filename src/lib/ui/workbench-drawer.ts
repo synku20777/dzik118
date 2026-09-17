@@ -541,7 +541,7 @@ if (dialogEl) {
         const message = isInputError(error)
           ? (error.fields.currentValue?.join(" ") ?? error.message)
           : error.message;
-        errorEl.textContent = message;
+        errorEl.textContent = s(message);
         errorEl.hidden = false;
       }
     }
@@ -570,7 +570,7 @@ if (dialogEl) {
         const message = isInputError(error)
           ? (error.fields.value?.join(" ") ?? error.message)
           : error.message;
-        errorEl.textContent = message;
+        errorEl.textContent = s(message);
         errorEl.hidden = false;
       }
     }

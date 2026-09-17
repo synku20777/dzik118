@@ -7,10 +7,18 @@ import {
 } from "../domain/accounts/adjustments";
 import { createLateFeePolicy } from "../domain/accounts/settings";
 import { requireOrganizationAccess } from "../domain/authorization/guards";
+import { decimalInput } from "../lib/decimal-input";
 import { withRequestDb } from "../lib/db-request";
 import { safeHandler } from "./_errors";
 
-const money = z.string().regex(/^-?\d+(\.\d{1,2})?$/);
+const AMOUNT_MESSAGE =
+  "Enter a valid amount, for example 12.50 or -5.00. Use up to 2 decimal places.";
+const POSITIVE_AMOUNT_MESSAGE =
+  "Enter a valid amount, for example 12.50. Use up to 2 decimal places.";
+const DAILY_RATE_MESSAGE = "Enter a valid daily rate, for example 0.05.";
+const PERCENT_MESSAGE = "Enter a valid percentage, for example 10 or 10.5.";
+
+const money = decimalInput(/^-?\d+(\.\d{1,2})?$/, AMOUNT_MESSAGE);
 
 export const accounts = {
   saveLateFeePolicy: defineAction({
@@ -24,9 +32,9 @@ export const accounts = {
       // boolean field in this codebase (e.g. organizations.update's
       // autoGenerateEnabled/autoSendEnabled).
       enabled: z.boolean().optional(),
-      dailyRate: z.string().regex(/^\d+(\.\d{1,6})?$/),
+      dailyRate: decimalInput(/^\d+(\.\d{1,6})?$/, DAILY_RATE_MESSAGE),
       graceDays: z.coerce.number().int().min(0).max(365),
-      maxPenaltyPercent: z.string().regex(/^\d+(\.\d{1,4})?$/),
+      maxPenaltyPercent: decimalInput(/^\d+(\.\d{1,4})?$/, PERCENT_MESSAGE),
       stopsAtCap: z.boolean().optional(),
     }),
     handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
@@ -95,7 +103,7 @@ export const accounts = {
       organizationId: z.uuid(),
       dwellingId: z.uuid(),
       currency: z.string().length(3),
-      amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
+      amount: decimalInput(/^\d+(\.\d{1,2})?$/, POSITIVE_AMOUNT_MESSAGE),
       direction: z.enum(["CHARGE", "CREDIT"]),
       effectiveDate: z.iso.date(),
       reason: z.string().min(1).max(200),

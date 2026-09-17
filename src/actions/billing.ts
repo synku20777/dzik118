@@ -6,6 +6,7 @@ import { billingCalculationTypeEnum } from "../db/schema/billing";
 import { meterTypeEnum } from "../db/schema/dwellings";
 import { requireOrganizationAccess } from "../domain/authorization/guards";
 import { archiveRule, createRule, updateRule } from "../domain/billing/rules";
+import { decimalInput } from "../lib/decimal-input";
 import {
   bulkGenerateInvoices,
   bulkPrepareInvoices,
@@ -15,6 +16,11 @@ import {
 } from "../domain/billing/generation";
 import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
+
+const UNIT_PRICE_MESSAGE =
+  "Enter a valid unit price, for example 0.35 or 12.50. Use up to 4 decimal places.";
+const VAT_RATE_MESSAGE =
+  "Enter a valid VAT percentage, for example 21 or 21.5.";
 
 const billingCaseStatus = z.enum([
   "MISSING_DATA",
@@ -50,14 +56,14 @@ export const billing = {
       calculationType: z.enum(billingCalculationTypeEnum.enumValues),
       meterType: z.enum(meterTypeEnum.enumValues).optional(),
       unit: z.string().min(1).max(20),
-      unitPrice: z
-        .string()
-        .regex(/^\d{1,10}(\.\d{1,4})?$/)
-        .optional(),
-      vatRate: z
-        .string()
-        .regex(/^\d{1,3}(\.\d{1,4})?$/)
-        .optional(),
+      unitPrice: decimalInput(
+        /^\d{1,10}(\.\d{1,4})?$/,
+        UNIT_PRICE_MESSAGE
+      ).optional(),
+      vatRate: decimalInput(
+        /^\d{1,3}(\.\d{1,4})?$/,
+        VAT_RATE_MESSAGE
+      ).optional(),
       effectiveFrom: z.iso.date(),
       effectiveUntil: z.iso.date().optional(),
       sortOrder: z.coerce.number().int().optional(),
@@ -81,15 +87,13 @@ export const billing = {
       nameEn: z.string().max(200).nullable(),
       nameRu: z.string().max(200).nullable(),
       description: z.string().max(1000).nullable().optional(),
-      unitPrice: z
-        .string()
-        .regex(/^\d{1,10}(\.\d{1,4})?$/)
+      unitPrice: decimalInput(/^\d{1,10}(\.\d{1,4})?$/, UNIT_PRICE_MESSAGE)
         .nullable()
         .optional(),
-      vatRate: z
-        .string()
-        .regex(/^\d{1,3}(\.\d{1,4})?$/)
-        .optional(),
+      vatRate: decimalInput(
+        /^\d{1,3}(\.\d{1,4})?$/,
+        VAT_RATE_MESSAGE
+      ).optional(),
       effectiveFrom: z.iso.date().optional(),
       effectiveUntil: z.iso.date().nullable().optional(),
       sortOrder: z.coerce.number().int().optional(),

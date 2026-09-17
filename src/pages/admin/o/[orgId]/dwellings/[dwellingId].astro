@@ -11,6 +11,7 @@ import {
   entityLabel,
   formatDate,
   formatMoney,
+  friendlyActionErrorMessage,
 } from "../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
@@ -360,9 +361,8 @@ const meterTypeIcons: Record<string, string> = {
                     />
                   </div>
                   <div>
-                    <label
-                      class="block text-label text-foreground"
-                      for="areaM2">{t("Area (m²)")}</label
+                    <label class="block text-label text-foreground" for="areaM2"
+                      >{t("Area (m²)")}</label
                     >
                     <input
                       id="areaM2"
@@ -471,7 +471,10 @@ const meterTypeIcons: Record<string, string> = {
                 {
                   adjustmentResult?.error && (
                     <p class="notice notice-danger" role="alert">
-                      {adjustmentResult.error.message}
+                      {friendlyActionErrorMessage(
+                        adjustmentResult.error,
+                        locale
+                      )}
                     </p>
                   )
                 }
@@ -789,6 +792,7 @@ const meterTypeIcons: Record<string, string> = {
             </div>
             <details
               class="edit-disclosure"
+              id="resident-details"
               open={!!assignResult?.error || !!removeResult?.error}
             >
               <summary class="btn-secondary">
@@ -799,15 +803,27 @@ const meterTypeIcons: Record<string, string> = {
                 {
                   (assignResult?.error || removeResult?.error) && (
                     <p class="notice notice-danger" role="alert">
-                      {assignResult?.error?.message ??
-                        removeResult?.error?.message}
+                      {friendlyActionErrorMessage(
+                        assignResult?.error ?? removeResult?.error,
+                        locale
+                      )}
                     </p>
                   )
                 }
                 <form
                   method="POST"
                   action={actions.dwellings.assignResident}
+                  id="resident-form"
                   class="mt-4 flex gap-2"
+                  data-saving-label={t("Saving…")}
+                  data-added-message={t("Resident added")}
+                  data-already-has-access={t(
+                    "This resident already has access."
+                  )}
+                  data-generic-error={t(
+                    "Something went wrong. Please try again."
+                  )}
+                  data-remove-label={t("Remove")}
                 >
                   <input
                     type="hidden"
@@ -830,44 +846,50 @@ const meterTypeIcons: Record<string, string> = {
               </div>
             </details>
           </div>
-          {
-            residents.length > 0 ? (
-              <ul class="sidebar-item-list">
-                {residents.map((r) => (
-                  <li>
-                    <div class="sidebar-item-avatar" aria-hidden="true">
-                      {(r.displayName ?? r.email).charAt(0).toUpperCase()}
-                    </div>
-                    <div class="sidebar-item-body">
-                      <strong>{r.displayName ?? r.email}</strong>
-                      <p>{r.email}</p>
-                    </div>
-                    <form
-                      method="POST"
-                      action={actions.dwellings.removeResident}
-                    >
-                      <input
-                        type="hidden"
-                        name="organizationId"
-                        value={organizationId}
-                      />
-                      <input
-                        type="hidden"
-                        name="dwellingId"
-                        value={dwellingId}
-                      />
-                      <input type="hidden" name="userId" value={r.userId} />
-                      <button type="submit" class="sidebar-item-remove">
-                        {t("Remove")}
-                      </button>
-                    </form>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState title={t("No residents assigned.")} />
-            )
-          }
+          <div
+            id="residents-list-region"
+            data-empty-title={t("No residents assigned.")}
+          >
+            {
+              residents.length > 0 ? (
+                <ul class="sidebar-item-list">
+                  {residents.map((r) => (
+                    <li data-user-id={r.userId}>
+                      <div class="sidebar-item-avatar" aria-hidden="true">
+                        {(r.displayName ?? r.email).charAt(0).toUpperCase()}
+                      </div>
+                      <div class="sidebar-item-body">
+                        <strong>{r.displayName ?? r.email}</strong>
+                        <p>{r.email}</p>
+                      </div>
+                      <form
+                        method="POST"
+                        action={actions.dwellings.removeResident}
+                        data-resident-remove-form
+                      >
+                        <input
+                          type="hidden"
+                          name="organizationId"
+                          value={organizationId}
+                        />
+                        <input
+                          type="hidden"
+                          name="dwellingId"
+                          value={dwellingId}
+                        />
+                        <input type="hidden" name="userId" value={r.userId} />
+                        <button type="submit" class="sidebar-item-remove">
+                          {t("Remove")}
+                        </button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState title={t("No residents assigned.")} />
+              )
+            }
+          </div>
         </section>
 
         <section id="meters" class="panel p-6" data-panel="meters">
@@ -878,7 +900,11 @@ const meterTypeIcons: Record<string, string> = {
                 {t("Water and other utility meters in this dwelling.")}
               </p>
             </div>
-            <details class="edit-disclosure" open={!!meterResult?.error}>
+            <details
+              class="edit-disclosure"
+              id="meter-details"
+              open={!!meterResult?.error}
+            >
               <summary class="btn-secondary">
                 <Icon name="plus" size="sm" />
                 {t("Add meter")}
@@ -887,14 +913,22 @@ const meterTypeIcons: Record<string, string> = {
                 {
                   meterResult?.error && (
                     <p class="notice notice-danger" role="alert">
-                      {meterResult.error.message}
+                      {friendlyActionErrorMessage(meterResult.error, locale)}
                     </p>
                   )
                 }
                 <form
                   method="POST"
                   action={actions.meters.create}
+                  id="meter-form"
                   class="mt-4 grid grid-cols-2 gap-3"
+                  data-saving-label={t("Saving…")}
+                  data-added-message={t("Meter added")}
+                  data-generic-error={t(
+                    "Something went wrong. Please try again."
+                  )}
+                  data-archive-label={t("Archive")}
+                  data-archived-label={t("archived")}
                 >
                   <input
                     type="hidden"
@@ -913,7 +947,9 @@ const meterTypeIcons: Record<string, string> = {
                     >
                       {
                         meterTypeOptions.map((mt) => (
-                          <option value={mt}>{entityLabel(mt, locale)}</option>
+                          <option value={mt} data-icon={meterTypeIcons[mt]}>
+                            {entityLabel(mt, locale)}
+                          </option>
                         ))
                       }
                     </select>
@@ -960,48 +996,54 @@ const meterTypeIcons: Record<string, string> = {
               </div>
             </details>
           </div>
-          {
-            meterList.length > 0 ? (
-              <ul class="sidebar-item-list">
-                {meterList.map((m) => (
-                  <li>
-                    <div
-                      class="sidebar-item-icon"
-                      data-meter-type={m.type}
-                      aria-hidden="true"
-                    >
-                      {meterTypeIcons[m.type] ?? "•"}
-                    </div>
-                    <div class="sidebar-item-body">
-                      <strong>
-                        {m.label ?? entityLabel(m.type, locale)}
-                        {m.archivedAt && ` (${t("archived")})`}
-                      </strong>
-                      <p>
-                        {m.serialNumber ? `${m.serialNumber} · ` : ""}
-                        {m.unit}
-                      </p>
-                    </div>
-                    {!m.archivedAt && (
-                      <form method="POST" action={actions.meters.archive}>
-                        <input
-                          type="hidden"
-                          name="organizationId"
-                          value={organizationId}
-                        />
-                        <input type="hidden" name="meterId" value={m.id} />
-                        <button type="submit" class="sidebar-item-remove">
-                          {t("Archive")}
-                        </button>
-                      </form>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState title={t("No meters yet.")} />
-            )
-          }
+          <div id="meters-list-region">
+            {
+              meterList.length > 0 ? (
+                <ul class="sidebar-item-list">
+                  {meterList.map((m) => (
+                    <li>
+                      <div
+                        class="sidebar-item-icon"
+                        data-meter-type={m.type}
+                        aria-hidden="true"
+                      >
+                        {meterTypeIcons[m.type] ?? "•"}
+                      </div>
+                      <div class="sidebar-item-body">
+                        <strong>
+                          {m.label ?? entityLabel(m.type, locale)}
+                          {m.archivedAt && ` (${t("archived")})`}
+                        </strong>
+                        <p>
+                          {m.serialNumber ? `${m.serialNumber} · ` : ""}
+                          {m.unit}
+                        </p>
+                      </div>
+                      {!m.archivedAt && (
+                        <form
+                          method="POST"
+                          action={actions.meters.archive}
+                          data-meter-archive-form
+                        >
+                          <input
+                            type="hidden"
+                            name="organizationId"
+                            value={organizationId}
+                          />
+                          <input type="hidden" name="meterId" value={m.id} />
+                          <button type="submit" class="sidebar-item-remove">
+                            {t("Archive")}
+                          </button>
+                        </form>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState title={t("No meters yet.")} />
+              )
+            }
+          </div>
         </section>
       </div>
     </div>
@@ -1240,6 +1282,13 @@ const meterTypeIcons: Record<string, string> = {
 </AdminLayout>
 
 <script>
+  import { actions } from "astro:actions";
+  import {
+    bindMutationForm,
+    copyAstroScope,
+    showMutationSuccess,
+  } from "../../../../../lib/ui/mutate-form";
+
   const archiveDialog =
     document.querySelector<HTMLDialogElement>("#archive-dialog");
   document
@@ -1325,6 +1374,363 @@ const meterTypeIcons: Record<string, string> = {
     for (const box of deliveryCheckboxes) {
       box.addEventListener("change", updateSaveState);
     }
+  }
+
+  // ---- Meters: submit once, patch the list from the returned meter, no
+  // full-page reload (previously a plain <form method="POST"> with no JS
+  // at all -- there was never a duplicate listener here; the fix is a
+  // single submit-event binding plus a pending-state guard, see
+  // src/lib/ui/mutate-form.ts's header comment). ----
+  interface CreatedMeter {
+    id: string;
+    type: string;
+    label: string | null;
+    serialNumber: string | null;
+    unit: string;
+  }
+
+  const meterForm = document.querySelector<HTMLFormElement>("#meter-form");
+  const meterDetails =
+    document.querySelector<HTMLDetailsElement>("#meter-details");
+  const metersListRegion = document.querySelector<HTMLElement>(
+    "#meters-list-region"
+  );
+
+  function ensureMetersList(): HTMLUListElement | null {
+    if (!metersListRegion) return null;
+    let list =
+      metersListRegion.querySelector<HTMLUListElement>(".sidebar-item-list");
+    if (!list) {
+      metersListRegion.querySelector(".empty-state")?.remove();
+      list = document.createElement("ul");
+      list.className = "sidebar-item-list";
+      if (metersListRegion) copyAstroScope(metersListRegion, list);
+      metersListRegion.appendChild(list);
+    }
+    return list;
+  }
+
+  // Archiving never removes the row: SSR keeps an archived meter visible
+  // with an "(archived)" suffix and no Archive button (see the block below
+  // this script) -- removing the row client-side instead would make the
+  // page look different immediately after archiving than it does after a
+  // manual refresh. Updating in place keeps both identical.
+  function markMeterRowArchived(row: HTMLLIElement, form: HTMLFormElement) {
+    const strong = row.querySelector("strong");
+    if (strong) {
+      const suffix = meterForm?.dataset.archivedLabel ?? "archived";
+      strong.textContent = `${strong.textContent} (${suffix})`;
+    }
+    form.remove();
+  }
+
+  function bindMeterArchiveForm(form: HTMLFormElement, row: HTMLLIElement) {
+    bindMutationForm({
+      form,
+      action: (fd) => actions.meters.archive(fd),
+      savingLabel: "…",
+      fallbackErrorMessage:
+        meterForm?.dataset.genericError ??
+        "Something went wrong. Please try again.",
+      onSuccess: () => markMeterRowArchived(row, form),
+    });
+  }
+
+  function buildMeterRow(meter: CreatedMeter): HTMLLIElement {
+    const option = meterForm?.querySelector<HTMLOptionElement>(
+      `option[value="${meter.type}"]`
+    );
+    const li = document.createElement("li");
+
+    const icon = document.createElement("div");
+    icon.className = "sidebar-item-icon";
+    icon.dataset.meterType = meter.type;
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = option?.dataset.icon ?? "•";
+
+    const body = document.createElement("div");
+    body.className = "sidebar-item-body";
+    const strong = document.createElement("strong");
+    strong.textContent =
+      meter.label ?? option?.textContent?.trim() ?? meter.type;
+    const unitLine = document.createElement("p");
+    unitLine.textContent = meter.serialNumber
+      ? `${meter.serialNumber} · ${meter.unit}`
+      : meter.unit;
+    body.appendChild(strong);
+    body.appendChild(unitLine);
+
+    const archiveForm = document.createElement("form");
+    archiveForm.method = "POST";
+    archiveForm.dataset.meterArchiveForm = "";
+    const orgId =
+      meterForm?.querySelector<HTMLInputElement>('input[name="organizationId"]')
+        ?.value ?? "";
+    archiveForm.insertAdjacentHTML(
+      "beforeend",
+      `<input type="hidden" name="organizationId" value="${orgId}" />
+       <input type="hidden" name="meterId" value="${meter.id}" />
+       <button type="submit" class="sidebar-item-remove">${
+         meterForm?.dataset.archiveLabel ?? "Archive"
+       }</button>`
+    );
+    bindMeterArchiveForm(archiveForm, li);
+
+    li.appendChild(icon);
+    li.appendChild(body);
+    li.appendChild(archiveForm);
+    if (meterForm) {
+      copyAstroScope(
+        meterForm,
+        li,
+        icon,
+        body,
+        strong,
+        unitLine,
+        archiveForm,
+        ...Array.from(archiveForm.children)
+      );
+    }
+    return li;
+  }
+
+  if (meterForm) {
+    bindMutationForm({
+      form: meterForm,
+      action: (fd) => actions.meters.create(fd),
+      savingLabel: meterForm.dataset.savingLabel ?? "Saving…",
+      fallbackErrorMessage:
+        meterForm.dataset.genericError ??
+        "Something went wrong. Please try again.",
+      onSuccess: (meter) => {
+        const list = ensureMetersList();
+        list?.appendChild(buildMeterRow(meter as CreatedMeter));
+        meterForm.reset();
+        if (meterDetails) meterDetails.open = false;
+        const header = document.querySelector("#meters .card-header");
+        if (header) {
+          showMutationSuccess(
+            header,
+            meterForm.dataset.addedMessage ?? "Meter added"
+          );
+        }
+      },
+    });
+  }
+
+  for (const form of document.querySelectorAll<HTMLFormElement>(
+    "[data-meter-archive-form]"
+  )) {
+    const row = form.closest("li");
+    if (row) bindMeterArchiveForm(form, row);
+  }
+
+  // ---- Residents: same pattern. A resident who already has access still
+  // returns success (existing business rule, see assignResident's
+  // onConflictDoNothing) -- guarded here by userId so re-submitting an
+  // existing resident's email never duplicates their row. ----
+  interface AssignedResident {
+    userId: string;
+    email: string;
+  }
+
+  const residentForm =
+    document.querySelector<HTMLFormElement>("#resident-form");
+  const residentDetails =
+    document.querySelector<HTMLDetailsElement>("#resident-details");
+  const residentsListRegion = document.querySelector<HTMLElement>(
+    "#residents-list-region"
+  );
+
+  function ensureResidentsList(): HTMLUListElement | null {
+    if (!residentsListRegion) return null;
+    let list =
+      residentsListRegion.querySelector<HTMLUListElement>(".sidebar-item-list");
+    if (!list) {
+      residentsListRegion.querySelector(".empty-state")?.remove();
+      list = document.createElement("ul");
+      list.className = "sidebar-item-list";
+      if (residentsListRegion) copyAstroScope(residentsListRegion, list);
+      residentsListRegion.appendChild(list);
+    }
+    return list;
+  }
+
+  // Removing a resident IS a full deletion (unlike archiving a meter), so
+  // the list can genuinely become empty -- restore the same empty state
+  // SSR would render, rather than leaving a bare, list-less panel.
+  function restoreResidentsEmptyStateIfNeeded() {
+    const list =
+      residentsListRegion?.querySelector<HTMLUListElement>(
+        ".sidebar-item-list"
+      );
+    if (!list || list.children.length > 0 || !residentsListRegion) return;
+    list.remove();
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    const title = document.createElement("p");
+    title.className = "font-display text-h3";
+    title.textContent =
+      residentsListRegion.dataset.emptyTitle ?? "No residents assigned.";
+    // EmptyState.astro always renders this wrapper (even with no slot
+    // content) -- it contributes spacing, so it's needed for an exact
+    // match with what SSR would render after a refresh.
+    const slotWrap = document.createElement("div");
+    slotWrap.className = "mt-4";
+    empty.appendChild(title);
+    empty.appendChild(slotWrap);
+    copyAstroScope(residentsListRegion, empty, title, slotWrap);
+    residentsListRegion.appendChild(empty);
+  }
+
+  // Assign and every remove form share this one flag: two resident
+  // mutations for this dwelling can otherwise resolve out of order (e.g.
+  // remove resident A, then quickly re-add A before the removal's response
+  // arrives) and leave the UI showing the opposite of what the server
+  // actually holds. Serializing them here removes that race -- a second
+  // resident-section submit while one is still in flight is rejected
+  // immediately, client-side, before it ever reaches the server.
+  let residentsBusy = false;
+  async function guardedResidentAction<T>(
+    call: () => Promise<{
+      data?: T;
+      error?: import("astro:actions").ActionError;
+    }>
+  ): Promise<{ data?: T; error?: import("astro:actions").ActionError }> {
+    if (residentsBusy) {
+      return {
+        error: {
+          message:
+            residentForm?.dataset.genericError ??
+            "Something went wrong. Please try again.",
+        } as import("astro:actions").ActionError,
+      };
+    }
+    residentsBusy = true;
+    try {
+      return await call();
+    } finally {
+      residentsBusy = false;
+    }
+  }
+
+  function bindResidentRemoveForm(form: HTMLFormElement, row: HTMLLIElement) {
+    bindMutationForm({
+      form,
+      action: (fd) =>
+        guardedResidentAction(() => actions.dwellings.removeResident(fd)),
+      savingLabel: "…",
+      fallbackErrorMessage:
+        residentForm?.dataset.genericError ??
+        "Something went wrong. Please try again.",
+      onSuccess: () => {
+        row.remove();
+        restoreResidentsEmptyStateIfNeeded();
+      },
+    });
+  }
+
+  function buildResidentRow(resident: AssignedResident): HTMLLIElement {
+    const li = document.createElement("li");
+    li.dataset.userId = resident.userId;
+
+    const avatar = document.createElement("div");
+    avatar.className = "sidebar-item-avatar";
+    avatar.setAttribute("aria-hidden", "true");
+    avatar.textContent = resident.email.charAt(0).toUpperCase();
+
+    const body = document.createElement("div");
+    body.className = "sidebar-item-body";
+    const strong = document.createElement("strong");
+    strong.textContent = resident.email;
+    const emailLine = document.createElement("p");
+    emailLine.textContent = resident.email;
+    body.appendChild(strong);
+    body.appendChild(emailLine);
+
+    const removeForm = document.createElement("form");
+    removeForm.method = "POST";
+    removeForm.dataset.residentRemoveForm = "";
+    const orgId =
+      residentForm?.querySelector<HTMLInputElement>(
+        'input[name="organizationId"]'
+      )?.value ?? "";
+    const dwellingIdValue =
+      residentForm?.querySelector<HTMLInputElement>('input[name="dwellingId"]')
+        ?.value ?? "";
+    removeForm.insertAdjacentHTML(
+      "beforeend",
+      `<input type="hidden" name="organizationId" value="${orgId}" />
+       <input type="hidden" name="dwellingId" value="${dwellingIdValue}" />
+       <input type="hidden" name="userId" value="${resident.userId}" />
+       <button type="submit" class="sidebar-item-remove">${
+         residentForm?.dataset.removeLabel ?? "Remove"
+       }</button>`
+    );
+    bindResidentRemoveForm(removeForm, li);
+
+    li.appendChild(avatar);
+    li.appendChild(body);
+    li.appendChild(removeForm);
+    if (residentForm) {
+      copyAstroScope(
+        residentForm,
+        li,
+        avatar,
+        body,
+        strong,
+        emailLine,
+        removeForm,
+        ...Array.from(removeForm.children)
+      );
+    }
+    return li;
+  }
+
+  if (residentForm) {
+    bindMutationForm({
+      form: residentForm,
+      action: (fd) =>
+        guardedResidentAction(() => actions.dwellings.assignResident(fd)),
+      savingLabel: residentForm.dataset.savingLabel ?? "Saving…",
+      fallbackErrorMessage:
+        residentForm.dataset.genericError ??
+        "Something went wrong. Please try again.",
+      onSuccess: (resident) => {
+        const { userId, email } = resident as AssignedResident;
+        const list = ensureResidentsList();
+        const header = document.querySelector("#residents .card-header");
+        residentForm.reset();
+        if (residentDetails) residentDetails.open = false;
+        const alreadyPresent = list?.querySelector(
+          `[data-user-id="${userId}"]`
+        );
+        if (alreadyPresent) {
+          if (header) {
+            showMutationSuccess(
+              header,
+              residentForm.dataset.alreadyHasAccess ??
+                "This resident already has access."
+            );
+          }
+          return;
+        }
+        list?.appendChild(buildResidentRow({ userId, email }));
+        if (header) {
+          showMutationSuccess(
+            header,
+            residentForm.dataset.addedMessage ?? "Resident added"
+          );
+        }
+      },
+    });
+  }
+
+  for (const form of document.querySelectorAll<HTMLFormElement>(
+    "[data-resident-remove-form]"
+  )) {
+    const row = form.closest("li");
+    if (row) bindResidentRemoveForm(form, row);
   }
 </script>
 

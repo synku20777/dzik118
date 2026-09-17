@@ -1,5 +1,9 @@
 ---
-import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+import {
+  translate,
+  uiLocale,
+  friendlyActionErrorMessage,
+} from "../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 // Phase F (Billing) - billing automation settings (spec Section 9.2, 27).
@@ -306,7 +310,7 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
           {
             policyResult?.error && (
               <p class="notice notice-danger" role="alert">
-                {policyResult.error.message}
+                {friendlyActionErrorMessage(policyResult.error, locale)}
               </p>
             )
           }

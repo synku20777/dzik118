@@ -81,6 +81,16 @@ const config = {
     manualInputValue: t("Value"),
     manualInputQuantityHelp: t("Enter the quantity for this period."),
     manualInputAmountHelp: t("Enter the amount to charge for this period."),
+    // Keyed by the exact English sentence (not a shortkey) -- these are the
+    // same Zod regex messages src/actions/readings.ts emits, looked up via
+    // s(message) in workbench-drawer.ts's field-error handling.
+    "Enter a valid meter reading, for example 123.456. Use up to 3 decimal places.":
+      t(
+        "Enter a valid meter reading, for example 123.456. Use up to 3 decimal places."
+      ),
+    "Enter a valid value, for example 12.3456. Use up to 4 decimal places.": t(
+      "Enter a valid value, for example 12.3456. Use up to 4 decimal places."
+    ),
     occupantName: t("Occupant name"),
     billingName: t("Billing name"),
     billingEmail: t("Billing email"),

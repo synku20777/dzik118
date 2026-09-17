@@ -12,26 +12,24 @@ import {
   submitResidentReading,
 } from "../domain/periods/readings";
 import { DECIMAL3_PATTERN } from "../lib/decimal3";
+import { decimalInput } from "../lib/decimal-input";
 import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
 
 // Kept as a string end to end (spec Section 17: no JS binary floating
 // point for persisted calculations), validated the same way the domain
-// layer re-validates it.
-const decimal3 = z
-  .string()
-  .regex(
-    DECIMAL3_PATTERN,
-    "Must be a non-negative number with at most 3 decimal places"
-  );
+// layer re-validates it. Accepts a comma decimal separator (Latvia-first
+// UX) via decimalInput's normalization before the regex runs.
+const decimal3 = decimalInput(
+  DECIMAL3_PATTERN,
+  "Enter a valid meter reading, for example 123.456. Use up to 3 decimal places."
+);
 
 // Matches manual_rule_inputs.value's numeric(14,4) column precision.
-const decimal4 = z
-  .string()
-  .regex(
-    /^\d{1,10}(\.\d{1,4})?$/,
-    "Must be a non-negative number with at most 4 decimal places"
-  );
+const decimal4 = decimalInput(
+  /^\d{1,10}(\.\d{1,4})?$/,
+  "Enter a valid value, for example 12.3456. Use up to 4 decimal places."
+);
 
 export const readings = {
   // MTR-002

@@ -27,6 +27,7 @@ import {
   formatNumber,
   formatPeriod,
   entityLabel,
+  friendlyActionErrorMessage,
 } from "../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
@@ -206,7 +207,7 @@ const base = "/portal/dwellings/" + dwellingId;
           <h2 class="section-title">{t("Meter readings")}</h2>
           {submitResult?.error && (
             <p role="alert" class="notice notice-danger mb-4">
-              {submitResult.error.message}
+              {friendlyActionErrorMessage(submitResult.error, locale)}
             </p>
           )}
           {submitResult?.data && (

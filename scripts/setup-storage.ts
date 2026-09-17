@@ -30,7 +30,7 @@ if (existing) {
 } else {
   const { error } = await admin.storage.createBucket("invoices", {
     public: false,
-    fileSizeLimit: "10MiB",
+    fileSizeLimit: "10MB",
     allowedMimeTypes: ["application/pdf"],
   });
   if (error) throw error;

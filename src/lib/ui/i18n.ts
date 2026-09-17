@@ -296,6 +296,9 @@ const lv: Record<string, string> = {
   "This conversation is resolved.": "Šī saruna ir atrisināta.",
   "No residents assigned.": "Nav piešķirtu iedzīvotāju.",
   "No meters yet.": "Vēl nav skaitītāju.",
+  "Meter added": "Skaitītājs pievienots",
+  "Resident added": "Iedzīvotājs pievienots",
+  "This resident already has access.": "Šim iedzīvotājam jau ir piekļuve.",
   "No billing rules yet.": "Vēl nav norēķinu noteikumu.",
   "No dwellings assigned.": "Nav piešķirtu īpašumu.",
   "No transactions in this import.": "Šajā importā nav darījumu.",
@@ -993,6 +996,22 @@ const lv: Record<string, string> = {
     "Atiestatīt rēķina izkārtojumu uz noklusējuma veidni? Pielāgotie teksta bloki, sadaļu nosaukumi un jebkurš rindu formatējums tiks noņemts. Jūsu galvenes, kājenes, maksājuma instrukciju un piezīmes teksts tiks saglabāts.",
   "This invoice layout has reached the maximum of 30 sections.":
     "Šis rēķina izkārtojums ir sasniedzis maksimālo 30 sadaļu skaitu.",
+  "Enter a valid unit price, for example 0.35 or 12.50. Use up to 4 decimal places.":
+    "Ievadiet derīgu vienības cenu, piemēram, 0,35 vai 12,50. Izmantojiet ne vairāk kā 4 zīmes aiz komata.",
+  "Enter a valid VAT percentage, for example 21 or 21.5.":
+    "Ievadiet derīgu PVN procentu, piemēram, 21 vai 21,5.",
+  "Enter a valid amount, for example 12.50 or -5.00. Use up to 2 decimal places.":
+    "Ievadiet derīgu summu, piemēram, 12,50 vai -5,00. Izmantojiet ne vairāk kā 2 zīmes aiz komata.",
+  "Enter a valid amount, for example 12.50. Use up to 2 decimal places.":
+    "Ievadiet derīgu summu, piemēram, 12,50. Izmantojiet ne vairāk kā 2 zīmes aiz komata.",
+  "Enter a valid daily rate, for example 0.05.":
+    "Ievadiet derīgu dienas likmi, piemēram, 0,05.",
+  "Enter a valid percentage, for example 10 or 10.5.":
+    "Ievadiet derīgu procentu, piemēram, 10 vai 10,5.",
+  "Enter a valid meter reading, for example 123.456. Use up to 3 decimal places.":
+    "Ievadiet derīgu skaitītāja rādījumu, piemēram, 123,456. Izmantojiet ne vairāk kā 3 zīmes aiz komata.",
+  "Enter a valid value, for example 12.3456. Use up to 4 decimal places.":
+    "Ievadiet derīgu vērtību, piemēram, 12,3456. Izmantojiet ne vairāk kā 4 zīmes aiz komata.",
 };
 
 const ru: Record<string, string> = {
@@ -1279,6 +1298,9 @@ const ru: Record<string, string> = {
   "This conversation is resolved.": "Этот вопрос решён.",
   "No residents assigned.": "Жильцы не назначены.",
   "No meters yet.": "Счётчиков пока нет.",
+  "Meter added": "Счётчик добавлен",
+  "Resident added": "Житель добавлен",
+  "This resident already has access.": "У этого жителя уже есть доступ.",
   "No billing rules yet.": "Правил расчёта пока нет.",
   "No dwellings assigned.": "Помещения не назначены.",
   "No transactions in this import.": "В этом импорте нет операций.",
@@ -1977,12 +1999,56 @@ const ru: Record<string, string> = {
     "Сбросить макет счета к шаблону по умолчанию? Пользовательские текстовые блоки, названия разделов и любое форматирование строк будут удалены. Текст верхнего колонтитула, нижнего колонтитула, платежных инструкций и примечания будет сохранен.",
   "This invoice layout has reached the maximum of 30 sections.":
     "В этом макете счета достигнут максимум в 30 разделов.",
+  "Enter a valid unit price, for example 0.35 or 12.50. Use up to 4 decimal places.":
+    "Введите корректную цену за единицу, например 0,35 или 12,50. Используйте не более 4 знаков после запятой.",
+  "Enter a valid VAT percentage, for example 21 or 21.5.":
+    "Введите корректный процент НДС, например 21 или 21,5.",
+  "Enter a valid amount, for example 12.50 or -5.00. Use up to 2 decimal places.":
+    "Введите корректную сумму, например 12,50 или -5,00. Используйте не более 2 знаков после запятой.",
+  "Enter a valid amount, for example 12.50. Use up to 2 decimal places.":
+    "Введите корректную сумму, например 12,50. Используйте не более 2 знаков после запятой.",
+  "Enter a valid daily rate, for example 0.05.":
+    "Введите корректную дневную ставку, например 0,05.",
+  "Enter a valid percentage, for example 10 or 10.5.":
+    "Введите корректный процент, например 10 или 10,5.",
+  "Enter a valid meter reading, for example 123.456. Use up to 3 decimal places.":
+    "Введите корректное показание счётчика, например 123,456. Используйте не более 3 знаков после запятой.",
+  "Enter a valid value, for example 12.3456. Use up to 4 decimal places.":
+    "Введите корректное значение, например 12,3456. Используйте не более 4 знаков после запятой.",
 };
 
 export function translate(locale: Locale, text: string): string {
   if (locale === "lv") return lv[text] ?? text;
   if (locale === "ru") return ru[text] ?? text;
   return text;
+}
+
+// Shared by every page rendering an Astro Action's error: never shows raw
+// Zod/ActionInputError JSON. When the action failed Zod input validation
+// (`error.fields` present), shows the first field's plain-language message,
+// translated -- every such message in this codebase is itself an English
+// sentence used as the i18n dictionary key (see e.g. src/actions/billing.ts's
+// UNIT_PRICE_MESSAGE), so this always resolves to a real, localized string.
+// A path-less Zod issue (rare, but possible from an object-level .refine())
+// leaves `.fields` present but with no usable message -- that falls back to
+// a generic translated message, never to `.message` (which for an input
+// error IS the raw "Failed to validate: [...]" blob). Only a genuine
+// non-input error (domain ConflictError/NotFoundError/etc., already a safe
+// human sentence -- see src/actions/_errors.ts) uses its own `.message`.
+export function friendlyActionErrorMessage(
+  error:
+    { message: string; fields?: Record<string, string[]> } | null | undefined,
+  locale: Locale
+): string | undefined {
+  if (!error) return undefined;
+  if (error.fields) {
+    const fieldMessage = Object.values(error.fields)[0]?.[0];
+    return translate(
+      locale,
+      fieldMessage ?? "Something went wrong. Please try again."
+    );
+  }
+  return translate(locale, error.message);
 }
 
 export function formatNumber(
