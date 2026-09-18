@@ -21,19 +21,6 @@ export default defineConfig({
         context: "server",
         access: "secret",
       }),
-      // Client-exposed duplicates of the two values above: the publishable
-      // key is designed to be public (spec Section 6 only forbids exposing
-      // the *secret* key), and the admin password sign-in form needs a
-      // browser-side Supabase client (spec Section 34) to call
-      // signInWithPassword directly rather than us reimplementing it.
-      PUBLIC_SUPABASE_URL: envField.string({
-        context: "client",
-        access: "public",
-      }),
-      PUBLIC_SUPABASE_PUBLISHABLE_KEY: envField.string({
-        context: "client",
-        access: "public",
-      }),
       SUPABASE_SECRET_KEY: envField.string({
         context: "server",
         access: "secret",

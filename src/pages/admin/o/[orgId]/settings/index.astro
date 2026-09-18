@@ -1,9 +1,4 @@
 ---
-// Phase D (Organizations/dwellings) - settings index (spec Section 9.2, 27
-// "Settings"). Billing/rules/invoice-template/data were later phases (F/G),
-// originally linked here as stubs so the nav was complete before they
-// shipped -- all are implemented now; each card's `ready` flag must flip to
-// true once its page actually works, or the link stays disabled forever.
 import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
 import type { IconName } from "../../../../../lib/ui/icons";
@@ -37,7 +32,6 @@ interface SettingsCardData {
   icon: IconName;
   label: string;
   desc: string;
-  ready: boolean;
 }
 
 const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
@@ -49,42 +43,36 @@ const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
         icon: "building",
         label: "Organization",
         desc: "Legal, bank, and contact details.",
-        ready: true,
       },
       {
         href: `${base}/settings/users`,
         icon: "users",
         label: "Users & access",
         desc: "Admin membership and resident access.",
-        ready: true,
       },
       {
         href: `${base}/settings/billing`,
         icon: "receipt-euro",
         label: "Billing",
         desc: "Automation, due dates, numbering, and defaults.",
-        ready: true,
       },
       {
         href: `${base}/settings/rules`,
         icon: "percentage",
         label: "Tariffs & rules",
         desc: "Utility rates and billing calculation rules.",
-        ready: true,
       },
       {
         href: `${base}/settings/invoice-template`,
         icon: "file-description",
         label: "Invoice template",
         desc: "Invoice appearance and document settings.",
-        ready: true,
       },
       {
         href: `${base}/settings/data`,
         icon: "database",
         label: "Data",
         desc: "Import, export, and bulk updates.",
-        ready: true,
       },
     ],
   },
@@ -96,7 +84,6 @@ const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
         icon: "clock",
         label: "Audit history",
         desc: "Track important changes in your organization.",
-        ready: true,
       },
     ],
   },
@@ -132,27 +119,17 @@ const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
             <h2 class="eyebrow">{t(group.label)}</h2>
             <div class="settings-grid">
               {group.items.map((s) => (
-                <a
-                  href={s.ready ? s.href : undefined}
-                  aria-disabled={!s.ready || undefined}
-                  class="settings-card"
-                  data-disabled={!s.ready ? "true" : undefined}
-                >
+                <a href={s.href} class="settings-card">
                   <span class="settings-card-icon" aria-hidden="true">
                     <Icon name={s.icon} size="lg" />
                   </span>
                   <div class="settings-card-text">
                     <h3>{t(s.label)}</h3>
                     <p>{t(s.desc)}</p>
-                    {!s.ready && (
-                      <p class="settings-card-note">{t("Not available yet")}</p>
-                    )}
                   </div>
-                  {s.ready && (
-                    <span class="settings-card-chevron" aria-hidden="true">
-                      ›
-                    </span>
-                  )}
+                  <span class="settings-card-chevron" aria-hidden="true">
+                    ›
+                  </span>
                 </a>
               ))}
             </div>
@@ -204,12 +181,8 @@ const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
     box-shadow: var(--shadow-panel);
     color: var(--color-foreground);
   }
-  .settings-card:not([data-disabled]):hover {
+  .settings-card:hover {
     border-color: var(--color-muted);
-  }
-  .settings-card[data-disabled] {
-    cursor: not-allowed;
-    opacity: 0.55;
   }
   .settings-card-icon {
     display: grid;
@@ -237,11 +210,6 @@ const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
     margin-top: 0.25rem;
     color: var(--color-muted);
     font-size: 0.875rem;
-  }
-  .settings-card-note {
-    margin-top: 0.25rem;
-    font-size: 0.75rem;
-    font-style: italic;
   }
   .settings-card-chevron {
     flex: 0 0 auto;

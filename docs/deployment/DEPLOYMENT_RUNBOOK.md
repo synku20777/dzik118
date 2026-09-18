@@ -107,16 +107,14 @@ wrangler secret put INTERNAL_CRON_SECRET
 
 ### Build-time values (`access: "public"`) -- do NOT use `wrangler secret put`
 
-`PUBLIC_SUPABASE_URL`, `PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `ADMIN_REQUIRE_AAL2` are declared with `access: "public"` in `astro.config.ts`. Astro bakes these into the built JavaScript as literal constants during `npm run build`, using whatever values are present in the environment (or a `.env` file) on the machine that runs the build -- **Cloudflare Worker secrets have no effect on them at all**, whether set before or after the build. Set these as real environment variables (or in a `.env.production` file Vite will pick up) before running `npm run build`/`npm run deploy`:
+`ADMIN_REQUIRE_AAL2` is declared with `access: "public"` in `astro.config.ts`. Astro resolves it during `npm run build`, using the value present in the environment (or a `.env` file) on the machine that runs the build -- **Cloudflare Worker secrets have no effect on it at all**, whether set before or after the build. Set it as a real environment variable (or in a `.env.production` file Vite will pick up) before running `npm run build`/`npm run deploy`:
 
 ```bash
-export PUBLIC_SUPABASE_URL="<production-url>"
-export PUBLIC_SUPABASE_PUBLISHABLE_KEY="<production-publishable-key>"
 export ADMIN_REQUIRE_AAL2="false"  # see the warning below before ever changing this
 npm run deploy
 ```
 
-If these aren't set on the build machine, the build can silently reuse whatever is in a local `.dev.vars`/`.env` file present in that checkout (empty or local-dev Supabase URLs, `ADMIN_REQUIRE_AAL2=false`) with no error at all. Always confirm what a given build machine's environment actually contains before deploying from it.
+If this isn't set on the build machine, the build can silently reuse `ADMIN_REQUIRE_AAL2=false` from a local `.dev.vars`/`.env` file present in that checkout. Always confirm what a given build machine's environment actually contains before deploying from it.
 
 > **Warning -- do not set `ADMIN_REQUIRE_AAL2=true` yet.** Per [docs/decisions/0002-admin-aal2-boundary.md](../decisions/0002-admin-aal2-boundary.md), this codebase has no MFA enrollment UI at all -- there is no way for an admin to ever satisfy the AAL2 check this flag turns on. Flipping it to `true` before that enrollment flow exists and every admin has enrolled a factor **locks out every admin with no recovery path**. Leave it `false` for this deployment; treat enabling it as a separate future step blocked on building MFA enrollment first, tracked in that decision doc.
 

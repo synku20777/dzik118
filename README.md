@@ -105,7 +105,7 @@ Run these steps in order.
    cp .env.example .dev.vars
    ```
 
-   Edit `.dev.vars`. Set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `PUBLIC_SUPABASE_URL`, and `PUBLIC_SUPABASE_PUBLISHABLE_KEY` to the values `supabase start` printed in step 2. Set `APP_BASE_URL` to `http://localhost:4321`. Leave the `AWS_SES_*` fields blank so the app uses local SMTP instead of real email.
+   Edit `.dev.vars`. Set `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SECRET_KEY` to the values `supabase start` printed in step 2. Set `APP_BASE_URL` to `http://localhost:4321`. Leave the `AWS_SES_*` fields blank so the app uses local SMTP instead of real email.
 
    The Cloudflare adapter reads `.dev.vars` for both `npm run dev` and `npm run build`.
 

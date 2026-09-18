@@ -505,6 +505,7 @@ const RULE_ICON_BODIES: Record<string, string> = {
           method="POST"
           action={actions.billing.createRule}
           id="create-rule-form"
+          data-calculation-type-labels={JSON.stringify(calculationTypeLabels)}
         >
           <input type="hidden" name="organizationId" value={organizationId} />
 
@@ -789,7 +790,6 @@ const RULE_ICON_BODIES: Record<string, string> = {
 <script
   is:inline
   define:vars={{
-    calculationTypeLabels,
     ongoingLabel: t("ongoing"),
     iconBodies: RULE_ICON_BODIES,
   }}
@@ -816,6 +816,9 @@ const RULE_ICON_BODIES: Record<string, string> = {
   const form = document.querySelector("#create-rule-form");
   const summaryBody = document.querySelector("#rule-summary-body");
   if (form && summaryBody) {
+    const calculationTypeLabels = JSON.parse(
+      form.dataset.calculationTypeLabels || "{}"
+    );
     // Captured once, before any mutation, so restoring the empty state
     // below reuses the server-rendered (correctly localized) markup
     // instead of a separately hard-coded copy that could drift out of

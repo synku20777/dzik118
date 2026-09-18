@@ -172,6 +172,7 @@ const meterTypeIcons: Record<string, string> = {
   HEAT: "🌡️",
   OTHER: "⚙️",
 };
+const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
 ---
 
 <AdminLayout
@@ -850,45 +851,44 @@ const meterTypeIcons: Record<string, string> = {
             id="residents-list-region"
             data-empty-title={t("No residents assigned.")}
           >
-            {
-              residents.length > 0 ? (
-                <ul class="sidebar-item-list">
-                  {residents.map((r) => (
-                    <li data-user-id={r.userId}>
-                      <div class="sidebar-item-avatar" aria-hidden="true">
-                        {(r.displayName ?? r.email).charAt(0).toUpperCase()}
-                      </div>
-                      <div class="sidebar-item-body">
-                        <strong>{r.displayName ?? r.email}</strong>
-                        <p>{r.email}</p>
-                      </div>
-                      <form
-                        method="POST"
-                        action={actions.dwellings.removeResident}
-                        data-resident-remove-form
-                      >
-                        <input
-                          type="hidden"
-                          name="organizationId"
-                          value={organizationId}
-                        />
-                        <input
-                          type="hidden"
-                          name="dwellingId"
-                          value={dwellingId}
-                        />
-                        <input type="hidden" name="userId" value={r.userId} />
-                        <button type="submit" class="sidebar-item-remove">
-                          {t("Remove")}
-                        </button>
-                      </form>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <EmptyState title={t("No residents assigned.")} />
-              )
-            }
+            <ul class="sidebar-item-list" hidden={residents.length === 0}>
+              {
+                residents.map((r) => (
+                  <li data-user-id={r.userId}>
+                    <div class="sidebar-item-avatar" aria-hidden="true">
+                      {(r.displayName ?? r.email).charAt(0).toUpperCase()}
+                    </div>
+                    <div class="sidebar-item-body">
+                      <strong>{r.displayName ?? r.email}</strong>
+                      <p>{r.email}</p>
+                    </div>
+                    <form
+                      method="POST"
+                      action={actions.dwellings.removeResident}
+                      data-resident-remove-form
+                    >
+                      <input
+                        type="hidden"
+                        name="organizationId"
+                        value={organizationId}
+                      />
+                      <input
+                        type="hidden"
+                        name="dwellingId"
+                        value={dwellingId}
+                      />
+                      <input type="hidden" name="userId" value={r.userId} />
+                      <button type="submit" class="sidebar-item-remove">
+                        {t("Remove")}
+                      </button>
+                    </form>
+                  </li>
+                ))
+              }
+            </ul>
+            <div id="residents-empty-state" hidden={residents.length > 0}>
+              <EmptyState title={t("No residents assigned.")} />
+            </div>
           </div>
         </section>
 
@@ -996,53 +996,79 @@ const meterTypeIcons: Record<string, string> = {
               </div>
             </details>
           </div>
-          <div id="meters-list-region">
-            {
-              meterList.length > 0 ? (
-                <ul class="sidebar-item-list">
-                  {meterList.map((m) => (
-                    <li>
-                      <div
-                        class="sidebar-item-icon"
-                        data-meter-type={m.type}
-                        aria-hidden="true"
+          <div
+            class="meter-filters"
+            role="group"
+            aria-label={t("Filter meters")}
+          >
+            <button
+              type="button"
+              class="btn-secondary btn-sm"
+              data-meter-filter="active"
+              aria-pressed="true">{t("Active")}</button
+            >
+            <button
+              type="button"
+              class="btn-secondary btn-sm"
+              data-meter-filter="archived"
+              aria-pressed="false">{t("Archived")}</button
+            >
+          </div>
+          <div
+            id="meters-list-region"
+            data-empty-active={t("No active meters for this dwelling.")}
+            data-empty-archived={t("No archived meters for this dwelling.")}
+          >
+            <ul class="sidebar-item-list" hidden={activeMeterCount === 0}>
+              {
+                meterList.map((m) => (
+                  <li
+                    class="meter-row"
+                    data-meter-id={m.id}
+                    data-archived={m.archivedAt ? "true" : "false"}
+                    hidden={!!m.archivedAt}
+                  >
+                    <div
+                      class="sidebar-item-icon"
+                      data-meter-type={m.type}
+                      aria-hidden="true"
+                    >
+                      {meterTypeIcons[m.type] ?? "•"}
+                    </div>
+                    <div class="sidebar-item-body">
+                      <strong>
+                        {m.label ?? entityLabel(m.type, locale)}
+                        {m.archivedAt && ` (${t("archived")})`}
+                      </strong>
+                      <p>
+                        {m.serialNumber ? `${m.serialNumber} · ` : ""}
+                        {m.unit}
+                      </p>
+                    </div>
+                    {!m.archivedAt && (
+                      <form
+                        method="POST"
+                        action={actions.meters.archive}
+                        data-meter-archive-form
                       >
-                        {meterTypeIcons[m.type] ?? "•"}
-                      </div>
-                      <div class="sidebar-item-body">
-                        <strong>
-                          {m.label ?? entityLabel(m.type, locale)}
-                          {m.archivedAt && ` (${t("archived")})`}
-                        </strong>
-                        <p>
-                          {m.serialNumber ? `${m.serialNumber} · ` : ""}
-                          {m.unit}
-                        </p>
-                      </div>
-                      {!m.archivedAt && (
-                        <form
-                          method="POST"
-                          action={actions.meters.archive}
-                          data-meter-archive-form
-                        >
-                          <input
-                            type="hidden"
-                            name="organizationId"
-                            value={organizationId}
-                          />
-                          <input type="hidden" name="meterId" value={m.id} />
-                          <button type="submit" class="sidebar-item-remove">
-                            {t("Archive")}
-                          </button>
-                        </form>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <EmptyState title={t("No meters yet.")} />
-              )
-            }
+                        <input
+                          type="hidden"
+                          name="organizationId"
+                          value={organizationId}
+                        />
+                        <input type="hidden" name="meterId" value={m.id} />
+                        <button type="submit" class="sidebar-item-remove">
+                          {t("Archive")}
+                        </button>
+                      </form>
+                    )}
+                  </li>
+                ))
+              }
+            </ul>
+            <div id="meters-empty-state" hidden={activeMeterCount > 0}>
+              <EmptyState title={t("No active meters for this dwelling.")} />
+            </div>
           </div>
         </section>
       </div>
@@ -1288,6 +1314,10 @@ const meterTypeIcons: Record<string, string> = {
     copyAstroScope,
     showMutationSuccess,
   } from "../../../../../lib/ui/mutate-form";
+  import {
+    meterListVisibility,
+    type MeterFilter,
+  } from "../../../../../lib/ui/meter-list";
 
   const archiveDialog =
     document.querySelector<HTMLDialogElement>("#archive-dialog");
@@ -1387,6 +1417,7 @@ const meterTypeIcons: Record<string, string> = {
     label: string | null;
     serialNumber: string | null;
     unit: string;
+    archivedAt: string | null;
   }
 
   const meterForm = document.querySelector<HTMLFormElement>("#meter-form");
@@ -1395,33 +1426,69 @@ const meterTypeIcons: Record<string, string> = {
   const metersListRegion = document.querySelector<HTMLElement>(
     "#meters-list-region"
   );
+  const metersList =
+    metersListRegion?.querySelector<HTMLUListElement>(".sidebar-item-list");
+  const metersEmptyState = metersListRegion?.querySelector<HTMLElement>(
+    "#meters-empty-state"
+  );
+  const meterFilterButtons = [
+    ...document.querySelectorAll<HTMLButtonElement>("[data-meter-filter]"),
+  ];
+  let meterFilter: MeterFilter = "active";
 
-  function ensureMetersList(): HTMLUListElement | null {
-    if (!metersListRegion) return null;
-    let list =
-      metersListRegion.querySelector<HTMLUListElement>(".sidebar-item-list");
-    if (!list) {
-      metersListRegion.querySelector(".empty-state")?.remove();
-      list = document.createElement("ul");
-      list.className = "sidebar-item-list";
-      if (metersListRegion) copyAstroScope(metersListRegion, list);
-      metersListRegion.appendChild(list);
+  function reconcileMeterList() {
+    if (!metersList || !metersEmptyState) return;
+    const rows = [...metersList.querySelectorAll<HTMLLIElement>(".meter-row")];
+    const visibility = meterListVisibility(
+      rows.map((row) => row.dataset.archived === "true"),
+      meterFilter
+    );
+    rows.forEach((row, index) => {
+      row.hidden = !visibility.rows[index];
+    });
+    metersList.hidden = visibility.empty;
+    metersEmptyState.hidden = !visibility.empty;
+    const title = metersEmptyState.querySelector<HTMLElement>(".text-h3");
+    if (title) {
+      title.textContent =
+        meterFilter === "archived"
+          ? (metersListRegion?.dataset.emptyArchived ?? "No archived meters.")
+          : (metersListRegion?.dataset.emptyActive ?? "No active meters.");
     }
-    return list;
+    for (const button of meterFilterButtons) {
+      button.setAttribute(
+        "aria-pressed",
+        button.dataset.meterFilter === meterFilter ? "true" : "false"
+      );
+    }
   }
 
-  // Archiving never removes the row: SSR keeps an archived meter visible
-  // with an "(archived)" suffix and no Archive button (see the block below
-  // this script) -- removing the row client-side instead would make the
-  // page look different immediately after archiving than it does after a
-  // manual refresh. Updating in place keeps both identical.
-  function markMeterRowArchived(row: HTMLLIElement, form: HTMLFormElement) {
+  for (const button of meterFilterButtons) {
+    button.addEventListener("click", () => {
+      const nextFilter = button.dataset.meterFilter;
+      if (nextFilter === "active" || nextFilter === "archived") {
+        meterFilter = nextFilter;
+        reconcileMeterList();
+      }
+    });
+  }
+
+  // Keep archived rows in the DOM so the Archived filter can reveal them.
+  // Updating metadata, label and controls in place also matches the row SSR
+  // renders after a refresh.
+  function markMeterRowArchived(
+    row: HTMLLIElement,
+    form: HTMLFormElement,
+    meter: CreatedMeter
+  ) {
+    row.dataset.archived = meter.archivedAt ? "true" : "false";
     const strong = row.querySelector("strong");
     if (strong) {
       const suffix = meterForm?.dataset.archivedLabel ?? "archived";
       strong.textContent = `${strong.textContent} (${suffix})`;
     }
     form.remove();
+    reconcileMeterList();
   }
 
   function bindMeterArchiveForm(form: HTMLFormElement, row: HTMLLIElement) {
@@ -1432,7 +1499,8 @@ const meterTypeIcons: Record<string, string> = {
       fallbackErrorMessage:
         meterForm?.dataset.genericError ??
         "Something went wrong. Please try again.",
-      onSuccess: () => markMeterRowArchived(row, form),
+      onSuccess: (meter) =>
+        markMeterRowArchived(row, form, meter as CreatedMeter),
     });
   }
 
@@ -1441,6 +1509,9 @@ const meterTypeIcons: Record<string, string> = {
       `option[value="${meter.type}"]`
     );
     const li = document.createElement("li");
+    li.className = "meter-row";
+    li.dataset.meterId = meter.id;
+    li.dataset.archived = meter.archivedAt ? "true" : "false";
 
     const icon = document.createElement("div");
     icon.className = "sidebar-item-icon";
@@ -1503,8 +1574,8 @@ const meterTypeIcons: Record<string, string> = {
         meterForm.dataset.genericError ??
         "Something went wrong. Please try again.",
       onSuccess: (meter) => {
-        const list = ensureMetersList();
-        list?.appendChild(buildMeterRow(meter as CreatedMeter));
+        metersList?.appendChild(buildMeterRow(meter as CreatedMeter));
+        reconcileMeterList();
         meterForm.reset();
         if (meterDetails) meterDetails.open = false;
         const header = document.querySelector("#meters .card-header");
@@ -1532,6 +1603,7 @@ const meterTypeIcons: Record<string, string> = {
   interface AssignedResident {
     userId: string;
     email: string;
+    displayName: string | null;
   }
 
   const residentForm =
@@ -1542,45 +1614,17 @@ const meterTypeIcons: Record<string, string> = {
     "#residents-list-region"
   );
 
-  function ensureResidentsList(): HTMLUListElement | null {
-    if (!residentsListRegion) return null;
-    let list =
-      residentsListRegion.querySelector<HTMLUListElement>(".sidebar-item-list");
-    if (!list) {
-      residentsListRegion.querySelector(".empty-state")?.remove();
-      list = document.createElement("ul");
-      list.className = "sidebar-item-list";
-      if (residentsListRegion) copyAstroScope(residentsListRegion, list);
-      residentsListRegion.appendChild(list);
-    }
-    return list;
-  }
+  const residentsList =
+    residentsListRegion?.querySelector<HTMLUListElement>(".sidebar-item-list");
+  const residentsEmptyState = residentsListRegion?.querySelector<HTMLElement>(
+    "#residents-empty-state"
+  );
 
-  // Removing a resident IS a full deletion (unlike archiving a meter), so
-  // the list can genuinely become empty -- restore the same empty state
-  // SSR would render, rather than leaving a bare, list-less panel.
-  function restoreResidentsEmptyStateIfNeeded() {
-    const list =
-      residentsListRegion?.querySelector<HTMLUListElement>(
-        ".sidebar-item-list"
-      );
-    if (!list || list.children.length > 0 || !residentsListRegion) return;
-    list.remove();
-    const empty = document.createElement("div");
-    empty.className = "empty-state";
-    const title = document.createElement("p");
-    title.className = "font-display text-h3";
-    title.textContent =
-      residentsListRegion.dataset.emptyTitle ?? "No residents assigned.";
-    // EmptyState.astro always renders this wrapper (even with no slot
-    // content) -- it contributes spacing, so it's needed for an exact
-    // match with what SSR would render after a refresh.
-    const slotWrap = document.createElement("div");
-    slotWrap.className = "mt-4";
-    empty.appendChild(title);
-    empty.appendChild(slotWrap);
-    copyAstroScope(residentsListRegion, empty, title, slotWrap);
-    residentsListRegion.appendChild(empty);
+  function reconcileResidentList() {
+    if (!residentsList || !residentsEmptyState) return;
+    const empty = residentsList.children.length === 0;
+    residentsList.hidden = empty;
+    residentsEmptyState.hidden = !empty;
   }
 
   // Assign and every remove form share this one flag: two resident
@@ -1625,7 +1669,7 @@ const meterTypeIcons: Record<string, string> = {
         "Something went wrong. Please try again.",
       onSuccess: () => {
         row.remove();
-        restoreResidentsEmptyStateIfNeeded();
+        reconcileResidentList();
       },
     });
   }
@@ -1637,12 +1681,14 @@ const meterTypeIcons: Record<string, string> = {
     const avatar = document.createElement("div");
     avatar.className = "sidebar-item-avatar";
     avatar.setAttribute("aria-hidden", "true");
-    avatar.textContent = resident.email.charAt(0).toUpperCase();
+    avatar.textContent = (resident.displayName ?? resident.email)
+      .charAt(0)
+      .toUpperCase();
 
     const body = document.createElement("div");
     body.className = "sidebar-item-body";
     const strong = document.createElement("strong");
-    strong.textContent = resident.email;
+    strong.textContent = resident.displayName ?? resident.email;
     const emailLine = document.createElement("p");
     emailLine.textContent = resident.email;
     body.appendChild(strong);
@@ -1697,12 +1743,11 @@ const meterTypeIcons: Record<string, string> = {
         residentForm.dataset.genericError ??
         "Something went wrong. Please try again.",
       onSuccess: (resident) => {
-        const { userId, email } = resident as AssignedResident;
-        const list = ensureResidentsList();
+        const { userId, email, displayName } = resident as AssignedResident;
         const header = document.querySelector("#residents .card-header");
         residentForm.reset();
         if (residentDetails) residentDetails.open = false;
-        const alreadyPresent = list?.querySelector(
+        const alreadyPresent = residentsList?.querySelector(
           `[data-user-id="${userId}"]`
         );
         if (alreadyPresent) {
@@ -1715,7 +1760,10 @@ const meterTypeIcons: Record<string, string> = {
           }
           return;
         }
-        list?.appendChild(buildResidentRow({ userId, email }));
+        residentsList?.appendChild(
+          buildResidentRow({ userId, email, displayName })
+        );
+        reconcileResidentList();
         if (header) {
           showMutationSuccess(
             header,
@@ -2018,6 +2066,21 @@ const meterTypeIcons: Record<string, string> = {
     display: grid;
     gap: 0.75rem;
     margin-top: 1.25rem;
+  }
+  .meter-filters {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+  .meter-filters button[aria-pressed="true"] {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+  }
+  .sidebar-item-list[hidden],
+  .meter-row[hidden],
+  #meters-empty-state[hidden],
+  #residents-empty-state[hidden] {
+    display: none !important;
   }
   .sidebar-item-list li {
     display: flex;

@@ -381,7 +381,11 @@ export async function assignResident(
       });
     }
 
-    return { userId: supabaseUser.id, email };
+    return {
+      userId: supabaseUser.id,
+      email: appUser.emailSnapshot,
+      displayName: appUser.displayName,
+    };
   });
 }
 

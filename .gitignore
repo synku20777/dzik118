@@ -12,6 +12,12 @@ node_modules/
 
 # logs
 npm-debug.log*
+dev-server-log*.txt
+
+# local agent tasks and Python caches
+.codex-task-*.md
+__pycache__/
+*.py[cod]
 
 # environment variables
 .env

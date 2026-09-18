@@ -1,6 +1,5 @@
 // src/actions/index.ts
 // Composes domain action groups
-// TODO: Actions implemented in later phases (Phase D, E, F, G, J, K)
 import { organizations } from "./organizations";
 import { dwellings } from "./dwellings";
 import { periods } from "./periods";

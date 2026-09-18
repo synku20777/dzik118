@@ -229,6 +229,9 @@ const lv: Record<string, string> = {
   "You don't have access to any dwellings.":
     "Jums nav piekļuves nevienam īpašumam.",
   "No active meters for this dwelling.": "Šim īpašumam nav aktīvu skaitītāju.",
+  "No archived meters for this dwelling.":
+    "Šim īpašumam nav arhivētu skaitītāju.",
+  "Filter meters": "Filtrēt skaitītājus",
   "No consumption history yet.": "Vēl nav patēriņa vēstures.",
   "Invoice email is missing. Add a billing email before sending.":
     "Trūkst rēķina e-pasta adreses. Pievienojiet to pirms nosūtīšanas.",
@@ -295,7 +298,6 @@ const lv: Record<string, string> = {
   "No conversations yet.": "Vēl nav sarunu.",
   "This conversation is resolved.": "Šī saruna ir atrisināta.",
   "No residents assigned.": "Nav piešķirtu iedzīvotāju.",
-  "No meters yet.": "Vēl nav skaitītāju.",
   "Meter added": "Skaitītājs pievienots",
   "Resident added": "Iedzīvotājs pievienots",
   "This resident already has access.": "Šim iedzīvotājam jau ir piekļuve.",
@@ -603,7 +605,6 @@ const lv: Record<string, string> = {
   "Audit history": "Audita vēsture",
   "Review recorded organization activity.":
     "Pārskatiet reģistrētās organizācijas darbības.",
-  "Not available yet": "Vēl nav pieejams",
   Save: "Saglabāt",
   "Billing name": "Rēķina saņēmējs",
   Email: "E-pasts",
@@ -1230,6 +1231,9 @@ const ru: Record<string, string> = {
     "У вас нет доступа ни к одному помещению.",
   "No active meters for this dwelling.":
     "Для этого помещения нет активных счётчиков.",
+  "No archived meters for this dwelling.":
+    "Для этого помещения нет архивных счётчиков.",
+  "Filter meters": "Фильтр счётчиков",
   "No consumption history yet.": "Истории расхода пока нет.",
   "Invoice email is missing. Add a billing email before sending.":
     "Не указана эл. почта для счетов. Добавьте её перед отправкой.",
@@ -1297,7 +1301,6 @@ const ru: Record<string, string> = {
   "No conversations yet.": "Сообщений пока нет.",
   "This conversation is resolved.": "Этот вопрос решён.",
   "No residents assigned.": "Жильцы не назначены.",
-  "No meters yet.": "Счётчиков пока нет.",
   "Meter added": "Счётчик добавлен",
   "Resident added": "Житель добавлен",
   "This resident already has access.": "У этого жителя уже есть доступ.",
@@ -1606,7 +1609,6 @@ const ru: Record<string, string> = {
   "Audit history": "История аудита",
   "Review recorded organization activity.":
     "Посмотрите действия, записанные в организации.",
-  "Not available yet": "Пока недоступно",
   Save: "Сохранить",
   "Billing name": "Имя для счетов",
   Email: "Эл. почта",

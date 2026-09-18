@@ -108,6 +108,75 @@ test("admin routes, keyboard navigation, filters and locked actions", async ({
   await expect(page.locator("main ol > li")).toHaveCount(10);
 });
 
+test("first meter is reconciled immediately and its dynamic archive control works", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  await page.locator("#admin-email").fill("admin.a@example.com");
+  await page.locator("#admin-password").fill("ChangeMe123!");
+  await page.locator("#admin-login-form button").click();
+  await page.waitForURL(/\/admin\/o\/.+\/dashboard/);
+  const base = new URL(page.url()).pathname.replace(/\/dashboard$/, "");
+  const dwellingNumber = `E2E-${Date.now()}`;
+
+  await page.goto(`${base}/dwellings`);
+  await page.getByRole("link", { name: "Create dwelling" }).click();
+  await page.locator("#create-dwelling #number").fill(dwellingNumber);
+  await page.locator("#create-dwelling #areaM2").fill("1");
+  await page.locator("#create-dwelling button[type=submit]").click();
+  await page
+    .locator("tbody a.row-link-target", { hasText: dwellingNumber })
+    .click();
+
+  await page.getByRole("tab", { name: "Meters" }).click();
+  await expect(page.locator("#meters-empty-state")).toBeVisible();
+  await page.locator("#meter-details summary").click();
+  const label = `Regression meter ${Date.now()}`;
+  await page.locator('#meter-form input[name="unit"]').fill("m3");
+  await page.locator('#meter-form input[name="label"]').fill(label);
+
+  let createRequests = 0;
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      request.url().includes("meters.create")
+    ) {
+      createRequests += 1;
+    }
+  });
+  await page.locator("#meter-form button[type=submit]").click();
+
+  const row = page.locator("#meters .meter-row", { hasText: label });
+  await expect(row).toBeVisible();
+  await expect(row).toHaveAttribute("data-archived", "false");
+  await expect(page.locator("#meters-empty-state")).toBeHidden();
+  expect(createRequests).toBe(1);
+
+  await page.getByRole("button", { name: "Archived", exact: true }).click();
+  await expect(row).toBeHidden();
+  await expect(page.locator("#meters-empty-state")).toBeVisible();
+  await page.getByRole("button", { name: "Active", exact: true }).click();
+  await expect(row).toBeVisible();
+
+  await row.getByRole("button", { name: "Archive", exact: true }).click();
+  await expect(row).toBeHidden();
+  await expect(page.locator("#meters-empty-state")).toBeVisible();
+  await page.getByRole("button", { name: "Archived", exact: true }).click();
+  await expect(row).toBeVisible();
+  await expect(row).toHaveAttribute("data-archived", "true");
+  await expect(row.locator("[data-meter-archive-form]")).toHaveCount(0);
+
+  await page.reload();
+  await page.getByRole("tab", { name: "Meters" }).click();
+  await page.getByRole("button", { name: "Archived", exact: true }).click();
+  const refreshedRow = page.locator("#meters .meter-row", { hasText: label });
+  await expect(refreshedRow).toBeVisible();
+  await expect(refreshedRow).toHaveAttribute("data-archived", "true");
+  await expect(refreshedRow.locator("[data-meter-archive-form]")).toHaveCount(
+    0
+  );
+});
+
 test("resident mobile routes remain separate from administration", async ({
   page,
   request,
