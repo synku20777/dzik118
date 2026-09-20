@@ -80,6 +80,7 @@ export async function cleanupOrganization(
     "delete from invoice_access_tokens where organization_id = $1",
     "delete from invoice_lines where organization_id = $1",
     "delete from invoices where organization_id = $1",
+    "delete from invoice_templates where organization_id = $1",
     "delete from meter_readings where organization_id = $1",
     "delete from manual_rule_inputs where organization_id = $1",
     "delete from billing_cases where organization_id = $1",
@@ -89,6 +90,7 @@ export async function cleanupOrganization(
     "delete from dwelling_access where dwelling_id in (select id from dwellings where organization_id = $1)",
     "delete from dwellings where organization_id = $1",
     "delete from organization_memberships where organization_id = $1",
+    "delete from mutation_receipts where organization_id = $1",
     "delete from audit_logs where organization_id = $1",
     "delete from organizations where id = $1",
   ];

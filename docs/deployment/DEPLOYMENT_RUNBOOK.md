@@ -46,13 +46,13 @@ Then add the returned id to wrangler.jsonc as a new `kv_namespaces` entry (`[{"b
 
 ## 3. Database migrations
 
-Run migrations directly against Postgres before the first deploy and after every future migration is added:
+Set the explicit production migration target before deploying:
 
 ```bash
-DATABASE_URL="<production-supabase-postgres-connection-string>" npm run db:migrate
+export PRODUCTION_DATABASE_URL="<production-supabase-postgres-connection-string>"
 ```
 
-This runs `drizzle-kit migrate` directly against Postgres (not through Hyperdrive -- migrations always use a direct connection).
+`npm run deploy` builds first, runs `drizzle-kit migrate` directly against this non-local Postgres target, and deploys the Worker only if both steps succeed. The migration runner rejects missing and localhost URLs; it does not reuse an ambient `DATABASE_URL`.
 
 > **Warning:** `npm run db:seed` is demo/local-dev-only fixture data (two fake organizations, fake residents) and must never be run against a production database.
 
@@ -166,7 +166,7 @@ Deploy the application to Cloudflare:
 npm run deploy
 ```
 
-`npm run deploy` is already wired to `npm run build && wrangler deploy` -- the build step runs the postbuild script that wires the Cloudflare Cron `scheduled` handler automatically.
+`npm run deploy` is wired to build, migrate using `PRODUCTION_DATABASE_URL`, then deploy. The build step runs the postbuild script that wires the Cloudflare Cron `scheduled` handler automatically.
 
 ## 9. Post-deploy verification checklist
 
@@ -179,5 +179,5 @@ npm run deploy
 
 ## 10. Ongoing maintenance
 
-- Every future schema change needs `npm run db:migrate` run against production before or as part of that deploy.
+- Every future schema change is applied by the migration gate in `npm run deploy`; keep `PRODUCTION_DATABASE_URL` explicit in the deployment environment.
 - The scheduled Cron job (POST /api/v1/internal/scheduled-jobs) returns HTTP 500 if any organization's automated run failed, which is what actually marks a Cloudflare Cron Trigger execution "failed" in Cloudflare's own dashboard -- check that dashboard periodically, since there is no other alerting configured.

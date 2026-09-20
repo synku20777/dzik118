@@ -611,6 +611,7 @@ const conversationStatusMap = Object.fromEntries(
 <script>
   import { actions, isInputError } from "astro:actions";
   import { ICONS, type IconName } from "../../../../../lib/ui/icons";
+  import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
 
   // Static, developer-authored path data only (never user input) -- see
   // the equivalent helper in lib/ui/workbench-drawer.ts.
@@ -626,182 +627,197 @@ const conversationStatusMap = Object.fromEntries(
     return svg;
   }
 
-  const filterForm = document.querySelector<HTMLFormElement>(
-    "[data-instant-filter]"
-  );
-  const searchInput = document.querySelector<HTMLInputElement>("#search");
-  const statusSelect = document.querySelector("#status-filter");
-  const unreadCheckbox = document.querySelector("#unread-only");
-  let searchTimer: number | undefined;
-  searchInput?.addEventListener("input", () => {
-    window.clearTimeout(searchTimer);
-    searchTimer = window.setTimeout(() => filterForm?.requestSubmit(), 300);
-  });
-  statusSelect?.addEventListener("change", () => filterForm?.requestSubmit());
-  unreadCheckbox?.addEventListener("change", () => filterForm?.requestSubmit());
+  onPageLoad(() => {
+    if (!document.querySelector(".messages-page")) return;
 
-  // Live thread + status updates for the open conversation. Polling (not a
-  // websocket/Supabase Realtime subscription) because this app has no
-  // realtime infrastructure anywhere else -- a plain JSON action polled on
-  // an interval is the lowest-risk way to get "the other side's messages
-  // and status changes show up without a reload" on a Cloudflare Worker
-  // that doesn't hold long-lived connections.
-  const pageEl = document.querySelector<HTMLElement>(".messages-page");
-  const threadEl = document.querySelector<HTMLElement>("#message-thread");
-  const organizationId = pageEl?.dataset.organizationId;
-  const conversationId = threadEl?.dataset.conversationId;
-  const statusMap: Record<
-    string,
-    { label: string; tone: string; icon: IconName }
-  > = pageEl?.dataset.statusMap ? JSON.parse(pageEl.dataset.statusMap) : {};
-  const adminLabel = pageEl?.dataset.adminLabel ?? "Admin";
-  const residentLabel = pageEl?.dataset.residentLabel ?? "Resident";
-  const occupantNameEl = document.querySelector<HTMLElement>(
-    "#conversation-occupant-name"
-  );
-  let occupantName = occupantNameEl?.textContent?.trim() || null;
-  let knownStatus = threadEl?.dataset.status;
-  const knownMessageIds = new Set(
-    [...document.querySelectorAll<HTMLElement>("[data-message-id]")].map(
-      (el) => el.dataset.messageId!
-    )
-  );
-
-  function renderStatusBadge(badge: Element, status: string) {
-    const info = statusMap[status];
-    if (!info) return;
-    badge.setAttribute("data-tone", info.tone);
-    badge.replaceChildren();
-    const icon = document.createElement("span");
-    icon.setAttribute("aria-hidden", "true");
-    icon.appendChild(iconSvg(info.icon));
-    badge.appendChild(icon);
-    badge.appendChild(document.createTextNode(info.label));
-  }
-
-  function applyStatus(status: string) {
-    knownStatus = status;
-    if (threadEl) threadEl.dataset.status = status;
-    const detailBadge = document.querySelector(
-      "#detail-status-badge .status-badge"
+    const filterForm = document.querySelector<HTMLFormElement>(
+      "[data-instant-filter]"
     );
-    if (detailBadge) renderStatusBadge(detailBadge, status);
-    const listBadge = document.querySelector(
-      '.messages-list-item[aria-current="true"] .status-badge'
-    );
-    if (listBadge) renderStatusBadge(listBadge, status);
-    const replySection = document.querySelector<HTMLElement>("#reply-section");
-    if (replySection) replySection.hidden = status === "RESOLVED";
-    const resolvedNotice =
-      document.querySelector<HTMLElement>("#resolved-notice");
-    if (resolvedNotice) resolvedNotice.hidden = status !== "RESOLVED";
-  }
-
-  function showError(message: string) {
-    const errorEl = document.querySelector<HTMLElement>("#messages-error");
-    if (!errorEl) return;
-    errorEl.textContent = message;
-    errorEl.hidden = false;
-  }
-
-  function appendMessage(message: {
-    id: string;
-    body: string;
-    createdAt: string | Date;
-    senderRole: string;
-  }) {
-    if (!threadEl || knownMessageIds.has(message.id)) return;
-    knownMessageIds.add(message.id);
-    const isAdmin = message.senderRole === "ADMIN";
-    const row = document.createElement("div");
-    row.className = "message-row";
-    row.dataset.messageId = message.id;
-    row.dataset.mine = isAdmin ? "true" : "false";
-    const avatar = document.createElement("span");
-    avatar.className = "message-avatar";
-    avatar.dataset.role = message.senderRole;
-    avatar.setAttribute("aria-hidden", "true");
-    avatar.textContent = isAdmin ? "A" : "R";
-    const col = document.createElement("div");
-    col.className = "message-col";
-    const meta = document.createElement("p");
-    meta.className = "message-meta";
-    const strong = document.createElement("strong");
-    strong.textContent = isAdmin ? adminLabel : (occupantName ?? residentLabel);
-    const time = document.createElement("span");
-    time.textContent = new Intl.DateTimeFormat(navigator.language, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(message.createdAt));
-    meta.appendChild(strong);
-    meta.appendChild(time);
-    const bubble = document.createElement("div");
-    bubble.className = "message-bubble";
-    bubble.textContent = message.body;
-    col.appendChild(meta);
-    col.appendChild(bubble);
-    row.appendChild(avatar);
-    row.appendChild(col);
-    threadEl.appendChild(row);
-  }
-
-  async function poll() {
-    if (!organizationId || !conversationId || document.hidden) return;
-    const { data, error } = await actions.messages.getThread({
-      organizationId,
-      conversationId,
+    const searchInput = document.querySelector<HTMLInputElement>("#search");
+    const statusSelect = document.querySelector("#status-filter");
+    const unreadCheckbox = document.querySelector("#unread-only");
+    let searchTimer: number | undefined;
+    searchInput?.addEventListener("input", () => {
+      window.clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(() => filterForm?.requestSubmit(), 300);
     });
-    if (error || !data) return;
-    if (data.occupantName) occupantName = data.occupantName;
-    for (const message of data.messages) appendMessage(message);
-    if (data.status !== knownStatus) applyStatus(data.status);
-  }
+    statusSelect?.addEventListener("change", () => filterForm?.requestSubmit());
+    unreadCheckbox?.addEventListener("change", () =>
+      filterForm?.requestSubmit()
+    );
 
-  if (organizationId && conversationId) {
-    window.setInterval(poll, 4000);
-  }
+    // Live thread + status updates for the open conversation. Polling (not a
+    // websocket/Supabase Realtime subscription) because this app has no
+    // realtime infrastructure anywhere else -- a plain JSON action polled on
+    // an interval is the lowest-risk way to get "the other side's messages
+    // and status changes show up without a reload" on a Cloudflare Worker
+    // that doesn't hold long-lived connections.
+    const pageEl = document.querySelector<HTMLElement>(".messages-page");
+    const threadEl = document.querySelector<HTMLElement>("#message-thread");
+    const organizationId = pageEl?.dataset.organizationId;
+    const conversationId = threadEl?.dataset.conversationId;
+    const statusMap: Record<
+      string,
+      { label: string; tone: string; icon: IconName }
+    > = pageEl?.dataset.statusMap ? JSON.parse(pageEl.dataset.statusMap) : {};
+    const adminLabel = pageEl?.dataset.adminLabel ?? "Admin";
+    const residentLabel = pageEl?.dataset.residentLabel ?? "Resident";
+    const occupantNameEl = document.querySelector<HTMLElement>(
+      "#conversation-occupant-name"
+    );
+    let occupantName = occupantNameEl?.textContent?.trim() || null;
+    let knownStatus = threadEl?.dataset.status;
+    const knownMessageIds = new Set(
+      [...document.querySelectorAll<HTMLElement>("[data-message-id]")].map(
+        (el) => el.dataset.messageId!
+      )
+    );
 
-  const replyForm = document.querySelector<HTMLFormElement>("#reply-form");
-  const replyTextarea = document.querySelector<HTMLTextAreaElement>(
-    'textarea[form="reply-form"]'
-  );
-  const replyButton = document.querySelector<HTMLButtonElement>(
-    'button[form="reply-form"]'
-  );
-  replyForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!replyTextarea?.value.trim()) return;
-    const formData = new FormData(replyForm);
-    if (replyButton) replyButton.disabled = true;
-    const { data, error } = await actions.messages.reply(formData);
-    if (replyButton) replyButton.disabled = false;
-    if (error) {
-      const message = isInputError(error)
-        ? (error.fields.body?.join(" ") ?? error.message)
-        : error.message;
-      showError(message);
-      return;
+    function renderStatusBadge(badge: Element, status: string) {
+      const info = statusMap[status];
+      if (!info) return;
+      badge.setAttribute("data-tone", info.tone);
+      badge.replaceChildren();
+      const icon = document.createElement("span");
+      icon.setAttribute("aria-hidden", "true");
+      icon.appendChild(iconSvg(info.icon));
+      badge.appendChild(icon);
+      badge.appendChild(document.createTextNode(info.label));
     }
-    if (replyTextarea) replyTextarea.value = "";
-    appendMessage({ ...data, senderRole: "ADMIN" });
-    if (knownStatus === "NEW") applyStatus("OPEN");
-  });
 
-  const resolveForm = document.querySelector<HTMLFormElement>("#resolve-form");
-  const resolveButton = document.querySelector<HTMLButtonElement>(
-    'button[form="resolve-form"]'
-  );
-  resolveForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const formData = new FormData(resolveForm);
-    if (resolveButton) resolveButton.disabled = true;
-    const { error } = await actions.messages.resolve(formData);
-    if (resolveButton) resolveButton.disabled = false;
-    if (error) {
-      showError(error.message);
-      return;
+    function applyStatus(status: string) {
+      knownStatus = status;
+      if (threadEl) threadEl.dataset.status = status;
+      const detailBadge = document.querySelector(
+        "#detail-status-badge .status-badge"
+      );
+      if (detailBadge) renderStatusBadge(detailBadge, status);
+      const listBadge = document.querySelector(
+        '.messages-list-item[aria-current="true"] .status-badge'
+      );
+      if (listBadge) renderStatusBadge(listBadge, status);
+      const replySection =
+        document.querySelector<HTMLElement>("#reply-section");
+      if (replySection) replySection.hidden = status === "RESOLVED";
+      const resolvedNotice =
+        document.querySelector<HTMLElement>("#resolved-notice");
+      if (resolvedNotice) resolvedNotice.hidden = status !== "RESOLVED";
     }
-    applyStatus("RESOLVED");
+
+    function showError(message: string) {
+      const errorEl = document.querySelector<HTMLElement>("#messages-error");
+      if (!errorEl) return;
+      errorEl.textContent = message;
+      errorEl.hidden = false;
+    }
+
+    function appendMessage(message: {
+      id: string;
+      body: string;
+      createdAt: string | Date;
+      senderRole: string;
+    }) {
+      if (!threadEl || knownMessageIds.has(message.id)) return;
+      knownMessageIds.add(message.id);
+      const isAdmin = message.senderRole === "ADMIN";
+      const row = document.createElement("div");
+      row.className = "message-row";
+      row.dataset.messageId = message.id;
+      row.dataset.mine = isAdmin ? "true" : "false";
+      const avatar = document.createElement("span");
+      avatar.className = "message-avatar";
+      avatar.dataset.role = message.senderRole;
+      avatar.setAttribute("aria-hidden", "true");
+      avatar.textContent = isAdmin ? "A" : "R";
+      const col = document.createElement("div");
+      col.className = "message-col";
+      const meta = document.createElement("p");
+      meta.className = "message-meta";
+      const strong = document.createElement("strong");
+      strong.textContent = isAdmin
+        ? adminLabel
+        : (occupantName ?? residentLabel);
+      const time = document.createElement("span");
+      time.textContent = new Intl.DateTimeFormat(navigator.language, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(message.createdAt));
+      meta.appendChild(strong);
+      meta.appendChild(time);
+      const bubble = document.createElement("div");
+      bubble.className = "message-bubble";
+      bubble.textContent = message.body;
+      col.appendChild(meta);
+      col.appendChild(bubble);
+      row.appendChild(avatar);
+      row.appendChild(col);
+      threadEl.appendChild(row);
+    }
+
+    async function poll() {
+      if (!organizationId || !conversationId || document.hidden) return;
+      const { data, error } = await actions.messages.getThread({
+        organizationId,
+        conversationId,
+      });
+      if (error || !data) return;
+      if (data.occupantName) occupantName = data.occupantName;
+      for (const message of data.messages) appendMessage(message);
+      if (data.status !== knownStatus) applyStatus(data.status);
+    }
+
+    const pollTimer =
+      organizationId && conversationId
+        ? window.setInterval(poll, 4000)
+        : undefined;
+
+    const replyForm = document.querySelector<HTMLFormElement>("#reply-form");
+    const replyTextarea = document.querySelector<HTMLTextAreaElement>(
+      'textarea[form="reply-form"]'
+    );
+    const replyButton = document.querySelector<HTMLButtonElement>(
+      'button[form="reply-form"]'
+    );
+    replyForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!replyTextarea?.value.trim()) return;
+      const formData = new FormData(replyForm);
+      if (replyButton) replyButton.disabled = true;
+      const { data, error } = await actions.messages.reply(formData);
+      if (replyButton) replyButton.disabled = false;
+      if (error) {
+        const message = isInputError(error)
+          ? (error.fields.body?.join(" ") ?? error.message)
+          : error.message;
+        showError(message);
+        return;
+      }
+      if (replyTextarea) replyTextarea.value = "";
+      appendMessage({ ...data, senderRole: "ADMIN" });
+      if (knownStatus === "NEW") applyStatus("OPEN");
+    });
+
+    const resolveForm =
+      document.querySelector<HTMLFormElement>("#resolve-form");
+    const resolveButton = document.querySelector<HTMLButtonElement>(
+      'button[form="resolve-form"]'
+    );
+    resolveForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(resolveForm);
+      if (resolveButton) resolveButton.disabled = true;
+      const { error } = await actions.messages.resolve(formData);
+      if (resolveButton) resolveButton.disabled = false;
+      if (error) {
+        showError(error.message);
+        return;
+      }
+      applyStatus("RESOLVED");
+    });
+    return () => {
+      window.clearTimeout(searchTimer);
+      if (pollTimer !== undefined) window.clearInterval(pollTimer);
+    };
   });
 </script>
 

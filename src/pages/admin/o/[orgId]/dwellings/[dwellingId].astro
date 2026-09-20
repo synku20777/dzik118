@@ -180,7 +180,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
   organizationId={organizationId}
   organizationName={organization.name}
 >
-  <div class="space-y-6">
+  <div class="space-y-6" data-dwelling-detail>
     <a href={`${base}/dwellings`} class="back-link">
       <span aria-hidden="true">←</span>
       {t("Dwellings")}
@@ -817,7 +817,15 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                   id="resident-form"
                   class="mt-4 flex gap-2"
                   data-saving-label={t("Saving…")}
+                  data-pending-label={t("Adding resident…")}
                   data-added-message={t("Resident added")}
+                  data-error-label={t("Could not add resident")}
+                  data-checking-label={t("Checking save status…")}
+                  data-unknown-label={t("Outcome not confirmed")}
+                  data-committed-missing={t(
+                    "The original change was saved, but the item is no longer present. The page has been refreshed."
+                  )}
+                  data-adding-label={t("Adding…")}
                   data-already-has-access={t(
                     "This resident already has access."
                   )}
@@ -825,6 +833,12 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                     "Something went wrong. Please try again."
                   )}
                   data-remove-label={t("Remove")}
+                  data-removing-label={t("Removing resident…")}
+                  data-removed-label={t("Resident removed")}
+                  data-could-not-save={t("Could not save")}
+                  data-reconcile-error={t(
+                    "Saved, but the view could not be updated"
+                  )}
                 >
                   <input
                     type="hidden"
@@ -923,12 +937,25 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                   id="meter-form"
                   class="mt-4 grid grid-cols-2 gap-3"
                   data-saving-label={t("Saving…")}
+                  data-pending-label={t("Adding meter…")}
                   data-added-message={t("Meter added")}
+                  data-error-label={t("Could not add meter")}
+                  data-checking-label={t("Checking save status…")}
+                  data-unknown-label={t("Outcome not confirmed")}
+                  data-committed-missing={t(
+                    "The original change was saved, but the item is no longer present. The page has been refreshed."
+                  )}
                   data-generic-error={t(
                     "Something went wrong. Please try again."
                   )}
                   data-archive-label={t("Archive")}
                   data-archived-label={t("archived")}
+                  data-archiving-label={t("Archiving…")}
+                  data-archived-label-text={t("Archived")}
+                  data-could-not-save={t("Could not save")}
+                  data-reconcile-error={t(
+                    "Saved, but the view could not be updated"
+                  )}
                 >
                   <input
                     type="hidden"
@@ -1309,480 +1336,666 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
 
 <script>
   import { actions } from "astro:actions";
+  import { navigate } from "astro:transitions/client";
   import {
     bindMutationForm,
     copyAstroScope,
-    showMutationSuccess,
   } from "../../../../../lib/ui/mutate-form";
   import {
     meterListVisibility,
     type MeterFilter,
   } from "../../../../../lib/ui/meter-list";
+  import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
 
-  const archiveDialog =
-    document.querySelector<HTMLDialogElement>("#archive-dialog");
-  document
-    .querySelector<HTMLButtonElement>("[data-open-archive-dialog]")
-    ?.addEventListener("click", () => {
-      document.querySelector(".more-menu")?.removeAttribute("open");
-      archiveDialog?.showModal();
-    });
-  archiveDialog?.addEventListener("click", (event) => {
-    if (event.target === archiveDialog) archiveDialog.close();
-  });
+  onPageLoad(() => {
+    if (!document.querySelector("[data-dwelling-detail]")) return;
+    const initializedPath = `${location.pathname}${location.search}`;
 
-  // Tabs filter which panels are visible -- "overview" (the default) shows
-  // every panel; any other tab shows only the one panel that declares a
-  // matching data-panel, hiding the rest (including panels like "Basic
-  // information"/"Invoice delivery" that only ever appear under Overview,
-  // since they have no tab of their own).
-  const tabs = [
-    ...document.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
-  ];
-  const panels = [...document.querySelectorAll<HTMLElement>("[data-panel]")];
-  const panelGroup = document.querySelector<HTMLElement>("[data-panel-group]");
-
-  function setFilter(filter: string) {
-    for (const panel of panels) {
-      panel.hidden = filter !== "overview" && panel.dataset.panel !== filter;
-    }
-    for (const tab of tabs) {
-      tab.setAttribute(
-        "aria-selected",
-        tab.dataset.filter === filter ? "true" : "false"
-      );
-    }
-    panelGroup?.classList.toggle("is-filtered", filter !== "overview");
-  }
-
-  for (const tab of tabs) {
-    tab.addEventListener("click", () => {
-      const filter = tab.dataset.filter;
-      if (filter) setFilter(filter);
-    });
-  }
-
-  document
-    .querySelectorAll<HTMLButtonElement>("[data-goto-panel]")
-    ?.forEach((button) => {
-      button.addEventListener("click", () => {
-        const filter = button.dataset.gotoPanel;
-        if (!filter) return;
-        setFilter(filter);
+    const archiveDialog =
+      document.querySelector<HTMLDialogElement>("#archive-dialog");
+    document
+      .querySelector<HTMLButtonElement>("[data-open-archive-dialog]")
+      ?.addEventListener("click", () => {
         document.querySelector(".more-menu")?.removeAttribute("open");
-        const reduceMotion = window.matchMedia(
-          "(prefers-reduced-motion: reduce)"
-        ).matches;
-        document
-          .querySelector(`[data-panel="${filter}"]`)
-          ?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+        archiveDialog?.showModal();
       });
+    archiveDialog?.addEventListener("click", (event) => {
+      if (event.target === archiveDialog) archiveDialog.close();
     });
 
-  // Invoice delivery: no separate edit mode -- the checkboxes are always
-  // live, and Save only becomes active once they actually differ from the
-  // saved state (rather than always being submittable).
-  const deliveryForm = document.querySelector<HTMLFormElement>(
-    "[data-delivery-form]"
-  );
-  const deliverySave = deliveryForm?.querySelector<HTMLButtonElement>(
-    "[data-delivery-save]"
-  );
-  if (deliveryForm && deliverySave) {
-    const deliveryCheckboxes = [
-      ...deliveryForm.querySelectorAll<HTMLInputElement>(
-        'input[type="checkbox"]'
-      ),
+    // Tabs filter which panels are visible -- "overview" (the default) shows
+    // every panel; any other tab shows only the one panel that declares a
+    // matching data-panel, hiding the rest (including panels like "Basic
+    // information"/"Invoice delivery" that only ever appear under Overview,
+    // since they have no tab of their own).
+    const tabs = [
+      ...document.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
     ];
-    const initialState = deliveryCheckboxes.map((box) => box.checked);
-    const updateSaveState = () => {
-      const isDirty = deliveryCheckboxes.some(
-        (box, index) => box.checked !== initialState[index]
-      );
-      deliverySave.disabled = !isDirty;
-    };
-    for (const box of deliveryCheckboxes) {
-      box.addEventListener("change", updateSaveState);
-    }
-  }
+    const panels = [...document.querySelectorAll<HTMLElement>("[data-panel]")];
+    const panelGroup =
+      document.querySelector<HTMLElement>("[data-panel-group]");
 
-  // ---- Meters: submit once, patch the list from the returned meter, no
-  // full-page reload (previously a plain <form method="POST"> with no JS
-  // at all -- there was never a duplicate listener here; the fix is a
-  // single submit-event binding plus a pending-state guard, see
-  // src/lib/ui/mutate-form.ts's header comment). ----
-  interface CreatedMeter {
-    id: string;
-    type: string;
-    label: string | null;
-    serialNumber: string | null;
-    unit: string;
-    archivedAt: string | null;
-  }
-
-  const meterForm = document.querySelector<HTMLFormElement>("#meter-form");
-  const meterDetails =
-    document.querySelector<HTMLDetailsElement>("#meter-details");
-  const metersListRegion = document.querySelector<HTMLElement>(
-    "#meters-list-region"
-  );
-  const metersList =
-    metersListRegion?.querySelector<HTMLUListElement>(".sidebar-item-list");
-  const metersEmptyState = metersListRegion?.querySelector<HTMLElement>(
-    "#meters-empty-state"
-  );
-  const meterFilterButtons = [
-    ...document.querySelectorAll<HTMLButtonElement>("[data-meter-filter]"),
-  ];
-  let meterFilter: MeterFilter = "active";
-
-  function reconcileMeterList() {
-    if (!metersList || !metersEmptyState) return;
-    const rows = [...metersList.querySelectorAll<HTMLLIElement>(".meter-row")];
-    const visibility = meterListVisibility(
-      rows.map((row) => row.dataset.archived === "true"),
-      meterFilter
-    );
-    rows.forEach((row, index) => {
-      row.hidden = !visibility.rows[index];
-    });
-    metersList.hidden = visibility.empty;
-    metersEmptyState.hidden = !visibility.empty;
-    const title = metersEmptyState.querySelector<HTMLElement>(".text-h3");
-    if (title) {
-      title.textContent =
-        meterFilter === "archived"
-          ? (metersListRegion?.dataset.emptyArchived ?? "No archived meters.")
-          : (metersListRegion?.dataset.emptyActive ?? "No active meters.");
-    }
-    for (const button of meterFilterButtons) {
-      button.setAttribute(
-        "aria-pressed",
-        button.dataset.meterFilter === meterFilter ? "true" : "false"
-      );
-    }
-  }
-
-  for (const button of meterFilterButtons) {
-    button.addEventListener("click", () => {
-      const nextFilter = button.dataset.meterFilter;
-      if (nextFilter === "active" || nextFilter === "archived") {
-        meterFilter = nextFilter;
-        reconcileMeterList();
+    function setFilter(filter: string) {
+      for (const panel of panels) {
+        panel.hidden = filter !== "overview" && panel.dataset.panel !== filter;
       }
-    });
-  }
-
-  // Keep archived rows in the DOM so the Archived filter can reveal them.
-  // Updating metadata, label and controls in place also matches the row SSR
-  // renders after a refresh.
-  function markMeterRowArchived(
-    row: HTMLLIElement,
-    form: HTMLFormElement,
-    meter: CreatedMeter
-  ) {
-    row.dataset.archived = meter.archivedAt ? "true" : "false";
-    const strong = row.querySelector("strong");
-    if (strong) {
-      const suffix = meterForm?.dataset.archivedLabel ?? "archived";
-      strong.textContent = `${strong.textContent} (${suffix})`;
+      for (const tab of tabs) {
+        tab.setAttribute(
+          "aria-selected",
+          tab.dataset.filter === filter ? "true" : "false"
+        );
+      }
+      panelGroup?.classList.toggle("is-filtered", filter !== "overview");
     }
-    form.remove();
-    reconcileMeterList();
-  }
 
-  function bindMeterArchiveForm(form: HTMLFormElement, row: HTMLLIElement) {
-    bindMutationForm({
-      form,
-      action: (fd) => actions.meters.archive(fd),
-      savingLabel: "…",
-      fallbackErrorMessage:
-        meterForm?.dataset.genericError ??
-        "Something went wrong. Please try again.",
-      onSuccess: (meter) =>
-        markMeterRowArchived(row, form, meter as CreatedMeter),
-    });
-  }
-
-  function buildMeterRow(meter: CreatedMeter): HTMLLIElement {
-    const option = meterForm?.querySelector<HTMLOptionElement>(
-      `option[value="${meter.type}"]`
-    );
-    const li = document.createElement("li");
-    li.className = "meter-row";
-    li.dataset.meterId = meter.id;
-    li.dataset.archived = meter.archivedAt ? "true" : "false";
-
-    const icon = document.createElement("div");
-    icon.className = "sidebar-item-icon";
-    icon.dataset.meterType = meter.type;
-    icon.setAttribute("aria-hidden", "true");
-    icon.textContent = option?.dataset.icon ?? "•";
-
-    const body = document.createElement("div");
-    body.className = "sidebar-item-body";
-    const strong = document.createElement("strong");
-    strong.textContent =
-      meter.label ?? option?.textContent?.trim() ?? meter.type;
-    const unitLine = document.createElement("p");
-    unitLine.textContent = meter.serialNumber
-      ? `${meter.serialNumber} · ${meter.unit}`
-      : meter.unit;
-    body.appendChild(strong);
-    body.appendChild(unitLine);
-
-    const archiveForm = document.createElement("form");
-    archiveForm.method = "POST";
-    archiveForm.dataset.meterArchiveForm = "";
-    const orgId =
-      meterForm?.querySelector<HTMLInputElement>('input[name="organizationId"]')
-        ?.value ?? "";
-    archiveForm.insertAdjacentHTML(
-      "beforeend",
-      `<input type="hidden" name="organizationId" value="${orgId}" />
-       <input type="hidden" name="meterId" value="${meter.id}" />
-       <button type="submit" class="sidebar-item-remove">${
-         meterForm?.dataset.archiveLabel ?? "Archive"
-       }</button>`
-    );
-    bindMeterArchiveForm(archiveForm, li);
-
-    li.appendChild(icon);
-    li.appendChild(body);
-    li.appendChild(archiveForm);
-    if (meterForm) {
-      copyAstroScope(
-        meterForm,
-        li,
-        icon,
-        body,
-        strong,
-        unitLine,
-        archiveForm,
-        ...Array.from(archiveForm.children)
-      );
+    for (const tab of tabs) {
+      tab.addEventListener("click", () => {
+        const filter = tab.dataset.filter;
+        if (filter) setFilter(filter);
+      });
     }
-    return li;
-  }
 
-  if (meterForm) {
-    bindMutationForm({
-      form: meterForm,
-      action: (fd) => actions.meters.create(fd),
-      savingLabel: meterForm.dataset.savingLabel ?? "Saving…",
-      fallbackErrorMessage:
-        meterForm.dataset.genericError ??
-        "Something went wrong. Please try again.",
-      onSuccess: (meter) => {
-        metersList?.appendChild(buildMeterRow(meter as CreatedMeter));
-        reconcileMeterList();
-        meterForm.reset();
-        if (meterDetails) meterDetails.open = false;
-        const header = document.querySelector("#meters .card-header");
-        if (header) {
-          showMutationSuccess(
-            header,
-            meterForm.dataset.addedMessage ?? "Meter added"
-          );
-        }
-      },
-    });
-  }
+    document
+      .querySelectorAll<HTMLButtonElement>("[data-goto-panel]")
+      ?.forEach((button) => {
+        button.addEventListener("click", () => {
+          const filter = button.dataset.gotoPanel;
+          if (!filter) return;
+          setFilter(filter);
+          document.querySelector(".more-menu")?.removeAttribute("open");
+          const reduceMotion = window.matchMedia(
+            "(prefers-reduced-motion: reduce)"
+          ).matches;
+          document
+            .querySelector(`[data-panel="${filter}"]`)
+            ?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+        });
+      });
 
-  for (const form of document.querySelectorAll<HTMLFormElement>(
-    "[data-meter-archive-form]"
-  )) {
-    const row = form.closest("li");
-    if (row) bindMeterArchiveForm(form, row);
-  }
-
-  // ---- Residents: same pattern. A resident who already has access still
-  // returns success (existing business rule, see assignResident's
-  // onConflictDoNothing) -- guarded here by userId so re-submitting an
-  // existing resident's email never duplicates their row. ----
-  interface AssignedResident {
-    userId: string;
-    email: string;
-    displayName: string | null;
-  }
-
-  const residentForm =
-    document.querySelector<HTMLFormElement>("#resident-form");
-  const residentDetails =
-    document.querySelector<HTMLDetailsElement>("#resident-details");
-  const residentsListRegion = document.querySelector<HTMLElement>(
-    "#residents-list-region"
-  );
-
-  const residentsList =
-    residentsListRegion?.querySelector<HTMLUListElement>(".sidebar-item-list");
-  const residentsEmptyState = residentsListRegion?.querySelector<HTMLElement>(
-    "#residents-empty-state"
-  );
-
-  function reconcileResidentList() {
-    if (!residentsList || !residentsEmptyState) return;
-    const empty = residentsList.children.length === 0;
-    residentsList.hidden = empty;
-    residentsEmptyState.hidden = !empty;
-  }
-
-  // Assign and every remove form share this one flag: two resident
-  // mutations for this dwelling can otherwise resolve out of order (e.g.
-  // remove resident A, then quickly re-add A before the removal's response
-  // arrives) and leave the UI showing the opposite of what the server
-  // actually holds. Serializing them here removes that race -- a second
-  // resident-section submit while one is still in flight is rejected
-  // immediately, client-side, before it ever reaches the server.
-  let residentsBusy = false;
-  async function guardedResidentAction<T>(
-    call: () => Promise<{
-      data?: T;
-      error?: import("astro:actions").ActionError;
-    }>
-  ): Promise<{ data?: T; error?: import("astro:actions").ActionError }> {
-    if (residentsBusy) {
-      return {
-        error: {
-          message:
-            residentForm?.dataset.genericError ??
-            "Something went wrong. Please try again.",
-        } as import("astro:actions").ActionError,
+    // Invoice delivery: no separate edit mode -- the checkboxes are always
+    // live, and Save only becomes active once they actually differ from the
+    // saved state (rather than always being submittable).
+    const deliveryForm = document.querySelector<HTMLFormElement>(
+      "[data-delivery-form]"
+    );
+    const deliverySave = deliveryForm?.querySelector<HTMLButtonElement>(
+      "[data-delivery-save]"
+    );
+    if (deliveryForm && deliverySave) {
+      const deliveryCheckboxes = [
+        ...deliveryForm.querySelectorAll<HTMLInputElement>(
+          'input[type="checkbox"]'
+        ),
+      ];
+      const initialState = deliveryCheckboxes.map((box) => box.checked);
+      const updateSaveState = () => {
+        const isDirty = deliveryCheckboxes.some(
+          (box, index) => box.checked !== initialState[index]
+        );
+        deliverySave.disabled = !isDirty;
       };
+      for (const box of deliveryCheckboxes) {
+        box.addEventListener("change", updateSaveState);
+      }
     }
-    residentsBusy = true;
-    try {
-      return await call();
-    } finally {
-      residentsBusy = false;
+
+    // ---- Meters: submit once, patch the list from the returned meter, no
+    // full-page reload (previously a plain <form method="POST"> with no JS
+    // at all -- there was never a duplicate listener here; the fix is a
+    // single submit-event binding plus a pending-state guard, see
+    // src/lib/ui/mutate-form.ts's header comment). ----
+    interface CreatedMeter {
+      id: string;
+      type: string;
+      label: string | null;
+      serialNumber: string | null;
+      unit: string;
+      archivedAt: Date | string | null;
     }
-  }
 
-  function bindResidentRemoveForm(form: HTMLFormElement, row: HTMLLIElement) {
-    bindMutationForm({
-      form,
-      action: (fd) =>
-        guardedResidentAction(() => actions.dwellings.removeResident(fd)),
-      savingLabel: "…",
-      fallbackErrorMessage:
-        residentForm?.dataset.genericError ??
-        "Something went wrong. Please try again.",
-      onSuccess: () => {
-        row.remove();
-        reconcileResidentList();
-      },
-    });
-  }
-
-  function buildResidentRow(resident: AssignedResident): HTMLLIElement {
-    const li = document.createElement("li");
-    li.dataset.userId = resident.userId;
-
-    const avatar = document.createElement("div");
-    avatar.className = "sidebar-item-avatar";
-    avatar.setAttribute("aria-hidden", "true");
-    avatar.textContent = (resident.displayName ?? resident.email)
-      .charAt(0)
-      .toUpperCase();
-
-    const body = document.createElement("div");
-    body.className = "sidebar-item-body";
-    const strong = document.createElement("strong");
-    strong.textContent = resident.displayName ?? resident.email;
-    const emailLine = document.createElement("p");
-    emailLine.textContent = resident.email;
-    body.appendChild(strong);
-    body.appendChild(emailLine);
-
-    const removeForm = document.createElement("form");
-    removeForm.method = "POST";
-    removeForm.dataset.residentRemoveForm = "";
-    const orgId =
-      residentForm?.querySelector<HTMLInputElement>(
-        'input[name="organizationId"]'
-      )?.value ?? "";
-    const dwellingIdValue =
-      residentForm?.querySelector<HTMLInputElement>('input[name="dwellingId"]')
-        ?.value ?? "";
-    removeForm.insertAdjacentHTML(
-      "beforeend",
-      `<input type="hidden" name="organizationId" value="${orgId}" />
-       <input type="hidden" name="dwellingId" value="${dwellingIdValue}" />
-       <input type="hidden" name="userId" value="${resident.userId}" />
-       <button type="submit" class="sidebar-item-remove">${
-         residentForm?.dataset.removeLabel ?? "Remove"
-       }</button>`
+    const meterForm = document.querySelector<HTMLFormElement>("#meter-form");
+    const meterDetails =
+      document.querySelector<HTMLDetailsElement>("#meter-details");
+    const metersListRegion = document.querySelector<HTMLElement>(
+      "#meters-list-region"
     );
-    bindResidentRemoveForm(removeForm, li);
+    const metersList =
+      metersListRegion?.querySelector<HTMLUListElement>(".sidebar-item-list");
+    const metersEmptyState = metersListRegion?.querySelector<HTMLElement>(
+      "#meters-empty-state"
+    );
+    const meterFilterButtons = [
+      ...document.querySelectorAll<HTMLButtonElement>("[data-meter-filter]"),
+    ];
+    let meterFilter: MeterFilter = "active";
 
-    li.appendChild(avatar);
-    li.appendChild(body);
-    li.appendChild(removeForm);
-    if (residentForm) {
-      copyAstroScope(
-        residentForm,
-        li,
-        avatar,
-        body,
-        strong,
-        emailLine,
-        removeForm,
-        ...Array.from(removeForm.children)
+    function reconcileMeterList() {
+      if (!metersList || !metersEmptyState) return;
+      const rows = [
+        ...metersList.querySelectorAll<HTMLLIElement>(".meter-row"),
+      ];
+      const visibility = meterListVisibility(
+        rows.map((row) => row.dataset.archived === "true"),
+        meterFilter
       );
+      rows.forEach((row, index) => {
+        row.hidden = !visibility.rows[index];
+      });
+      metersList.hidden = visibility.empty;
+      metersEmptyState.hidden = !visibility.empty;
+      const title = metersEmptyState.querySelector<HTMLElement>(".text-h3");
+      if (title) {
+        title.textContent =
+          meterFilter === "archived"
+            ? (metersListRegion?.dataset.emptyArchived ?? "No archived meters.")
+            : (metersListRegion?.dataset.emptyActive ?? "No active meters.");
+      }
+      for (const button of meterFilterButtons) {
+        button.setAttribute(
+          "aria-pressed",
+          button.dataset.meterFilter === meterFilter ? "true" : "false"
+        );
+      }
     }
-    return li;
-  }
 
-  if (residentForm) {
-    bindMutationForm({
-      form: residentForm,
-      action: (fd) =>
-        guardedResidentAction(() => actions.dwellings.assignResident(fd)),
-      savingLabel: residentForm.dataset.savingLabel ?? "Saving…",
-      fallbackErrorMessage:
-        residentForm.dataset.genericError ??
-        "Something went wrong. Please try again.",
-      onSuccess: (resident) => {
-        const { userId, email, displayName } = resident as AssignedResident;
-        const header = document.querySelector("#residents .card-header");
-        residentForm.reset();
-        if (residentDetails) residentDetails.open = false;
-        const alreadyPresent = residentsList?.querySelector(
-          `[data-user-id="${userId}"]`
-        );
-        if (alreadyPresent) {
-          if (header) {
-            showMutationSuccess(
-              header,
-              residentForm.dataset.alreadyHasAccess ??
-                "This resident already has access."
-            );
+    for (const button of meterFilterButtons) {
+      button.addEventListener("click", () => {
+        const nextFilter = button.dataset.meterFilter;
+        if (nextFilter === "active" || nextFilter === "archived") {
+          meterFilter = nextFilter;
+          reconcileMeterList();
+        }
+      });
+    }
+
+    // Keep archived rows in the DOM so the Archived filter can reveal them.
+    // Updating metadata, label and controls in place also matches the row SSR
+    // renders after a refresh.
+    function markMeterRowArchived(
+      row: HTMLLIElement,
+      form: HTMLFormElement,
+      meter: CreatedMeter
+    ) {
+      row.dataset.archived = meter.archivedAt ? "true" : "false";
+      const strong = row.querySelector("strong");
+      if (strong) {
+        const suffix = meterForm?.dataset.archivedLabel ?? "archived";
+        strong.textContent = `${strong.textContent} (${suffix})`;
+      }
+      form.remove();
+      reconcileMeterList();
+    }
+
+    function bindMeterArchiveForm(form: HTMLFormElement, row: HTMLLIElement) {
+      bindMutationForm<CreatedMeter, HTMLLIElement>({
+        form,
+        action: (fd) => actions.meters.archive(fd),
+        savingLabel: "…",
+        fallbackErrorMessage:
+          meterForm?.dataset.genericError ??
+          "Something went wrong. Please try again.",
+        mutation: () => ({
+          entity: "meter",
+          operation: "archive",
+          pendingLabel: meterForm?.dataset.archivingLabel ?? "Archiving…",
+          successLabel: meterForm?.dataset.archivedLabelText ?? "Archived",
+          errorLabel: meterForm?.dataset.couldNotSave ?? "Could not save",
+          reconciliationErrorLabel: meterForm?.dataset.reconcileError,
+        }),
+        onSuccess: (meter) => {
+          if (row.isConnected) {
+            markMeterRowArchived(row, form, meter as CreatedMeter);
           }
-          return;
-        }
-        residentsList?.appendChild(
-          buildResidentRow({ userId, email, displayName })
-        );
-        reconcileResidentList();
-        if (header) {
-          showMutationSuccess(
-            header,
-            residentForm.dataset.addedMessage ?? "Resident added"
-          );
-        }
-      },
-    });
-  }
+        },
+      });
+    }
 
-  for (const form of document.querySelectorAll<HTMLFormElement>(
-    "[data-resident-remove-form]"
-  )) {
-    const row = form.closest("li");
-    if (row) bindResidentRemoveForm(form, row);
-  }
+    function buildMeterRow(
+      meter: CreatedMeter,
+      pending = false
+    ): HTMLLIElement {
+      const option = meterForm?.querySelector<HTMLOptionElement>(
+        `option[value="${meter.type}"]`
+      );
+      const li = document.createElement("li");
+      li.className = "meter-row";
+      li.dataset.meterId = meter.id;
+      li.dataset.archived = meter.archivedAt ? "true" : "false";
+      if (pending) li.dataset.pending = "true";
+
+      const icon = document.createElement("div");
+      icon.className = "sidebar-item-icon";
+      icon.dataset.meterType = meter.type;
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = option?.dataset.icon ?? "•";
+
+      const body = document.createElement("div");
+      body.className = "sidebar-item-body";
+      const strong = document.createElement("strong");
+      strong.textContent =
+        meter.label ?? option?.textContent?.trim() ?? meter.type;
+      const unitLine = document.createElement("p");
+      unitLine.textContent = meter.serialNumber
+        ? `${meter.serialNumber} · ${meter.unit}`
+        : meter.unit;
+      body.appendChild(strong);
+      body.appendChild(unitLine);
+
+      let pendingLine: HTMLParagraphElement | undefined;
+      if (pending) {
+        pendingLine = document.createElement("p");
+        pendingLine.className = "optimistic-status";
+        pendingLine.textContent = meterForm?.dataset.savingLabel ?? "Saving…";
+        body.appendChild(pendingLine);
+      }
+
+      li.appendChild(icon);
+      li.appendChild(body);
+      let archiveForm: HTMLFormElement | undefined;
+      if (!pending) {
+        archiveForm = document.createElement("form");
+        archiveForm.method = "POST";
+        archiveForm.dataset.meterArchiveForm = "";
+        const orgId =
+          meterForm?.querySelector<HTMLInputElement>(
+            'input[name="organizationId"]'
+          )?.value ?? "";
+        archiveForm.insertAdjacentHTML(
+          "beforeend",
+          `<input type="hidden" name="organizationId" value="${orgId}" />
+         <input type="hidden" name="meterId" value="${meter.id}" />
+         <button type="submit" class="sidebar-item-remove">${
+           meterForm?.dataset.archiveLabel ?? "Archive"
+         }</button>`
+        );
+        bindMeterArchiveForm(archiveForm, li);
+        li.appendChild(archiveForm);
+      }
+      if (meterForm) {
+        copyAstroScope(
+          meterForm,
+          li,
+          icon,
+          body,
+          strong,
+          unitLine,
+          ...(pendingLine ? [pendingLine] : []),
+          ...(archiveForm
+            ? [archiveForm, ...Array.from(archiveForm.children)]
+            : [])
+        );
+      }
+      return li;
+    }
+
+    async function recoverCreate(clientMutationId: string) {
+      const organizationId =
+        meterForm?.querySelector<HTMLInputElement>(
+          'input[name="organizationId"]'
+        )?.value ??
+        residentForm?.querySelector<HTMLInputElement>(
+          'input[name="organizationId"]'
+        )?.value ??
+        "";
+      const { data, error } = await actions.mutations.lookup({
+        organizationId,
+        clientMutationId,
+      });
+      if (error || !data) throw error ?? new Error("Lookup failed");
+      return data;
+    }
+
+    function setPendingRowStatus(row: HTMLElement | undefined, text: string) {
+      const status = row?.querySelector<HTMLElement>(".optimistic-status");
+      if (status) status.textContent = text;
+    }
+
+    if (meterForm) {
+      bindMutationForm<CreatedMeter, HTMLLIElement>({
+        form: meterForm,
+        action: (fd) => actions.meters.create(fd),
+        savingLabel: meterForm.dataset.savingLabel ?? "Saving…",
+        fallbackErrorMessage:
+          meterForm.dataset.genericError ??
+          "Something went wrong. Please try again.",
+        mutation: () => ({
+          entity: "meter",
+          operation: "create",
+          idempotentCreate: true,
+          messageKey: "Adding meter…",
+          successMessageKey: "Meter added",
+          pendingLabel: meterForm.dataset.pendingLabel ?? "Adding meter…",
+          successLabel: meterForm.dataset.addedMessage ?? "Meter added",
+          errorLabel: meterForm.dataset.errorLabel ?? "Could not add meter",
+          reconciliationErrorLabel: meterForm.dataset.reconcileError,
+          committedMissingLabel: meterForm.dataset.committedMissing,
+        }),
+        recover: recoverCreate,
+        onVerifying: (optimisticRow, unknown) =>
+          setPendingRowStatus(
+            optimisticRow,
+            unknown
+              ? (meterForm.dataset.unknownLabel ?? "Outcome not confirmed")
+              : (meterForm.dataset.checkingLabel ?? "Checking save status…")
+          ),
+        onCommittedMissing: async (_form, optimisticRow) => {
+          optimisticRow?.remove();
+          reconcileMeterList();
+          if (`${location.pathname}${location.search}` === initializedPath) {
+            await navigate(initializedPath, { history: "replace" });
+          }
+        },
+        optimistic: (formData, mutationId) => {
+          const type = String(formData.get("type") ?? "OTHER");
+          const row = buildMeterRow(
+            {
+              id: `client:meter:${mutationId.split(":").at(-1)}`,
+              type,
+              label: String(formData.get("label") || "") || null,
+              serialNumber: String(formData.get("serialNumber") || "") || null,
+              unit: String(formData.get("unit") ?? ""),
+              archivedAt: null,
+            },
+            true
+          );
+          metersList?.appendChild(row);
+          reconcileMeterList();
+          return row;
+        },
+        onError: (_error, _form, optimisticRow) => {
+          if (!optimisticRow?.isConnected) return;
+          optimisticRow?.remove();
+          reconcileMeterList();
+        },
+        onSuccess: (meter, _form, optimisticRow) => {
+          if (!optimisticRow?.isConnected) {
+            if (`${location.pathname}${location.search}` === initializedPath) {
+              void navigate(initializedPath, { history: "replace" });
+            }
+            return;
+          }
+          optimisticRow.replaceWith(buildMeterRow(meter as CreatedMeter));
+          reconcileMeterList();
+          meterForm.reset();
+          if (meterDetails) meterDetails.open = false;
+        },
+      });
+    }
+
+    for (const form of document.querySelectorAll<HTMLFormElement>(
+      "[data-meter-archive-form]"
+    )) {
+      const row = form.closest("li");
+      if (row) bindMeterArchiveForm(form, row);
+    }
+
+    // ---- Residents: same pattern. A resident who already has access still
+    // returns success (existing business rule, see assignResident's
+    // onConflictDoNothing) -- guarded here by userId so re-submitting an
+    // existing resident's email never duplicates their row. ----
+    interface AssignedResident {
+      userId: string;
+      email: string;
+      displayName: string | null;
+    }
+
+    const residentForm =
+      document.querySelector<HTMLFormElement>("#resident-form");
+    const residentDetails =
+      document.querySelector<HTMLDetailsElement>("#resident-details");
+    const residentsListRegion = document.querySelector<HTMLElement>(
+      "#residents-list-region"
+    );
+
+    const residentsList =
+      residentsListRegion?.querySelector<HTMLUListElement>(
+        ".sidebar-item-list"
+      );
+    const residentsEmptyState = residentsListRegion?.querySelector<HTMLElement>(
+      "#residents-empty-state"
+    );
+
+    function reconcileResidentList() {
+      if (!residentsList || !residentsEmptyState) return;
+      const empty = residentsList.children.length === 0;
+      residentsList.hidden = empty;
+      residentsEmptyState.hidden = !empty;
+    }
+
+    // Assign and every remove form share this one flag: two resident
+    // mutations for this dwelling can otherwise resolve out of order (e.g.
+    // remove resident A, then quickly re-add A before the removal's response
+    // arrives) and leave the UI showing the opposite of what the server
+    // actually holds. Serializing them here removes that race -- a second
+    // resident-section submit while one is still in flight is rejected
+    // immediately, client-side, before it ever reaches the server.
+    let residentsBusy = false;
+    async function guardedResidentAction<T>(
+      call: () => Promise<{
+        data?: T;
+        error?: import("astro:actions").ActionError;
+      }>
+    ): Promise<{ data?: T; error?: import("astro:actions").ActionError }> {
+      if (residentsBusy) {
+        return {
+          error: {
+            message:
+              residentForm?.dataset.genericError ??
+              "Something went wrong. Please try again.",
+          } as import("astro:actions").ActionError,
+        };
+      }
+      residentsBusy = true;
+      try {
+        return await call();
+      } finally {
+        residentsBusy = false;
+      }
+    }
+
+    function bindResidentRemoveForm(form: HTMLFormElement, row: HTMLLIElement) {
+      bindMutationForm({
+        form,
+        action: (fd) =>
+          guardedResidentAction(() => actions.dwellings.removeResident(fd)),
+        savingLabel: "…",
+        fallbackErrorMessage:
+          residentForm?.dataset.genericError ??
+          "Something went wrong. Please try again.",
+        mutation: () => ({
+          entity: "resident-access",
+          operation: "remove",
+          pendingLabel:
+            residentForm?.dataset.removingLabel ?? "Removing resident…",
+          successLabel:
+            residentForm?.dataset.removedLabel ?? "Resident removed",
+          errorLabel: residentForm?.dataset.couldNotSave ?? "Could not save",
+          reconciliationErrorLabel: residentForm?.dataset.reconcileError,
+        }),
+        onSuccess: () => {
+          if (!row.isConnected) return;
+          row.remove();
+          reconcileResidentList();
+        },
+      });
+    }
+
+    function buildResidentRow(
+      resident: AssignedResident,
+      pending = false
+    ): HTMLLIElement {
+      const li = document.createElement("li");
+      li.dataset.userId = resident.userId;
+      if (pending) li.dataset.pending = "true";
+
+      const avatar = document.createElement("div");
+      avatar.className = "sidebar-item-avatar";
+      avatar.setAttribute("aria-hidden", "true");
+      avatar.textContent = (resident.displayName ?? resident.email)
+        .charAt(0)
+        .toUpperCase();
+
+      const body = document.createElement("div");
+      body.className = "sidebar-item-body";
+      const strong = document.createElement("strong");
+      strong.textContent = resident.displayName ?? resident.email;
+      const emailLine = document.createElement("p");
+      emailLine.textContent = resident.email;
+      body.appendChild(strong);
+      body.appendChild(emailLine);
+
+      let pendingLine: HTMLParagraphElement | undefined;
+      if (pending) {
+        pendingLine = document.createElement("p");
+        pendingLine.className = "optimistic-status";
+        pendingLine.textContent =
+          residentForm?.dataset.addingLabel ?? "Adding…";
+        body.appendChild(pendingLine);
+      }
+
+      li.appendChild(avatar);
+      li.appendChild(body);
+      let removeForm: HTMLFormElement | undefined;
+      if (!pending) {
+        removeForm = document.createElement("form");
+        removeForm.method = "POST";
+        removeForm.dataset.residentRemoveForm = "";
+        const orgId =
+          residentForm?.querySelector<HTMLInputElement>(
+            'input[name="organizationId"]'
+          )?.value ?? "";
+        const dwellingIdValue =
+          residentForm?.querySelector<HTMLInputElement>(
+            'input[name="dwellingId"]'
+          )?.value ?? "";
+        removeForm.insertAdjacentHTML(
+          "beforeend",
+          `<input type="hidden" name="organizationId" value="${orgId}" />
+         <input type="hidden" name="dwellingId" value="${dwellingIdValue}" />
+         <input type="hidden" name="userId" value="${resident.userId}" />
+         <button type="submit" class="sidebar-item-remove">${
+           residentForm?.dataset.removeLabel ?? "Remove"
+         }</button>`
+        );
+        bindResidentRemoveForm(removeForm, li);
+        li.appendChild(removeForm);
+      }
+      if (residentForm) {
+        copyAstroScope(
+          residentForm,
+          li,
+          avatar,
+          body,
+          strong,
+          emailLine,
+          ...(pendingLine ? [pendingLine] : []),
+          ...(removeForm
+            ? [removeForm, ...Array.from(removeForm.children)]
+            : [])
+        );
+      }
+      return li;
+    }
+
+    if (residentForm) {
+      bindMutationForm<AssignedResident, HTMLLIElement>({
+        form: residentForm,
+        action: (fd) =>
+          guardedResidentAction(() => actions.dwellings.assignResident(fd)),
+        savingLabel: residentForm.dataset.savingLabel ?? "Saving…",
+        fallbackErrorMessage:
+          residentForm.dataset.genericError ??
+          "Something went wrong. Please try again.",
+        mutation: () => ({
+          entity: "resident-access",
+          operation: "create",
+          idempotentCreate: true,
+          messageKey: "Adding resident…",
+          successMessageKey: "Resident added",
+          pendingLabel: residentForm.dataset.pendingLabel ?? "Adding resident…",
+          successLabel: residentForm.dataset.addedMessage ?? "Resident added",
+          errorLabel:
+            residentForm.dataset.errorLabel ?? "Could not add resident",
+          reconciliationErrorLabel: residentForm.dataset.reconcileError,
+          committedMissingLabel: residentForm.dataset.committedMissing,
+        }),
+        recover: recoverCreate,
+        onVerifying: (optimisticRow, unknown) =>
+          setPendingRowStatus(
+            optimisticRow,
+            unknown
+              ? (residentForm.dataset.unknownLabel ?? "Outcome not confirmed")
+              : (residentForm.dataset.checkingLabel ?? "Checking save status…")
+          ),
+        onCommittedMissing: async (_form, optimisticRow) => {
+          optimisticRow?.remove();
+          reconcileResidentList();
+          if (`${location.pathname}${location.search}` === initializedPath) {
+            await navigate(initializedPath, { history: "replace" });
+          }
+        },
+        optimistic: (formData, mutationId) => {
+          const email = String(formData.get("email") ?? "");
+          const row = buildResidentRow(
+            {
+              userId: `client:resident:${mutationId.split(":").at(-1)}`,
+              email,
+              displayName: null,
+            },
+            true
+          );
+          residentsList?.appendChild(row);
+          reconcileResidentList();
+          return row;
+        },
+        onError: (_error, _form, optimisticRow) => {
+          if (!optimisticRow?.isConnected) return;
+          optimisticRow?.remove();
+          reconcileResidentList();
+        },
+        onSuccess: (resident, _form, optimisticRow) => {
+          if (!optimisticRow?.isConnected) {
+            if (`${location.pathname}${location.search}` === initializedPath) {
+              void navigate(initializedPath, { history: "replace" });
+            }
+            return;
+          }
+          const { userId, email, displayName } = resident as AssignedResident;
+          residentForm.reset();
+          if (residentDetails) residentDetails.open = false;
+          const alreadyPresent = residentsList?.querySelector(
+            `[data-user-id="${userId}"]`
+          );
+          if (alreadyPresent) {
+            optimisticRow?.remove();
+            reconcileResidentList();
+            return;
+          }
+          const authoritativeRow = buildResidentRow({
+            userId,
+            email,
+            displayName,
+          });
+          optimisticRow.replaceWith(authoritativeRow);
+          reconcileResidentList();
+        },
+      });
+    }
+
+    for (const form of document.querySelectorAll<HTMLFormElement>(
+      "[data-resident-remove-form]"
+    )) {
+      const row = form.closest("li");
+      if (row) bindResidentRemoveForm(form, row);
+    }
+  });
 </script>
 
 <style>
+  [data-dwelling-detail] {
+    min-width: 0;
+    max-width: 100%;
+  }
   .back-link {
     display: inline-flex;
     align-items: center;
@@ -1849,6 +2062,8 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
   }
   .dwelling-tabs {
     display: flex;
+    width: 100%;
+    max-width: 100%;
     gap: 1.5rem;
     overflow-x: auto;
     border-bottom: 1px solid var(--color-border);
@@ -1886,6 +2101,11 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     display: grid;
     gap: 1.5rem;
     min-width: 0;
+  }
+  .dwelling-main > *,
+  .dwelling-sidebar > * {
+    min-width: 0;
+    max-width: 100%;
   }
   .card-header {
     display: flex;
@@ -2144,6 +2364,10 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     color: var(--color-muted);
     font-size: 0.8125rem;
   }
+  .sidebar-item-body .optimistic-status {
+    color: var(--color-primary);
+    font-weight: 650;
+  }
   .sidebar-item-remove {
     flex: 0 0 auto;
     color: var(--color-destructive);
@@ -2244,6 +2468,9 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     }
   }
   @media (max-width: 540px) {
+    [data-dwelling-detail] {
+      width: calc(100vw - 2rem);
+    }
     .stat-grid {
       grid-template-columns: minmax(0, 1fr);
     }

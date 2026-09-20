@@ -1,0 +1,380 @@
+---
+import { translate, uiLocale } from "../../lib/ui/i18n";
+
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+const strings = {
+  allSaved: t("All changes saved"),
+  oneSaving: t("1 change saving"),
+  manySaving: t("{n} changes saving"),
+  oneError: t("1 change needs attention"),
+  manyErrors: t("{n} changes need attention"),
+  waiting: t("Waiting for server…"),
+  applying: t("Applying changes…"),
+  saved: t("Saved"),
+  recent: t("Recent changes"),
+  dismiss: t("Dismiss"),
+  retry: t("Retry"),
+  checkAgain: t("Check again"),
+  checking: t("Checking save status…"),
+  unknown: t("Outcome not confirmed"),
+  committedMissing: t(
+    "The original change was saved, but the item is no longer present. The page has been refreshed."
+  ),
+  messages: {
+    "Adding meter…": t("Adding meter…"),
+    "Meter added": t("Meter added"),
+    "Adding resident…": t("Adding resident…"),
+    "Resident added": t("Resident added"),
+    "Creating dwelling…": t("Creating dwelling…"),
+    "Dwelling created": t("Dwelling created"),
+  },
+};
+---
+
+<div id="mutation-status" data-strings={JSON.stringify(strings)}>
+  <div
+    class="mutation-toasts"
+    data-mutation-toasts
+    aria-live="polite"
+    aria-atomic="false"
+  >
+  </div>
+  <details class="mutation-activity">
+    <summary class="mutation-summary">
+      <span aria-hidden="true" data-mutation-summary-icon>✓</span>
+      <span data-mutation-summary aria-live="polite">{strings.allSaved}</span>
+    </summary>
+    <section class="mutation-panel" aria-labelledby="mutation-panel-title">
+      <h2 id="mutation-panel-title">{strings.recent}</h2>
+      <div data-mutation-list></div>
+    </section>
+  </details>
+</div>
+
+<script>
+  import { actions } from "astro:actions";
+  import { navigate } from "astro:transitions/client";
+  import { onPageLoad } from "../../lib/ui/page-lifecycle";
+  import {
+    completeMutation,
+    confirmMutation,
+    dismissMutation,
+    hydrateMutations,
+    markOutcomeUnknown,
+    markReconciling,
+    markVerifying,
+    mutationCounts,
+    retryMutation,
+    runMutationRecovery,
+    subscribeMutations,
+    type UiMutation,
+  } from "../../lib/ui/mutations";
+
+  interface Strings {
+    allSaved: string;
+    oneSaving: string;
+    manySaving: string;
+    oneError: string;
+    manyErrors: string;
+    waiting: string;
+    applying: string;
+    saved: string;
+    recent: string;
+    dismiss: string;
+    retry: string;
+    checkAgain: string;
+    checking: string;
+    unknown: string;
+    committedMissing: string;
+    messages: Record<string, string>;
+  }
+
+  function statusText(mutation: UiMutation, strings: Strings): string {
+    if (mutation.status === "pending") return strings.waiting;
+    if (mutation.status === "verifying") return strings.checking;
+    if (mutation.status === "confirmed" || mutation.status === "reconciling") {
+      return strings.applying;
+    }
+    if (mutation.status === "success") return strings.saved;
+    if (mutation.status === "unknown") return strings.unknown;
+    return mutation.error ?? "";
+  }
+
+  function renderItems(
+    container: HTMLElement,
+    mutations: readonly UiMutation[],
+    strings: Strings
+  ): void {
+    const existing = new Map(
+      [...container.querySelectorAll<HTMLElement>("[data-mutation-id]")].map(
+        (element) => [element.dataset.mutationId!, element]
+      )
+    );
+
+    for (const mutation of mutations) {
+      const item =
+        existing.get(mutation.id) ?? document.createElement("article");
+      existing.delete(mutation.id);
+      item.className = "mutation-item";
+      item.dataset.mutationId = mutation.id;
+      item.dataset.status = mutation.status;
+      if (!item.isConnected) {
+        item.innerHTML =
+          '<span class="mutation-item-icon" aria-hidden="true"></span>' +
+          '<span class="mutation-item-copy"><strong></strong><small></small></span>' +
+          '<span class="mutation-item-actions">' +
+          '<button type="button" class="mutation-retry"></button>' +
+          '<button type="button" class="mutation-dismiss"></button>' +
+          "</span>";
+        container.appendChild(item);
+      }
+      const icon = item.querySelector<HTMLElement>(".mutation-item-icon")!;
+      icon.textContent =
+        mutation.status === "success"
+          ? "✓"
+          : mutation.status === "error"
+            ? "!"
+            : "◌";
+      item.querySelector("strong")!.textContent = mutation.label;
+      item.querySelector("small")!.textContent = statusText(mutation, strings);
+      const dismiss =
+        item.querySelector<HTMLButtonElement>(".mutation-dismiss")!;
+      const retry = item.querySelector<HTMLButtonElement>(".mutation-retry")!;
+      retry.textContent =
+        mutation.status === "unknown" ? strings.checkAgain : strings.retry;
+      retry.hidden =
+        (mutation.status !== "error" || !mutation.retry) &&
+        (mutation.status !== "unknown" || !mutation.checkAgain);
+      retry.onclick = () =>
+        mutation.status === "unknown"
+          ? mutation.checkAgain?.()
+          : retryMutation(mutation.id);
+      dismiss.textContent = strings.dismiss;
+      dismiss.hidden = mutation.status !== "error";
+      dismiss.onclick = () => dismissMutation(mutation.id);
+      item.setAttribute(
+        "role",
+        mutation.status === "error" || mutation.status === "unknown"
+          ? "alert"
+          : "status"
+      );
+    }
+    for (const item of existing.values()) item.remove();
+  }
+
+  onPageLoad(() => {
+    const root = document.querySelector<HTMLElement>("#mutation-status");
+    if (!root) return;
+    const strings: Strings = JSON.parse(root.dataset.strings ?? "{}");
+    const translateMessage = (key: string) => strings.messages[key] ?? key;
+    const hydrated = hydrateMutations(translateMessage);
+
+    function recover(mutation: UiMutation) {
+      if (!mutation.recovery) return;
+      const lookup = async () => {
+        const { data, error } = await actions.mutations.lookup({
+          organizationId: mutation.recovery!.organizationId,
+          clientMutationId: mutation.recovery!.clientMutationId,
+        });
+        if (error || !data) throw error ?? new Error("Lookup failed");
+        return data;
+      };
+      runMutationRecovery(mutation.id, lookup, {
+        committed: async (entity) => {
+          confirmMutation(mutation.id);
+          markReconciling(mutation.id);
+          if (
+            `${location.pathname}${location.search}` ===
+            mutation.recovery!.originPath
+          ) {
+            await navigate(mutation.recovery!.originPath).catch(() => {});
+          }
+          completeMutation(
+            mutation.id,
+            entity === null
+              ? strings.committedMissing
+              : translateMessage(mutation.successMessageKey ?? "Saved")
+          );
+        },
+        unknown: (checkAgain) => {
+          markOutcomeUnknown(mutation.id, () => {
+            markVerifying(mutation.id);
+            checkAgain();
+          });
+        },
+      });
+    }
+
+    for (const mutation of hydrated) {
+      if (mutation.status === "verifying") recover(mutation);
+      if (mutation.status === "unknown") {
+        markOutcomeUnknown(mutation.id, () => {
+          markVerifying(mutation.id);
+          recover(mutation);
+        });
+      }
+    }
+    const summary = root.querySelector<HTMLElement>("[data-mutation-summary]")!;
+    const summaryIcon = root.querySelector<HTMLElement>(
+      "[data-mutation-summary-icon]"
+    )!;
+    const toasts = root.querySelector<HTMLElement>("[data-mutation-toasts]")!;
+    const list = root.querySelector<HTMLElement>("[data-mutation-list]")!;
+
+    return subscribeMutations((mutations) => {
+      const { active, errors } = mutationCounts(mutations);
+      summary.textContent = errors
+        ? errors === 1
+          ? strings.oneError
+          : strings.manyErrors.replace("{n}", String(errors))
+        : active
+          ? active === 1
+            ? strings.oneSaving
+            : strings.manySaving.replace("{n}", String(active))
+          : strings.allSaved;
+      summaryIcon.textContent = errors ? "!" : active ? "◌" : "✓";
+      root.dataset.state = errors ? "error" : active ? "pending" : "saved";
+      renderItems(toasts, mutations, strings);
+      renderItems(list, mutations, strings);
+    });
+  });
+</script>
+
+<style is:global>
+  #mutation-status {
+    position: fixed;
+    z-index: 90;
+    right: 1rem;
+    bottom: 1rem;
+    display: grid;
+    justify-items: end;
+    gap: 0.75rem;
+    width: min(24rem, calc(100vw - 2rem));
+  }
+  .mutation-toasts {
+    display: grid;
+    width: 100%;
+    gap: 0.5rem;
+  }
+  .mutation-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0.875rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow: var(--elevation-1);
+  }
+  .mutation-item[data-status="error"] {
+    border-color: var(--color-destructive);
+  }
+  .mutation-item-icon {
+    display: grid;
+    width: 1.5rem;
+    height: 1.5rem;
+    place-items: center;
+    color: var(--color-primary);
+    font-weight: 700;
+  }
+  .mutation-item[data-status="pending"] .mutation-item-icon,
+  .mutation-item[data-status="confirmed"] .mutation-item-icon,
+  .mutation-item[data-status="reconciling"] .mutation-item-icon,
+  .mutation-item[data-status="verifying"] .mutation-item-icon {
+    animation: mutation-spin 1.2s linear infinite;
+  }
+  .mutation-item[data-status="error"] .mutation-item-icon,
+  .mutation-item[data-status="unknown"] .mutation-item-icon {
+    color: var(--color-destructive);
+  }
+  .mutation-item-copy {
+    display: grid;
+    min-width: 0;
+  }
+  .mutation-item-copy strong {
+    overflow: hidden;
+    font-size: 0.875rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mutation-item-copy small {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+  .mutation-dismiss {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    text-decoration: underline;
+  }
+  .mutation-item-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .mutation-retry {
+    color: var(--color-primary);
+    font-size: 0.75rem;
+    font-weight: 650;
+  }
+  .mutation-activity {
+    position: relative;
+  }
+  .mutation-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 0.875rem;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface);
+    box-shadow: var(--elevation-1);
+    color: var(--color-foreground);
+    font-size: 0.8125rem;
+    font-weight: 650;
+    list-style: none;
+    cursor: pointer;
+  }
+  .mutation-summary::-webkit-details-marker {
+    display: none;
+  }
+  #mutation-status[data-state="error"] .mutation-summary {
+    color: var(--color-destructive);
+  }
+  .mutation-panel {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.5rem);
+    width: min(24rem, calc(100vw - 2rem));
+    max-height: min(28rem, 70vh);
+    padding: 1rem;
+    overflow: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow: var(--elevation-1);
+  }
+  .mutation-panel h2 {
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+  .mutation-panel [data-mutation-list] {
+    display: grid;
+    gap: 0.5rem;
+  }
+  .mutation-panel [data-mutation-list]:empty::after {
+    content: "—";
+    color: var(--color-muted);
+  }
+  @keyframes mutation-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mutation-item-icon {
+      animation: none !important;
+    }
+  }
+</style>

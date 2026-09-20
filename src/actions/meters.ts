@@ -15,6 +15,7 @@ export const meters = {
     input: z.object({
       organizationId: z.uuid(),
       dwellingId: z.uuid(),
+      clientMutationId: z.uuid(),
       type: meterType,
       serialNumber: z.string().max(100).optional(),
       unit: z.string().min(1).max(20),
@@ -22,7 +23,10 @@ export const meters = {
       installedAt: z.iso.date().optional(),
     }),
     handler: safeHandler(
-      async ({ organizationId, dwellingId, ...input }, { locals }) => {
+      async (
+        { organizationId, dwellingId, clientMutationId, ...input },
+        { locals }
+      ) => {
         requireOrganizationAccess(locals.auth, organizationId);
         return withDb((db) =>
           createMeter(
@@ -30,7 +34,8 @@ export const meters = {
             organizationId,
             dwellingId,
             input,
-            locals.auth!.userId
+            locals.auth!.userId,
+            clientMutationId
           )
         );
       }

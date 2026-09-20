@@ -5,6 +5,8 @@ import BrandMark from "../components/ui/BrandMark.astro";
 import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
 import ThemeToggle from "../components/ui/ThemeToggle.astro";
 import Icon from "../components/ui/Icon.astro";
+import MutationStatus from "../components/ui/MutationStatus.astro";
+import { ClientRouter } from "astro:transitions";
 import { translate, uiLocale } from "../lib/ui/i18n";
 interface Props {
   title?: string;
@@ -26,6 +28,7 @@ const t = (text: string) => translate(locale, text);
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <ClientRouter fallback="swap" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script is:inline>
       (function () {
@@ -43,7 +46,7 @@ const t = (text: string) => translate(locale, text);
     </script>
     <title>{title}</title>
   </head>
-  <body>
+  <body data-working-label={t("Working…")}>
     <a class="skip-link" href="#main-content">{t("Skip to content")}</a>
     <aside class="admin-sidebar">
       <a class="brand" href="/admin/organizations"
@@ -116,12 +119,15 @@ const t = (text: string) => translate(locale, text);
     <main id="main-content" tabindex="-1" class="admin-content app-content">
       <slot />
     </main>
+    <MutationStatus />
     <script>
       import "../lib/ui/forms";
+      import { onPageLoad } from "../lib/ui/page-lifecycle";
 
-      const mobileNavDialog =
-        document.querySelector<HTMLDialogElement>("#mobile-nav-drawer");
-      if (mobileNavDialog) {
+      onPageLoad(() => {
+        const mobileNavDialog =
+          document.querySelector<HTMLDialogElement>("#mobile-nav-drawer");
+        if (!mobileNavDialog) return;
         document
           .querySelector("[data-open-mobile-nav]")
           ?.addEventListener("click", () => mobileNavDialog.showModal());
@@ -139,7 +145,7 @@ const t = (text: string) => translate(locale, text);
           .forEach((link) =>
             link.addEventListener("click", () => mobileNavDialog.close())
           );
-      }
+      });
     </script>
   </body>
 </html>

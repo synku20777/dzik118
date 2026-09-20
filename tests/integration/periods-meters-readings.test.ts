@@ -15,6 +15,7 @@ import { createDwelling } from "../../src/domain/organizations/dwellings";
 import {
   archiveMeter,
   createMeter,
+  listMeters,
 } from "../../src/domain/organizations/meters";
 import {
   ConflictError,
@@ -29,6 +30,7 @@ import {
   submitAdminReading,
   submitResidentReading,
 } from "../../src/domain/periods/readings";
+import { lookupMutationReceipt } from "../../src/domain/mutations/receipts";
 
 let db: Db;
 let seedAdminId: string;
@@ -223,6 +225,72 @@ describe("periods", () => {
 });
 
 describe("meters and readings", () => {
+  it("retries meter creation with one client mutation ID without duplicating it", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT Meter Idempotency", addressLine1: "Addr" },
+      seedAdminId
+    );
+    const dwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "1" },
+      seedAdminId
+    );
+    const key = crypto.randomUUID();
+    const input = {
+      type: "COLD_WATER" as const,
+      unit: "m3",
+      label: "Idempotent",
+    };
+    const first = await createMeter(
+      db,
+      org.id,
+      dwelling.id,
+      input,
+      seedAdminId,
+      key
+    );
+    const retry = await createMeter(
+      db,
+      org.id,
+      dwelling.id,
+      input,
+      seedAdminId,
+      key
+    );
+
+    expect(retry.id).toBe(first.id);
+    expect(
+      (await listMeters(db, org.id, dwelling.id)).filter(
+        (row) => row.label === "Idempotent"
+      )
+    ).toHaveLength(1);
+
+    const otherDwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "2" },
+      seedAdminId
+    );
+    await expect(
+      createMeter(db, org.id, otherDwelling.id, input, seedAdminId, key)
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    expect(await lookupMutationReceipt(db, org.id, key)).toMatchObject({
+      state: "committed",
+      entityType: "meter",
+      scopeId: dwelling.id,
+      entity: { id: first.id },
+    });
+    await db.$client.query("delete from meters where id = $1", [first.id]);
+    expect(await lookupMutationReceipt(db, org.id, key)).toMatchObject({
+      state: "committed",
+      entity: null,
+    });
+    await cleanupOrg(org.id);
+  });
+
   it("MTR-002: records an exact Decimal consumption and recalculates case readiness", async () => {
     const { org, meter } = await setupOrgWithDwellingAndMeter("IT-E Org 6");
     const period = await createPeriod(

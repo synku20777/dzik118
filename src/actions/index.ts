@@ -12,6 +12,7 @@ import { messages } from "./messages";
 import { accounts } from "./accounts";
 import { workbench } from "./workbench";
 import { invoiceTemplates } from "./invoice-templates";
+import { mutations } from "./mutations";
 
 export const server = {
   organizations,
@@ -26,4 +27,5 @@ export const server = {
   accounts,
   workbench,
   invoiceTemplates,
+  mutations,
 };

@@ -17,6 +17,11 @@ import {
 } from "../../lib/supabase/admin";
 import { isUniqueViolation } from "../../lib/db-errors";
 import { ConflictError, NotFoundError, ValidationError } from "./organizations";
+import {
+  claimMutationReceipt,
+  completeMutationReceipt,
+  lookupMutationReceipt,
+} from "../mutations/receipts";
 
 type SupabaseAdmin = ReturnType<typeof createSupabaseAdminClient>;
 type DwellingType = (typeof dwellingTypeEnum.enumValues)[number];
@@ -60,7 +65,8 @@ export async function createDwelling(
   db: Db,
   organizationId: string,
   input: CreateDwellingInput,
-  actorUserId: string
+  actorUserId: string,
+  clientMutationId: string = crypto.randomUUID()
 ) {
   assertInvoiceDeliveryMethodSelected(
     input.invoiceByEmail ?? true,
@@ -68,6 +74,31 @@ export async function createDwelling(
   );
   try {
     return await db.transaction(async (tx) => {
+      const identity = {
+        organizationId,
+        clientMutationId,
+        operation: "dwelling.create",
+        entityType: "dwelling" as const,
+      };
+      const { replayed, receipt } = await claimMutationReceipt(tx, identity);
+      if (replayed) {
+        const [existing] = receipt.entityId
+          ? await tx
+              .select()
+              .from(dwellings)
+              .where(
+                and(
+                  eq(dwellings.organizationId, organizationId),
+                  eq(dwellings.id, receipt.entityId)
+                )
+              )
+              .limit(1)
+          : [];
+        if (!existing)
+          throw new ConflictError("The original item is no longer present");
+        return existing;
+      }
+
       const [dwelling] = await tx
         .insert(dwellings)
         .values({ organizationId, ...input })
@@ -80,6 +111,7 @@ export async function createDwelling(
         entityId: dwelling.id,
         afterData: dwelling,
       });
+      await completeMutationReceipt(tx, identity, dwelling.id);
       return dwelling;
     });
   } catch (err) {
@@ -337,13 +369,71 @@ export async function assignResident(
   dwellingId: string,
   email: string,
   actorUserId: string,
-  supabaseAdmin: SupabaseAdmin
+  supabaseAdmin: SupabaseAdmin,
+  clientMutationId: string = crypto.randomUUID()
 ) {
   await getDwelling(db, organizationId, dwellingId);
+
+  const existingReceipt = await lookupMutationReceipt(
+    db,
+    organizationId,
+    clientMutationId
+  );
+  if (existingReceipt.state === "committed") {
+    if (
+      existingReceipt.operation !== "resident-access.create" ||
+      existingReceipt.entityType !== "resident-access" ||
+      existingReceipt.scopeId !== dwellingId
+    ) {
+      throw new ConflictError("This request key was already used");
+    }
+    if (!existingReceipt.entity) {
+      throw new ConflictError("The original access grant is no longer present");
+    }
+    return existingReceipt.entity as {
+      userId: string;
+      email: string;
+      displayName: string | null;
+    };
+  }
 
   const supabaseUser = await findOrCreateSupabaseUser(supabaseAdmin, email);
 
   return db.transaction(async (tx) => {
+    const identity = {
+      organizationId,
+      clientMutationId,
+      operation: "resident-access.create",
+      entityType: "resident-access" as const,
+      scopeId: dwellingId,
+    };
+    const { replayed, receipt } = await claimMutationReceipt(tx, identity);
+    if (replayed) {
+      const [existing] = receipt.entityId
+        ? await tx
+            .select({
+              userId: appUsers.id,
+              email: appUsers.emailSnapshot,
+              displayName: appUsers.displayName,
+            })
+            .from(dwellingAccess)
+            .innerJoin(appUsers, eq(appUsers.id, dwellingAccess.userId))
+            .where(
+              and(
+                eq(dwellingAccess.dwellingId, dwellingId),
+                eq(dwellingAccess.userId, receipt.entityId)
+              )
+            )
+            .limit(1)
+        : [];
+      if (!existing) {
+        throw new ConflictError(
+          "The original access grant is no longer present"
+        );
+      }
+      return existing;
+    }
+
     // insert-then-reselect: see the identical comment in addAdminMembership
     // (src/domain/organizations/organizations.ts) -- avoids a raw
     // unique-violation when two requests provision the same new email
@@ -380,6 +470,8 @@ export async function assignResident(
         afterData: { email },
       });
     }
+
+    await completeMutationReceipt(tx, identity, supabaseUser.id);
 
     return {
       userId: supabaseUser.id,

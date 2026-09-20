@@ -913,79 +913,91 @@ function filterHref(status?: CaseStatus) {
 </AdminLayout>
 
 <script>
-  const filterForm = document.querySelector<HTMLFormElement>(
-    "[data-instant-filter]"
-  );
-  const searchInput = document.querySelector<HTMLInputElement>("#search");
-  const statusSelect = document.querySelector("#status");
-  let searchTimer: number | undefined;
-  searchInput?.addEventListener("input", () => {
-    window.clearTimeout(searchTimer);
-    searchTimer = window.setTimeout(() => filterForm?.requestSubmit(), 300);
-  });
-  statusSelect?.addEventListener("change", () => filterForm?.requestSubmit());
+  import { onPageLoad } from "../../../../../../lib/ui/page-lifecycle";
 
-  const lockDialog = document.querySelector<HTMLDialogElement>(
-    "#lock-period-dialog"
-  );
-  const lockButton = document.querySelector<HTMLButtonElement>(
-    "[data-open-lock-dialog]"
-  );
-  lockButton?.addEventListener("click", () => {
-    lockButton.closest("details")?.removeAttribute("open");
-    lockDialog?.showModal();
-  });
-  lockDialog?.addEventListener("click", (event) => {
-    if (event.target === lockDialog) lockDialog.close();
-  });
+  onPageLoad(() => {
+    if (!document.querySelector(".workbench")) return;
+    const filterForm = document.querySelector<HTMLFormElement>(
+      "[data-instant-filter]"
+    );
+    const searchInput = document.querySelector<HTMLInputElement>("#search");
+    const statusSelect = document.querySelector("#status");
+    let searchTimer: number | undefined;
+    searchInput?.addEventListener("input", () => {
+      window.clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(() => filterForm?.requestSubmit(), 300);
+    });
+    statusSelect?.addEventListener("change", () => filterForm?.requestSubmit());
 
-  const boxes = [
-    ...document.querySelectorAll<HTMLInputElement>('input[name="invoiceIds"]'),
-  ];
-  const selectAll = document.querySelector<HTMLInputElement>("#select-all");
-  const toolbar = document.querySelector<HTMLElement>("#bulk-toolbar");
-  const selectedCount = document.querySelector<HTMLElement>("#selected-count");
-  const prepareCount = document.querySelector<HTMLElement>("#prepare-count");
-  const sendCount = document.querySelector<HTMLElement>("#send-count");
+    const lockDialog = document.querySelector<HTMLDialogElement>(
+      "#lock-period-dialog"
+    );
+    const lockButton = document.querySelector<HTMLButtonElement>(
+      "[data-open-lock-dialog]"
+    );
+    lockButton?.addEventListener("click", () => {
+      lockButton.closest("details")?.removeAttribute("open");
+      lockDialog?.showModal();
+    });
+    lockDialog?.addEventListener("click", (event) => {
+      if (event.target === lockDialog) lockDialog.close();
+    });
 
-  const updateSelection = () => {
-    const selected = boxes.filter((box) => box.checked);
-    const prepareEligible = selected.filter(
-      (box) => box.dataset.prepareEligible === "true"
-    ).length;
-    const sendEligible = selected.filter(
-      (box) => box.dataset.sendEligible === "true"
-    ).length;
-    if (toolbar) toolbar.hidden = selected.length === 0;
-    if (selectedCount) selectedCount.textContent = String(selected.length);
-    if (prepareCount) prepareCount.textContent = String(prepareEligible);
-    if (sendCount) sendCount.textContent = String(sendEligible);
+    const boxes = [
+      ...document.querySelectorAll<HTMLInputElement>(
+        'input[name="invoiceIds"]'
+      ),
+    ];
+    const selectAll = document.querySelector<HTMLInputElement>("#select-all");
+    const toolbar = document.querySelector<HTMLElement>("#bulk-toolbar");
+    const selectedCount =
+      document.querySelector<HTMLElement>("#selected-count");
+    const prepareCount = document.querySelector<HTMLElement>("#prepare-count");
+    const sendCount = document.querySelector<HTMLElement>("#send-count");
+
+    const updateSelection = () => {
+      const selected = boxes.filter((box) => box.checked);
+      const prepareEligible = selected.filter(
+        (box) => box.dataset.prepareEligible === "true"
+      ).length;
+      const sendEligible = selected.filter(
+        (box) => box.dataset.sendEligible === "true"
+      ).length;
+      if (toolbar) toolbar.hidden = selected.length === 0;
+      if (selectedCount) selectedCount.textContent = String(selected.length);
+      if (prepareCount) prepareCount.textContent = String(prepareEligible);
+      if (sendCount) sendCount.textContent = String(sendEligible);
+      document
+        .querySelectorAll<HTMLButtonElement>("[data-bulk-status]")
+        .forEach((button) => {
+          button.disabled =
+            button.dataset.bulkStatus === "DRAFT"
+              ? prepareEligible === 0
+              : sendEligible === 0;
+        });
+      if (selectAll) {
+        selectAll.checked =
+          boxes.length > 0 && selected.length === boxes.length;
+        selectAll.indeterminate =
+          selected.length > 0 && selected.length < boxes.length;
+        selectAll.disabled = boxes.length === 0;
+      }
+    };
+
+    boxes.forEach((box) => box.addEventListener("change", updateSelection));
+    selectAll?.addEventListener("change", () => {
+      boxes.forEach((box) => (box.checked = selectAll.checked));
+      updateSelection();
+    });
     document
-      .querySelectorAll<HTMLButtonElement>("[data-bulk-status]")
-      .forEach((button) => {
-        button.disabled =
-          button.dataset.bulkStatus === "DRAFT"
-            ? prepareEligible === 0
-            : sendEligible === 0;
+      .querySelector("#clear-selection")
+      ?.addEventListener("click", () => {
+        boxes.forEach((box) => (box.checked = false));
+        updateSelection();
       });
-    if (selectAll) {
-      selectAll.checked = boxes.length > 0 && selected.length === boxes.length;
-      selectAll.indeterminate =
-        selected.length > 0 && selected.length < boxes.length;
-      selectAll.disabled = boxes.length === 0;
-    }
-  };
-
-  boxes.forEach((box) => box.addEventListener("change", updateSelection));
-  selectAll?.addEventListener("change", () => {
-    boxes.forEach((box) => (box.checked = selectAll.checked));
     updateSelection();
+    return () => window.clearTimeout(searchTimer);
   });
-  document.querySelector("#clear-selection")?.addEventListener("click", () => {
-    boxes.forEach((box) => (box.checked = false));
-    updateSelection();
-  });
-  updateSelection();
 </script>
 
 <style>

@@ -7,6 +7,10 @@ import { meterTypeEnum, meters } from "../../db/schema/dwellings";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { recalculateCaseReadinessForOpenPeriods } from "../periods/case-readiness";
 import { getDwelling, NotFoundError } from "./dwellings";
+import {
+  claimMutationReceipt,
+  completeMutationReceipt,
+} from "../mutations/receipts";
 
 export { NotFoundError };
 
@@ -26,10 +30,37 @@ export async function createMeter(
   organizationId: string,
   dwellingId: string,
   input: CreateMeterInput,
-  actorUserId: string
+  actorUserId: string,
+  clientMutationId: string = crypto.randomUUID()
 ) {
   await getDwelling(db, organizationId, dwellingId);
   return db.transaction(async (tx) => {
+    const identity = {
+      organizationId,
+      clientMutationId,
+      operation: "meter.create",
+      entityType: "meter" as const,
+      scopeId: dwellingId,
+    };
+    const { replayed, receipt } = await claimMutationReceipt(tx, identity);
+    if (replayed) {
+      const [existing] = receipt.entityId
+        ? await tx
+            .select()
+            .from(meters)
+            .where(
+              and(
+                eq(meters.organizationId, organizationId),
+                eq(meters.id, receipt.entityId)
+              )
+            )
+            .limit(1)
+        : [];
+      if (!existing)
+        throw new NotFoundError("The original meter is no longer present");
+      return existing;
+    }
+
     const [meter] = await tx
       .insert(meters)
       .values({ organizationId, dwellingId, ...input })
@@ -47,6 +78,7 @@ export async function createMeter(
       organizationId,
       dwellingId
     );
+    await completeMutationReceipt(tx, identity, meter.id);
     return meter;
   });
 }

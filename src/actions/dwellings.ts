@@ -27,6 +27,7 @@ export const dwellings = {
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
+      clientMutationId: z.uuid(),
       number: z.string().min(1).max(50),
       type: dwellingType.optional(),
       displayName: z.string().max(200).optional(),
@@ -39,7 +40,10 @@ export const dwellings = {
       notes: z.string().max(2000).optional(),
     }),
     handler: safeHandler(
-      async ({ organizationId, areaM2, ...input }, { locals }) => {
+      async (
+        { organizationId, clientMutationId, areaM2, ...input },
+        { locals }
+      ) => {
         requireOrganizationAccess(locals.auth, organizationId);
         return withDb((db) =>
           createDwelling(
@@ -49,7 +53,8 @@ export const dwellings = {
               ...input,
               areaM2: areaM2 !== undefined ? String(areaM2) : undefined,
             },
-            locals.auth!.userId
+            locals.auth!.userId,
+            clientMutationId
           )
         );
       }
@@ -145,9 +150,13 @@ export const dwellings = {
       organizationId: z.uuid(),
       dwellingId: z.uuid(),
       email: z.email(),
+      clientMutationId: z.uuid(),
     }),
     handler: safeHandler(
-      async ({ organizationId, dwellingId, email }, { locals }) => {
+      async (
+        { organizationId, dwellingId, email, clientMutationId },
+        { locals }
+      ) => {
         requireOrganizationAccess(locals.auth, organizationId);
         return withDb((db) =>
           assignResident(
@@ -156,7 +165,8 @@ export const dwellings = {
             dwellingId,
             email,
             locals.auth!.userId,
-            getSupabaseAdmin()
+            getSupabaseAdmin(),
+            clientMutationId
           )
         );
       }

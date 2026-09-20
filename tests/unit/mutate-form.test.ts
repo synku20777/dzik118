@@ -58,7 +58,14 @@ describe("bindMutationForm", () => {
     vi.stubGlobal(
       "FormData",
       class {
+        values = new Map<string, unknown>();
         constructor(public source: unknown) {}
+        set(name: string, value: unknown) {
+          this.values.set(name, value);
+        }
+        get(name: string) {
+          return this.values.get(name) ?? null;
+        }
       }
     );
   });
@@ -85,7 +92,7 @@ describe("bindMutationForm", () => {
     await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
 
     expect(action).toHaveBeenCalledTimes(1);
-    expect(onSuccess).toHaveBeenCalledWith({ id: "m1" }, form);
+    expect(onSuccess).toHaveBeenCalledWith({ id: "m1" }, form, undefined);
   });
 
   it("ignores a second submit while the first is still in flight (no duplicate mutation)", async () => {
@@ -253,6 +260,138 @@ describe("bindMutationForm", () => {
     form.triggerSubmit();
     await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
     expect(action).toHaveBeenCalledTimes(2);
+  });
+
+  it("passes one optimistic handle through rollback when the Action fails", async () => {
+    const button = makeButton();
+    const form = makeForm(button);
+    const optimisticHandle = { id: "client:meter:1" };
+    const optimistic = vi.fn(() => optimisticHandle);
+    const onError = vi.fn();
+
+    bindMutationForm({
+      form: form as never,
+      action: vi.fn().mockResolvedValue({
+        error: { message: "Meter already exists" },
+      }),
+      savingLabel: "Saving…",
+      fallbackErrorMessage: "Something went wrong.",
+      mutation: () => ({
+        entity: "meter",
+        operation: "create",
+        pendingLabel: "Adding meter…",
+        successLabel: "Meter added",
+        errorLabel: "Could not add meter",
+      }),
+      optimistic,
+      onError,
+      onSuccess: vi.fn(),
+    });
+
+    form.triggerSubmit();
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+
+    expect(optimistic).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith(
+      { message: "Meter already exists" },
+      form,
+      optimisticHandle
+    );
+  });
+
+  it("reuses the server idempotency key and logical mutation ID after an unknown failure", async () => {
+    const button = makeButton();
+    const form = makeForm(button);
+    const mutationIds: string[] = [];
+    const keys: unknown[] = [];
+    const action = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("network lost"))
+      .mockImplementationOnce(
+        async (formData: { get(name: string): unknown }) => {
+          keys.push(formData.get("clientMutationId"));
+          return { data: { id: "m1" } };
+        }
+      );
+
+    bindMutationForm({
+      form: form as never,
+      action: (formData) => {
+        keys.push(formData.get("clientMutationId"));
+        return action(formData);
+      },
+      savingLabel: "Saving…",
+      fallbackErrorMessage: "Could not save",
+      mutation: () => ({
+        entity: "meter",
+        operation: "create",
+        pendingLabel: "Adding meter…",
+        successLabel: "Meter added",
+        errorLabel: "Could not add meter",
+        idempotentCreate: true,
+      }),
+      optimistic: (_formData, mutationId) => {
+        mutationIds.push(mutationId);
+        return undefined;
+      },
+      onSuccess: vi.fn(),
+    });
+
+    form.triggerSubmit();
+    await vi.waitFor(() => expect(button.disabled).toBe(false));
+    form.triggerSubmit();
+    await vi.waitFor(() => expect(action).toHaveBeenCalledTimes(2));
+
+    expect(keys[0]).toBeTruthy();
+    expect(keys[2]).toBe(keys[0]);
+    expect(mutationIds[1]).toBe(mutationIds[0]);
+  });
+
+  it("keeps the optimistic entity while an unknown outcome is verified", async () => {
+    const button = makeButton();
+    const form = makeForm(button);
+    const optimisticHandle = { id: "client:meter:pending" };
+    const onError = vi.fn();
+    const onVerifying = vi.fn();
+    const onSuccess = vi.fn();
+    const recover = vi.fn().mockResolvedValue({
+      state: "committed",
+      entity: { id: "meter-1" },
+    });
+
+    bindMutationForm<{ id: string }, typeof optimisticHandle>({
+      form: form as never,
+      action: vi.fn().mockRejectedValue(new TypeError("response lost")),
+      savingLabel: "Saving…",
+      fallbackErrorMessage: "Could not save",
+      mutation: () => ({
+        entity: "meter",
+        operation: "create",
+        idempotentCreate: true,
+        messageKey: "Adding meter…",
+        successMessageKey: "Meter added",
+        pendingLabel: "Adding meter…",
+        successLabel: "Meter added",
+        errorLabel: "Could not add meter",
+      }),
+      optimistic: () => optimisticHandle,
+      recover,
+      onVerifying,
+      onError,
+      onSuccess,
+    });
+
+    form.triggerSubmit();
+    await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledOnce());
+
+    expect(onVerifying).toHaveBeenCalledWith(optimisticHandle, false);
+    expect(onError).not.toHaveBeenCalled();
+    expect(recover).toHaveBeenCalledOnce();
+    expect(onSuccess).toHaveBeenCalledWith(
+      { id: "meter-1" },
+      form,
+      optimisticHandle
+    );
   });
 });
 

@@ -11,6 +11,7 @@
 // hardcoded, so the same discipline applies here.
 import { actions, isInputError } from "astro:actions";
 import { ICONS, type IconName } from "./icons";
+import { onPageLoad } from "./page-lifecycle";
 
 type DrawerKind = "readings" | "billing-details";
 
@@ -106,10 +107,12 @@ function iconSvg(name: IconName): SVGSVGElement {
   return svg;
 }
 
-const dialogEl = document.querySelector<HTMLDialogElement>(
-  "#admin-context-drawer"
-);
-if (dialogEl) {
+onPageLoad(() => {
+  const dialogEl = document.querySelector<HTMLDialogElement>(
+    "#admin-context-drawer"
+  );
+  if (!dialogEl) return;
+  const controller = new AbortController();
   const dialog = dialogEl;
   const config: DrawerConfig = JSON.parse(dialog.dataset.config ?? "{}");
   const eyebrowEl = dialog.querySelector<HTMLElement>(
@@ -863,18 +866,22 @@ if (dialogEl) {
     }
   }
 
-  document.addEventListener("click", (event) => {
-    const trigger = (event.target as HTMLElement).closest<HTMLElement>(
-      "[data-open-drawer]"
-    );
-    if (!trigger) return;
-    event.preventDefault();
-    const kind = trigger.dataset.openDrawer as DrawerKind;
-    const dwellingId = trigger.dataset.dwellingId!;
-    const focus = trigger.dataset.focus;
-    history.pushState(null, "", drawerUrl(kind, dwellingId, focus));
-    void openDrawer(kind, dwellingId, focus, trigger);
-  });
+  document.addEventListener(
+    "click",
+    (event) => {
+      const trigger = (event.target as HTMLElement).closest<HTMLElement>(
+        "[data-open-drawer]"
+      );
+      if (!trigger) return;
+      event.preventDefault();
+      const kind = trigger.dataset.openDrawer as DrawerKind;
+      const dwellingId = trigger.dataset.dwellingId!;
+      const focus = trigger.dataset.focus;
+      history.pushState(null, "", drawerUrl(kind, dwellingId, focus));
+      void openDrawer(kind, dwellingId, focus, trigger);
+    },
+    { signal: controller.signal }
+  );
 
   closeButton.addEventListener("click", () => requestClose());
   dialog.addEventListener("cancel", (event) => {
@@ -883,16 +890,25 @@ if (dialogEl) {
     requestClose();
   });
 
-  window.addEventListener("popstate", () => {
-    const params = new URLSearchParams(window.location.search);
-    const kind = params.get("drawer") as DrawerKind | null;
-    const dwellingId = params.get("dwelling");
-    if (kind && dwellingId) {
-      void openDrawer(kind, dwellingId, params.get("focus") ?? undefined, null);
-    } else if (dialog.open) {
-      requestClose({ fromPopstate: true });
-    }
-  });
+  window.addEventListener(
+    "popstate",
+    () => {
+      const params = new URLSearchParams(window.location.search);
+      const kind = params.get("drawer") as DrawerKind | null;
+      const dwellingId = params.get("dwelling");
+      if (kind && dwellingId) {
+        void openDrawer(
+          kind,
+          dwellingId,
+          params.get("focus") ?? undefined,
+          null
+        );
+      } else if (dialog.open) {
+        requestClose({ fromPopstate: true });
+      }
+    },
+    { signal: controller.signal }
+  );
 
   const initialParams = new URLSearchParams(window.location.search);
   const initialKind = initialParams.get("drawer") as DrawerKind | null;
@@ -905,4 +921,5 @@ if (dialogEl) {
       null
     );
   }
-}
+  return () => controller.abort();
+});

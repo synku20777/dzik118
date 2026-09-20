@@ -521,12 +521,17 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
 </AdminLayout>
 
 <script>
-  const autoSendCheckbox =
-    document.querySelector<HTMLInputElement>("#autoSendEnabled");
-  const autoSendDayInput =
-    document.querySelector<HTMLInputElement>("#autoSendDay");
-  autoSendCheckbox?.addEventListener("change", () => {
-    if (autoSendDayInput) autoSendDayInput.disabled = !autoSendCheckbox.checked;
+  import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
+
+  onPageLoad(() => {
+    const autoSendCheckbox =
+      document.querySelector<HTMLInputElement>("#autoSendEnabled");
+    const autoSendDayInput =
+      document.querySelector<HTMLInputElement>("#autoSendDay");
+    autoSendCheckbox?.addEventListener("change", () => {
+      if (autoSendDayInput)
+        autoSendDayInput.disabled = !autoSendCheckbox.checked;
+    });
   });
 </script>
 

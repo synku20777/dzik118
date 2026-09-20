@@ -789,6 +789,7 @@ const RULE_ICON_BODIES: Record<string, string> = {
 
 <script
   is:inline
+  data-astro-rerun
   define:vars={{
     ongoingLabel: t("ongoing"),
     iconBodies: RULE_ICON_BODIES,
@@ -800,6 +801,11 @@ const RULE_ICON_BODIES: Record<string, string> = {
   const statusSelect = document.querySelector("#status-filter");
   const archivedCheckbox = document.querySelector("#show-archived");
   let searchTimer;
+  document.addEventListener(
+    "astro:before-swap",
+    () => window.clearTimeout(searchTimer),
+    { once: true }
+  );
   searchInput?.addEventListener("input", () => {
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => filterForm?.requestSubmit(), 300);

@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Db } from "../../src/db/client";
 import { organizationMemberships } from "../../src/db/schema/organizations";
+import { mutationReceipts } from "../../src/db/schema/mutation-receipts";
 import {
   cleanupOrganization,
   createIntegrationDb,
@@ -182,6 +183,35 @@ describe("dwellings (spec DWL-001/002/003)", () => {
     await cleanupOrg(orgB.id);
   });
 
+  it("retries dwelling creation with one client mutation ID without duplicating it", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT Dwl Idempotency", addressLine1: "Addr" },
+      seedAdminId
+    );
+    const key = randomUUID();
+    const first = await createDwelling(
+      db,
+      org.id,
+      { number: "IDEM-1" },
+      seedAdminId,
+      key
+    );
+    const retry = await createDwelling(
+      db,
+      org.id,
+      { number: "IDEM-1" },
+      seedAdminId,
+      key
+    );
+
+    expect(retry.id).toBe(first.id);
+    expect(
+      (await listDwellings(db, org.id)).filter((row) => row.number === "IDEM-1")
+    ).toHaveLength(1);
+    await cleanupOrg(org.id);
+  });
+
   it("invoice delivery: defaults to email-only, rejects turning both methods off, allows paper-only", async () => {
     const org = await createOrganization(
       db,
@@ -265,15 +295,31 @@ describe("dwellings (spec DWL-001/002/003)", () => {
       seedAdminId
     );
 
+    const email = `it-resident-${randomUUID()}@example.com`;
+    const key = randomUUID();
     const resident = await assignResident(
       db,
       org.id,
       dwelling.id,
-      `it-resident-${randomUUID()}@example.com`,
+      email,
       seedAdminId,
-      supabaseAdmin
+      supabaseAdmin,
+      key
+    );
+    const retry = await assignResident(
+      db,
+      org.id,
+      dwelling.id,
+      email,
+      seedAdminId,
+      supabaseAdmin,
+      key
     );
     const residents = await listDwellingResidents(db, dwelling.id);
+    expect(retry.userId).toBe(resident.userId);
+    expect(residents.filter((r) => r.userId === resident.userId)).toHaveLength(
+      1
+    );
     expect(residents.some((r) => r.userId === resident.userId)).toBe(true);
 
     await db.$client.query("delete from dwelling_access where user_id = $1", [
@@ -284,6 +330,73 @@ describe("dwellings (spec DWL-001/002/003)", () => {
     ]);
     await cleanupOrg(org.id);
   }, 20_000);
+
+  it("serializes concurrent resident retries across Supabase Auth and Postgres", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT Resident Idempotency", addressLine1: "Addr" },
+      seedAdminId
+    );
+    const dwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "RACE-1" },
+      seedAdminId
+    );
+    const email = `it-resident-race-${randomUUID()}@example.com`;
+    const key = randomUUID();
+
+    const [first, second] = await Promise.all([
+      assignResident(
+        db,
+        org.id,
+        dwelling.id,
+        email,
+        seedAdminId,
+        supabaseAdmin,
+        key
+      ),
+      assignResident(
+        db,
+        org.id,
+        dwelling.id,
+        email,
+        seedAdminId,
+        supabaseAdmin,
+        key
+      ),
+    ]);
+
+    expect(second.userId).toBe(first.userId);
+    expect(
+      (await listDwellingResidents(db, dwelling.id)).filter(
+        (resident) => resident.userId === first.userId
+      )
+    ).toHaveLength(1);
+    expect(
+      await db
+        .select()
+        .from(mutationReceipts)
+        .where(eq(mutationReceipts.clientMutationId, key))
+    ).toHaveLength(1);
+
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1_000,
+    });
+    expect(error).toBeNull();
+    expect(
+      data.users.filter((user) => user.email?.toLowerCase() === email)
+    ).toHaveLength(1);
+
+    await db.$client.query("delete from dwelling_access where user_id = $1", [
+      first.userId,
+    ]);
+    await db.$client.query("delete from app_users where id = $1", [
+      first.userId,
+    ]);
+    await cleanupOrg(org.id);
+  }, 30_000);
 });
 
 describe("DWL-004: CSV import", () => {

@@ -34,6 +34,7 @@
 // <details>/<summary> popover (zero extra JS, keyboard accessible by
 // default) holding that row's Spacing control.
 import Sortable from "sortablejs";
+import { onPageLoad } from "./page-lifecycle";
 import {
   renderInvoiceHtml,
   rowPresentationKey,
@@ -78,8 +79,10 @@ interface EditorBootstrap {
   strings: Record<string, string>;
 }
 
-const root = document.querySelector<HTMLElement>("#template-editor");
-if (root) {
+onPageLoad(() => {
+  const root = document.querySelector<HTMLElement>("#template-editor");
+  if (!root) return;
+  const controller = new AbortController();
   const bootstrapEl = document.querySelector<HTMLScriptElement>(
     "#template-editor-bootstrap"
   );
@@ -138,10 +141,14 @@ if (root) {
   function markDirty() {
     dirty = true;
   }
-  window.addEventListener("beforeunload", (event) => {
-    if (!dirty) return;
-    event.preventDefault();
-  });
+  window.addEventListener(
+    "beforeunload",
+    (event) => {
+      if (!dirty) return;
+      event.preventDefault();
+    },
+    { signal: controller.signal }
+  );
   form.addEventListener("submit", () => {
     dirty = false;
   });
@@ -848,7 +855,7 @@ if (root) {
     refreshPreview();
   });
 
-  new Sortable(blockListEl, {
+  const sortable = new Sortable(blockListEl, {
     handle: ".tpl-drag-handle",
     animation: 150,
     onEnd: () => {
@@ -887,7 +894,7 @@ if (root) {
           if (details !== target) details.open = false;
         });
     },
-    true
+    { capture: true, signal: controller.signal }
   );
 
   form.addEventListener("submit", () => {
@@ -906,4 +913,8 @@ if (root) {
   renderBlockList();
   refreshPreview();
   applyZoom();
-}
+  return () => {
+    controller.abort();
+    sortable.destroy();
+  };
+});

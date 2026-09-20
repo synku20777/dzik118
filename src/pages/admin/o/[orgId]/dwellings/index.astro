@@ -185,9 +185,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
 
     <div class="table-wrap">
       <table class="w-full text-left text-body-sm">
-        <thead
-          class="border-b border-border bg-surface-hover text-muted"
-        >
+        <thead class="border-b border-border bg-surface-hover text-muted">
           <tr>
             <th class="px-4 py-2">
               {t("Number")}
@@ -202,7 +200,13 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
             <th class="px-4 py-2 text-right">{t("Actions")}</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-border">
+        <tbody
+          class="divide-y divide-border"
+          id="dwellings-list"
+          data-address={organization.addressLine1}
+          data-active-label={t("Active")}
+          data-saving-label={t("Saving…")}
+        >
           {
             dwellings.map((d) => (
               <tr class="row-link">
@@ -261,7 +265,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
           }
           {
             dwellings.length === 0 && (
-              <tr>
+              <tr data-empty-row>
                 <td colspan="8" class="px-4 py-8 text-center text-muted">
                   {t("No dwellings match this filter.")}
                 </td>
@@ -311,7 +315,19 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
       <form
         method="POST"
         action={actions.dwellings.create}
+        id="dwelling-form"
         class="mt-4 grid grid-cols-2 gap-3"
+        data-saving-label={t("Saving…")}
+        data-pending-label={t("Creating dwelling…")}
+        data-created-label={t("Dwelling created")}
+        data-error-label={t("Could not create dwelling")}
+        data-checking-label={t("Checking save status…")}
+        data-unknown-label={t("Outcome not confirmed")}
+        data-committed-missing={t(
+          "The original change was saved, but the item is no longer present. The page has been refreshed."
+        )}
+        data-generic-error={t("Something went wrong. Please try again.")}
+        data-reconcile-error={t("Saved, but the view could not be updated")}
       >
         <input type="hidden" name="organizationId" value={organizationId} />
         <div class="col-span-2">
@@ -368,25 +384,197 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
 </AdminLayout>
 
 <script>
-  const filterForm = document.querySelector<HTMLFormElement>(
-    "[data-instant-filter]"
-  );
-  const searchInput = document.querySelector<HTMLInputElement>("#search");
-  const typeSelect = document.querySelector("#type-filter");
-  const statusSelect = document.querySelector("#status-filter");
-  const archivedCheckbox = document.querySelector(
-    'input[name="includeArchived"]'
-  );
-  let searchTimer: number | undefined;
-  searchInput?.addEventListener("input", () => {
-    window.clearTimeout(searchTimer);
-    searchTimer = window.setTimeout(() => filterForm?.requestSubmit(), 300);
+  import { actions } from "astro:actions";
+  import { navigate } from "astro:transitions/client";
+  import {
+    bindMutationForm,
+    copyAstroScope,
+  } from "../../../../../lib/ui/mutate-form";
+  import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
+
+  interface CreatedDwelling {
+    id: string;
+    number: string;
+    type: string;
+    occupantName: string | null;
+    areaM2: string | null;
+    residentCount: number;
+  }
+
+  onPageLoad(() => {
+    if (!document.querySelector("#dwelling-form")) return;
+    const initializedPath = `${location.pathname}${location.search}`;
+    const filterForm = document.querySelector<HTMLFormElement>(
+      "[data-instant-filter]"
+    );
+    if (!filterForm) return;
+    const searchInput = document.querySelector<HTMLInputElement>("#search");
+    const typeSelect = document.querySelector("#type-filter");
+    const statusSelect = document.querySelector("#status-filter");
+    const archivedCheckbox = document.querySelector(
+      'input[name="includeArchived"]'
+    );
+    let searchTimer: number | undefined;
+    searchInput?.addEventListener("input", () => {
+      window.clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(() => filterForm.requestSubmit(), 300);
+    });
+    typeSelect?.addEventListener("change", () => filterForm.requestSubmit());
+    statusSelect?.addEventListener("change", () => filterForm.requestSubmit());
+    archivedCheckbox?.addEventListener("change", () =>
+      filterForm.requestSubmit()
+    );
+
+    const form = document.querySelector<HTMLFormElement>("#dwelling-form");
+    const list =
+      document.querySelector<HTMLTableSectionElement>("#dwellings-list");
+    if (!form || !list) return () => window.clearTimeout(searchTimer);
+
+    const reconcileEmpty = () => {
+      const emptyRow =
+        list.querySelector<HTMLTableRowElement>("[data-empty-row]");
+      if (emptyRow) {
+        emptyRow.hidden = !!list.querySelector("tr:not([data-empty-row])");
+      }
+    };
+
+    const buildRow = (
+      dwelling: CreatedDwelling,
+      pending = false
+    ): HTMLTableRowElement => {
+      const row = document.createElement("tr");
+      row.className = "row-link";
+      row.dataset.dwellingId = dwelling.id;
+      if (pending) row.dataset.pending = "true";
+      const typeOption = form.querySelector<HTMLOptionElement>(
+        `option[value="${dwelling.type}"]`
+      );
+      const href = `/admin/o/${
+        form.querySelector<HTMLInputElement>('input[name="organizationId"]')
+          ?.value ?? ""
+      }/dwellings/${dwelling.id}`;
+      const numberCell = document.createElement("td");
+      numberCell.className = "px-4 py-2 font-medium";
+      if (pending) {
+        numberCell.textContent = dwelling.number;
+      } else {
+        const link = document.createElement("a");
+        link.className = "row-link-target hover:underline";
+        link.href = href;
+        link.textContent = dwelling.number;
+        numberCell.appendChild(link);
+      }
+      const values = [
+        typeOption?.textContent?.trim() ?? dwelling.type,
+        dwelling.occupantName ?? "—",
+        list.dataset.address ?? "",
+        dwelling.areaM2 ?? "—",
+        String(dwelling.residentCount ?? 0),
+        pending
+          ? (list.dataset.savingLabel ?? "Saving…")
+          : (list.dataset.activeLabel ?? "Active"),
+        "",
+      ];
+      row.appendChild(numberCell);
+      values.forEach((value, index) => {
+        const cell = document.createElement("td");
+        cell.className = `px-4 py-2${index === 3 || index === 4 || index === 6 ? " text-right" : ""}`;
+        cell.textContent = value;
+        row.appendChild(cell);
+      });
+      copyAstroScope(form, row, ...Array.from(row.querySelectorAll("*")));
+      return row;
+    };
+
+    bindMutationForm<CreatedDwelling, HTMLTableRowElement>({
+      form,
+      action: (formData) => actions.dwellings.create(formData),
+      savingLabel: form.dataset.savingLabel ?? "Saving…",
+      fallbackErrorMessage:
+        form.dataset.genericError ?? "Something went wrong. Please try again.",
+      mutation: (formData) => ({
+        entity: "dwelling",
+        operation: "create",
+        idempotentCreate: true,
+        messageKey: "Creating dwelling…",
+        successMessageKey: "Dwelling created",
+        pendingLabel:
+          `${form.dataset.pendingLabel ?? "Creating dwelling…"} ${String(formData.get("number") ?? "")}`.trim(),
+        successLabel: form.dataset.createdLabel ?? "Dwelling created",
+        errorLabel: form.dataset.errorLabel ?? "Could not create dwelling",
+        reconciliationErrorLabel: form.dataset.reconcileError,
+        committedMissingLabel: form.dataset.committedMissing,
+      }),
+      recover: async (clientMutationId) => {
+        const organizationId =
+          form.querySelector<HTMLInputElement>('input[name="organizationId"]')
+            ?.value ?? "";
+        const { data, error } = await actions.mutations.lookup({
+          organizationId,
+          clientMutationId,
+        });
+        if (error || !data) throw error ?? new Error("Lookup failed");
+        return data;
+      },
+      onVerifying: (optimisticRow, unknown) => {
+        const status = optimisticRow?.querySelector<HTMLTableCellElement>(
+          "td:nth-last-child(2)"
+        );
+        if (status) {
+          status.textContent = unknown
+            ? (form.dataset.unknownLabel ?? "Outcome not confirmed")
+            : (form.dataset.checkingLabel ?? "Checking save status…");
+        }
+      },
+      onCommittedMissing: async (_form, optimisticRow) => {
+        optimisticRow?.remove();
+        reconcileEmpty();
+        if (`${location.pathname}${location.search}` === initializedPath) {
+          await navigate(initializedPath, { history: "replace" });
+        }
+      },
+      optimistic: (formData, mutationId) => {
+        const row = buildRow(
+          {
+            id: `client:dwelling:${mutationId.split(":").at(-1)}`,
+            number: String(formData.get("number") ?? ""),
+            type: String(formData.get("type") ?? "APARTMENT"),
+            occupantName: null,
+            areaM2: String(formData.get("areaM2") || "") || null,
+            residentCount: 0,
+          },
+          true
+        );
+        list.appendChild(row);
+        reconcileEmpty();
+        return row;
+      },
+      onError: (_error, _form, optimisticRow) => {
+        if (!optimisticRow?.isConnected) return;
+        optimisticRow?.remove();
+        reconcileEmpty();
+      },
+      onSuccess: async (dwelling, _form, optimisticRow) => {
+        if (optimisticRow?.isConnected) {
+          optimisticRow.replaceWith(buildRow(dwelling));
+        }
+        if (form.isConnected) {
+          reconcileEmpty();
+          form.reset();
+          const details =
+            document.querySelector<HTMLDetailsElement>("#create-dwelling");
+          if (details) details.open = false;
+          await navigate(window.location.href, { history: "replace" });
+        } else if (
+          `${location.pathname}${location.search}` === initializedPath
+        ) {
+          await navigate(initializedPath, { history: "replace" });
+        }
+      },
+    });
+
+    return () => window.clearTimeout(searchTimer);
   });
-  typeSelect?.addEventListener("change", () => filterForm?.requestSubmit());
-  statusSelect?.addEventListener("change", () => filterForm?.requestSubmit());
-  archivedCheckbox?.addEventListener("change", () =>
-    filterForm?.requestSubmit()
-  );
 </script>
 
 <style>
@@ -400,6 +588,10 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
     height: 1.15rem;
     flex-shrink: 0;
     color: var(--color-muted);
+  }
+  #dwellings-list tr[data-pending="true"] td:last-of-type {
+    color: var(--color-primary);
+    font-weight: 650;
   }
   .pagination-bar {
     display: flex;
