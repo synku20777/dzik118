@@ -160,9 +160,12 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await page.locator("#admin-login-form button").click();
   await page.waitForURL(/\/admin\/o\/.+\/dashboard/);
   const base = new URL(page.url()).pathname.replace(/\/dashboard$/, "");
-  const dwellingNumber = `E2E-${Date.now()}`;
+  const dwellingNumber = `00-E2E-${Date.now()}`;
 
   await page.goto(`${base}/dwellings`);
+  const dwellingBLink = page.locator("tbody a.row-link-target").first();
+  const dwellingBHref = await dwellingBLink.getAttribute("href");
+  expect(dwellingBHref).toBeTruthy();
   await page.getByRole("link", { name: "Create dwelling" }).click();
   await page.locator("#create-dwelling #number").fill(dwellingNumber);
   await page.locator("#create-dwelling #areaM2").fill("1");
@@ -203,6 +206,446 @@ test("first meter is reconciled immediately and its dynamic archive control work
     hasText: dwellingNumber,
   });
   await dwellingLink.click();
+
+  await page.locator("#basic-info-details summary").click();
+  const basicInfoBillingName = `Basic E2E ${Date.now()}`;
+  const basicInfoArea = "45.75";
+  const basicInfoResidentCount = "3";
+  await page
+    .locator('#basic-info-form input[name="billingName"]')
+    .fill(basicInfoBillingName);
+  await page
+    .locator('#basic-info-form input[name="areaM2"]')
+    .fill(basicInfoArea);
+  await page
+    .locator('#basic-info-form input[name="residentCount"]')
+    .fill(basicInfoResidentCount);
+
+  let basicInfoRequests = 0;
+  const onBasicInfoRequest = (request: import("@playwright/test").Request) => {
+    if (
+      request.method() === "POST" &&
+      request.url().includes("dwellings.update") &&
+      !request.url().includes("updateInvoiceDelivery")
+    ) {
+      basicInfoRequests += 1;
+    }
+  };
+  page.on("request", onBasicInfoRequest);
+
+  let releaseBasicInfo!: () => void;
+  const basicInfoGate = new Promise<void>((resolve) => {
+    releaseBasicInfo = resolve;
+  });
+  const holdBasicInfoRequest = async (
+    route: import("@playwright/test").Route
+  ) => {
+    if (
+      route.request().method() === "POST" &&
+      route.request().url().includes("dwellings.update") &&
+      !route.request().url().includes("updateInvoiceDelivery")
+    ) {
+      await basicInfoGate;
+      await route.continue();
+      return;
+    }
+    await route.continue();
+  };
+  await page.route("**/*", holdBasicInfoRequest);
+  await page.locator("#basic-info-form button[type=submit]").click();
+
+  await expect(page.locator("[data-mutation-summary]")).toHaveText(
+    "1 change saving"
+  );
+  await expect(page.locator('[data-kpi="area"] p')).toHaveText(
+    `${basicInfoArea} m²`
+  );
+  await expect(page.locator('[data-kpi="resident-count"] p')).toHaveText(
+    basicInfoResidentCount
+  );
+  await expect(page.locator('dd[data-field="billingName"]')).toHaveText(
+    basicInfoBillingName
+  );
+  await expect(page.locator('dd[data-field="areaM2"]')).toHaveText(
+    basicInfoArea
+  );
+  await expect(page.locator('dd[data-field="residentCount"]')).toHaveText(
+    basicInfoResidentCount
+  );
+
+  releaseBasicInfo();
+  await expect(page.locator("[data-mutation-summary]")).toHaveText(
+    "All changes saved"
+  );
+  await page.unroute("**/*", holdBasicInfoRequest);
+  page.off("request", onBasicInfoRequest);
+
+  await expect(page.locator(".mutation-toasts")).toContainText("Changes saved");
+  await expect(page.locator("#basic-info-details")).not.toHaveAttribute(
+    "open",
+    ""
+  );
+  await expect(page.locator('[data-kpi="area"] p')).toHaveText(
+    `${basicInfoArea} m²`
+  );
+  await expect(page.locator('dd[data-field="billingName"]')).toHaveText(
+    basicInfoBillingName
+  );
+  await expect(page.locator('dd[data-field="areaM2"]')).toHaveText(
+    basicInfoArea
+  );
+  await expect(page.locator('dd[data-field="residentCount"]')).toHaveText(
+    basicInfoResidentCount
+  );
+  expect(basicInfoRequests).toBe(1);
+
+  await page.reload();
+  await expect(page.locator('[data-kpi="area"] p')).toHaveText(
+    `${basicInfoArea} m²`
+  );
+  await expect(page.locator('[data-kpi="resident-count"] p')).toHaveText(
+    basicInfoResidentCount
+  );
+  await expect(page.locator('dd[data-field="billingName"]')).toHaveText(
+    basicInfoBillingName
+  );
+  await expect(page.locator('dd[data-field="areaM2"]')).toHaveText(
+    basicInfoArea
+  );
+  await expect(page.locator('dd[data-field="residentCount"]')).toHaveText(
+    basicInfoResidentCount
+  );
+
+  const emailCheckbox = page.locator(
+    '[data-delivery-form] input[name="invoiceByEmail"]'
+  );
+  const paperCheckbox = page.locator(
+    '[data-delivery-form] input[name="invoiceByPaper"]'
+  );
+  const deliverySave = page.locator("[data-delivery-save]");
+  const deliveryKpi = page.locator('[data-kpi="invoice-delivery"] p');
+
+  const initialPaperChecked = await paperCheckbox.isChecked();
+  const initialKpi = (await deliveryKpi.textContent())?.trim() ?? "";
+  await expect(deliverySave).toBeDisabled();
+
+  // Toggle invoiceByPaper to a genuinely different value while keeping invoiceByEmail true
+  // (satisfies the schema constraint: invoiceByEmail OR invoiceByPaper)
+  if (initialPaperChecked) {
+    await paperCheckbox.uncheck();
+  } else {
+    await paperCheckbox.check();
+  }
+  await expect(deliverySave).toBeEnabled();
+
+  let deliveryRequests = 0;
+  const onDeliveryRequest = (request: import("@playwright/test").Request) => {
+    if (
+      request.method() === "POST" &&
+      request.url().includes("dwellings.updateInvoiceDelivery")
+    ) {
+      deliveryRequests += 1;
+    }
+  };
+  page.on("request", onDeliveryRequest);
+
+  let releaseDelivery!: () => void;
+  const deliveryGate = new Promise<void>((resolve) => {
+    releaseDelivery = resolve;
+  });
+  const holdDeliveryRequest = async (
+    route: import("@playwright/test").Route
+  ) => {
+    if (
+      route.request().method() === "POST" &&
+      route.request().url().includes("dwellings.updateInvoiceDelivery")
+    ) {
+      await deliveryGate;
+      await route.continue();
+      return;
+    }
+    await route.continue();
+  };
+  await page.route("**/*", holdDeliveryRequest);
+  await deliverySave.click();
+
+  // Pending-only tier: controls disabled, no optimistic display update
+  await expect(deliverySave).toBeDisabled();
+  await expect(emailCheckbox).toBeDisabled();
+  await expect(paperCheckbox).toBeDisabled();
+  await expect(page.locator("[data-mutation-summary]")).toHaveText(
+    "1 change saving"
+  );
+  await expect(deliveryKpi).toHaveText(initialKpi);
+
+  releaseDelivery();
+  await expect(page.locator("[data-mutation-summary]")).toHaveText(
+    "All changes saved"
+  );
+  await page.unroute("**/*", holdDeliveryRequest);
+  page.off("request", onDeliveryRequest);
+
+  await expect(page.locator(".mutation-toasts")).toContainText(
+    "Delivery preferences saved"
+  );
+  await expect(deliverySave).toBeDisabled();
+  await expect(emailCheckbox).toBeEnabled();
+  await expect(paperCheckbox).toBeEnabled();
+  if (initialPaperChecked) {
+    await expect(paperCheckbox).not.toBeChecked();
+    await expect(deliveryKpi).toHaveText("Email");
+  } else {
+    await expect(paperCheckbox).toBeChecked();
+    await expect(deliveryKpi).toHaveText("Email, Paper");
+  }
+  expect(deliveryRequests).toBe(1);
+
+  await page.reload();
+  if (initialPaperChecked) {
+    await expect(paperCheckbox).not.toBeChecked();
+    await expect(deliveryKpi).toHaveText("Email");
+  } else {
+    await expect(paperCheckbox).toBeChecked();
+    await expect(deliveryKpi).toHaveText("Email, Paper");
+  }
+
+  const pageErrors: Error[] = [];
+  const onPageError = (err: Error) => pageErrors.push(err);
+  page.on("pageerror", onPageError);
+
+  await page.locator("#basic-info-details summary").click();
+  const navBillingName = `Nav Persisted ${Date.now()}`;
+  const navArea = "67.25";
+  await page
+    .locator('#basic-info-form input[name="billingName"]')
+    .fill(navBillingName);
+  await page.locator('#basic-info-form input[name="areaM2"]').fill(navArea);
+
+  let releaseNavBasicInfo!: () => void;
+  const navBasicInfoGate = new Promise<void>((resolve) => {
+    releaseNavBasicInfo = resolve;
+  });
+  let navUpdateRequests = 0;
+  const onNavUpdateRequest = (request: import("@playwright/test").Request) => {
+    if (
+      request.method() === "POST" &&
+      request.url().includes("dwellings.update") &&
+      !request.url().includes("updateInvoiceDelivery")
+    ) {
+      navUpdateRequests += 1;
+    }
+  };
+  page.on("request", onNavUpdateRequest);
+
+  const holdNavBasicInfoRequest = async (
+    route: import("@playwright/test").Route
+  ) => {
+    if (
+      route.request().method() === "POST" &&
+      route.request().url().includes("dwellings.update") &&
+      !route.request().url().includes("updateInvoiceDelivery")
+    ) {
+      await navBasicInfoGate;
+      await route.continue();
+      return;
+    }
+    await route.continue();
+  };
+  await page.route("**/*", holdNavBasicInfoRequest);
+  await page.locator("#basic-info-form button[type=submit]").click();
+
+  await expect(page.locator("[data-mutation-summary]")).toHaveText(
+    "1 change saving"
+  );
+  await page.locator(`.admin-sidebar a[href="${base}/dwellings"]`).click();
+  await page.locator(`a[href="${dwellingBHref}"]`).first().click();
+  await expect(page).toHaveURL(dwellingBHref!);
+  await expect(page.locator("[data-dwelling-detail]")).toBeVisible();
+  await expect(page.locator("[data-mutation-summary]")).toHaveText(
+    "1 change saving"
+  );
+  expect(pageErrors).toEqual([]);
+
+  const bKpiArea = await page.locator('[data-kpi="area"] p').textContent();
+  const bKpiResident = await page
+    .locator('[data-kpi="resident-count"] p')
+    .textContent();
+  const bBillingName = await page
+    .locator('dd[data-field="billingName"]')
+    .textContent();
+  const bAreaM2 = await page.locator('dd[data-field="areaM2"]').textContent();
+  const bFormBillingName = await page
+    .locator('#basic-info-form input[name="billingName"]')
+    .inputValue();
+  const bFormAreaM2 = await page
+    .locator('#basic-info-form input[name="areaM2"]')
+    .inputValue();
+
+  expect(bBillingName).not.toBe(navBillingName);
+  expect(bAreaM2).not.toBe(navArea);
+
+  releaseNavBasicInfo();
+  await expect(page.locator("[data-mutation-summary]")).toHaveText(
+    "All changes saved"
+  );
+  await expect(page.locator(".mutation-toasts")).toContainText("Changes saved");
+  await page.unroute("**/*", holdNavBasicInfoRequest);
+  page.off("request", onNavUpdateRequest);
+  expect(navUpdateRequests).toBe(1);
+  expect(pageErrors).toEqual([]);
+
+  await expect(page.locator('[data-kpi="area"] p')).toHaveText(bKpiArea ?? "");
+  await expect(page.locator('[data-kpi="resident-count"] p')).toHaveText(
+    bKpiResident ?? ""
+  );
+  await expect(page.locator('dd[data-field="billingName"]')).toHaveText(
+    bBillingName ?? ""
+  );
+  await expect(page.locator('dd[data-field="areaM2"]')).toHaveText(
+    bAreaM2 ?? ""
+  );
+  await expect(
+    page.locator('#basic-info-form input[name="billingName"]')
+  ).toHaveValue(bFormBillingName);
+  await expect(
+    page.locator('#basic-info-form input[name="areaM2"]')
+  ).toHaveValue(bFormAreaM2);
+
+  await page.locator(`.admin-sidebar a[href="${base}/dwellings"]`).click();
+  await page.getByRole("link", { name: dwellingNumber, exact: true }).click();
+  await expect(page.locator('[data-kpi="area"] p')).toHaveText(`${navArea} m²`);
+  await expect(page.locator('dd[data-field="billingName"]')).toHaveText(
+    navBillingName
+  );
+  await expect(page.locator('dd[data-field="areaM2"]')).toHaveText(navArea);
+  expect(pageErrors).toEqual([]);
+  page.off("pageerror", onPageError);
+
+  await page.locator("#basic-info-details summary").click();
+  await expect(page.locator("#basic-info-details")).toHaveAttribute("open", "");
+  const preBillingName =
+    (
+      await page.locator('dd[data-field="billingName"]').textContent()
+    )?.trim() ?? "";
+  const preAreaM2 =
+    (await page.locator('dd[data-field="areaM2"]').textContent())?.trim() ?? "";
+  const preKpiArea =
+    (await page.locator('[data-kpi="area"] p').textContent())?.trim() ?? "";
+  const preFormBillingName = await page
+    .locator('#basic-info-form input[name="billingName"]')
+    .inputValue();
+  const preFormAreaM2 = await page
+    .locator('#basic-info-form input[name="areaM2"]')
+    .inputValue();
+
+  expect(preBillingName).toBe(navBillingName);
+  expect(preFormBillingName).toBe(navBillingName);
+  expect(preAreaM2).toBe(navArea);
+  expect(preFormAreaM2).toBe(navArea);
+
+  const rollbackBillingName = `Rollback test ${Date.now()}`;
+  const rollbackArea = "91.50";
+  await page
+    .locator('#basic-info-form input[name="billingName"]')
+    .fill(rollbackBillingName);
+  await page
+    .locator('#basic-info-form input[name="areaM2"]')
+    .fill(rollbackArea);
+
+  const dwellingUrlBeforeSubmit = page.url();
+
+  let releaseRollbackGate!: () => void;
+  const rollbackGate = new Promise<void>((resolve) => {
+    releaseRollbackGate = resolve;
+  });
+  let rollbackUpdateRequests = 0;
+  const holdAndFailBasicInfoRequest = async (
+    route: import("@playwright/test").Route
+  ) => {
+    if (
+      route.request().method() === "POST" &&
+      route.request().url().includes("dwellings.update") &&
+      !route.request().url().includes("updateInvoiceDelivery")
+    ) {
+      rollbackUpdateRequests += 1;
+      await rollbackGate;
+      await route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({
+          type: "AstroActionError",
+          code: "BAD_REQUEST",
+          message: "Could not save dwelling information",
+        }),
+      });
+      return;
+    }
+    await route.continue();
+  };
+  await page.route("**/*", holdAndFailBasicInfoRequest);
+  await page.locator("#basic-info-form button[type=submit]").click();
+
+  await expect(page.locator("[data-mutation-summary]")).toHaveText(
+    "1 change saving"
+  );
+  await expect.poll(() => rollbackUpdateRequests).toBe(1);
+  await expect.poll(() => mutationStatuses(page)).toContain("pending");
+  await expect(page.locator('dd[data-field="billingName"]')).toHaveText(
+    rollbackBillingName
+  );
+  await expect(page.locator('dd[data-field="areaM2"]')).toHaveText(
+    rollbackArea
+  );
+  await expect(page.locator('[data-kpi="area"] p')).toHaveText(
+    `${rollbackArea} m²`
+  );
+
+  releaseRollbackGate();
+
+  await expect(page.locator('dd[data-field="billingName"]')).toHaveText(
+    preBillingName
+  );
+  await expect(page.locator('dd[data-field="areaM2"]')).toHaveText(preAreaM2);
+  await expect(page.locator('[data-kpi="area"] p')).toHaveText(preKpiArea);
+
+  await expect(
+    page.locator('#basic-info-form input[name="billingName"]')
+  ).toHaveValue(rollbackBillingName);
+  await expect(
+    page.locator('#basic-info-form input[name="areaM2"]')
+  ).toHaveValue(rollbackArea);
+  await expect(
+    page.locator("#basic-info-form button[type=submit]")
+  ).toBeEnabled();
+
+  const inlineAlert = page.locator(
+    '#basic-info-details .edit-disclosure-panel [role="alert"]'
+  );
+  await expect(inlineAlert).toBeVisible();
+  await expect(inlineAlert).toHaveText("Could not save dwelling information");
+
+  await expect(page.locator("[data-mutation-summary]")).toHaveText(
+    "1 change needs attention"
+  );
+  await expect.poll(() => mutationStatuses(page)).toContain("error");
+  await expect(page.locator(".mutation-toasts")).toContainText(
+    "Could not save dwelling information"
+  );
+
+  expect(page.url()).toBe(dwellingUrlBeforeSubmit);
+  await page.unroute("**/*", holdAndFailBasicInfoRequest);
+  expect(rollbackUpdateRequests).toBe(1);
+
+  await page
+    .locator(
+      ".mutation-toasts .mutation-item[data-status='error'] .mutation-dismiss"
+    )
+    .click();
+  await expect(page.locator("[data-mutation-summary]")).toHaveText(
+    "All changes saved"
+  );
+  await expect.poll(() => mutationStatuses(page)).not.toContain("error");
+  await page.locator("#basic-info-details summary").click();
 
   await page.getByRole("tab", { name: "Meters" }).click();
   await expect(page.locator("#meters-empty-state")).toBeVisible();

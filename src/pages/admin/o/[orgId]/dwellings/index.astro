@@ -564,6 +564,18 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
           const details =
             document.querySelector<HTMLDetailsElement>("#create-dwelling");
           if (details) details.open = false;
+          // Not a stale-read/Hyperdrive-caching workaround (Hyperdrive query
+          // caching is disabled -- see docs/decisions/0005-admin-mutation-
+          // feedback.md): this list is server-sorted by dwelling number
+          // (listDwellings: `ORDER BY number ASC LIMIT/OFFSET`) and can be
+          // search/type/status-filtered. The optimistic row above is always
+          // appended at the end of the current view, which is only correct
+          // by coincidence -- the new dwelling's real sort position, page,
+          // or even membership in the active filter can't be reconstructed
+          // client-side from the returned entity alone. This re-navigation
+          // re-renders the list from the server's actual, authoritative
+          // ordering/pagination/filtering. Do not remove this as if it were
+          // leftover cache-staleness compensation.
           await navigate(window.location.href, { history: "replace" });
         } else if (
           `${location.pathname}${location.search}` === initializedPath

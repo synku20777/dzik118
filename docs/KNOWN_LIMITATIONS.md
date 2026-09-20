@@ -88,3 +88,11 @@ The `@astrojs/cloudflare` adapter automatically adds a KV binding named `SESSION
 ### Manual bootstrap required for initial admin and organization
 
 There is no self-serve workflow to create the initial admin account or organization. The `organizations.create` action requires an already-authenticated `ADMIN` caller, creating a circular dependency on a fresh deployment with no users. The first organization and admin must be provisioned manually through direct database inserts and the Supabase Auth admin API. These manual steps are detailed in `docs/deployment/DEPLOYMENT_RUNBOOK.md` section 7, mirroring the bootstrap process described in `README.md` step 7.
+
+## Infrastructure
+
+### Hyperdrive query caching must remain disabled
+
+Hyperdrive query caching is disabled in production and must stay disabled. The application requires fresh read-after-write behavior across all domains (dwellings, meters, residents, tariffs, billing configuration/state, balances, period state, and admin settings). When query caching is enabled, client-side revalidation reads immediately following a mutation hit stale cached `SELECT` results, causing the UI to overwrite optimistic updates with stale data and making newly created or updated entities appear to vanish or misbehave.
+
+Connection pooling and connection acceleration via Hyperdrive remain enabled. For verification and configuration commands, see the Hyperdrive section in [docs/deployment/DEPLOYMENT_RUNBOOK.md](deployment/DEPLOYMENT_RUNBOOK.md#hyperdrive). For details on the mutation feedback architecture and distinguishing cache staleness from network lost-response recovery, see [docs/decisions/0005-admin-mutation-feedback.md](decisions/0005-admin-mutation-feedback.md).

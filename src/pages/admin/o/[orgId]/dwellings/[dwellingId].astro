@@ -238,19 +238,25 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     }
 
     <div class="stat-grid">
-      <KpiCard label={t("Area")} value={`${dwelling.areaM2} m²`} />
-      <KpiCard label={t("Resident count")} value={dwelling.residentCount} />
+      <div data-kpi="area">
+        <KpiCard label={t("Area")} value={`${dwelling.areaM2} m²`} />
+      </div>
+      <div data-kpi="resident-count">
+        <KpiCard label={t("Resident count")} value={dwelling.residentCount} />
+      </div>
       <KpiCard
         label={isCredit ? t("Account credit") : t("Outstanding balance")}
         value={formatMoney(balanceForDisplay, organization.currency, locale)}
         tone={balanceKpiTone}
       />
-      <KpiCard
-        label={t("Invoice delivery")}
-        value={deliveryMethods.length > 0
-          ? deliveryMethods.join(", ")
-          : t("None")}
-      />
+      <div data-kpi="invoice-delivery">
+        <KpiCard
+          label={t("Invoice delivery")}
+          value={deliveryMethods.length > 0
+            ? deliveryMethods.join(", ")
+            : t("None")}
+        />
+      </div>
     </div>
 
     <div class="dwelling-tabs" role="tablist" aria-label={t("Sections")}>
@@ -314,7 +320,11 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                 {t("Core information about this dwelling.")}
               </p>
             </div>
-            <details class="edit-disclosure" open={!!updateResult?.error}>
+            <details
+              class="edit-disclosure"
+              id="basic-info-details"
+              open={!!updateResult?.error}
+            >
               <summary class="btn-secondary">
                 <Icon name="pencil" size="sm" />
                 {t("Edit")}
@@ -323,14 +333,25 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                 {
                   updateResult?.error && (
                     <p class="notice notice-danger" role="alert">
-                      {updateResult.error.message}
+                      {friendlyActionErrorMessage(updateResult.error, locale)}
                     </p>
                   )
                 }
                 <form
                   method="POST"
                   action={actions.dwellings.update}
+                  id="basic-info-form"
                   class="mt-4 grid grid-cols-2 gap-3"
+                  data-saving-label={t("Saving…")}
+                  data-pending-label={t("Saving dwelling information…")}
+                  data-success-label={t("Changes saved")}
+                  data-error-label={t("Could not save dwelling information")}
+                  data-generic-error={t(
+                    "Something went wrong. Please try again."
+                  )}
+                  data-reconcile-error={t(
+                    "Saved, but the view could not be updated"
+                  )}
                 >
                   <input
                     type="hidden"
@@ -426,27 +447,29 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
           <dl class="detail-list">
             <div>
               <dt>{t("Occupant name")}</dt>
-              <dd>{dwelling.occupantName ?? "—"}</dd>
+              <dd data-field="occupantName">{dwelling.occupantName ?? "—"}</dd>
             </div>
             <div>
               <dt>{t("Billing name")}</dt>
-              <dd>{dwelling.billingName ?? "—"}</dd>
+              <dd data-field="billingName">{dwelling.billingName ?? "—"}</dd>
             </div>
             <div>
               <dt>{t("Billing email")}</dt>
-              <dd>{dwelling.billingEmail ?? "—"}</dd>
+              <dd data-field="billingEmail">{dwelling.billingEmail ?? "—"}</dd>
             </div>
             <div>
               <dt>{t("Billing address")}</dt>
-              <dd>{dwelling.billingAddress ?? "—"}</dd>
+              <dd data-field="billingAddress">
+                {dwelling.billingAddress ?? "—"}
+              </dd>
             </div>
             <div>
               <dt>{t("Area (m²)")}</dt>
-              <dd>{dwelling.areaM2}</dd>
+              <dd data-field="areaM2">{dwelling.areaM2}</dd>
             </div>
             <div>
               <dt>{t("Resident count")}</dt>
-              <dd>{dwelling.residentCount}</dd>
+              <dd data-field="residentCount">{dwelling.residentCount}</dd>
             </div>
           </dl>
         </section>
@@ -714,7 +737,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
           {
             deliveryResult?.error && (
               <p class="notice notice-danger" role="alert">
-                {deliveryResult.error.message}
+                {friendlyActionErrorMessage(deliveryResult.error, locale)}
               </p>
             )
           }
@@ -723,6 +746,15 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
             action={actions.dwellings.updateInvoiceDelivery}
             class="delivery-form"
             data-delivery-form
+            data-saving-label={t("Saving…")}
+            data-pending-label={t("Saving delivery preferences…")}
+            data-success-label={t("Delivery preferences saved")}
+            data-error-label={t("Could not save delivery preferences")}
+            data-generic-error={t("Something went wrong. Please try again.")}
+            data-reconcile-error={t("Saved, but the view could not be updated")}
+            data-email-label={t("Email")}
+            data-paper-label={t("Paper")}
+            data-none-label={t("None")}
           >
             <input type="hidden" name="organizationId" value={organizationId} />
             <input type="hidden" name="dwellingId" value={dwellingId} />
@@ -1415,6 +1447,13 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     // Invoice delivery: no separate edit mode -- the checkboxes are always
     // live, and Save only becomes active once they actually differ from the
     // saved state (rather than always being submittable).
+    // Pending-only mutation tier: disable controls immediately, apply the
+    // authoritative result only after server confirmation.
+    interface UpdatedDeliveryDwelling {
+      invoiceByEmail?: boolean;
+      invoiceByPaper?: boolean;
+    }
+
     const deliveryForm = document.querySelector<HTMLFormElement>(
       "[data-delivery-form]"
     );
@@ -1427,7 +1466,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
           'input[type="checkbox"]'
         ),
       ];
-      const initialState = deliveryCheckboxes.map((box) => box.checked);
+      let initialState = deliveryCheckboxes.map((box) => box.checked);
       const updateSaveState = () => {
         const isDirty = deliveryCheckboxes.some(
           (box, index) => box.checked !== initialState[index]
@@ -1437,6 +1476,347 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
       for (const box of deliveryCheckboxes) {
         box.addEventListener("change", updateSaveState);
       }
+
+      let capturedDeliveryElements: {
+        kpiDelivery: HTMLElement | null;
+        emailBox: HTMLInputElement | null;
+        paperBox: HTMLInputElement | null;
+      } | null = null;
+
+      bindMutationForm<UpdatedDeliveryDwelling>({
+        form: deliveryForm,
+        action: (fd) => actions.dwellings.updateInvoiceDelivery(fd),
+        savingLabel: deliveryForm.dataset.savingLabel ?? "Saving…",
+        fallbackErrorMessage:
+          deliveryForm.dataset.genericError ??
+          "Something went wrong. Please try again.",
+        mutation: () => {
+          capturedDeliveryElements = {
+            kpiDelivery: document.querySelector<HTMLElement>(
+              '[data-kpi="invoice-delivery"] p'
+            ),
+            emailBox: deliveryForm.querySelector<HTMLInputElement>(
+              'input[name="invoiceByEmail"]'
+            ),
+            paperBox: deliveryForm.querySelector<HTMLInputElement>(
+              'input[name="invoiceByPaper"]'
+            ),
+          };
+          if (
+            deliveryForm.previousElementSibling?.classList.contains(
+              "notice-danger"
+            )
+          ) {
+            deliveryForm.previousElementSibling.remove();
+          }
+          for (const box of deliveryCheckboxes) {
+            box.disabled = true;
+          }
+          return {
+            entity: "dwelling",
+            operation: "update-invoice-delivery",
+            messageKey: "Saving delivery preferences…",
+            successMessageKey: "Delivery preferences saved",
+            pendingLabel:
+              deliveryForm.dataset.pendingLabel ??
+              "Saving delivery preferences…",
+            successLabel:
+              deliveryForm.dataset.successLabel ?? "Delivery preferences saved",
+            errorLabel:
+              deliveryForm.dataset.errorLabel ??
+              "Could not save delivery preferences",
+            reconciliationErrorLabel: deliveryForm.dataset.reconcileError,
+          };
+        },
+        onSuccess: (dwelling) => {
+          for (const box of deliveryCheckboxes) {
+            if (box.isConnected) {
+              box.disabled = false;
+            }
+          }
+
+          const emailBox = capturedDeliveryElements?.emailBox;
+          if (emailBox?.isConnected && dwelling.invoiceByEmail !== undefined) {
+            emailBox.checked = Boolean(dwelling.invoiceByEmail);
+          }
+          const paperBox = capturedDeliveryElements?.paperBox;
+          if (paperBox?.isConnected && dwelling.invoiceByPaper !== undefined) {
+            paperBox.checked = Boolean(dwelling.invoiceByPaper);
+          }
+
+          const emailLabel = deliveryForm.dataset.emailLabel ?? "Email";
+          const paperLabel = deliveryForm.dataset.paperLabel ?? "Paper";
+          const noneLabel = deliveryForm.dataset.noneLabel ?? "None";
+          const methods = [
+            dwelling.invoiceByEmail && emailLabel,
+            dwelling.invoiceByPaper && paperLabel,
+          ].filter(Boolean) as string[];
+          const kpiDelivery = capturedDeliveryElements?.kpiDelivery;
+          if (kpiDelivery?.isConnected) {
+            kpiDelivery.textContent =
+              methods.length > 0 ? methods.join(", ") : noneLabel;
+          }
+
+          if (deliveryForm.isConnected) {
+            initialState = deliveryCheckboxes.map((box) => box.checked);
+            updateSaveState();
+            setTimeout(updateSaveState, 0);
+          }
+        },
+        onError: () => {
+          for (const box of deliveryCheckboxes) {
+            if (box.isConnected) {
+              box.disabled = false;
+            }
+          }
+          if (deliveryForm.isConnected) {
+            updateSaveState();
+            setTimeout(updateSaveState, 0);
+          }
+        },
+      });
+    }
+
+    // ---- Basic information: submit once, patch KPI and details from the
+    // returned dwelling, no full-page reload. Optimistic tier: update
+    // displayed values immediately, restore snapshot on failure, overwrite
+    // with authoritative server values on success. ----
+    interface UpdatedDwelling {
+      billingName?: string | null;
+      occupantName?: string | null;
+      billingEmail?: string | null;
+      billingAddress?: string | null;
+      areaM2?: string | number | null;
+      residentCount?: number | null;
+    }
+
+    interface BasicInfoElements {
+      kpiArea: HTMLElement | null;
+      kpiResident: HTMLElement | null;
+      occupantName: HTMLElement | null;
+      billingName: HTMLElement | null;
+      billingEmail: HTMLElement | null;
+      billingAddress: HTMLElement | null;
+      areaM2: HTMLElement | null;
+      residentCount: HTMLElement | null;
+    }
+
+    interface BasicInfoSnapshot {
+      elements: BasicInfoElements;
+      kpiArea: string;
+      kpiResidentCount: string;
+      occupantName: string;
+      billingName: string;
+      billingEmail: string;
+      billingAddress: string;
+      areaM2: string;
+      residentCount: string;
+    }
+
+    const basicInfoForm =
+      document.querySelector<HTMLFormElement>("#basic-info-form");
+    const basicInfoDetails =
+      document.querySelector<HTMLDetailsElement>("#basic-info-details") ??
+      basicInfoForm?.closest<HTMLDetailsElement>("details");
+
+    function getBasicInfoElements(): BasicInfoElements {
+      return {
+        kpiArea: document.querySelector<HTMLElement>('[data-kpi="area"] p'),
+        kpiResident: document.querySelector<HTMLElement>(
+          '[data-kpi="resident-count"] p'
+        ),
+        occupantName: document.querySelector<HTMLElement>(
+          'dd[data-field="occupantName"]'
+        ),
+        billingName: document.querySelector<HTMLElement>(
+          'dd[data-field="billingName"]'
+        ),
+        billingEmail: document.querySelector<HTMLElement>(
+          'dd[data-field="billingEmail"]'
+        ),
+        billingAddress: document.querySelector<HTMLElement>(
+          'dd[data-field="billingAddress"]'
+        ),
+        areaM2: document.querySelector<HTMLElement>('dd[data-field="areaM2"]'),
+        residentCount: document.querySelector<HTMLElement>(
+          'dd[data-field="residentCount"]'
+        ),
+      };
+    }
+
+    if (basicInfoForm) {
+      let capturedBasicInfoElements: BasicInfoElements | null = null;
+
+      bindMutationForm<UpdatedDwelling, BasicInfoSnapshot>({
+        form: basicInfoForm,
+        action: (fd) => actions.dwellings.update(fd),
+        savingLabel: basicInfoForm.dataset.savingLabel ?? "Saving…",
+        fallbackErrorMessage:
+          basicInfoForm.dataset.genericError ??
+          "Something went wrong. Please try again.",
+        mutation: () => ({
+          entity: "dwelling",
+          operation: "update",
+          messageKey: "Saving dwelling information…",
+          successMessageKey: "Changes saved",
+          pendingLabel:
+            basicInfoForm.dataset.pendingLabel ??
+            "Saving dwelling information…",
+          successLabel: basicInfoForm.dataset.successLabel ?? "Changes saved",
+          errorLabel:
+            basicInfoForm.dataset.errorLabel ??
+            "Could not save dwelling information",
+          reconciliationErrorLabel: basicInfoForm.dataset.reconcileError,
+        }),
+        optimistic: (formData) => {
+          const els = getBasicInfoElements();
+          capturedBasicInfoElements = els;
+          const snapshot: BasicInfoSnapshot = {
+            elements: els,
+            kpiArea: els.kpiArea?.textContent ?? "",
+            kpiResidentCount: els.kpiResident?.textContent ?? "",
+            occupantName: els.occupantName?.textContent ?? "",
+            billingName: els.billingName?.textContent ?? "",
+            billingEmail: els.billingEmail?.textContent ?? "",
+            billingAddress: els.billingAddress?.textContent ?? "",
+            areaM2: els.areaM2?.textContent ?? "",
+            residentCount: els.residentCount?.textContent ?? "",
+          };
+
+          const occupantVal = String(formData.get("occupantName") ?? "").trim();
+          const billingNameVal = String(
+            formData.get("billingName") ?? ""
+          ).trim();
+          const billingEmailVal = String(
+            formData.get("billingEmail") ?? ""
+          ).trim();
+          const billingAddressVal = String(
+            formData.get("billingAddress") ?? ""
+          ).trim();
+          const areaM2Val = String(formData.get("areaM2") ?? "").trim();
+          const residentCountVal = String(
+            formData.get("residentCount") ?? ""
+          ).trim();
+
+          if (els.kpiArea?.isConnected) {
+            els.kpiArea.textContent = areaM2Val ? `${areaM2Val} m²` : "—";
+          }
+          if (els.kpiResident?.isConnected) {
+            els.kpiResident.textContent = residentCountVal || "—";
+          }
+          if (els.occupantName?.isConnected) {
+            els.occupantName.textContent = occupantVal || "—";
+          }
+          if (els.billingName?.isConnected) {
+            els.billingName.textContent = billingNameVal || "—";
+          }
+          if (els.billingEmail?.isConnected) {
+            els.billingEmail.textContent = billingEmailVal || "—";
+          }
+          if (els.billingAddress?.isConnected) {
+            els.billingAddress.textContent = billingAddressVal || "—";
+          }
+          if (els.areaM2?.isConnected) {
+            els.areaM2.textContent = areaM2Val || "—";
+          }
+          if (els.residentCount?.isConnected) {
+            els.residentCount.textContent = residentCountVal || "—";
+          }
+
+          return snapshot;
+        },
+        onError: (_error, _form, snapshot) => {
+          if (!snapshot) return;
+          const els = snapshot.elements ?? capturedBasicInfoElements;
+          if (!els) return;
+          if (els.kpiArea?.isConnected)
+            els.kpiArea.textContent = snapshot.kpiArea;
+          if (els.kpiResident?.isConnected)
+            els.kpiResident.textContent = snapshot.kpiResidentCount;
+          if (els.occupantName?.isConnected)
+            els.occupantName.textContent = snapshot.occupantName;
+          if (els.billingName?.isConnected)
+            els.billingName.textContent = snapshot.billingName;
+          if (els.billingEmail?.isConnected)
+            els.billingEmail.textContent = snapshot.billingEmail;
+          if (els.billingAddress?.isConnected)
+            els.billingAddress.textContent = snapshot.billingAddress;
+          if (els.areaM2?.isConnected) els.areaM2.textContent = snapshot.areaM2;
+          if (els.residentCount?.isConnected)
+            els.residentCount.textContent = snapshot.residentCount;
+        },
+        onSuccess: (dwelling, form, snapshot) => {
+          const els = snapshot?.elements ?? capturedBasicInfoElements;
+          const occupantVal = dwelling.occupantName?.trim() || "";
+          const billingNameVal = dwelling.billingName?.trim() || "";
+          const billingEmailVal = dwelling.billingEmail?.trim() || "";
+          const billingAddressVal = dwelling.billingAddress?.trim() || "";
+          const areaM2Val =
+            dwelling.areaM2 != null ? String(dwelling.areaM2).trim() : "";
+          const residentCountVal =
+            dwelling.residentCount != null
+              ? String(dwelling.residentCount).trim()
+              : "";
+
+          if (els?.kpiArea?.isConnected) {
+            els.kpiArea.textContent = areaM2Val ? `${areaM2Val} m²` : "—";
+          }
+          if (els?.kpiResident?.isConnected) {
+            els.kpiResident.textContent = residentCountVal || "—";
+          }
+          if (els?.occupantName?.isConnected) {
+            els.occupantName.textContent = occupantVal || "—";
+          }
+          if (els?.billingName?.isConnected) {
+            els.billingName.textContent = billingNameVal || "—";
+          }
+          if (els?.billingEmail?.isConnected) {
+            els.billingEmail.textContent = billingEmailVal || "—";
+          }
+          if (els?.billingAddress?.isConnected) {
+            els.billingAddress.textContent = billingAddressVal || "—";
+          }
+          if (els?.areaM2?.isConnected) {
+            els.areaM2.textContent = areaM2Val || "—";
+          }
+          if (els?.residentCount?.isConnected) {
+            els.residentCount.textContent = residentCountVal || "—";
+          }
+
+          if (form.isConnected) {
+            const occupantInput = form.querySelector<HTMLInputElement>(
+              'input[name="occupantName"]'
+            );
+            if (occupantInput?.isConnected) occupantInput.value = occupantVal;
+            const billingNameInput = form.querySelector<HTMLInputElement>(
+              'input[name="billingName"]'
+            );
+            if (billingNameInput?.isConnected)
+              billingNameInput.value = billingNameVal;
+            const billingEmailInput = form.querySelector<HTMLInputElement>(
+              'input[name="billingEmail"]'
+            );
+            if (billingEmailInput?.isConnected)
+              billingEmailInput.value = billingEmailVal;
+            const billingAddressInput = form.querySelector<HTMLInputElement>(
+              'input[name="billingAddress"]'
+            );
+            if (billingAddressInput?.isConnected)
+              billingAddressInput.value = billingAddressVal;
+            const areaM2Input = form.querySelector<HTMLInputElement>(
+              'input[name="areaM2"]'
+            );
+            if (areaM2Input?.isConnected) areaM2Input.value = areaM2Val;
+            const residentCountInput = form.querySelector<HTMLInputElement>(
+              'input[name="residentCount"]'
+            );
+            if (residentCountInput?.isConnected)
+              residentCountInput.value = residentCountVal;
+          }
+
+          if (basicInfoDetails?.isConnected) basicInfoDetails.open = false;
+        },
+      });
     }
 
     // ---- Meters: submit once, patch the list from the returned meter, no

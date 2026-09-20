@@ -26,6 +26,20 @@ wrangler hyperdrive create <name> --connection-string="<supabase-postgres-url>"
 
 Copy the returned id into `wrangler.jsonc`'s `hyperdrive[0].id`, replacing the `<production-hyperdrive-id>` placeholder currently there.
 
+**Production Invariant: Query Caching MUST Be Disabled**
+
+Query caching MUST be disabled on this Hyperdrive configuration. This application requires fresh read-after-write behavior across all admin and billing operations (dwellings, meters, residents, tariffs, billing configuration/state, balances, period state, and settings). Writes are immediately followed by client-side revalidation reads that must never observe stale cached query results. This is a strict production invariant, not an optional performance tuning recommendation. Connection pooling and acceleration remain enabled.
+
+- To disable caching at creation time:
+  ```bash
+  wrangler hyperdrive create <name> --connection-string="<url>" --caching-disabled
+  ```
+- To inspect and disable caching on an existing configuration:
+  ```bash
+  wrangler hyperdrive get <id>
+  wrangler hyperdrive update <id> --caching-disabled
+  ```
+
 ### Rate limiting
 
 `wrangler.jsonc` already declares three Rate Limiting bindings (`AUTH_RATE_LIMITER`, `AUTH_IP_RATE_LIMITER`, `INVOICE_TOKEN_RATE_LIMITER`) with arbitrary `namespace_id` integers (`1001`, `1003`, `1002`). These are declarative -- Cloudflare provisions them automatically on deploy, no manual dashboard step needed. If this Cloudflare account already runs other Workers with their own rate limiter bindings, double-check these three `namespace_id` values don't collide with one of them.
@@ -176,6 +190,7 @@ npm run deploy
 - [ ] A resident magic link (once one is provisioned via the admin UI) arrives and its link points at the production `APP_BASE_URL` (not Supabase's own default).
 - [ ] The Cloudflare dashboard's Cron Triggers page shows the "15 2 * * *" trigger for this Worker.
 - [ ] A Storage upload/download round-trip works (e.g. by sending one real invoice and confirming its PDF downloads).
+- [ ] Verify via `wrangler hyperdrive get <id>` that the production Hyperdrive config shows caching disabled. Perform this explicit manual check every time a Hyperdrive config is created or modified (not just on first deploy).
 
 ## 10. Ongoing maintenance
 

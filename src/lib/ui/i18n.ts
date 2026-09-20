@@ -706,6 +706,13 @@ const lv: Record<string, string> = {
   "Creating dwelling…": "Izveido īpašumu…",
   "Dwelling created": "Īpašums izveidots",
   "Could not create dwelling": "Neizdevās izveidot īpašumu",
+  "Saving dwelling information…": "Saglabā īpašuma informāciju…",
+  "Could not save dwelling information":
+    "Neizdevās saglabāt īpašuma informāciju",
+  "Saving delivery preferences…": "Saglabā piegādes iestatījumus…",
+  "Delivery preferences saved": "Piegādes iestatījumi saglabāti",
+  "Could not save delivery preferences":
+    "Neizdevās saglabāt piegādes iestatījumus",
   "Could not save": "Neizdevās saglabāt",
   "Saved, but the view could not be updated":
     "Saglabāts, bet skatu neizdevās atjaunināt",
@@ -1742,6 +1749,13 @@ const ru: Record<string, string> = {
   "Creating dwelling…": "Создание помещения…",
   "Dwelling created": "Помещение создано",
   "Could not create dwelling": "Не удалось создать помещение",
+  "Saving dwelling information…": "Сохранение информации о помещении…",
+  "Could not save dwelling information":
+    "Не удалось сохранить информацию о помещении",
+  "Saving delivery preferences…": "Сохранение настроек доставки…",
+  "Delivery preferences saved": "Настройки доставки сохранены",
+  "Could not save delivery preferences":
+    "Не удалось сохранить настройки доставки",
   "Could not save": "Не удалось сохранить",
   "Saved, but the view could not be updated":
     "Сохранено, но не удалось обновить представление",

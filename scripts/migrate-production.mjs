@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 
 const connectionString = process.env.PRODUCTION_DATABASE_URL;
 if (!connectionString) {
@@ -18,8 +19,8 @@ if (
 }
 
 const result = spawnSync(
-  process.platform === "win32" ? "npm.cmd" : "npm",
-  ["run", "db:migrate"],
+  process.execPath,
+  [resolve("node_modules", "drizzle-kit", "bin.cjs"), "migrate"],
   {
     stdio: "inherit",
     env: { ...process.env, DATABASE_URL: connectionString },

@@ -262,6 +262,8 @@ Supabase authenticates identity. Our database decides authorization.
 - Hyperdrive for Postgres
 - production environment uses Worker bindings/secrets
 
+Hyperdrive provides connection pooling/acceleration only; Hyperdrive query caching MUST remain disabled, since the application requires fresh read-after-write behavior after every write.
+
 ## 3.6 email
 
 Default production provider:
