@@ -393,6 +393,58 @@ describe("bindMutationForm", () => {
       optimisticHandle
     );
   });
+
+  it("calls onSettled exactly once after success and after the submit button is re-enabled", async () => {
+    const button = makeButton();
+    const form = makeForm(button);
+    const action = vi.fn().mockResolvedValue({ data: { id: "m1" } });
+    let buttonDisabledAtSettled: boolean | undefined;
+    const onSettled = vi.fn(() => {
+      buttonDisabledAtSettled = button.disabled;
+    });
+
+    bindMutationForm({
+      form: form as never,
+      action,
+      savingLabel: "Saving…",
+      onSuccess: vi.fn(),
+      fallbackErrorMessage: "Something went wrong.",
+      onSettled,
+    });
+
+    form.triggerSubmit();
+    await vi.waitFor(() => expect(onSettled).toHaveBeenCalledTimes(1));
+
+    expect(buttonDisabledAtSettled).toBe(false);
+    expect(button.disabled).toBe(false);
+  });
+
+  it("calls onSettled exactly once after error and after the submit button is re-enabled", async () => {
+    const button = makeButton();
+    const form = makeForm(button);
+    const action = vi
+      .fn()
+      .mockResolvedValue({ error: { message: "Something failed" } });
+    let buttonDisabledAtSettled: boolean | undefined;
+    const onSettled = vi.fn(() => {
+      buttonDisabledAtSettled = button.disabled;
+    });
+
+    bindMutationForm({
+      form: form as never,
+      action,
+      savingLabel: "Saving…",
+      onSuccess: vi.fn(),
+      fallbackErrorMessage: "Something went wrong.",
+      onSettled,
+    });
+
+    form.triggerSubmit();
+    await vi.waitFor(() => expect(onSettled).toHaveBeenCalledTimes(1));
+
+    expect(buttonDisabledAtSettled).toBe(false);
+    expect(button.disabled).toBe(false);
+  });
 });
 
 describe("copyAstroScope", () => {

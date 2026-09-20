@@ -316,6 +316,55 @@ test("first meter is reconciled immediately and its dynamic archive control work
     basicInfoResidentCount
   );
 
+  // Clear billingName via the form, save, reload, confirm it stays empty
+  await page.locator("#basic-info-details summary").click();
+  await page.locator('#basic-info-form input[name="billingName"]').fill("");
+
+  let releaseClearGate!: () => void;
+  const clearGate = new Promise<void>((resolve) => {
+    releaseClearGate = resolve;
+  });
+  const holdClearRequest = async (route: import("@playwright/test").Route) => {
+    if (
+      route.request().method() === "POST" &&
+      route.request().url().includes("dwellings.update") &&
+      !route.request().url().includes("updateInvoiceDelivery")
+    ) {
+      await clearGate;
+      await route.continue();
+      return;
+    }
+    await route.continue();
+  };
+  await page.route("**/*", holdClearRequest);
+  await page.locator("#basic-info-form button[type=submit]").click();
+
+  await expect(page.locator("[data-mutation-summary]")).toHaveText(
+    "1 change saving"
+  );
+  await expect(page.locator('dd[data-field="billingName"]')).toHaveText("—");
+
+  releaseClearGate();
+  await expect(page.locator("[data-mutation-summary]")).toHaveText(
+    "All changes saved"
+  );
+  await page.unroute("**/*", holdClearRequest);
+
+  await expect(page.locator(".mutation-toasts")).toContainText("Changes saved");
+  await expect(page.locator("#basic-info-details")).not.toHaveAttribute(
+    "open",
+    ""
+  );
+  await expect(page.locator('dd[data-field="billingName"]')).toHaveText("—");
+
+  await page.reload();
+  await expect(page.locator('dd[data-field="billingName"]')).toHaveText("—");
+  await page.locator("#basic-info-details summary").click();
+  await expect(
+    page.locator('#basic-info-form input[name="billingName"]')
+  ).toHaveValue("");
+  await page.locator("#basic-info-details summary").click();
+
   const emailCheckbox = page.locator(
     '[data-delivery-form] input[name="invoiceByEmail"]'
   );
@@ -408,6 +457,71 @@ test("first meter is reconciled immediately and its dynamic archive control work
     await expect(paperCheckbox).toBeChecked();
     await expect(deliveryKpi).toHaveText("Email, Paper");
   }
+  await expect(deliverySave).toBeDisabled();
+
+  // Induce a delivery save failure while checkboxes are dirty:
+  // controls re-enable, user's selection is preserved, and Save ends up ENABLED deterministically.
+  if (initialPaperChecked) {
+    await paperCheckbox.check();
+  } else {
+    await paperCheckbox.uncheck();
+  }
+  await expect(deliverySave).toBeEnabled();
+
+  const failDeliveryRequest = async (
+    route: import("@playwright/test").Route
+  ) => {
+    if (
+      route.request().method() === "POST" &&
+      route.request().url().includes("dwellings.updateInvoiceDelivery")
+    ) {
+      await route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({
+          type: "AstroActionError",
+          code: "BAD_REQUEST",
+          message: "Could not save delivery preferences",
+        }),
+      });
+      return;
+    }
+    await route.continue();
+  };
+  await page.route("**/*", failDeliveryRequest);
+  await deliverySave.click();
+
+  await expect.poll(() => mutationStatuses(page)).toContain("error");
+  await expect(page.locator(".mutation-toasts")).toContainText(
+    "Could not save delivery preferences"
+  );
+  await expect(deliverySave).toBeEnabled();
+  await expect(emailCheckbox).toBeEnabled();
+  await expect(paperCheckbox).toBeEnabled();
+  if (initialPaperChecked) {
+    await expect(paperCheckbox).toBeChecked();
+  } else {
+    await expect(paperCheckbox).not.toBeChecked();
+  }
+  await page.unroute("**/*", failDeliveryRequest);
+
+  await page
+    .locator(
+      ".mutation-toasts .mutation-item[data-status='error'] .mutation-dismiss"
+    )
+    .click();
+  await expect(page.locator("[data-mutation-summary]")).toHaveText(
+    "All changes saved"
+  );
+  await expect.poll(() => mutationStatuses(page)).not.toContain("error");
+
+  // Revert back to the saved state to leave the form clean
+  if (initialPaperChecked) {
+    await paperCheckbox.uncheck();
+  } else {
+    await paperCheckbox.check();
+  }
+  await expect(deliverySave).toBeDisabled();
 
   const pageErrors: Error[] = [];
   const onPageError = (err: Error) => pageErrors.push(err);
@@ -415,7 +529,7 @@ test("first meter is reconciled immediately and its dynamic archive control work
 
   await page.locator("#basic-info-details summary").click();
   const navBillingName = `Nav Persisted ${Date.now()}`;
-  const navArea = "67.25";
+  const navArea = (10 + (Date.now() % 9000) / 100).toFixed(2);
   await page
     .locator('#basic-info-form input[name="billingName"]')
     .fill(navBillingName);

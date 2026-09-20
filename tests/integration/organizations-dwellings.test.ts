@@ -212,6 +212,58 @@ describe("dwellings (spec DWL-001/002/003)", () => {
     await cleanupOrg(org.id);
   });
 
+  it("updateDwelling: clears nullable fields when set to null and preserves them when omitted", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT Dwl Org Clearable", addressLine1: "Addr" },
+      seedAdminId
+    );
+    const initial = await createDwelling(
+      db,
+      org.id,
+      {
+        number: "CLR-1",
+        billingName: "Initial Billing Name",
+        occupantName: "Initial Occupant",
+      },
+      seedAdminId
+    );
+    expect(initial.billingName).toBe("Initial Billing Name");
+    expect(initial.occupantName).toBe("Initial Occupant");
+
+    // 1. Calling updateDwelling with billingName omitted leaves previously-set value unchanged
+    const partialUpdate = await updateDwelling(
+      db,
+      org.id,
+      initial.id,
+      { occupantName: "Updated Occupant" },
+      seedAdminId
+    );
+    expect(partialUpdate.billingName).toBe("Initial Billing Name");
+    expect(partialUpdate.occupantName).toBe("Updated Occupant");
+
+    const fetchedAfterOmit = await getDwelling(db, org.id, initial.id);
+    expect(fetchedAfterOmit.billingName).toBe("Initial Billing Name");
+    expect(fetchedAfterOmit.occupantName).toBe("Updated Occupant");
+
+    // 2. Calling updateDwelling with explicit billingName: null clears the column in the returned row and DB
+    const cleared = await updateDwelling(
+      db,
+      org.id,
+      initial.id,
+      { billingName: null },
+      seedAdminId
+    );
+    expect(cleared.billingName).toBeNull();
+    expect(cleared.occupantName).toBe("Updated Occupant");
+
+    const fetchedAfterClear = await getDwelling(db, org.id, initial.id);
+    expect(fetchedAfterClear.billingName).toBeNull();
+    expect(fetchedAfterClear.occupantName).toBe("Updated Occupant");
+
+    await cleanupOrg(org.id);
+  });
+
   it("invoice delivery: defaults to email-only, rejects turning both methods off, allows paper-only", async () => {
     const org = await createOrganization(
       db,

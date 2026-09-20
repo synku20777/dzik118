@@ -1560,7 +1560,6 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
           if (deliveryForm.isConnected) {
             initialState = deliveryCheckboxes.map((box) => box.checked);
             updateSaveState();
-            setTimeout(updateSaveState, 0);
           }
         },
         onError: () => {
@@ -1571,9 +1570,9 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
           }
           if (deliveryForm.isConnected) {
             updateSaveState();
-            setTimeout(updateSaveState, 0);
           }
         },
+        onSettled: updateSaveState,
       });
     }
 

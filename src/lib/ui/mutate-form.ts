@@ -56,6 +56,7 @@ export interface MutateFormConfig<T, Optimistic = undefined> {
     form: HTMLFormElement,
     optimistic: Optimistic | undefined
   ) => void;
+  onSettled?: () => void;
   recover?: (clientMutationId: string) => Promise<RecoveryResult>;
   onVerifying?: (optimistic: Optimistic | undefined, unknown: boolean) => void;
   onCommittedMissing?: (
@@ -242,6 +243,7 @@ export function bindMutationForm<T, Optimistic = undefined>(
               clientMutationId = undefined;
               logicalMutationId = undefined;
               releaseForm();
+              config.onSettled?.();
             },
             unknown: (checkAgain) => {
               config.onVerifying?.(optimistic, true);
@@ -270,7 +272,10 @@ export function bindMutationForm<T, Optimistic = undefined>(
         }
       })
       .finally(() => {
-        if (!recovering) releaseForm();
+        if (!recovering) {
+          releaseForm();
+          config.onSettled?.();
+        }
       });
   });
 }

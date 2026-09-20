@@ -16,6 +16,7 @@ import {
   updateInvoiceDeliveryPreferences,
 } from "../domain/organizations/dwellings";
 import { safeHandler } from "./_errors";
+import { readClearableTextFields } from "./_clearable-fields";
 import { withRequestDb as withDb } from "../lib/db-request";
 import { getSupabaseAdmin } from "./_supabase_admin";
 
@@ -77,8 +78,19 @@ export const dwellings = {
       notes: z.string().max(2000).nullable().optional(),
     }),
     handler: safeHandler(
-      async ({ organizationId, dwellingId, areaM2, ...input }, { locals }) => {
+      async (
+        { organizationId, dwellingId, areaM2, ...input },
+        { locals, request }
+      ) => {
         requireOrganizationAccess(locals.auth, organizationId);
+        const clearable = await readClearableTextFields(request, [
+          "displayName",
+          "occupantName",
+          "billingName",
+          "billingEmail",
+          "billingAddress",
+          "notes",
+        ] as const);
         return withDb((db) =>
           updateDwelling(
             db,
@@ -86,6 +98,7 @@ export const dwellings = {
             dwellingId,
             {
               ...input,
+              ...clearable,
               areaM2: areaM2 !== undefined ? String(areaM2) : undefined,
             },
             locals.auth!.userId
