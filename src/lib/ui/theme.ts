@@ -106,10 +106,30 @@ export function initTheme() {
         }
       });
   }
+
+  // AdminLayout's ClientRouter swaps in each new page's freshly
+  // server-rendered <html>, which never has data-theme on it (only the
+  // very first hard load's is:inline head script sets that, and it doesn't
+  // re-run on soft navigations) -- without this, every in-app navigation
+  // would flash to the OS/browser default theme until this same handler's
+  // updateToggleButtons() above ran, and even then nothing here writes the
+  // attribute back. Copying it onto the incoming document during
+  // astro:before-swap applies it before the swap is even visible, so
+  // there's no flash at all.
+  if (!window.__themeBeforeSwapBound) {
+    window.__themeBeforeSwapBound = true;
+    document.addEventListener("astro:before-swap", (event) => {
+      const theme = document.documentElement.getAttribute("data-theme");
+      if (!theme) return;
+      const { newDocument } = event as unknown as { newDocument: Document };
+      newDocument.documentElement.setAttribute("data-theme", theme);
+    });
+  }
 }
 
 declare global {
   interface Window {
     __themeMediaBound?: boolean;
+    __themeBeforeSwapBound?: boolean;
   }
 }

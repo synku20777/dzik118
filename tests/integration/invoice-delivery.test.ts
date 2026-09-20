@@ -11,7 +11,7 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Db } from "../../src/db/client";
-import { invoices } from "../../src/db/schema/invoices";
+import { invoiceDeliveries, invoices } from "../../src/db/schema/invoices";
 import {
   cleanupOrganization,
   createIntegrationDb,
@@ -41,12 +41,20 @@ import {
   type SendInvoiceDeps,
 } from "../../src/domain/billing/sending";
 import {
+  claimSendAttempt,
+  markDispatching,
+} from "../../src/domain/billing/send-attempts";
+import {
   resolveInvoiceAccessToken,
   NotFoundError as TokenNotFoundError,
 } from "../../src/domain/billing/invoice-tokens";
 import { createSupabaseAdminClient } from "../../src/lib/supabase/admin";
-import type { EmailService } from "../../src/lib/email/service";
+import type {
+  EmailService,
+  SendInvoiceEmailInput,
+} from "../../src/lib/email/service";
 import { createSmtpEmailService } from "../../src/lib/email/smtp";
+import { createServer, type Socket } from "node:net";
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
@@ -255,7 +263,11 @@ describe("invoice sending", () => {
       invoice.id,
       stubDeps({
         emailService: {
-          sendInvoice: async () => ({ success: false, provider: "smtp" }),
+          sendInvoice: async () => ({
+            success: false,
+            provider: "smtp",
+            failureClassification: "DEFINITIVE",
+          }),
         },
       }),
       seedAdminId
@@ -417,6 +429,227 @@ describe("invoice sending", () => {
     expect(match!.Subject).toContain(invoice.invoiceNumber);
 
     await cleanupOrg(org.id);
+  });
+
+  describe("SMTP delivery failure classification", () => {
+    function createRawSmtpServer(
+      onConnection: (socket: Socket) => void
+    ): Promise<{ port: number; close: () => Promise<void> }> {
+      return new Promise((resolve, reject) => {
+        const server = createServer(onConnection);
+        server.listen(0, "127.0.0.1", () => {
+          const addr = server.address();
+          if (!addr || typeof addr === "string") {
+            return reject(new Error("Unable to obtain server port"));
+          }
+          resolve({
+            port: addr.port,
+            close: () =>
+              new Promise<void>((res) => {
+                server.close(() => res());
+              }),
+          });
+        });
+      });
+    }
+
+    const testEmailInput: SendInvoiceEmailInput = {
+      to: "resident@example.com",
+      organizationName: "Test Org",
+      periodLabel: "2026-04",
+      invoiceNumber: "INV-202604-00001",
+      total: "12.10",
+      currency: "EUR",
+      dueDate: "2026-05-14",
+      viewInvoiceUrl: "https://billing.example.test/invoices/1",
+      portalUrl: "https://billing.example.test/portal",
+    };
+
+    it("connection refused before DATA classifies as DEFINITIVE (SMTP_CONNECTION_FAILED)", async () => {
+      const server = createServer();
+      await new Promise<void>((res) =>
+        server.listen(0, "127.0.0.1", () => res())
+      );
+      const addr = server.address();
+      const port = addr && typeof addr !== "string" ? addr.port : 59999;
+      await new Promise<void>((res) => server.close(() => res()));
+
+      const smtp = createSmtpEmailService({
+        host: "127.0.0.1",
+        port,
+        fromAddress: "invoices@example.test",
+      });
+      const result = await smtp.sendInvoice(testEmailInput);
+
+      expect(result).toEqual({
+        success: false,
+        provider: "smtp",
+        errorCode: "SMTP_CONNECTION_FAILED",
+        failureClassification: "DEFINITIVE",
+      });
+    });
+
+    it("socket closed before DATA classifies as DEFINITIVE (SMTP_CONNECTION_FAILED)", async () => {
+      const { port, close } = await createRawSmtpServer((socket) => {
+        socket.write("220 mock-smtp\r\n");
+        socket.on("data", () => {
+          socket.destroy();
+        });
+      });
+      try {
+        const smtp = createSmtpEmailService({
+          host: "127.0.0.1",
+          port,
+          fromAddress: "invoices@example.test",
+        });
+        const result = await smtp.sendInvoice(testEmailInput);
+
+        expect(result).toEqual({
+          success: false,
+          provider: "smtp",
+          errorCode: "SMTP_CONNECTION_FAILED",
+          failureClassification: "DEFINITIVE",
+        });
+      } finally {
+        await close();
+      }
+    });
+
+    it("server negative reply before DATA classifies as DEFINITIVE (SMTP_REJECTED)", async () => {
+      const { port, close } = await createRawSmtpServer((socket) => {
+        let buffer = "";
+        let state = "GREETING";
+        socket.write("220 mock-smtp\r\n");
+        socket.on("data", (chunk) => {
+          buffer += chunk.toString("utf8");
+          if (state === "GREETING" && buffer.includes("\r\n")) {
+            buffer = "";
+            state = "EHLO";
+            socket.write("250 localhost\r\n");
+          } else if (state === "EHLO" && buffer.includes("\r\n")) {
+            buffer = "";
+            state = "MAIL";
+            socket.write("250 OK\r\n");
+          } else if (state === "MAIL" && buffer.includes("\r\n")) {
+            buffer = "";
+            state = "RCPT";
+            socket.write("550 Mailbox unavailable\r\n");
+          }
+        });
+      });
+      try {
+        const smtp = createSmtpEmailService({
+          host: "127.0.0.1",
+          port,
+          fromAddress: "invoices@example.test",
+        });
+        const result = await smtp.sendInvoice(testEmailInput);
+
+        expect(result).toEqual({
+          success: false,
+          provider: "smtp",
+          errorCode: "SMTP_REJECTED",
+          failureClassification: "DEFINITIVE",
+        });
+      } finally {
+        await close();
+      }
+    });
+
+    it("socket forcibly closed after DATA payload classifies as AMBIGUOUS (SMTP_RESPONSE_UNCERTAIN)", async () => {
+      const { port, close } = await createRawSmtpServer((socket) => {
+        let buffer = "";
+        let state = "GREETING";
+        socket.write("220 mock-smtp\r\n");
+        socket.on("data", (chunk) => {
+          buffer += chunk.toString("utf8");
+          if (state === "GREETING" && buffer.includes("\r\n")) {
+            buffer = "";
+            state = "EHLO";
+            socket.write("250 localhost\r\n");
+          } else if (state === "EHLO" && buffer.includes("\r\n")) {
+            buffer = "";
+            state = "MAIL";
+            socket.write("250 OK\r\n");
+          } else if (state === "MAIL" && buffer.includes("\r\n")) {
+            buffer = "";
+            state = "RCPT";
+            socket.write("250 OK\r\n");
+          } else if (state === "RCPT" && buffer.includes("\r\n")) {
+            buffer = "";
+            state = "DATA";
+            socket.write("354 Start mail input; end with <CRLF>.<CRLF>\r\n");
+          } else if (state === "DATA" && buffer.includes("\r\n.\r\n")) {
+            // Received full body + terminating dot line; forcibly close without response
+            socket.destroy();
+          }
+        });
+      });
+      try {
+        const smtp = createSmtpEmailService({
+          host: "127.0.0.1",
+          port,
+          fromAddress: "invoices@example.test",
+        });
+        const result = await smtp.sendInvoice(testEmailInput);
+
+        expect(result).toEqual({
+          success: false,
+          provider: "smtp",
+          errorCode: "SMTP_RESPONSE_UNCERTAIN",
+          failureClassification: "AMBIGUOUS",
+        });
+      } finally {
+        await close();
+      }
+    });
+
+    it("server negative reply after DATA payload classifies as DEFINITIVE (SMTP_REJECTED)", async () => {
+      const { port, close } = await createRawSmtpServer((socket) => {
+        let buffer = "";
+        let state = "GREETING";
+        socket.write("220 mock-smtp\r\n");
+        socket.on("data", (chunk) => {
+          buffer += chunk.toString("utf8");
+          if (state === "GREETING" && buffer.includes("\r\n")) {
+            buffer = "";
+            state = "EHLO";
+            socket.write("250 localhost\r\n");
+          } else if (state === "EHLO" && buffer.includes("\r\n")) {
+            buffer = "";
+            state = "MAIL";
+            socket.write("250 OK\r\n");
+          } else if (state === "MAIL" && buffer.includes("\r\n")) {
+            buffer = "";
+            state = "RCPT";
+            socket.write("250 OK\r\n");
+          } else if (state === "RCPT" && buffer.includes("\r\n")) {
+            buffer = "";
+            state = "DATA";
+            socket.write("354 Start mail input; end with <CRLF>.<CRLF>\r\n");
+          } else if (state === "DATA" && buffer.includes("\r\n.\r\n")) {
+            socket.write("554 Transaction failed\r\n");
+          }
+        });
+      });
+      try {
+        const smtp = createSmtpEmailService({
+          host: "127.0.0.1",
+          port,
+          fromAddress: "invoices@example.test",
+        });
+        const result = await smtp.sendInvoice(testEmailInput);
+
+        expect(result).toEqual({
+          success: false,
+          provider: "smtp",
+          errorCode: "SMTP_REJECTED",
+          failureClassification: "DEFINITIVE",
+        });
+      } finally {
+        await close();
+      }
+    });
   });
 
   it("Section 24: the invoice access token created at send time resolves to the right invoice, and a wrong token does not", async () => {
@@ -582,6 +815,392 @@ describe("invoice sending", () => {
       method: "EMAIL",
       error_code: "NO_RECIPIENT_EMAIL",
     });
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Package 3 (1): ambiguous email delivery failure leaves invoice PREPARED, marks attempt and delivery UNKNOWN, and subsequent send throws ConflictError without calling provider again", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org Ambiguous",
+      10
+    );
+    let emailCallCount = 0;
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          return {
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "FAKE_AMBIGUOUS",
+            failureClassification: "AMBIGUOUS" as const,
+          };
+        },
+      },
+    });
+
+    const first = await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
+    expect(first.sentAt).toBeNull();
+
+    const [caseRow] = await db.$client
+      .query(
+        "select status from billing_cases where id = (select billing_case_id from invoices where id = $1)",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(caseRow.status).toBe("PREPARED");
+
+    await expect(
+      sendInvoice(db, org.id, invoice.id, deps, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+    expect(emailCallCount).toBe(1);
+
+    const attempts = await db.$client
+      .query(
+        "select status, error_code from invoice_send_attempts where invoice_id = $1",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toEqual({
+      status: "UNKNOWN",
+      error_code: "FAKE_AMBIGUOUS",
+    });
+
+    const deliveries = await db.$client
+      .query(
+        "select method, status, error_code from invoice_deliveries where invoice_id = $1",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]).toEqual({
+      method: "EMAIL",
+      status: "UNKNOWN",
+      error_code: "FAKE_AMBIGUOUS",
+    });
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Package 3 (2): stale CLAIMED row reconciles to FAILED and subsequent sendInvoice claims fresh and completes normally", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org StaleClaim",
+      11
+    );
+    const claim = await claimSendAttempt(db, org.id, invoice.id);
+    expect(claim.claimed).toBe(true);
+
+    // Simulate worker died before dispatch by backdating claimed_at past STALE_CLAIM_MS (60s)
+    await db.$client.query(
+      "update invoice_send_attempts set claimed_at = now() - interval '2 minutes' where id = $1",
+      [claim.attempt.id]
+    );
+
+    const sent = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps(),
+      seedAdminId
+    );
+    expect(sent.sentAt).not.toBeNull();
+
+    const [caseRow] = await db.$client
+      .query(
+        "select status from billing_cases where id = (select billing_case_id from invoices where id = $1)",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(caseRow.status).toBe("SENT");
+
+    const attempts = await db.$client
+      .query(
+        "select status, error_code from invoice_send_attempts where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]).toEqual({
+      status: "FAILED",
+      error_code: "ABANDONED_BEFORE_DISPATCH",
+    });
+    expect(attempts[1].status).toBe("SENT");
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Package 3 (3): stale DISPATCHING row reconciles to UNKNOWN and subsequent sendInvoice throws ConflictError rather than sending", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org StaleDispatch",
+      3
+    );
+    const claim = await claimSendAttempt(db, org.id, invoice.id);
+    expect(claim.claimed).toBe(true);
+    await markDispatching(db, claim.attempt.id);
+
+    // Simulate worker crash after dispatch started by backdating dispatch_started_at past STALE_DISPATCH_MS (5m)
+    await db.$client.query(
+      "update invoice_send_attempts set dispatch_started_at = now() - interval '10 minutes' where id = $1",
+      [claim.attempt.id]
+    );
+
+    let emailCalled = false;
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCalled = true;
+          return { success: true, provider: "smtp" as const };
+        },
+      },
+    });
+
+    await expect(
+      sendInvoice(db, org.id, invoice.id, deps, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+    expect(emailCalled).toBe(false);
+
+    const { invoice: current } = await getInvoice(db, org.id, invoice.id);
+    expect(current.sentAt).toBeNull();
+
+    const [attemptRow] = await db.$client
+      .query(
+        "select status, error_code from invoice_send_attempts where id = $1",
+        [claim.attempt.id]
+      )
+      .then((r) => r.rows);
+    expect(attemptRow.status).toBe("UNKNOWN");
+    expect(attemptRow.error_code).toBe("STALE_DISPATCH_NO_CONFIRMATION");
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Package 3 (4): EMAIL+PAPER invoice where email is AMBIGUOUS but paper succeeds sets sentAt and SENT, but attempt and EMAIL delivery remain UNKNOWN", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org BothAmbiguous",
+      1,
+      {
+        invoiceByEmail: true,
+        invoiceByPaper: true,
+      }
+    );
+
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => ({
+          success: false,
+          provider: "smtp" as const,
+          errorCode: "FAKE_AMBIGUOUS",
+          failureClassification: "AMBIGUOUS" as const,
+        }),
+      },
+    });
+
+    const sent = await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
+    expect(sent.sentAt).not.toBeNull();
+
+    const [caseRow] = await db.$client
+      .query(
+        "select status from billing_cases where id = (select billing_case_id from invoices where id = $1)",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(caseRow.status).toBe("SENT");
+
+    // The attempt row for this invoice still shows status UNKNOWN (not overwritten to SENT)
+    const [attemptRow] = await db.$client
+      .query(
+        "select status, error_code from invoice_send_attempts where invoice_id = $1",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(attemptRow.status).toBe("UNKNOWN");
+    expect(attemptRow.error_code).toBe("FAKE_AMBIGUOUS");
+
+    // Deliveries: EMAIL is UNKNOWN, PAPER is SENT
+    const deliveries = await db.$client
+      .query(
+        "select method, status, error_code from invoice_deliveries where invoice_id = $1 order by method",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(deliveries).toEqual([
+      { method: "EMAIL", status: "UNKNOWN", error_code: "FAKE_AMBIGUOUS" },
+      { method: "PAPER", status: "SENT", error_code: null },
+    ]);
+
+    // Calling sendInvoice again is a fast no-op returning the sent invoice, without throwing
+    const again = await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
+    expect(again.sentAt?.getTime()).toBe(sent.sentAt?.getTime());
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Package 3 (5): resendInvoice succeeds on an invoice whose only attempt is UNKNOWN, finalizes sentAt, and sets case to SENT", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org ResendUnknown",
+      2
+    );
+
+    // First send has ambiguous failure -> sentAt stays null, attempt is UNKNOWN
+    const ambiguousDeps = stubDeps({
+      emailService: {
+        sendInvoice: async () => ({
+          success: false,
+          provider: "smtp" as const,
+          errorCode: "FAKE_AMBIGUOUS",
+          failureClassification: "AMBIGUOUS" as const,
+        }),
+      },
+    });
+    const firstSend = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      ambiguousDeps,
+      seedAdminId
+    );
+    expect(firstSend.sentAt).toBeNull();
+
+    // resendInvoice succeeds and does not throw ConflictError
+    const resent = await resendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps(),
+      seedAdminId
+    );
+    expect(resent.id).toBe(invoice.id);
+    // Fix 2: successful resend of previously-UNKNOWN invoice finalizes sentAt
+    expect(resent.sentAt).not.toBeNull();
+
+    const [caseRow] = await db.$client
+      .query(
+        "select status from billing_cases where id = (select billing_case_id from invoices where id = $1)",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(caseRow.status).toBe("SENT");
+
+    const deliveries = await db.$client
+      .query(
+        "select method, status, attempt_id from invoice_deliveries where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(deliveries).toHaveLength(2);
+    expect(deliveries[0].status).toBe("UNKNOWN");
+    expect(deliveries[0].attempt_id).not.toBeNull();
+    expect(deliveries[1].status).toBe("SENT");
+    expect(deliveries[1].attempt_id).toBeNull();
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Fix 3: resendInvoice throws ConflictError without calling provider if a first-send attempt is CLAIMED or DISPATCHING", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org ResendInFlight",
+      3
+    );
+
+    // Claim an attempt to simulate an in-flight first-send
+    const claim = await claimSendAttempt(db, org.id, invoice.id);
+    expect(claim.claimed).toBe(true);
+
+    let emailCallCount = 0;
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          return { success: true, provider: "smtp" as const };
+        },
+      },
+    });
+
+    // Calling resendInvoice while attempt is CLAIMED must throw ConflictError
+    await expect(
+      resendInvoice(db, org.id, invoice.id, deps, seedAdminId)
+    ).rejects.toThrow(
+      "A delivery attempt is currently in progress for this invoice; wait for it to finish before resending."
+    );
+
+    // Assert email provider was never called
+    expect(emailCallCount).toBe(0);
+
+    // Transition to DISPATCHING and verify it still blocks resend
+    await markDispatching(db, claim.attempt.id);
+
+    await expect(
+      resendInvoice(db, org.id, invoice.id, deps, seedAdminId)
+    ).rejects.toThrow(
+      "A delivery attempt is currently in progress for this invoice; wait for it to finish before resending."
+    );
+    expect(emailCallCount).toBe(0);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Fix 6: stale DISPATCHING attempt with confirmed PAPER delivery completes finalization instead of UNKNOWN", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org StalePaperConfirm",
+      4,
+      {
+        billingEmail: undefined,
+        invoiceByEmail: false,
+        invoiceByPaper: true,
+      }
+    );
+
+    // Claim an attempt for a PAPER-only invoice
+    const claim = await claimSendAttempt(db, org.id, invoice.id);
+    expect(claim.claimed).toBe(true);
+    await markDispatching(db, claim.attempt.id);
+
+    // Manually insert a PAPER invoice_deliveries row with status SENT and attempt_id set to that attempt's id
+    // (mirroring what deliver() would have done before a worker crash)
+    await db.insert(invoiceDeliveries).values({
+      organizationId: org.id,
+      invoiceId: invoice.id,
+      attemptId: claim.attempt.id,
+      method: "PAPER",
+      destinationEmail: null,
+      provider: "paper",
+      status: "SENT",
+      sentAt: new Date(),
+    });
+
+    // Backdate dispatch_started_at past the staleness threshold (5 minutes)
+    await db.$client.query(
+      "update invoice_send_attempts set dispatch_started_at = now() - interval '10 minutes' where id = $1",
+      [claim.attempt.id]
+    );
+
+    // Calling sendInvoice again should complete successfully (sentAt set, case SENT) rather than throwing UNKNOWN
+    const sent = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps(),
+      seedAdminId
+    );
+    expect(sent.sentAt).not.toBeNull();
+
+    const [caseRow] = await db.$client
+      .query(
+        "select status from billing_cases where id = (select billing_case_id from invoices where id = $1)",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(caseRow.status).toBe("SENT");
+
+    // Attempt should now be SENT
+    const [attemptRow] = await db.$client
+      .query(
+        "select status, error_code from invoice_send_attempts where id = $1",
+        [claim.attempt.id]
+      )
+      .then((r) => r.rows);
+    expect(attemptRow.status).toBe("SENT");
 
     await cleanupOrg(org.id);
   });

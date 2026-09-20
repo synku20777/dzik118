@@ -77,6 +77,7 @@ export async function cleanupOrganization(
     "delete from messages where organization_id = $1",
     "delete from conversations where organization_id = $1",
     "delete from invoice_deliveries where organization_id = $1",
+    "delete from invoice_send_attempts where organization_id = $1",
     "delete from invoice_access_tokens where organization_id = $1",
     "delete from invoice_lines where organization_id = $1",
     "delete from invoices where organization_id = $1",

@@ -1,10 +1,11 @@
 // Phase L (Automation/audit) - scheduled jobs (spec Section 32). Cloudflare
 // Cron invokes a single entry point (runScheduledJobs); this module decides
 // which organizations' jobs are due. Every mutation here reuses the exact
-// same idempotent domain functions the admin UI calls (generateInvoice/
-// prepareInvoice/sendInvoice via their bulk wrappers), so "idempotent,
-// retry-safe, non-duplicating" (spec's job requirements) comes for free --
-// running this twice in a row is always safe.
+// same domain functions the admin UI calls (generateInvoice/prepareInvoice/
+// sendInvoice via their bulk wrappers). Repeated scheduler runs are safe
+// against duplicate sends (already-sent invoices are skipped), and an invoice
+// with an unresolved (UNKNOWN) delivery outcome is deliberately skipped
+// rather than auto-retried, requiring admin attention via an explicit resend.
 import { and, eq, isNull, lt } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import { organizations } from "../../db/schema/organizations";

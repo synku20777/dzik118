@@ -178,7 +178,7 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
           )
         }
         {
-          invoice.sentAt && (
+          (invoice.sentAt || deliveries.length > 0) && (
             <form method="POST" action={actions.invoices.resend}>
               <input
                 type="hidden"
@@ -373,6 +373,8 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
                     <td class="px-4 py-2">
                       {d.status === "SENT" ? (
                         <span class="text-success">{t("Sent")}</span>
+                      ) : d.status === "UNKNOWN" ? (
+                        <span class="text-warning">{t("Needs attention")}</span>
                       ) : (
                         <span class="text-destructive">{t("Failed")}</span>
                       )}

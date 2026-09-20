@@ -16,6 +16,7 @@ describe("theme management", () => {
   let metaAttributes: Record<string, string> = {};
   let clickListener: (() => void) | null = null;
   let mediaListener: ((e: { matches: boolean }) => void) | null = null;
+  let beforeSwapListener: ((e: unknown) => void) | null = null;
 
   beforeEach(() => {
     store = {};
@@ -28,6 +29,7 @@ describe("theme management", () => {
     metaAttributes = {};
     clickListener = null;
     mediaListener = null;
+    beforeSwapListener = null;
 
     const mockStorage = {
       getItem: vi.fn((key: string) => store[key] ?? null),
@@ -89,6 +91,9 @@ describe("theme management", () => {
       querySelectorAll(sel: string) {
         if (sel.includes("data-theme-toggle")) return [mockButton];
         return [];
+      },
+      addEventListener(event: string, handler: (e: unknown) => void) {
+        if (event === "astro:before-swap") beforeSwapListener = handler;
       },
     };
 
@@ -176,6 +181,37 @@ describe("theme management", () => {
     clickListener!();
     expect(rootAttributes["data-theme"]).toBe("light");
     expect(store["color-scheme"]).toBe("light");
+  });
+
+  it("copies the current theme onto the incoming document before a ClientRouter swap", () => {
+    rootAttributes["data-theme"] = "dark";
+    initTheme();
+    expect(beforeSwapListener).not.toBeNull();
+
+    const newRootAttributes: Record<string, string> = {};
+    const newDocument = {
+      documentElement: {
+        setAttribute(name: string, val: string) {
+          newRootAttributes[name] = val;
+        },
+      },
+    };
+    beforeSwapListener!({ newDocument });
+    expect(newRootAttributes["data-theme"]).toBe("dark");
+  });
+
+  it("does not write an attribute onto the incoming document when no theme is set", () => {
+    initTheme();
+    const newRootAttributes: Record<string, string> = {};
+    const newDocument = {
+      documentElement: {
+        setAttribute(name: string, val: string) {
+          newRootAttributes[name] = val;
+        },
+      },
+    };
+    beforeSwapListener!({ newDocument });
+    expect(newRootAttributes["data-theme"]).toBeUndefined();
   });
 
   it("updates toggle buttons when OS theme changes and user has no preference", () => {

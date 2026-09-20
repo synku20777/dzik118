@@ -25,6 +25,7 @@ import {
   prepareInvoice,
 } from "../../src/domain/billing/generation";
 import {
+  bulkSendInvoices,
   sendInvoice,
   type SendInvoiceDeps,
 } from "../../src/domain/billing/sending";
@@ -50,7 +51,7 @@ let db: Db;
 let seedAdminId: string;
 const supabaseAdmin = createSupabaseAdminClient(supabaseUrl, supabaseSecretKey);
 
-function stubDeps(): SendInvoiceDeps {
+function stubDeps(overrides: Partial<SendInvoiceDeps> = {}): SendInvoiceDeps {
   const email: EmailService = {
     sendInvoice: async () => ({
       success: true,
@@ -64,6 +65,7 @@ function stubDeps(): SendInvoiceDeps {
     emailService: email,
     tokenSecret: "it-l-token-secret",
     appBaseUrl: "https://billing.example.test",
+    ...overrides,
   };
 }
 
@@ -351,6 +353,170 @@ describe("autoSendForOrganization", () => {
     expect(result.sent).toBe(0);
     await cleanupOrg(org.id);
   });
+
+  it("Package 4 (2a): running autoSendForOrganization twice against the same PREPARED invoice sends it once and calls email service once", async () => {
+    const { org, dwelling, period } = await setupBillableOrg(
+      "IT-L Org AutoSendTwice",
+      8
+    );
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    await prepareInvoice(db, org.id, invoice.id, seedAdminId);
+
+    let emailCallCount = 0;
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          return {
+            success: true,
+            provider: "smtp" as const,
+            providerMessageId: "stub-msg-id",
+          };
+        },
+      },
+    });
+
+    // First run sends the invoice
+    const firstResult = await autoSendForOrganization(
+      db,
+      org.id,
+      deps,
+      seedAdminId
+    );
+    expect(firstResult.sent).toBe(1);
+    expect(emailCallCount).toBe(1);
+
+    const invoiceAfterFirst = await getInvoice(db, org.id, invoice.id);
+    expect(invoiceAfterFirst.invoice.sentAt).not.toBeNull();
+    expect(invoiceAfterFirst.caseStatus).toBe("SENT");
+
+    const attempts = await db.$client
+      .query("select status from invoice_send_attempts where invoice_id = $1", [
+        invoice.id,
+      ])
+      .then((r) => r.rows);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0].status).toBe("SENT");
+
+    // Second run: case is no longer PREPARED, nothing to send
+    const secondResult = await autoSendForOrganization(
+      db,
+      org.id,
+      deps,
+      seedAdminId
+    );
+    expect(secondResult.sent).toBe(0);
+    expect(emailCallCount).toBe(1);
+
+    // Furthermore, bulkSendInvoices directly against the already-sent invoice skips it
+    // via before.sentAt, maintaining the non-duplicating guarantee under the attempt-table model
+    const bulkResult = await bulkSendInvoices(
+      db,
+      org.id,
+      [invoice.id],
+      deps,
+      seedAdminId
+    );
+    expect(bulkResult.sent).toHaveLength(0);
+    expect(bulkResult.skipped).toEqual([
+      { invoiceId: invoice.id, reason: "Already sent" },
+    ]);
+    expect(emailCallCount).toBe(1);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Package 4 (2b): ambiguous failure leaves invoice PREPARED with UNKNOWN attempt, and second scheduler run skips without recalling provider", async () => {
+    const { org, dwelling, period } = await setupBillableOrg(
+      "IT-L Org AmbiguousScheduler",
+      9
+    );
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    await prepareInvoice(db, org.id, invoice.id, seedAdminId);
+
+    let emailCallCount = 0;
+    const ambiguousDeps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          return {
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "FAKE_AMBIGUOUS",
+            failureClassification: "AMBIGUOUS" as const,
+          };
+        },
+      },
+    });
+
+    // First run encounters AMBIGUOUS delivery failure
+    const firstResult = await autoSendForOrganization(
+      db,
+      org.id,
+      ambiguousDeps,
+      seedAdminId
+    );
+    expect(firstResult.sent).toBe(0);
+    expect(emailCallCount).toBe(1);
+
+    // Invoice remains PREPARED, sentAt is null, attempt recorded as UNKNOWN
+    const invoiceAfterFirst = await getInvoice(db, org.id, invoice.id);
+    expect(invoiceAfterFirst.caseStatus).toBe("PREPARED");
+    expect(invoiceAfterFirst.invoice.sentAt).toBeNull();
+
+    const attempts = await db.$client
+      .query(
+        "select status, error_code from invoice_send_attempts where invoice_id = $1",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toEqual({
+      status: "UNKNOWN",
+      error_code: "FAKE_AMBIGUOUS",
+    });
+
+    // Second run: the invoice is still PREPARED, but the scheduler detects the UNKNOWN attempt
+    // and skips it rather than auto-retrying, without calling the email provider again
+    const secondResult = await autoSendForOrganization(
+      db,
+      org.id,
+      ambiguousDeps,
+      seedAdminId
+    );
+    expect(secondResult.sent).toBe(0);
+    expect(emailCallCount).toBe(1);
+
+    // bulkSendInvoices surfaces the exact safe ConflictError skip reason
+    const bulkResult = await bulkSendInvoices(
+      db,
+      org.id,
+      [invoice.id],
+      ambiguousDeps,
+      seedAdminId
+    );
+    expect(bulkResult.sent).toHaveLength(0);
+    expect(bulkResult.skipped).toHaveLength(1);
+    expect(bulkResult.skipped[0].invoiceId).toBe(invoice.id);
+    expect(bulkResult.skipped[0].reason).toContain(
+      "The previous delivery attempt's outcome could not be confirmed"
+    );
+    expect(emailCallCount).toBe(1);
+
+    await cleanupOrg(org.id);
+  });
 });
 
 describe("runScheduledJobs", () => {
@@ -402,5 +568,58 @@ describe("runScheduledJobs", () => {
 
     await cleanupOrg(orgA.id);
     await cleanupOrg(orgB.id);
+  });
+
+  it("Package 4 (2b end-to-end): runScheduledJobs gracefully skips UNKNOWN attempt invoice without throwing or recalling provider", async () => {
+    const { org, dwelling, period } = await setupBillableOrg(
+      "IT-L Org SchedAmbiguous",
+      10
+    );
+    await updateOrganization(
+      db,
+      org.id,
+      { autoSendEnabled: true, autoSendDay: 20 },
+      seedAdminId
+    );
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    await prepareInvoice(db, org.id, invoice.id, seedAdminId);
+
+    let emailCallCount = 0;
+    const ambiguousDeps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          return {
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "FAKE_AMBIGUOUS",
+            failureClassification: "AMBIGUOUS" as const,
+          };
+        },
+      },
+    });
+
+    // First cron run: encounters ambiguous failure
+    const runDate = new Date("2026-10-20T10:00:00Z");
+    const firstRun = await runScheduledJobs(db, ambiguousDeps, runDate);
+    const orgResult1 = firstRun.find((r) => r.organizationId === org.id)!;
+    expect(orgResult1.sent).toBe(0);
+    expect(orgResult1.error).toBeUndefined();
+    expect(emailCallCount).toBe(1);
+
+    // Second cron run: skips the UNKNOWN attempt without error or calling email provider
+    const secondRun = await runScheduledJobs(db, ambiguousDeps, runDate);
+    const orgResult2 = secondRun.find((r) => r.organizationId === org.id)!;
+    expect(orgResult2.sent).toBe(0);
+    expect(orgResult2.error).toBeUndefined();
+    expect(emailCallCount).toBe(1);
+
+    await cleanupOrg(org.id);
   });
 });

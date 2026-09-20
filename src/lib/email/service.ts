@@ -17,6 +17,8 @@ export interface SendInvoiceEmailInput {
   portalUrl: string;
 }
 
+export type EmailFailureClassification = "DEFINITIVE" | "AMBIGUOUS";
+
 export interface EmailDeliveryResult {
   success: boolean;
   provider: "ses" | "smtp";
@@ -25,6 +27,8 @@ export interface EmailDeliveryResult {
   // credentials, just a short machine-readable failure classification
   // (spec Section 23: "sensitive provider errors not exposed to resident").
   errorCode?: string;
+  // Only meaningful when success is false. Absent when success is true.
+  failureClassification?: EmailFailureClassification;
 }
 
 export interface EmailService {

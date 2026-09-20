@@ -18,6 +18,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -31,6 +32,10 @@ import { dwellings } from "./dwellings";
 import { organizations } from "./organizations";
 
 export const deliveryMethodEnum = pgEnum("delivery_method", ["EMAIL", "PAPER"]);
+export const invoiceSendAttemptStatusEnum = pgEnum(
+  "invoice_send_attempt_status",
+  ["CLAIMED", "DISPATCHING", "SENT", "FAILED", "UNKNOWN"]
+);
 
 export const invoices = pgTable(
   "invoices",
@@ -192,6 +197,42 @@ export const invoiceAccessTokens = pgTable(
   (table) => [index("invoice_access_tokens_invoice_id_idx").on(table.invoiceId)]
 );
 
+export const invoiceSendAttempts = pgTable(
+  "invoice_send_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoices.id),
+    status: invoiceSendAttemptStatusEnum("status").notNull().default("CLAIMED"),
+    errorCode: text("error_code"),
+    claimedAt: timestamp("claimed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    dispatchStartedAt: timestamp("dispatch_started_at", {
+      withTimezone: true,
+    }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("invoice_send_attempts_invoice_id_idx").on(table.invoiceId),
+    uniqueIndex("invoice_send_attempts_invoice_id_active_idx")
+      .on(table.invoiceId)
+      .where(
+        sql`${table.status} in ('CLAIMED', 'DISPATCHING', 'SENT', 'UNKNOWN')`
+      ),
+  ]
+);
+
 export const invoiceDeliveries = pgTable(
   "invoice_deliveries",
   {
@@ -202,6 +243,7 @@ export const invoiceDeliveries = pgTable(
     invoiceId: uuid("invoice_id")
       .notNull()
       .references(() => invoices.id),
+    attemptId: uuid("attempt_id").references(() => invoiceSendAttempts.id),
     method: deliveryMethodEnum("method").notNull().default("EMAIL"),
     // Nullable: a PAPER delivery has no email address at all -- distinct
     // from an EMAIL delivery that failed for lack of one, which still
@@ -209,6 +251,7 @@ export const invoiceDeliveries = pgTable(
     destinationEmail: text("destination_email"),
     provider: text("provider").notNull(),
     providerMessageId: text("provider_message_id"),
+    // Status can be 'SENT', 'FAILED', or 'UNKNOWN' (added in retry-safety fix)
     status: text("status").notNull(),
     errorCode: text("error_code"),
     sentAt: timestamp("sent_at", { withTimezone: true }),
@@ -216,7 +259,10 @@ export const invoiceDeliveries = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("invoice_deliveries_invoice_id_idx").on(table.invoiceId)]
+  (table) => [
+    index("invoice_deliveries_invoice_id_idx").on(table.invoiceId),
+    index("invoice_deliveries_attempt_id_idx").on(table.attemptId),
+  ]
 );
 
 export const invoiceTemplates = pgTable("invoice_templates", {

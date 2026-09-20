@@ -64,6 +64,7 @@ export function createSesEmailService(config: SesConfig): EmailService {
             success: false,
             provider: "ses",
             errorCode: `SES_HTTP_${response.status}`,
+            failureClassification: "DEFINITIVE",
           };
         }
         const data = (await response.json()) as { MessageId?: string };
@@ -77,6 +78,7 @@ export function createSesEmailService(config: SesConfig): EmailService {
           success: false,
           provider: "ses",
           errorCode: "SES_REQUEST_FAILED",
+          failureClassification: "AMBIGUOUS",
         };
       }
     },
