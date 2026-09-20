@@ -363,6 +363,68 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await expect(
     page.locator('#basic-info-form input[name="billingName"]')
   ).toHaveValue("");
+  // billingEmail: set a valid email, save, then clear it via a
+  // whitespace-only value (must be treated the same as a blank clear, not
+  // rejected as an invalid email), then save a padded valid email and
+  // confirm it's trimmed on persist -- exercises the z.preprocess() fix that
+  // trims before z.email() validates.
+  const billingEmailInput = page.locator(
+    '#basic-info-form input[name="billingEmail"]'
+  );
+  const billingEmailDd = page.locator('dd[data-field="billingEmail"]');
+
+  async function saveBasicInfo() {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const hold = async (route: import("@playwright/test").Route) => {
+      if (
+        route.request().method() === "POST" &&
+        route.request().url().includes("dwellings.update") &&
+        !route.request().url().includes("updateInvoiceDelivery")
+      ) {
+        await gate;
+        await route.continue();
+        return;
+      }
+      await route.continue();
+    };
+    await page.route("**/*", hold);
+    await page.locator("#basic-info-form button[type=submit]").click();
+    await expect(page.locator("[data-mutation-summary]")).toHaveText(
+      "1 change saving"
+    );
+    release();
+    await expect(page.locator("[data-mutation-summary]")).toHaveText(
+      "All changes saved"
+    );
+    await page.unroute("**/*", hold);
+    // A successful save auto-closes the disclosure (see onSuccess in the
+    // page's script) -- reopen it so the next fill() has a visible input.
+    await page.locator("#basic-info-details summary").click();
+  }
+
+  const validEmail = `e2e-${Date.now()}@example.com`;
+  await billingEmailInput.fill(validEmail);
+  await saveBasicInfo();
+  await expect(billingEmailDd).toHaveText(validEmail);
+
+  await billingEmailInput.fill("   ");
+  await saveBasicInfo();
+  await expect(billingEmailDd).toHaveText("—");
+  await page.reload();
+  await expect(billingEmailDd).toHaveText("—");
+  await page.locator("#basic-info-details summary").click();
+  await expect(billingEmailInput).toHaveValue("");
+
+  const paddedEmail = `e2e-padded-${Date.now()}@example.com`;
+  await billingEmailInput.fill(`  ${paddedEmail}  `);
+  await saveBasicInfo();
+  await page.reload();
+  await expect(billingEmailDd).toHaveText(paddedEmail);
+  await page.locator("#basic-info-details summary").click();
+  await expect(billingEmailInput).toHaveValue(paddedEmail);
   await page.locator("#basic-info-details summary").click();
 
   const emailCheckbox = page.locator(

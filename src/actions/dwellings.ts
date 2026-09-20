@@ -16,7 +16,10 @@ import {
   updateInvoiceDeliveryPreferences,
 } from "../domain/organizations/dwellings";
 import { safeHandler } from "./_errors";
-import { readClearableTextFields } from "./_clearable-fields";
+import {
+  readClearableTextFields,
+  trimmedEmailOrNull,
+} from "./_clearable-fields";
 import { withRequestDb as withDb } from "../lib/db-request";
 import { getSupabaseAdmin } from "./_supabase_admin";
 
@@ -71,7 +74,9 @@ export const dwellings = {
       displayName: z.string().max(200).nullable().optional(),
       occupantName: z.string().max(200).nullable().optional(),
       billingName: z.string().max(200).nullable().optional(),
-      billingEmail: z.email().max(320).nullable().optional(),
+      billingEmail: z
+        .preprocess(trimmedEmailOrNull, z.email().max(320).nullable())
+        .optional(),
       billingAddress: z.string().max(300).nullable().optional(),
       areaM2: z.coerce.number().min(0).optional(),
       residentCount: z.coerce.number().int().min(0).optional(),

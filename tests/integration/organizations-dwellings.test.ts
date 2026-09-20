@@ -264,6 +264,45 @@ describe("dwellings (spec DWL-001/002/003)", () => {
     await cleanupOrg(org.id);
   });
 
+  it("updateDwelling: billingEmail clears to null and persists a value unchanged", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT Dwl Org Email Clearable", addressLine1: "Addr" },
+      seedAdminId
+    );
+    const initial = await createDwelling(
+      db,
+      org.id,
+      { number: "EMAIL-1", billingEmail: "old@example.com" },
+      seedAdminId
+    );
+    expect(initial.billingEmail).toBe("old@example.com");
+
+    const cleared = await updateDwelling(
+      db,
+      org.id,
+      initial.id,
+      { billingEmail: null },
+      seedAdminId
+    );
+    expect(cleared.billingEmail).toBeNull();
+    expect((await getDwelling(db, org.id, initial.id)).billingEmail).toBeNull();
+
+    const updated = await updateDwelling(
+      db,
+      org.id,
+      initial.id,
+      { billingEmail: "new@example.com" },
+      seedAdminId
+    );
+    expect(updated.billingEmail).toBe("new@example.com");
+    expect((await getDwelling(db, org.id, initial.id)).billingEmail).toBe(
+      "new@example.com"
+    );
+
+    await cleanupOrg(org.id);
+  });
+
   it("invoice delivery: defaults to email-only, rejects turning both methods off, allows paper-only", async () => {
     const org = await createOrganization(
       db,
