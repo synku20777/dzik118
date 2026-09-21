@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
-import type { DbOrTx } from "../../db/client";
+import type { Db, DbOrTx } from "../../db/client";
 import {
+  invoices,
   invoiceSendAttempts,
   type invoiceSendAttemptStatusEnum,
 } from "../../db/schema/invoices";
@@ -71,6 +72,14 @@ export function classifyAttemptStaleness(
  * unique index on (invoice_id) WHERE status IN ('CLAIMED', 'DISPATCHING')
  * violates uniqueness. In that event, the conflict is caught and the existing active attempt
  * row is selected and returned with `claimed: false`.
+ *
+ * Note: this insert-then-catch-conflict approach alone has a late-loser
+ * race (a caller that loses the conflict, then re-selects AFTER the winner
+ * has already gone terminal, finds no active row and can claim again).
+ * sendInvoice/resendInvoice use claimSendCommand (below) instead, which
+ * closes that race via an invoice-row lock. This function remains as the
+ * lower-level primitive it wraps, and for direct callers that don't need
+ * that guarantee.
  */
 export async function claimSendAttempt(
   db: DbOrTx,
@@ -115,6 +124,122 @@ export async function claimSendAttempt(
     }
     throw err;
   }
+}
+
+export type SendCommandMode = "FIRST_SEND" | "RESEND";
+
+export type ClaimSendCommandResult =
+  | { outcome: "CLAIMED"; attempt: InvoiceSendAttempt }
+  | { outcome: "ALREADY_SENT"; invoice: typeof invoices.$inferSelect }
+  | { outcome: "UNKNOWN_BLOCKS_SEND" }
+  | { outcome: "IN_FLIGHT"; attempt: InvoiceSendAttempt }
+  | { outcome: "DUPLICATE_COMMAND"; attempt: InvoiceSendAttempt };
+
+/**
+ * Atomically decides whether a send/resend command may claim a new attempt,
+ * and claims it if so -- all under one `SELECT ... FOR UPDATE` lock on the
+ * invoice row.
+ *
+ * This closes the late-loser race the plain insert-and-catch-conflict
+ * approach in claimSendAttempt() cannot: without a lock, a caller that loses
+ * the unique-index race, then re-checks for an active attempt AFTER the
+ * winner has already gone terminal (SENT/FAILED/UNKNOWN), finds nothing
+ * blocking it and can insert a second CLAIMED row of its own. Here, the
+ * losing caller blocks on the row lock instead, then re-reads the
+ * authoritative state itself once it acquires it -- so it always makes its
+ * decision against the winner's ACTUAL final state, never a stale read.
+ *
+ * No external I/O (provider dispatch) happens inside this transaction.
+ *
+ * `commandId`, for RESEND only, correlates this claim attempt back to the
+ * specific form submission that produced it (a fresh value per page
+ * render). Two concurrent submits of the same rendered Resend form carry
+ * the same commandId; the second one to reach this lock is recognized as a
+ * replay of the same logical click (DUPLICATE_COMMAND) rather than being
+ * treated as a distinct, later resend.
+ */
+export async function claimSendCommand(
+  db: Db,
+  organizationId: string,
+  invoiceId: string,
+  mode: SendCommandMode,
+  commandId: string | null = null
+): Promise<ClaimSendCommandResult> {
+  return db.transaction(async (tx) => {
+    const [invoice] = await tx
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.id, invoiceId),
+          eq(invoices.organizationId, organizationId)
+        )
+      )
+      .for("update")
+      .limit(1);
+    if (!invoice) {
+      throw new NotFoundError("Invoice not found");
+    }
+
+    if (mode === "FIRST_SEND" && invoice.sentAt) {
+      return { outcome: "ALREADY_SENT", invoice };
+    }
+
+    const [latestAttempt] = await tx
+      .select()
+      .from(invoiceSendAttempts)
+      .where(
+        and(
+          eq(invoiceSendAttempts.invoiceId, invoiceId),
+          eq(invoiceSendAttempts.organizationId, organizationId)
+        )
+      )
+      .orderBy(desc(invoiceSendAttempts.createdAt))
+      .limit(1);
+
+    if (
+      latestAttempt &&
+      (latestAttempt.status === "CLAIMED" ||
+        latestAttempt.status === "DISPATCHING")
+    ) {
+      return { outcome: "IN_FLIGHT", attempt: latestAttempt };
+    }
+
+    if (mode === "FIRST_SEND" && latestAttempt?.status === "UNKNOWN") {
+      // Application-layer policy, not a DB constraint: UNKNOWN is never
+      // auto-retried. An explicit resend (mode RESEND) is exactly the
+      // mechanism that's allowed to try again after UNKNOWN.
+      return { outcome: "UNKNOWN_BLOCKS_SEND" };
+    }
+
+    if (mode === "RESEND" && commandId) {
+      const [duplicate] = await tx
+        .select()
+        .from(invoiceSendAttempts)
+        .where(
+          and(
+            eq(invoiceSendAttempts.invoiceId, invoiceId),
+            eq(invoiceSendAttempts.commandId, commandId)
+          )
+        )
+        .limit(1);
+      if (duplicate) {
+        return { outcome: "DUPLICATE_COMMAND", attempt: duplicate };
+      }
+    }
+
+    const [attempt] = await tx
+      .insert(invoiceSendAttempts)
+      .values({
+        organizationId,
+        invoiceId,
+        status: "CLAIMED",
+        commandId: mode === "RESEND" ? commandId : null,
+      })
+      .returning();
+
+    return { outcome: "CLAIMED", attempt };
+  });
 }
 
 export async function getLatestSendAttempt(

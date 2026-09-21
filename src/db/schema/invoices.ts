@@ -6,6 +6,7 @@
 // (later phase), not by a DB constraint, since Postgres cannot easily express
 // "immutable after column X is set" without triggers this spec doesn't ask for.
 import {
+  boolean,
   char,
   check,
   date,
@@ -209,6 +210,15 @@ export const invoiceSendAttempts = pgTable(
       .references(() => invoices.id),
     status: invoiceSendAttemptStatusEnum("status").notNull().default("CLAIMED"),
     errorCode: text("error_code"),
+    // Correlates an attempt back to the specific admin-action submission that
+    // created it (e.g. a fresh UUID rendered into the Resend form's hidden
+    // input on each page load). Two concurrent submits of the SAME rendered
+    // form share this value, so the second is recognized as a replay of the
+    // same logical click rather than a distinct resend -- a genuinely later,
+    // separate click gets a fresh value from a fresh page render. Null for
+    // the automatic first-send/retry path, which has no such per-click
+    // identity to correlate.
+    commandId: text("command_id"),
     claimedAt: timestamp("claimed_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -228,6 +238,9 @@ export const invoiceSendAttempts = pgTable(
     uniqueIndex("invoice_send_attempts_invoice_id_active_idx")
       .on(table.invoiceId)
       .where(sql`${table.status} in ('CLAIMED', 'DISPATCHING')`),
+    uniqueIndex("invoice_send_attempts_invoice_id_command_id_idx")
+      .on(table.invoiceId, table.commandId)
+      .where(sql`${table.commandId} is not null`),
   ]
 );
 
@@ -253,6 +266,16 @@ export const invoiceDeliveries = pgTable(
     status: text("status").notNull(),
     errorCode: text("error_code"),
     sentAt: timestamp("sent_at", { withTimezone: true }),
+    // Marks the one PAPER row that represents the initial "Record paper
+    // dispatch" business event for an invoice (spec: paper is not
+    // electronically sent, an admin explicitly confirms physical dispatch
+    // once). Scoped uniqueness lives on THIS flag, not on
+    // (invoice_id, method='PAPER') generally, so a future reprint/additional
+    // mailed copy can still add further PAPER rows without violating the
+    // invariant, and pre-existing historical PAPER rows never need deleting.
+    isInitialPaperDispatch: boolean("is_initial_paper_dispatch")
+      .notNull()
+      .default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -260,9 +283,9 @@ export const invoiceDeliveries = pgTable(
   (table) => [
     index("invoice_deliveries_invoice_id_idx").on(table.invoiceId),
     index("invoice_deliveries_attempt_id_idx").on(table.attemptId),
-    uniqueIndex("invoice_deliveries_invoice_id_paper_idx")
+    uniqueIndex("invoice_deliveries_invoice_id_initial_paper_idx")
       .on(table.invoiceId)
-      .where(sql`${table.method} = 'PAPER'`),
+      .where(sql`${table.isInitialPaperDispatch} = true`),
   ]
 );
 

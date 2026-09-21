@@ -54,19 +54,26 @@ export const invoices = {
     input: z.object({
       organizationId: z.uuid(),
       invoiceId: z.uuid(),
+      // A fresh value rendered into the Resend form on each page load
+      // (see [invoiceId].astro). Correlates concurrent submissions of the
+      // SAME form back to one logical click; see claimSendCommand.
+      commandId: z.string().min(1).max(100),
     }),
-    handler: safeHandler(async ({ organizationId, invoiceId }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
-      return withDb((db) =>
-        resendInvoice(
-          db,
-          organizationId,
-          invoiceId,
-          sendDeps(),
-          locals.auth!.userId
-        )
-      );
-    }),
+    handler: safeHandler(
+      async ({ organizationId, invoiceId, commandId }, { locals }) => {
+        requireOrganizationAccess(locals.auth, organizationId);
+        return withDb((db) =>
+          resendInvoice(
+            db,
+            organizationId,
+            invoiceId,
+            sendDeps(),
+            locals.auth!.userId,
+            commandId
+          )
+        );
+      }
+    ),
   }),
 
   recordPaperDispatch: defineAction({

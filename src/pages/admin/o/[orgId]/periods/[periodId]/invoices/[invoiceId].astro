@@ -106,25 +106,39 @@ const hasEmailDelivery = deliveries.some((d) => d.method === "EMAIL");
 
 type ElectronicState = "NONE" | "IN_PROGRESS" | "UNKNOWN" | "FAILED" | "SENT";
 
+// Derived ONLY from electronic send-attempt/delivery evidence -- never from
+// invoice.sentAt, which is an overall business fact that a PAPER dispatch
+// can also set. An invoice can be overall SENT (via paper) while its EMAIL
+// channel independently sits at UNKNOWN/FAILED; the two must not collapse
+// into one state, or the UNKNOWN warning would wrongly disappear once paper
+// completes the invoice.
+const hasLegacyEmailSent =
+  !latestAttempt &&
+  deliveries.some((d) => d.method === "EMAIL" && d.status === "SENT");
+const hasLegacyEmailFailed =
+  !latestAttempt &&
+  deliveries.some((d) => d.method === "EMAIL" && d.status === "FAILED");
+
 let electronicState: ElectronicState;
-if (invoice.sentAt || latestAttempt?.status === "SENT") {
-  electronicState = "SENT";
-} else if (
+if (
   latestAttempt?.status === "CLAIMED" ||
   latestAttempt?.status === "DISPATCHING"
 ) {
   electronicState = "IN_PROGRESS";
 } else if (latestAttempt?.status === "UNKNOWN") {
   electronicState = "UNKNOWN";
-} else if (
-  latestAttempt?.status === "FAILED" ||
-  (!latestAttempt &&
-    deliveries.some((d) => d.method === "EMAIL" && d.status === "FAILED"))
-) {
+} else if (latestAttempt?.status === "SENT" || hasLegacyEmailSent) {
+  electronicState = "SENT";
+} else if (latestAttempt?.status === "FAILED" || hasLegacyEmailFailed) {
   electronicState = "FAILED";
 } else {
   electronicState = "NONE";
 }
+// Fresh per page render: two submissions of the SAME rendered Resend form
+// (double-click, browser retry) carry this same value and are recognized
+// as one logical click by resendInvoice/claimSendCommand; reloading the
+// page gets a new one, free to resend again.
+const resendCommandId = crypto.randomUUID();
 const docLocale = parseInvoiceLocale(Astro.url.searchParams.get("docLocale"));
 const invoiceHtml = renderInvoiceHtml(invoice, lines, docLocale);
 const pdfHref =
@@ -242,6 +256,11 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
                       value={organizationId}
                     />
                     <input type="hidden" name="invoiceId" value={invoice.id} />
+                    <input
+                      type="hidden"
+                      name="commandId"
+                      value={resendCommandId}
+                    />
                     <button
                       type="submit"
                       class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
@@ -486,7 +505,11 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
                     <td class="px-4 py-2">{d.destinationEmail ?? "—"}</td>
                     <td class="px-4 py-2">
                       {d.status === "SENT" ? (
-                        <span class="text-success">{t("Sent")}</span>
+                        <span class="text-success">
+                          {d.method === "PAPER"
+                            ? t("Paper dispatched")
+                            : t("Sent")}
+                        </span>
                       ) : d.status === "UNKNOWN" ? (
                         <span class="text-warning">{t("Needs attention")}</span>
                       ) : (

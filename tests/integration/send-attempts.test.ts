@@ -387,28 +387,44 @@ describe("invoice send attempts state model", () => {
     }
   });
 
-  it("9. invoice_deliveries partial unique index enforces at most one PAPER delivery per invoice", async () => {
+  it("9. invoice_deliveries partial unique index enforces at most one INITIAL PAPER dispatch per invoice, without blocking further historical PAPER rows", async () => {
     const { org, invoice } = await setupTestInvoice("IT-SA Org 9", 9);
     try {
-      // 9a. First PAPER delivery insert succeeds
+      // 9a. First initial-dispatch PAPER delivery insert succeeds
       const firstPaper = await db.$client.query(
-        `INSERT INTO invoice_deliveries (id, organization_id, invoice_id, method, provider, status)
-         VALUES (gen_random_uuid(), $1, $2, 'PAPER', 'paper', 'SENT')
+        `INSERT INTO invoice_deliveries (id, organization_id, invoice_id, method, provider, status, is_initial_paper_dispatch)
+         VALUES (gen_random_uuid(), $1, $2, 'PAPER', 'paper', 'SENT', true)
          RETURNING id`,
         [org.id, invoice.id]
       );
       expect(firstPaper.rows.length).toBe(1);
 
-      // 9b. Second PAPER delivery insert for SAME invoice fails with unique constraint violation
+      // 9b. A second row ALSO marked as the initial dispatch for the SAME
+      // invoice fails with a unique constraint violation.
       await expect(
         db.$client.query(
-          `INSERT INTO invoice_deliveries (id, organization_id, invoice_id, method, provider, status)
-           VALUES (gen_random_uuid(), $1, $2, 'PAPER', 'paper', 'SENT')`,
+          `INSERT INTO invoice_deliveries (id, organization_id, invoice_id, method, provider, status, is_initial_paper_dispatch)
+           VALUES (gen_random_uuid(), $1, $2, 'PAPER', 'paper', 'SENT', true)`,
           [org.id, invoice.id]
         )
-      ).rejects.toThrow(/invoice_deliveries_invoice_id_paper_idx|unique/i);
+      ).rejects.toThrow(
+        /invoice_deliveries_invoice_id_initial_paper_idx|unique/i
+      );
 
-      // 9c. EMAIL delivery for same invoice succeeds (partial index does not constrain EMAIL)
+      // 9c. A further PAPER row NOT marked as the initial dispatch (e.g. a
+      // future reprint/additional mailed copy) is NOT blocked -- the
+      // invariant is scoped to the one initial-dispatch business event, not
+      // to PAPER deliveries in general, so historical rows never need
+      // deleting to satisfy it.
+      const secondPaper = await db.$client.query(
+        `INSERT INTO invoice_deliveries (id, organization_id, invoice_id, method, provider, status, is_initial_paper_dispatch)
+         VALUES (gen_random_uuid(), $1, $2, 'PAPER', 'paper', 'SENT', false)
+         RETURNING id`,
+        [org.id, invoice.id]
+      );
+      expect(secondPaper.rows.length).toBe(1);
+
+      // 9d. EMAIL delivery for same invoice succeeds (partial index does not constrain EMAIL)
       const emailDelivery = await db.$client.query(
         `INSERT INTO invoice_deliveries (id, organization_id, invoice_id, method, provider, status)
          VALUES (gen_random_uuid(), $1, $2, 'EMAIL', 'resend', 'SENT')

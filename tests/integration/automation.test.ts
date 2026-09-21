@@ -732,7 +732,12 @@ describe("autoSendForOrganization", () => {
     expect(bulkResult.sent).toHaveLength(0);
     expect(bulkResult.skipped).toHaveLength(1);
     expect(bulkResult.skipped[0].invoiceId).toBe(invoice.id);
-    expect(bulkResult.skipped[0].reason).toBe("Delivery failed");
+    // A missing billing email is known before dispatch, so this is now a
+    // clean, specific skip reason -- not a generic "Delivery failed" implying
+    // the provider was actually contacted.
+    expect(bulkResult.skipped[0].reason).toBe(
+      "Invoice email is missing. Add a billing email before sending."
+    );
 
     await cleanupOrg(org.id);
   });

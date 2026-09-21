@@ -26,6 +26,14 @@ test.describe.configure({ mode: "serial" });
 test.setTimeout(180_000);
 const widths = [1440, 1024, 768, 390];
 
+// For the direct-DB-seeding scenario below (states impractical to reproduce
+// through the real UI alone, e.g. UNKNOWN). Matches the convention used by
+// the integration tests for connecting to the same local stack this E2E
+// run's dev server is already using.
+const dbUrl = process.env.DATABASE_URL;
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
+
 async function loginAdmin(page: Page): Promise<string> {
   await page.goto("/login");
   await page.locator("#admin-email").fill("admin.a@example.com");
@@ -1310,6 +1318,11 @@ test("resident mobile routes remain separate from administration", async ({
 test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+paper, failed, and sent", async ({
   page,
 }) => {
+  if (!dbUrl || !supabaseUrl || !supabaseSecretKey) {
+    throw new Error(
+      "DATABASE_URL, SUPABASE_URL and SUPABASE_SECRET_KEY are required for this test's direct-DB seeding"
+    );
+  }
   const db = await createDb(dbUrl);
   const supabaseAdmin = createSupabaseAdminClient(
     supabaseUrl,
@@ -1494,7 +1507,15 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
     // Assert: after the resulting page reload, exactly one "Paper dispatched" status is shown
     // button replaced by static text, case status badge shows SENT
     await expect(page.locator("h1 .status-badge")).toContainText("Sent");
-    await expect(page.getByText("Paper dispatched")).toBeVisible();
+    // "Paper dispatched" now legitimately appears twice: the action-area
+    // badge ("✓ Paper dispatched") and the delivery-history row's status
+    // cell (issue 5: PAPER+SENT reads "Paper dispatched", not generic
+    // "Sent") -- assert both are present rather than using an ambiguous
+    // exact-text locator.
+    await expect(page.getByText("✓ Paper dispatched")).toBeVisible();
+    await expect(
+      page.getByText("Paper dispatched", { exact: true })
+    ).toBeVisible();
     await expect(
       page.getByRole("button", {
         name: "Record paper dispatch",
@@ -1506,7 +1527,7 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
     // and the page does not offer to record it again
     await page.reload();
     await expect(page.locator("h1 .status-badge")).toContainText("Sent");
-    await expect(page.getByText("Paper dispatched")).toBeVisible();
+    await expect(page.getByText("✓ Paper dispatched")).toBeVisible();
     await expect(
       page.getByRole("button", {
         name: "Record paper dispatch",
@@ -1603,7 +1624,7 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
 
     // Assert: invoice becomes SENT, exactly one PAPER delivery row/status appears
     await expect(page.locator("h1 .status-badge")).toContainText("Sent");
-    await expect(page.getByText("Paper dispatched")).toBeVisible();
+    await expect(page.getByText("✓ Paper dispatched")).toBeVisible();
 
     // Assert: earlier FAILED email delivery row is still shown as FAILED in delivery history
     const historySection3 = page.locator("section", {
@@ -1617,7 +1638,9 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
     const paperRow3 = historySection3.locator("tbody tr", {
       hasText: "Paper",
     });
-    await expect(paperRow3).toContainText("Sent");
+    // PAPER + SENT reads "Paper dispatched" in history, not generic "Sent"
+    // (issue 5: posting proves dispatch, not recipient delivery).
+    await expect(paperRow3).toContainText("Paper dispatched");
 
     // =========================================================================
     // Scenario 4: EMAIL UNKNOWN THEN PAPER DISPATCH
@@ -1691,7 +1714,7 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
     const paperRow4 = historySection4.locator("tbody tr", {
       hasText: "Paper",
     });
-    await expect(paperRow4).toContainText("Sent");
+    await expect(paperRow4).toContainText("Paper dispatched");
 
     // Assert: no new email was sent as any part of this action
     const mailpitRespAfter4 = await page.request.get(

@@ -246,21 +246,32 @@ describe("invoice sending", () => {
       },
     });
 
-    const [a, b] = await Promise.all([
-      sendInvoice(db, org.id, invoice.id, deps, seedAdminId),
-      sendInvoice(db, org.id, invoice.id, deps, seedAdminId),
-    ]);
-    expect(a.sentAt?.getTime()).toBe(b.sentAt?.getTime());
-    expect(emailCallCount).toBe(1);
+    // Two separate connections, like two real concurrent HTTP requests
+    // (each Worker request opens its own createDb()) -- reusing one
+    // connection would serialize claimSendCommand's transaction on the
+    // client itself and hide the row-level DB lock race being tested.
+    const dbA = await createIntegrationDb();
+    const dbB = await createIntegrationDb();
+    try {
+      const [a, b] = await Promise.all([
+        sendInvoice(dbA, org.id, invoice.id, deps, seedAdminId),
+        sendInvoice(dbB, org.id, invoice.id, deps, seedAdminId),
+      ]);
+      expect(a.sentAt?.getTime()).toBe(b.sentAt?.getTime());
+      expect(emailCallCount).toBe(1);
 
-    const deliveryCount = await db.$client
-      .query("select count(*) from invoice_deliveries where invoice_id = $1", [
-        invoice.id,
-      ])
-      .then((r) => Number(r.rows[0].count));
-    expect(deliveryCount).toBe(1);
-
-    await cleanupOrg(org.id);
+      const deliveryCount = await db.$client
+        .query(
+          "select count(*) from invoice_deliveries where invoice_id = $1",
+          [invoice.id]
+        )
+        .then((r) => Number(r.rows[0].count));
+      expect(deliveryCount).toBe(1);
+    } finally {
+      await dbA.$client.end();
+      await dbB.$client.end();
+      await cleanupOrg(org.id);
+    }
   });
 
   it("regenerating an invoice after a status override clears the stale canonical PDF so the next send re-renders it", async () => {
@@ -832,25 +843,27 @@ describe("invoice sending", () => {
     const { org, invoice } = await setupPreparedInvoice("IT-G Org NoEmail", 9, {
       billingEmail: undefined,
     });
-    const sent = await sendInvoice(
-      db,
-      org.id,
-      invoice.id,
-      stubDeps(),
-      seedAdminId
-    );
-    expect(sent.sentAt).toBeNull();
+    // A missing billing email is known before any dispatch is attempted, so
+    // sendInvoice rejects it as a plain validation error -- no provider call,
+    // no delivery row, and no attempt is ever claimed for this invoice.
+    await expect(
+      sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId)
+    ).rejects.toThrow(ConflictError);
 
-    const [delivery] = await db.$client
+    const deliveries = await db.$client
+      .query("select count(*) from invoice_deliveries where invoice_id = $1", [
+        invoice.id,
+      ])
+      .then((r) => Number(r.rows[0].count));
+    expect(deliveries).toBe(0);
+
+    const attempts = await db.$client
       .query(
-        "select method, error_code from invoice_deliveries where invoice_id = $1",
+        "select count(*) from invoice_send_attempts where invoice_id = $1",
         [invoice.id]
       )
-      .then((r) => r.rows);
-    expect(delivery).toEqual({
-      method: "EMAIL",
-      error_code: "NO_RECIPIENT_EMAIL",
-    });
+      .then((r) => Number(r.rows[0].count));
+    expect(attempts).toBe(0);
 
     await cleanupOrg(org.id);
   });
@@ -1305,48 +1318,57 @@ describe("invoice sending", () => {
       },
     });
 
-    // 3. Race resendInvoice against sendInvoice
-    const p1 = resendInvoice(
-      db,
-      org.id,
-      invoice.id,
-      gatedDeps,
-      seedAdminId
-    ).catch((err) => err);
-    const p2 = sendInvoice(
-      db,
-      org.id,
-      invoice.id,
-      gatedDeps,
-      seedAdminId
-    ).catch((err) => err);
+    // 3. Race resendInvoice against sendInvoice -- two separate connections,
+    // like two real concurrent HTTP requests, so claimSendCommand's
+    // transaction genuinely races at the DB row-lock level instead of
+    // serializing on one shared client.
+    const dbA = await createIntegrationDb();
+    const dbB = await createIntegrationDb();
+    try {
+      const p1 = resendInvoice(
+        dbA,
+        org.id,
+        invoice.id,
+        gatedDeps,
+        seedAdminId
+      ).catch((err) => err);
+      const p2 = sendInvoice(
+        dbB,
+        org.id,
+        invoice.id,
+        gatedDeps,
+        seedAdminId
+      ).catch((err) => err);
 
-    // Wait briefly for one caller to acquire the claim and enter the email provider
-    await new Promise((r) => setTimeout(r, 60));
-    gate.resolve();
+      // Wait briefly for one caller to acquire the claim and enter the email provider
+      await new Promise((r) => setTimeout(r, 60));
+      gate.resolve();
 
-    const [r1, r2] = await Promise.all([p1, p2]);
+      const [r1, r2] = await Promise.all([p1, p2]);
 
-    // Exactly one email provider call total
-    expect(emailCallCount).toBe(1);
+      // Exactly one email provider call total
+      expect(emailCallCount).toBe(1);
 
-    // Invoice is now finalized as SENT
-    const { invoice: finalInvoice, caseStatus } = await getInvoice(
-      db,
-      org.id,
-      invoice.id
-    );
-    expect(finalInvoice.sentAt).not.toBeNull();
-    expect(caseStatus).toBe("SENT");
+      // Invoice is now finalized as SENT
+      const { invoice: finalInvoice, caseStatus } = await getInvoice(
+        db,
+        org.id,
+        invoice.id
+      );
+      expect(finalInvoice.sentAt).not.toBeNull();
+      expect(caseStatus).toBe("SENT");
 
-    // One promise resolved to final invoice, the other either threw ConflictError (if resend collided) or returned the sent invoice (if sendInvoice waited)
-    if (r1 instanceof ConflictError) {
-      expect(r2).toHaveProperty("sentAt");
-    } else {
-      expect(r1).toHaveProperty("sentAt");
+      // One promise resolved to final invoice, the other either threw ConflictError (if resend collided) or returned the sent invoice (if sendInvoice waited)
+      if (r1 instanceof ConflictError) {
+        expect(r2).toHaveProperty("sentAt");
+      } else {
+        expect(r1).toHaveProperty("sentAt");
+      }
+    } finally {
+      await dbA.$client.end();
+      await dbB.$client.end();
+      await cleanupOrg(org.id);
     }
-
-    await cleanupOrg(org.id);
   });
 
   it("Package 2 (2): resend vs resend concurrent calls on already-SENT invoice - exactly one provider call, one new attempt, one INVOICE_RESENT audit", async () => {
@@ -1377,42 +1399,142 @@ describe("invoice sending", () => {
       },
     });
 
-    const p1 = resendInvoice(db, org.id, invoice.id, gatedDeps, seedAdminId);
-    const p2 = resendInvoice(db, org.id, invoice.id, gatedDeps, seedAdminId);
-    const all = Promise.allSettled([p1, p2]);
+    // Two separate connections, like two real concurrent admin clicks from
+    // two separate requests -- reusing one connection would serialize
+    // claimSendCommand's transaction on the client and hide the race.
+    const dbA = await createIntegrationDb();
+    const dbB = await createIntegrationDb();
+    try {
+      const p1 = resendInvoice(dbA, org.id, invoice.id, gatedDeps, seedAdminId);
+      const p2 = resendInvoice(dbB, org.id, invoice.id, gatedDeps, seedAdminId);
+      const all = Promise.allSettled([p1, p2]);
 
-    // Wait briefly so one claims and enters gated provider
-    await new Promise((r) => setTimeout(r, 60));
-    gate.resolve();
+      // Wait briefly so one claims and enters gated provider
+      await new Promise((r) => setTimeout(r, 60));
+      gate.resolve();
 
-    const results = await all;
-    const fulfilled = results.filter((r) => r.status === "fulfilled");
-    const rejected = results.filter((r) => r.status === "rejected");
+      const results = await all;
+      const fulfilled = results.filter((r) => r.status === "fulfilled");
+      const rejected = results.filter((r) => r.status === "rejected");
 
-    expect(fulfilled).toHaveLength(1);
-    expect(rejected).toHaveLength(1);
-    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(
-      ConflictError
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(
+        ConflictError
+      );
+
+      // Exactly one provider call total during resend
+      expect(emailCallCount).toBe(1);
+
+      // Exactly one new attempt row created (2 total: 1 original + 1 from successful resend)
+      const attempts = await db.$client
+        .query(
+          "select id, status from invoice_send_attempts where invoice_id = $1 order by created_at",
+          [invoice.id]
+        )
+        .then((r) => r.rows);
+      expect(attempts).toHaveLength(2);
+      expect(attempts[0].status).toBe("SENT");
+      expect(attempts[1].status).toBe("SENT");
+
+      // Exactly one INVOICE_RESENT audit event
+      const logs = await listAuditLogs(db, org.id);
+      const resentLogs = logs.filter((l) => l.action === "INVOICE_RESENT");
+      expect(resentLogs).toHaveLength(1);
+    } finally {
+      await dbA.$client.end();
+      await dbB.$client.end();
+      await cleanupOrg(org.id);
+    }
+  });
+
+  it("Late-loser regression: a resend replayed with the SAME commandId strictly AFTER the original fully completed converges without a second provider call", async () => {
+    // Directly exercises the exact race the old claimSendAttempt-only
+    // approach could not close: a second submission that only resumes once
+    // the winner has already gone fully terminal (not merely overlapping
+    // it). No gate/timing needed -- the two calls are made fully
+    // sequentially, since "sequential" is precisely the failure mode.
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org LateLoserResend",
+      7
     );
+    await sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId);
 
-    // Exactly one provider call total during resend
+    let emailCallCount = 0;
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          return { success: true, provider: "smtp" as const };
+        },
+      },
+    });
+
+    const commandId = "same-click-command-id";
+    const first = await resendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      deps,
+      seedAdminId,
+      commandId
+    );
     expect(emailCallCount).toBe(1);
 
-    // Exactly one new attempt row created (2 total: 1 original + 1 from successful resend)
+    // Replays the SAME commandId only after `first` has fully committed
+    // (SENT, finalized) -- a double-submit of the identical form, not a
+    // fresh distinct resend.
+    const second = await resendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      deps,
+      seedAdminId,
+      commandId
+    );
+
+    expect(emailCallCount).toBe(1);
+    expect(second.id).toBe(first.id);
+
     const attempts = await db.$client
       .query(
-        "select id, status from invoice_send_attempts where invoice_id = $1 order by created_at",
-        [invoice.id]
+        "select count(*) from invoice_send_attempts where invoice_id = $1 and command_id = $2",
+        [invoice.id, commandId]
       )
-      .then((r) => r.rows);
-    expect(attempts).toHaveLength(2);
-    expect(attempts[0].status).toBe("SENT");
-    expect(attempts[1].status).toBe("SENT");
+      .then((r) => Number(r.rows[0].count));
+    expect(attempts).toBe(1);
 
-    // Exactly one INVOICE_RESENT audit event
     const logs = await listAuditLogs(db, org.id);
     const resentLogs = logs.filter((l) => l.action === "INVOICE_RESENT");
     expect(resentLogs).toHaveLength(1);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Late-loser regression: a genuinely later resend with a DIFFERENT commandId after full completion is a distinct dispatch", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org LateLoserDistinct",
+      7
+    );
+    await sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId);
+
+    let emailCallCount = 0;
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          return { success: true, provider: "smtp" as const };
+        },
+      },
+    });
+
+    await resendInvoice(db, org.id, invoice.id, deps, seedAdminId, "click-1");
+    expect(emailCallCount).toBe(1);
+
+    // A separate click (different commandId, e.g. from a fresh page load)
+    // is a legitimate distinct resend and dispatches again.
+    await resendInvoice(db, org.id, invoice.id, deps, seedAdminId, "click-2");
+    expect(emailCallCount).toBe(2);
 
     await cleanupOrg(org.id);
   });
@@ -1521,35 +1643,45 @@ describe("invoice sending", () => {
       }
     );
 
-    const [r1, r2] = await Promise.all([
-      recordPaperDispatch(db, org.id, invoice.id, seedAdminId),
-      recordPaperDispatch(db, org.id, invoice.id, seedAdminId),
-    ]);
+    // Two separate connections, like two real concurrent admin clicks --
+    // recordPaperDispatch's SELECT ... FOR UPDATE lock genuinely needs two
+    // physical connections to race against each other.
+    const dbA = await createIntegrationDb();
+    const dbB = await createIntegrationDb();
+    try {
+      const [r1, r2] = await Promise.all([
+        recordPaperDispatch(dbA, org.id, invoice.id, seedAdminId),
+        recordPaperDispatch(dbB, org.id, invoice.id, seedAdminId),
+      ]);
 
-    expect(r1.sentAt).not.toBeNull();
-    expect(r2.sentAt).not.toBeNull();
-    expect(r1.sentAt?.getTime()).toBe(r2.sentAt?.getTime());
+      expect(r1.sentAt).not.toBeNull();
+      expect(r2.sentAt).not.toBeNull();
+      expect(r1.sentAt?.getTime()).toBe(r2.sentAt?.getTime());
 
-    const deliveries = await db.$client
-      .query("select count(*) from invoice_deliveries where invoice_id = $1", [
-        invoice.id,
-      ])
-      .then((r) => Number(r.rows[0].count));
-    expect(deliveries).toBe(1);
+      const deliveries = await db.$client
+        .query(
+          "select count(*) from invoice_deliveries where invoice_id = $1",
+          [invoice.id]
+        )
+        .then((r) => Number(r.rows[0].count));
+      expect(deliveries).toBe(1);
 
-    const [caseRow] = await db.$client
-      .query(
-        "select status from billing_cases where id = (select billing_case_id from invoices where id = $1)",
-        [invoice.id]
-      )
-      .then((r) => r.rows);
-    expect(caseRow.status).toBe("SENT");
+      const [caseRow] = await db.$client
+        .query(
+          "select status from billing_cases where id = (select billing_case_id from invoices where id = $1)",
+          [invoice.id]
+        )
+        .then((r) => r.rows);
+      expect(caseRow.status).toBe("SENT");
 
-    const logs = await listAuditLogs(db, org.id);
-    const sentLogs = logs.filter((l) => l.action === "INVOICE_SENT");
-    expect(sentLogs).toHaveLength(1);
-
-    await cleanupOrg(org.id);
+      const logs = await listAuditLogs(db, org.id);
+      const sentLogs = logs.filter((l) => l.action === "INVOICE_SENT");
+      expect(sentLogs).toHaveLength(1);
+    } finally {
+      await dbA.$client.end();
+      await dbB.$client.end();
+      await cleanupOrg(org.id);
+    }
   });
 
   it("Package 2 (10): EMAIL UNKNOWN then PAPER dispatch finalizes invoice, original attempt/delivery remain UNKNOWN, provider not recalled", async () => {

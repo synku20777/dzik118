@@ -2,7 +2,6 @@
 dist/
 .wrangler/
 test-results/
-tests/
 playwright-report/
 # generated types
 .astro/

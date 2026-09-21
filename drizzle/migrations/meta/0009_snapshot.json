@@ -1,5 +1,5 @@
 {
-  "id": "dcd70f1a-79f9-4091-9db4-8fe8e0f917e2",
+  "id": "61166a6e-5610-4c7e-ae33-c8008ab08045",
   "prevId": "fc28c568-bc40-452e-88ce-0fcedc56d451",
   "version": "7",
   "dialect": "postgresql",
@@ -2327,6 +2327,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "is_initial_paper_dispatch": {
+          "name": "is_initial_paper_dispatch",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -2366,8 +2373,8 @@
           "method": "btree",
           "with": {}
         },
-        "invoice_deliveries_invoice_id_paper_idx": {
-          "name": "invoice_deliveries_invoice_id_paper_idx",
+        "invoice_deliveries_invoice_id_initial_paper_idx": {
+          "name": "invoice_deliveries_invoice_id_initial_paper_idx",
           "columns": [
             {
               "expression": "invoice_id",
@@ -2377,7 +2384,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"invoice_deliveries\".\"method\" = 'PAPER'",
+          "where": "\"invoice_deliveries\".\"is_initial_paper_dispatch\" = true",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -2628,6 +2635,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "command_id": {
+          "name": "command_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "claimed_at": {
           "name": "claimed_at",
           "type": "timestamp with time zone",
@@ -2690,6 +2703,28 @@
           ],
           "isUnique": true,
           "where": "\"invoice_send_attempts\".\"status\" in ('CLAIMED', 'DISPATCHING')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "invoice_send_attempts_invoice_id_command_id_idx": {
+          "name": "invoice_send_attempts_invoice_id_command_id_idx",
+          "columns": [
+            {
+              "expression": "invoice_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "command_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"invoice_send_attempts\".\"command_id\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
