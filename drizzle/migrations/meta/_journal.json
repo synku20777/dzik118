@@ -78,6 +78,13 @@
       "when": 1790050000000,
       "tag": "0010_delivery_safety_convergence",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790100000000,
+      "tag": "0011_resend_retryable_command_id",
+      "breakpoints": true
     }
   ]
 }

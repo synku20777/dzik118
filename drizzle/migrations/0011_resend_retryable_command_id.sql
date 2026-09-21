@@ -1,0 +1,21 @@
+-- Forward migration (0009/0010 established the "don't re-edit an already-
+-- committed migration, treat deployment state as unknown, use IF EXISTS/IF
+-- NOT EXISTS throughout" pattern -- applied here too, since this repo's
+-- `npm run deploy` runs migrations outside CI with no automated record).
+--
+-- Narrows invoice_send_attempts_invoice_id_command_id_idx from "unique per
+-- (invoice_id, command_id) for as long as command_id is not null" to
+-- "...for as long as command_id is not null AND status is CLAIMED or
+-- DISPATCHING". Without this, a stale CLAIMED/DISPATCHING resend attempt
+-- that gets reconciled to FAILED permanently occupies its command_id: the
+-- browser retrying the SAME still-rendered Resend form (same commandId,
+-- e.g. after a crash, before any page reload) would find that FAILED row
+-- via claimSendCommand's duplicate-command check and silently converge on
+-- the stale failure instead of claiming a genuinely fresh attempt -- even
+-- though FAILED is always safely retryable and letting the same commandId
+-- claim again cannot cause a duplicate provider call. Once this index only
+-- covers active statuses, a fresh row can be inserted with the same
+-- command_id after the old one reaches FAILED (see the corresponding
+-- application-layer change in claimSendCommand's duplicate-command check).
+DROP INDEX IF EXISTS "invoice_send_attempts_invoice_id_command_id_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "invoice_send_attempts_invoice_id_command_id_idx" ON "invoice_send_attempts" USING btree ("invoice_id","command_id") WHERE "invoice_send_attempts"."command_id" is not null and "invoice_send_attempts"."status" in ('CLAIMED', 'DISPATCHING');

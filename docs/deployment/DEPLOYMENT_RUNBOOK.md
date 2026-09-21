@@ -70,12 +70,18 @@ export PRODUCTION_DATABASE_URL="<production-supabase-postgres-connection-string>
 
 > **Warning:** `npm run db:seed` is demo/local-dev-only fixture data (two fake organizations, fake residents) and must never be run against a production database.
 
-### Migration 0009/0010 safety check
+### Migration 0009/0010/0011 safety check
 
-Run this check before deploying any release that includes migrations `0009_delivery_safety_indexes` or `0010_delivery_safety_convergence`. Migration `0009` has existed in three different forms across this project's git history with genuinely different effects (see the comment at the top of `drizzle/migrations/0010_delivery_safety_convergence.sql`), and this repository's own deploy path (`npm run deploy` -> `db:migrate:production`) runs outside CI, so there is no automated record of what has actually been applied to production. Connect directly to the production database (read-only is enough) and run:
+Run this check before deploying any release that includes migrations `0009_delivery_safety_indexes`, `0010_delivery_safety_convergence`, or `0011_resend_retryable_command_id`. Migration `0009` has existed in three different forms across this project's git history with genuinely different effects (see the comment at the top of `drizzle/migrations/0010_delivery_safety_convergence.sql`), and this repository's own deploy path (`npm run deploy` -> `db:migrate:production`) runs outside CI, so there is no automated record of what has actually been applied to production. Connect directly to the production database (read-only is enough) and run:
 
 ```sql
--- 1. Has any form of 0009/0010 already been applied, and when?
+-- 1. How many migrations have been applied, in order? Drizzle's own
+--    tracking table stores a content HASH and an applied timestamp, NOT
+--    the migration's filename/tag -- it cannot tell you "0009" by name.
+--    Row count tells you how far the chain has progressed (this repo has
+--    12 migration files, 0000 through 0011, in `drizzle/migrations/`); to
+--    identify a SPECIFIC historical form of 0009, rely on the SCHEMA
+--    evidence in query 2/3 below, which is unambiguous.
 SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at;
 
 -- 2. What does the schema actually look like right now?
@@ -97,10 +103,20 @@ ORDER BY created_at;
 
 Interpret the results:
 
-- **Neither `0009` nor `0010` appears in query 1, and `invoice_deliveries_invoice_id_paper_idx` does not appear in query 2**: nothing has run yet. Deploying `0009` then `0010` in order is safe.
-- **`0009` appears in query 1, and `invoice_deliveries_invoice_id_paper_idx` (the old destructive index) appears in query 2**: the FIRST historical form ran. Its `DELETE` already removed any duplicate historical PAPER rows before you can inspect them -- check query 3's row count against any independent record you have (a backup, an audit export) of how many PAPER rows existed before that deploy. If they don't match, the missing rows are unrecoverable from this database; only a pre-deploy backup can restore them. Deploying `0010` afterward is still safe and required (it drops the bad index and adds the missing columns/indexes going forward).
-- **`0009` appears in query 1, and query 3 shows rows with `is_initial_paper_dispatch = true` for invoices that predate the "Record paper dispatch" feature**: the SECOND historical form ran (the backfill). Those `true` values are not verified manual dispatch -- cross-check each one against real evidence (physical mailing records, resident correspondence) before trusting it, or treat it as unverified and have an administrator use "Record paper dispatch" again for any invoice that genuinely needs a verified record. Deploying `0010` does not touch these values either way (see its own comment).
-- **`0010` already appears in query 1**: this exact migration set has already been deployed; re-running `npm run deploy` is a safe no-op for this specific concern (both migrations are idempotent).
+- **Query 1 has fewer than 9 rows**: migrations have not yet reached `0009`. Deploying the full chain (`0009` -> `0010` -> `0011`) in order is safe.
+- **`invoice_deliveries_invoice_id_paper_idx` appears in query 2** (alongside, or instead of, `invoice_deliveries_invoice_id_initial_paper_idx`): the FIRST historical form of `0009` ran. Its `DELETE` already removed any duplicate historical PAPER rows before you can inspect them -- check query 3's row count against any independent record you have (a backup, an audit export) of how many PAPER rows existed before that deploy. If they don't match, the missing rows are unrecoverable from this database; only a pre-deploy backup can restore them. Deploying `0010`/`0011` afterward is still safe and required (they drop the bad index and converge the rest of the schema).
+- **Query 3 shows rows with `is_initial_paper_dispatch = true` for invoices that predate the "Record paper dispatch" feature**: the SECOND historical form of `0009` ran (the backfill). Those `true` values are not verified manual dispatch. For each such row:
+  1. Cross-check it against real evidence (physical mailing records, resident correspondence) that an administrator genuinely printed and posted/handed over that specific invoice.
+  2. If you cannot confirm it, clear the false positive so the application stops treating it as verified and the "Record paper dispatch" action becomes available again for that invoice:
+     ```sql
+     UPDATE invoice_deliveries
+     SET is_initial_paper_dispatch = false
+     WHERE id = '<the specific row's id>';
+     ```
+     Do this ONE ROW AT A TIME with its own `id`, never as a bulk `UPDATE ... WHERE method = 'PAPER'` -- a row you DID confirm as genuine (or one created by the real "Record paper dispatch" action after this feature shipped) must not be cleared.
+  3. Once cleared, an administrator can use "Record paper dispatch" again on that invoice to create a genuinely verified record. This does not touch the invoice's existing `sent_at`/case status -- see "Operator action required: old auto-PAPER-success data may show a contradictory delivery history" in `docs/KNOWN_LIMITATIONS.md`.
+- **`invoice_send_attempts_invoice_id_command_id_idx`'s `indexdef` in query 2 includes `status = 'CLAIMED'` in its `WHERE` clause (not just `command_id IS NOT NULL`)**: `0011` has already applied. If it shows only `command_id IS NOT NULL`, `0011` has not yet run (safe to deploy) or ran before this narrowing was introduced.
+- **All of the above show the fully-converged end state already**: this migration set has already been deployed; re-running `npm run deploy` is a safe no-op for this specific concern (all three migrations are idempotent).
 
 ## 4. Storage bucket setup
 

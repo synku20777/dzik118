@@ -44,6 +44,7 @@ import {
 } from "../../src/domain/billing/sending";
 import {
   claimSendAttempt,
+  claimSendCommand,
   markDispatching,
 } from "../../src/domain/billing/send-attempts";
 import {
@@ -1431,12 +1432,12 @@ describe("invoice sending", () => {
     await cleanupOrg(org.id);
   });
 
-  it("Regression: a crashed Resend (stuck CLAIMED) is recoverable through resendInvoice itself, not permanently stuck 'in progress'", async () => {
+  it("Regression: a crashed Resend recovers when a DIFFERENT commandId retries (e.g. a page reload)", async () => {
     // EMAIL already succeeded once. An explicit resend claims an attempt,
-    // then the Worker crashes before ever reaching the provider call (or
-    // before markDispatching). The attempt is left CLAIMED forever unless
-    // resendInvoice itself can reconcile a stale attempt -- previously it
-    // only ever threw "in progress" on IN_FLIGHT, with no way out.
+    // then the Worker crashes before ever reaching the provider call. The
+    // attempt is left CLAIMED forever unless resendInvoice itself can
+    // reconcile a stale attempt -- previously it only ever threw "in
+    // progress" on IN_FLIGHT, with no way out.
     const { org, invoice } = await setupPreparedInvoice(
       "IT-G Org StaleResendClaim",
       7
@@ -1484,6 +1485,71 @@ describe("invoice sending", () => {
       { status: "SENT", error_code: null },
       { status: "FAILED", error_code: "ABANDONED_BEFORE_DISPATCH" },
       { status: "SENT", error_code: null },
+    ]);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Regression: a crashed Resend recovers when the SAME commandId retries (the browser resubmitting the identical still-rendered form, no reload)", async () => {
+    // The stricter, more realistic crash scenario: the attempt that gets
+    // stuck CLAIMED was itself claimed under a real commandId (as a real
+    // Resend click does via claimSendCommand), and the SAME commandId is
+    // used to retry -- e.g. the admin clicks Resend again on the same page
+    // without reloading, or the browser automatically retries the POST.
+    // The command_id uniqueness index must not treat the now-FAILED
+    // reconciled row as a permanent claim on that commandId.
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org StaleResendSameCommand",
+      9
+    );
+    await sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId);
+
+    const claim = await claimSendCommand(
+      db,
+      org.id,
+      invoice.id,
+      "RESEND",
+      "same-command"
+    );
+    expect(claim.outcome).toBe("CLAIMED");
+    if (claim.outcome !== "CLAIMED") throw new Error("unreachable");
+    // Worker crashes right after claiming, before ever reaching the
+    // provider -- backdate past STALE_CLAIM_MS (60s).
+    await db.$client.query(
+      "update invoice_send_attempts set claimed_at = now() - interval '2 minutes' where id = $1",
+      [claim.attempt.id]
+    );
+
+    let emailCallCount = 0;
+    const recovered = await resendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => {
+            emailCallCount++;
+            return { success: true, provider: "smtp" as const };
+          },
+        },
+      }),
+      seedAdminId,
+      "same-command"
+    );
+
+    expect(emailCallCount).toBe(1);
+    expect(recovered.sentAt).not.toBeNull();
+
+    const attempts = await db.$client
+      .query(
+        "select status, command_id from invoice_send_attempts where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(attempts).toEqual([
+      { status: "SENT", command_id: null },
+      { status: "FAILED", command_id: "same-command" },
+      { status: "SENT", command_id: "same-command" },
     ]);
 
     await cleanupOrg(org.id);

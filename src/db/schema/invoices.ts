@@ -218,6 +218,14 @@ export const invoiceSendAttempts = pgTable(
     // separate click gets a fresh value from a fresh page render. Null for
     // the automatic first-send/retry path, which has no such per-click
     // identity to correlate.
+    //
+    // Uniqueness (see invoice_send_attempts_invoice_id_command_id_idx) is
+    // scoped to CLAIMED/DISPATCHING only, NOT to every row ever created
+    // under this command_id: once an attempt reaches FAILED, the same
+    // commandId may claim a fresh row (FAILED is always safely retryable,
+    // so a browser retrying the identical still-rendered form after a
+    // crash must be able to claim again under that same logical click,
+    // not be silently no-opped as "already handled").
     commandId: text("command_id"),
     claimedAt: timestamp("claimed_at", { withTimezone: true })
       .notNull()
@@ -240,7 +248,9 @@ export const invoiceSendAttempts = pgTable(
       .where(sql`${table.status} in ('CLAIMED', 'DISPATCHING')`),
     uniqueIndex("invoice_send_attempts_invoice_id_command_id_idx")
       .on(table.invoiceId, table.commandId)
-      .where(sql`${table.commandId} is not null`),
+      .where(
+        sql`${table.commandId} is not null and ${table.status} in ('CLAIMED', 'DISPATCHING')`
+      ),
   ]
 );
 

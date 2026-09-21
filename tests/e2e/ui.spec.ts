@@ -12,6 +12,7 @@ import {
 } from "../../src/domain/billing/generation";
 import {
   claimSendAttempt,
+  claimSendCommand,
   markFailed,
   markUnknown,
 } from "../../src/domain/billing/send-attempts";
@@ -2047,6 +2048,105 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
         return count;
       })
       .toBe(mailCountBeforeRetry + 1);
+
+    // =========================================================================
+    // Scenario 9: CRASHED RESEND RECOVERS UNDER THE SAME rendered commandId,
+    // WITHOUT A PAGE RELOAD
+    // - EMAIL already sent once. Read the ALREADY-RENDERED Resend form's
+    //   real commandId directly from the DOM.
+    // - Seed a stale CLAIMED attempt tagged with that EXACT commandId
+    //   (simulating: this is the attempt this exact button, if clicked,
+    //   would have created, before the Worker crashed).
+    // - WITHOUT reloading (a reload would render a fresh commandId,
+    //   masking the bug), click the SAME already-rendered Resend button.
+    // Assert: the click actually recovers and dispatches -- exactly one
+    // real email arrives -- rather than silently converging on the stale
+    // failure as a no-op "duplicate command".
+    // =========================================================================
+    const recoveryEmail = `e2e-recovery-${Date.now()}@example.com`;
+    const inv9 = await setupPreparedE2EInvoice(
+      db,
+      supabaseAdmin,
+      orgId,
+      periodId,
+      adminUserId,
+      {
+        invoiceByEmail: true,
+        invoiceByPaper: false,
+        billingEmail: recoveryEmail,
+      }
+    );
+    createdDwellingIds.push(inv9.dwelling.id);
+    createdInvoiceIds.push(inv9.invoice.id);
+
+    // First send for real, so the page will render a Resend form.
+    const inv9Url = `${base}/periods/${periodId}/invoices/${inv9.invoice.id}`;
+    await page.goto(inv9Url);
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const resp = await page.request.get(
+          "http://127.0.0.1:54324/api/v1/messages"
+        );
+        if (!resp.ok()) return false;
+        const data = (await resp.json()) as {
+          messages: { To: { Address: string }[]; Subject: string }[];
+        };
+        return data.messages?.some(
+          (m) =>
+            m.To?.some((t) => t.Address === recoveryEmail) &&
+            m.Subject?.includes(inv9.invoice.invoiceNumber)
+        );
+      })
+      .toBe(true);
+    await expect(page.locator("h1 .status-badge")).toContainText("Sent");
+
+    const resendBtn9 = page.getByRole("button", {
+      name: "Resend",
+      exact: true,
+    });
+    await expect(resendBtn9).toBeVisible();
+    const realCommandId = await page
+      .locator('input[name="commandId"]')
+      .inputValue();
+    expect(realCommandId).toBeTruthy();
+
+    // Seed the crash: claim a stale attempt under that EXACT commandId,
+    // as if this exact rendered button had already been clicked once and
+    // the Worker died right after claiming.
+    const staleClaim = await claimSendCommand(
+      db,
+      orgId,
+      inv9.invoice.id,
+      "RESEND",
+      realCommandId
+    );
+    expect(staleClaim.outcome).toBe("CLAIMED");
+    await db.$client.query(
+      "update invoice_send_attempts set claimed_at = now() - interval '2 minutes' where invoice_id = $1 and command_id = $2",
+      [inv9.invoice.id, realCommandId]
+    );
+
+    // No reload: click the SAME already-rendered button, submitting the
+    // SAME commandId the crashed attempt was claimed under.
+    await resendBtn9.click();
+
+    await expect
+      .poll(async () => {
+        const resp = await page.request.get(
+          "http://127.0.0.1:54324/api/v1/messages"
+        );
+        if (!resp.ok()) return false;
+        const data = (await resp.json()) as {
+          messages: { To: { Address: string }[] }[];
+        };
+        return (
+          data.messages?.filter((m) =>
+            m.To?.some((t) => t.Address === recoveryEmail)
+          ).length ?? 0
+        );
+      })
+      .toBe(2); // the original send + the recovered resend
   } finally {
     await cleanupTestDwellingsAndInvoices(
       db,

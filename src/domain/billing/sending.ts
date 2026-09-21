@@ -663,16 +663,31 @@ async function reconcileAttemptForInvoice(
   const emailDelivery = deliveries.find((d) => d.method === "EMAIL");
 
   if (emailDelivery?.status === "SENT") {
-    const { invoice: sentInvoice } = await finalizeInvoiceSent(db, {
-      organizationId,
-      invoiceId,
-      billingCaseId,
-      actorUserId,
-      attemptId: row.id,
-      attemptTargetStatus: "SENT",
-      attemptErrorCode: null,
-      expectedAttemptStatus: "DISPATCHING",
-    });
+    const { invoice: sentInvoice, wasFirstTransition } =
+      await finalizeInvoiceSent(db, {
+        organizationId,
+        invoiceId,
+        billingCaseId,
+        actorUserId,
+        attemptId: row.id,
+        attemptTargetStatus: "SENT",
+        attemptErrorCode: null,
+        expectedAttemptStatus: "DISPATCHING",
+      });
+
+    // Not the first transition: the invoice was already sent through
+    // another channel (e.g. PAPER) before this stale attempt's confirmed
+    // EMAIL evidence was reconciled. Record it as a resend completion
+    // rather than silently reconciling with no audit trail at all.
+    if (!wasFirstTransition) {
+      await recordAuditEvent(db, {
+        organizationId,
+        actorUserId,
+        action: "INVOICE_RESENT",
+        entityType: "invoice",
+        entityId: invoiceId,
+      });
+    }
 
     return { action: "FINALIZED", invoice: sentInvoice };
   }
