@@ -294,31 +294,35 @@ export async function claimSendCommand(
     }
 
     if (mode === "RESEND" && commandId) {
-      const [duplicate] = await tx
+      // A command_id can now have MULTIPLE historical rows (0011 narrowed
+      // its uniqueness to active statuses only, so a FAILED row no longer
+      // blocks a fresh claim under the same command_id -- see that
+      // migration's comment). That means an unordered "any one row" lookup
+      // is wrong: once this command has ever resolved to SENT or UNKNOWN,
+      // that resolution must permanently stick for every future submission
+      // of this exact command, regardless of which (possibly older,
+      // possibly since-superseded) FAILED rows also exist under it.
+      // Explicitly ask "has this command EVER resolved" rather than
+      // fetching one arbitrary row and reading its status.
+      const [resolved] = await tx
         .select()
         .from(invoiceSendAttempts)
         .where(
           and(
             eq(invoiceSendAttempts.invoiceId, invoiceId),
-            eq(invoiceSendAttempts.commandId, commandId)
+            eq(invoiceSendAttempts.commandId, commandId),
+            inArray(invoiceSendAttempts.status, ["SENT", "UNKNOWN"])
           )
         )
         .limit(1);
-      // Only a genuinely RESOLVED prior dispatch under this exact command
-      // (SENT, or UNKNOWN pending admin judgment) converges as a no-op
-      // replay. A FAILED prior attempt under the same command_id is
-      // deliberately NOT treated as a duplicate to converge on: FAILED is
-      // always safely retryable regardless of how it was reached (a stale
-      // CLAIMED reconciled to ABANDONED_BEFORE_DISPATCH proves the
-      // provider was never contacted; a genuine DISPATCHING -> FAILED
-      // proves a definitive rejection) -- in neither case does letting the
-      // SAME logical click (same commandId, e.g. the browser retrying the
-      // same still-rendered form after a crash) claim a fresh attempt risk
-      // a duplicate provider call. (CLAIMED/DISPATCHING never reaches this
-      // point -- the IN_FLIGHT check above already returns first.)
-      if (duplicate && duplicate.status !== "FAILED") {
-        return { outcome: "DUPLICATE_COMMAND", attempt: duplicate };
+      if (resolved) {
+        return { outcome: "DUPLICATE_COMMAND", attempt: resolved };
       }
+      // Otherwise every historical row under this command_id (if any) is
+      // FAILED -- always safely retryable, so fall through and claim a
+      // fresh attempt under the same command_id. (CLAIMED/DISPATCHING
+      // never reaches this point -- the IN_FLIGHT check above already
+      // returns first.)
     }
 
     const [attempt] = await tx

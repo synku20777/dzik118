@@ -425,6 +425,21 @@ interface FinalizeInvoiceSentParams {
 export interface FinalizeInvoiceSentResult {
   invoice: typeof invoices.$inferSelect;
   wasFirstTransition: boolean;
+  /**
+   * True only if THIS call actually performed the attempt's own
+   * expectedAttemptStatus -> attemptTargetStatus transition (via the
+   * primary CAS or the zero-row forward-correction). Distinct from
+   * wasFirstTransition (which tracks the SEPARATE invoices.sentAt CAS):
+   * when two concurrent reconcilers both find confirmed SENT evidence for
+   * the same stale attempt, only ONE of them actually transitions the
+   * attempt row, but BOTH may see wasFirstTransition === false (if a THIRD
+   * channel, e.g. PAPER, already set sentAt earlier). Callers must gate a
+   * "recovery" audit event (e.g. INVOICE_RESENT) on this flag, not on
+   * wasFirstTransition alone, or every such concurrent reconciler would
+   * each record its own audit event for what is really one recovered
+   * delivery.
+   */
+  attemptTransitionedByThisCaller: boolean;
 }
 
 /**
@@ -444,6 +459,7 @@ async function finalizeInvoiceSentInTx(
   params: FinalizeInvoiceSentParams
 ): Promise<FinalizeInvoiceSentResult> {
   let wasFirstTransition = false;
+  let attemptTransitionedByThisCaller = false;
   let updatedInvoice: typeof invoices.$inferSelect | undefined;
 
   if (params.attemptId && params.attemptTargetStatus) {
@@ -463,6 +479,10 @@ async function finalizeInvoiceSentInTx(
           )
         )
         .returning({ id: invoiceSendAttempts.id });
+
+      if (transitioned.length > 0) {
+        attemptTransitionedByThisCaller = true;
+      }
 
       if (transitioned.length === 0) {
         // Another worker already moved this attempt off expectedStatus
@@ -495,7 +515,7 @@ async function finalizeInvoiceSentInTx(
             current &&
             (current.status === "UNKNOWN" || current.status === "FAILED")
           ) {
-            await tx
+            const corrected = await tx
               .update(invoiceSendAttempts)
               .set({
                 status: "SENT",
@@ -508,11 +528,16 @@ async function finalizeInvoiceSentInTx(
                   eq(invoiceSendAttempts.id, params.attemptId),
                   eq(invoiceSendAttempts.status, current.status)
                 )
-              );
+              )
+              .returning({ id: invoiceSendAttempts.id });
+            if (corrected.length > 0) {
+              attemptTransitionedByThisCaller = true;
+            }
           }
         }
       }
     } else {
+      attemptTransitionedByThisCaller = true;
       if (params.attemptTargetStatus === "SENT") {
         await markSent(tx, params.attemptId);
       } else if (params.attemptTargetStatus === "UNKNOWN") {
@@ -566,6 +591,7 @@ async function finalizeInvoiceSentInTx(
   return {
     invoice: updatedInvoice!,
     wasFirstTransition,
+    attemptTransitionedByThisCaller,
   };
 }
 
@@ -586,6 +612,7 @@ async function finalizeInvoiceSent(
   return {
     invoice: authoritativeInvoice,
     wasFirstTransition: result.wasFirstTransition,
+    attemptTransitionedByThisCaller: result.attemptTransitionedByThisCaller,
   };
 }
 
@@ -663,23 +690,33 @@ async function reconcileAttemptForInvoice(
   const emailDelivery = deliveries.find((d) => d.method === "EMAIL");
 
   if (emailDelivery?.status === "SENT") {
-    const { invoice: sentInvoice, wasFirstTransition } =
-      await finalizeInvoiceSent(db, {
-        organizationId,
-        invoiceId,
-        billingCaseId,
-        actorUserId,
-        attemptId: row.id,
-        attemptTargetStatus: "SENT",
-        attemptErrorCode: null,
-        expectedAttemptStatus: "DISPATCHING",
-      });
+    const {
+      invoice: sentInvoice,
+      wasFirstTransition,
+      attemptTransitionedByThisCaller,
+    } = await finalizeInvoiceSent(db, {
+      organizationId,
+      invoiceId,
+      billingCaseId,
+      actorUserId,
+      attemptId: row.id,
+      attemptTargetStatus: "SENT",
+      attemptErrorCode: null,
+      expectedAttemptStatus: "DISPATCHING",
+    });
 
     // Not the first transition: the invoice was already sent through
     // another channel (e.g. PAPER) before this stale attempt's confirmed
-    // EMAIL evidence was reconciled. Record it as a resend completion
-    // rather than silently reconciling with no audit trail at all.
-    if (!wasFirstTransition) {
+    // EMAIL evidence was reconciled. Record it as a resend completion --
+    // but ONLY if THIS caller actually performed the attempt's own
+    // DISPATCHING -> SENT transition. Gating on wasFirstTransition alone
+    // is wrong here: when two concurrent reconcilers both find the same
+    // confirmed SENT evidence for the same stale attempt, only one of them
+    // actually wins the attempt-status CAS, but BOTH would see
+    // wasFirstTransition === false (since sentAt was already set by a
+    // third channel) and would otherwise each record their own
+    // INVOICE_RESENT for what is really one recovered delivery.
+    if (!wasFirstTransition && attemptTransitionedByThisCaller) {
       await recordAuditEvent(db, {
         organizationId,
         actorUserId,
