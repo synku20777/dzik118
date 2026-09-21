@@ -23,21 +23,48 @@
 -- EXISTS guards throughout, rather than assuming a specific starting
 -- point.
 --
--- What this migration deliberately does NOT do: it does not touch any
--- existing `is_initial_paper_dispatch` value. If the second historical
--- form of 0009 already ran against this database, some legacy PAPER rows
--- may already be incorrectly marked `true`. That cannot be safely
--- auto-corrected here (this application has no way to distinguish a
--- wrongly-backfilled row from a row an administrator later confirmed
--- through the current explicit "Record paper dispatch" workflow) -- it
--- requires a manual operator audit. Before relying on this data, run:
+-- What this migration deliberately does NOT do, and CANNOT do:
 --
---   SELECT id, invoice_id, created_at
---   FROM invoice_deliveries
---   WHERE method = 'PAPER' AND is_initial_paper_dispatch = true;
+-- 1. It does not touch any existing `is_initial_paper_dispatch` value. If
+--    the SECOND historical form of 0009 already ran against this database,
+--    some legacy PAPER rows may already be incorrectly marked `true`. That
+--    cannot be safely auto-corrected here (this application has no way to
+--    distinguish a wrongly-backfilled row from a row an administrator
+--    later confirmed through the current explicit "Record paper dispatch"
+--    workflow) -- it requires a manual operator audit. Before relying on
+--    this data, run:
 --
--- and manually cross-check the resulting rows against real evidence of
--- physical dispatch for invoices generated before this feature existed.
+--      SELECT id, invoice_id, created_at
+--      FROM invoice_deliveries
+--      WHERE method = 'PAPER' AND is_initial_paper_dispatch = true;
+--
+--    and manually cross-check the resulting rows against real evidence of
+--    physical dispatch for invoices generated before this feature existed.
+--
+-- 2. It CANNOT restore historical PAPER delivery rows that were already
+--    deleted. The FIRST historical form of 0009 (commit 4e0f735) executed:
+--
+--      DELETE FROM invoice_deliveries
+--      WHERE method = 'PAPER'
+--        AND id NOT IN (
+--          SELECT DISTINCT ON (invoice_id) id FROM invoice_deliveries
+--          WHERE method = 'PAPER' ORDER BY invoice_id, created_at ASC, id ASC
+--        );
+--
+--    If that specific form of 0009 was ever applied to a real database,
+--    any invoice that had MORE than one historical PAPER row at that time
+--    already had all but its earliest one irreversibly deleted, before
+--    this migration (or any later one) could ever run. This is schema
+--    convergence, not data convergence -- 0010 fixes the SCHEMA (indexes,
+--    columns) to a consistent state regardless of which prior 0009 ran,
+--    but it has no way to know what a deleted row's method/status/
+--    timestamps were, so it cannot reconstruct deleted history. If this
+--    matters, it must be recovered from a database backup taken before
+--    that deploy, or accepted as unrecoverable.
+--
+-- See docs/deployment/DEPLOYMENT_RUNBOOK.md's "Migration 0009/0010 safety
+-- check" section for the full inspection procedure and what to do with
+-- each possible finding.
 
 -- Drop the original, superseded destructive index if the first historical
 -- form of 0009 ever created it. Harmless no-op otherwise.

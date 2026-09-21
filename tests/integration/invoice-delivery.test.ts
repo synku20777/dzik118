@@ -1431,6 +1431,128 @@ describe("invoice sending", () => {
     await cleanupOrg(org.id);
   });
 
+  it("Regression: a crashed Resend (stuck CLAIMED) is recoverable through resendInvoice itself, not permanently stuck 'in progress'", async () => {
+    // EMAIL already succeeded once. An explicit resend claims an attempt,
+    // then the Worker crashes before ever reaching the provider call (or
+    // before markDispatching). The attempt is left CLAIMED forever unless
+    // resendInvoice itself can reconcile a stale attempt -- previously it
+    // only ever threw "in progress" on IN_FLIGHT, with no way out.
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org StaleResendClaim",
+      7
+    );
+    await sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId);
+
+    const staleClaim = await claimSendAttempt(db, org.id, invoice.id);
+    expect(staleClaim.claimed).toBe(true);
+    // Backdate past STALE_CLAIM_MS (60s) so it's classified abandoned.
+    await db.$client.query(
+      "update invoice_send_attempts set claimed_at = now() - interval '2 minutes' where id = $1",
+      [staleClaim.attempt.id]
+    );
+
+    let emailCallCount = 0;
+    const recovered = await resendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => {
+            emailCallCount++;
+            return { success: true, provider: "smtp" as const };
+          },
+        },
+      }),
+      seedAdminId,
+      "recovery-click"
+    );
+
+    // The stale CLAIMED attempt was reconciled to FAILED (abandoned before
+    // dispatch), then a genuinely fresh attempt was claimed and dispatched
+    // -- exactly one provider call for this one logical recovery click.
+    expect(emailCallCount).toBe(1);
+    expect(recovered.sentAt).not.toBeNull();
+
+    const attempts = await db.$client
+      .query(
+        "select status, error_code from invoice_send_attempts where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(attempts).toEqual([
+      { status: "SENT", error_code: null },
+      { status: "FAILED", error_code: "ABANDONED_BEFORE_DISPATCH" },
+      { status: "SENT", error_code: null },
+    ]);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Regression: stale DISPATCHING with a linked definitive EMAIL/FAILED delivery reconciles to FAILED (retryable), not UNKNOWN", async () => {
+    // Worker crashes after deliver() inserts the FAILED delivery row but
+    // before its own markFailed() call runs -- the attempt is left
+    // DISPATCHING even though the database already holds definitive proof
+    // the provider rejected the message. This must reconcile to FAILED
+    // (safely retryable), not the more conservative UNKNOWN (which would
+    // incorrectly demand manual judgment for a known outcome).
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org StaleDefinitiveFailed",
+      8
+    );
+
+    const claim = await claimSendAttempt(db, org.id, invoice.id);
+    await markDispatching(db, claim.attempt.id, org.id, invoice.id);
+    await db.insert(invoiceDeliveries).values({
+      organizationId: org.id,
+      invoiceId: invoice.id,
+      attemptId: claim.attempt.id,
+      method: "EMAIL",
+      destinationEmail: "resident@example.com",
+      provider: "smtp",
+      status: "FAILED",
+      errorCode: "SMTP_REJECTED",
+    });
+    await db.$client.query(
+      "update invoice_send_attempts set dispatch_started_at = now() - interval '10 minutes' where id = $1",
+      [claim.attempt.id]
+    );
+
+    let emailCallCount = 0;
+    const result = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => {
+            emailCallCount++;
+            return { success: true, provider: "smtp" as const };
+          },
+        },
+      }),
+      seedAdminId
+    );
+
+    // The stale attempt reconciled to FAILED and a fresh retry claim
+    // dispatched exactly once -- not left at UNKNOWN.
+    expect(emailCallCount).toBe(1);
+    expect(result.sentAt).not.toBeNull();
+
+    const attempts = await db.$client
+      .query(
+        "select status, error_code from invoice_send_attempts where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(attempts).toEqual([
+      { status: "FAILED", error_code: "SMTP_REJECTED" },
+      { status: "SENT", error_code: null },
+    ]);
+
+    await cleanupOrg(org.id);
+  });
+
   it("Package 2 (1): resend vs scheduler retry after FAILED races with gated email service - exactly one provider call total", async () => {
     const { org, invoice } = await setupPreparedInvoice(
       "IT-G Org RaceResendSend",
@@ -1569,6 +1691,10 @@ describe("invoice sending", () => {
       const fulfilled = results.filter((r) => r.status === "fulfilled");
       const rejected = results.filter((r) => r.status === "rejected");
 
+      // The loser's claim collides on a genuinely LIVE (not stale) attempt
+      // -- resendInvoice fails fast with a clear "in progress" error rather
+      // than silently waiting, since this is an explicit admin action, not
+      // an idempotent "make sure it's sent" call.
       expect(fulfilled).toHaveLength(1);
       expect(rejected).toHaveLength(1);
       expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(

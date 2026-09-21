@@ -249,11 +249,19 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
             caseStatus !== "DRAFT" && invoiceByEmail && (
               <>
                 {electronicState === "IN_PROGRESS" && (
+                  // A CLAIMED/DISPATCHING attempt might be a genuinely live
+                  // dispatch in flight, or a crashed Worker's stale attempt
+                  // that hasn't been reconciled yet -- the button below is
+                  // NOT hidden in either case: the domain layer safely
+                  // reconciles a stale attempt (finalizing or unblocking
+                  // it) if clicked, or reports "still in progress" if it's
+                  // genuinely live. The invoice must never be permanently
+                  // stuck behind this text with no available action.
                   <span class="text-sm text-muted">
                     {t("Sending in progress…")}
                   </span>
                 )}
-                {electronicState !== "IN_PROGRESS" && !useResendCommand && (
+                {!useResendCommand && (
                   <form method="POST" action={actions.invoices.send}>
                     <input
                       type="hidden"
@@ -273,7 +281,7 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
                     </button>
                   </form>
                 )}
-                {electronicState !== "IN_PROGRESS" && useResendCommand && (
+                {useResendCommand && (
                   <form method="POST" action={actions.invoices.resend}>
                     <input
                       type="hidden"

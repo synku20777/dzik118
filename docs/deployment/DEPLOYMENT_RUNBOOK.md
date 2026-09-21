@@ -70,6 +70,38 @@ export PRODUCTION_DATABASE_URL="<production-supabase-postgres-connection-string>
 
 > **Warning:** `npm run db:seed` is demo/local-dev-only fixture data (two fake organizations, fake residents) and must never be run against a production database.
 
+### Migration 0009/0010 safety check
+
+Run this check before deploying any release that includes migrations `0009_delivery_safety_indexes` or `0010_delivery_safety_convergence`. Migration `0009` has existed in three different forms across this project's git history with genuinely different effects (see the comment at the top of `drizzle/migrations/0010_delivery_safety_convergence.sql`), and this repository's own deploy path (`npm run deploy` -> `db:migrate:production`) runs outside CI, so there is no automated record of what has actually been applied to production. Connect directly to the production database (read-only is enough) and run:
+
+```sql
+-- 1. Has any form of 0009/0010 already been applied, and when?
+SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at;
+
+-- 2. What does the schema actually look like right now?
+SELECT indexname, indexdef FROM pg_indexes
+WHERE tablename IN ('invoice_deliveries', 'invoice_send_attempts');
+
+SELECT column_name FROM information_schema.columns
+WHERE table_name IN ('invoice_deliveries', 'invoice_send_attempts')
+ORDER BY table_name, ordinal_position;
+
+-- 3. Were any historical PAPER rows backfilled as "verified" by the
+--    second historical form of 0009? (Only meaningful once
+--    is_initial_paper_dispatch exists -- query 2 confirms that.)
+SELECT id, invoice_id, created_at, is_initial_paper_dispatch
+FROM invoice_deliveries
+WHERE method = 'PAPER'
+ORDER BY created_at;
+```
+
+Interpret the results:
+
+- **Neither `0009` nor `0010` appears in query 1, and `invoice_deliveries_invoice_id_paper_idx` does not appear in query 2**: nothing has run yet. Deploying `0009` then `0010` in order is safe.
+- **`0009` appears in query 1, and `invoice_deliveries_invoice_id_paper_idx` (the old destructive index) appears in query 2**: the FIRST historical form ran. Its `DELETE` already removed any duplicate historical PAPER rows before you can inspect them -- check query 3's row count against any independent record you have (a backup, an audit export) of how many PAPER rows existed before that deploy. If they don't match, the missing rows are unrecoverable from this database; only a pre-deploy backup can restore them. Deploying `0010` afterward is still safe and required (it drops the bad index and adds the missing columns/indexes going forward).
+- **`0009` appears in query 1, and query 3 shows rows with `is_initial_paper_dispatch = true` for invoices that predate the "Record paper dispatch" feature**: the SECOND historical form ran (the backfill). Those `true` values are not verified manual dispatch -- cross-check each one against real evidence (physical mailing records, resident correspondence) before trusting it, or treat it as unverified and have an administrator use "Record paper dispatch" again for any invoice that genuinely needs a verified record. Deploying `0010` does not touch these values either way (see its own comment).
+- **`0010` already appears in query 1**: this exact migration set has already been deployed; re-running `npm run deploy` is a safe no-op for this specific concern (both migrations are idempotent).
+
 ## 4. Storage bucket setup
 
 Run the storage initialization script once to create the private `invoices` bucket:

@@ -35,6 +35,7 @@ import {
   getLatestSendAttempt,
   markDispatching,
   markFailed,
+  markFailedConditional,
   markSent,
   markUnknown,
   reconcileStaleAttempt,
@@ -290,6 +291,43 @@ async function deliver(
 const UNCONFIRMED_DELIVERY_ERROR_MESSAGE =
   "The previous delivery attempt's outcome could not be confirmed. Verify whether the invoice was actually delivered, then use Resend if it needs to go out again.";
 
+/**
+ * Atomically marks a non-first-transition terminal attempt outcome
+ * (FAILED/UNKNOWN/a redundant SENT) AND records its corresponding audit
+ * event in one transaction. Without this, a crash between the two
+ * statements can leave a confirmed/failed/ambiguous outcome persisted with
+ * no matching audit trail.
+ */
+async function markAttemptTerminalWithAudit(
+  db: Db,
+  attemptId: string,
+  targetStatus: "SENT" | "FAILED" | "UNKNOWN",
+  errorCode: string | undefined,
+  audit: {
+    organizationId: string;
+    actorUserId: string | null;
+    action: string;
+    invoiceId: string;
+  }
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    if (targetStatus === "SENT") {
+      await markSent(tx, attemptId);
+    } else if (targetStatus === "FAILED") {
+      await markFailed(tx, attemptId, errorCode ?? "DELIVERY_FAILED");
+    } else {
+      await markUnknown(tx, attemptId, errorCode ?? "DELIVERY_OUTCOME_UNKNOWN");
+    }
+    await recordAuditEvent(tx, {
+      organizationId: audit.organizationId,
+      actorUserId: audit.actorUserId,
+      action: audit.action,
+      entityType: "invoice",
+      entityId: audit.invoiceId,
+    });
+  });
+}
+
 const CONCURRENT_WAIT_MS = 10_000;
 const CONCURRENT_POLL_INTERVAL_MS = 25;
 
@@ -318,6 +356,59 @@ async function waitForAttemptSettlement(
     await new Promise((r) => setTimeout(r, CONCURRENT_POLL_INTERVAL_MS));
   }
   return (await getInvoice(db, organizationId, invoiceId)).invoice;
+}
+
+/**
+ * Waits (bounded) for a genuinely live in-flight attempt to settle --
+ * "genuinely live" meaning reconcileAttemptForInvoice already checked and
+ * found it not yet stale, so this is a real concurrent dispatch rather than
+ * a crashed worker. Shared by sendInvoice and resendInvoice's claim loops.
+ *
+ * Resolves `{ retry: true }` if the attempt settles to FAILED (caller
+ * should loop back and claim fresh); resolves `{ retry: false, invoice }`
+ * if it settles to SENT or the wait window is exceeded (return current
+ * state rather than starting a second provider call); throws on UNKNOWN,
+ * matching the never-auto-retry policy.
+ */
+async function waitForLiveAttemptOrRetry(
+  db: Db,
+  organizationId: string,
+  invoiceId: string,
+  attemptId: string
+): Promise<
+  { retry: true } | { retry: false; invoice: typeof invoices.$inferSelect }
+> {
+  const deadline = Date.now() + CONCURRENT_WAIT_MS;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, CONCURRENT_POLL_INTERVAL_MS));
+    const { invoice: latest } = await getInvoice(db, organizationId, invoiceId);
+    if (latest.sentAt) {
+      return { retry: false, invoice: latest };
+    }
+    const [att] = await db
+      .select({ status: invoiceSendAttempts.status })
+      .from(invoiceSendAttempts)
+      .where(eq(invoiceSendAttempts.id, attemptId))
+      .limit(1);
+    if (att?.status === "SENT") {
+      return {
+        retry: false,
+        invoice: (await getInvoice(db, organizationId, invoiceId)).invoice,
+      };
+    }
+    if (att?.status === "UNKNOWN") {
+      throw new ConflictError(UNCONFIRMED_DELIVERY_ERROR_MESSAGE);
+    }
+    if (att?.status === "FAILED") {
+      return { retry: true };
+    }
+  }
+  // Exceeded wait window: return current invoice unchanged without starting
+  // a second provider call.
+  return {
+    retry: false,
+    invoice: (await getInvoice(db, organizationId, invoiceId)).invoice,
+  };
 }
 
 interface FinalizeInvoiceSentParams {
@@ -570,9 +661,8 @@ async function reconcileAttemptForInvoice(
     );
 
   const emailDelivery = deliveries.find((d) => d.method === "EMAIL");
-  const hasConfirmedSent = emailDelivery?.status === "SENT";
 
-  if (hasConfirmedSent) {
+  if (emailDelivery?.status === "SENT") {
     const { invoice: sentInvoice } = await finalizeInvoiceSent(db, {
       organizationId,
       invoiceId,
@@ -587,7 +677,32 @@ async function reconcileAttemptForInvoice(
     return { action: "FINALIZED", invoice: sentInvoice };
   }
 
-  // No confirmed SENT delivery row: fall through to demoting to UNKNOWN
+  if (emailDelivery?.status === "FAILED") {
+    // Definitive failure evidence already exists (e.g. the Worker crashed
+    // after deliver() inserted the FAILED delivery row but before its own
+    // markFailed() call ran). We have definitive proof, not ambiguity --
+    // reconcile to FAILED (safely retryable) rather than the more
+    // conservative UNKNOWN, which would otherwise misclassify a known
+    // outcome as needing manual judgment.
+    const reconciled = await markFailedConditional(
+      db,
+      row.id,
+      emailDelivery.errorCode ?? "DELIVERY_FAILED",
+      "DISPATCHING"
+    );
+    if (reconciled?.status === "FAILED") {
+      return { action: "RETRY_CLAIM" };
+    }
+    const [fresh] = await db
+      .select()
+      .from(invoiceSendAttempts)
+      .where(eq(invoiceSendAttempts.id, row.id))
+      .limit(1);
+    return { action: "IN_FLIGHT", attempt: fresh ?? row };
+  }
+
+  // emailDelivery is UNKNOWN, or no EMAIL delivery row exists at all:
+  // conservatively demote to UNKNOWN.
   const reconciled = await reconcileStaleAttempt(db, row);
   if (reconciled.status === "UNKNOWN") {
     return { action: "THROW_UNKNOWN" };
@@ -728,45 +843,18 @@ export async function sendInvoice(
     }
 
     // Reconciled status is unchanged: a genuine concurrent in-flight caller
-    // owns this attempt. Wait briefly for it to settle via read-only
-    // queries so concurrent callers converge without attempting conflicting
-    // claims.
-    const deadline = Date.now() + CONCURRENT_WAIT_MS;
-    let settled = false;
-    while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, CONCURRENT_POLL_INTERVAL_MS));
-      const { invoice: latest } = await getInvoice(
-        db,
-        organizationId,
-        invoiceId
-      );
-      if (latest.sentAt) {
-        return latest;
-      }
-      const [att] = await db
-        .select({ status: invoiceSendAttempts.status })
-        .from(invoiceSendAttempts)
-        .where(eq(invoiceSendAttempts.id, existingAttempt.id))
-        .limit(1);
-      if (att?.status === "SENT") {
-        return (await getInvoice(db, organizationId, invoiceId)).invoice;
-      }
-      if (att?.status === "UNKNOWN") {
-        throw new ConflictError(UNCONFIRMED_DELIVERY_ERROR_MESSAGE);
-      }
-      if (att?.status === "FAILED") {
-        settled = true;
-        break;
-      }
-    }
-
-    if (settled) {
-      // Previous attempt failed definitively; loop back to claim fresh
+    // owns this attempt. Wait briefly for it to settle so concurrent
+    // callers converge without attempting conflicting claims.
+    const settlement = await waitForLiveAttemptOrRetry(
+      db,
+      organizationId,
+      invoiceId,
+      existingAttempt.id
+    );
+    if (settlement.retry) {
       continue;
     }
-
-    // Exceeded wait window: return current invoice unchanged without starting a second provider call
-    return (await getInvoice(db, organizationId, invoiceId)).invoice;
+    return settlement.invoice;
   }
 
   // 5. We now own a fresh CLAIMED attempt.
@@ -826,32 +914,32 @@ export async function sendInvoice(
     }
     return sentInvoice;
   } else if (overallDefinitivelyFailed) {
-    await markFailed(
+    await markAttemptTerminalWithAudit(
       db,
       attempt.id,
-      deliverResult.emailErrorCode ?? "DELIVERY_FAILED"
+      "FAILED",
+      deliverResult.emailErrorCode,
+      {
+        organizationId,
+        actorUserId,
+        action: "INVOICE_SEND_FAILED",
+        invoiceId,
+      }
     );
-    await recordAuditEvent(db, {
-      organizationId,
-      actorUserId,
-      action: "INVOICE_SEND_FAILED",
-      entityType: "invoice",
-      entityId: invoiceId,
-    });
     return (await getInvoice(db, organizationId, invoiceId)).invoice;
   } else if (overallUnknown) {
-    await markUnknown(
+    await markAttemptTerminalWithAudit(
       db,
       attempt.id,
-      deliverResult.emailErrorCode ?? "DELIVERY_OUTCOME_UNKNOWN"
+      "UNKNOWN",
+      deliverResult.emailErrorCode,
+      {
+        organizationId,
+        actorUserId,
+        action: "INVOICE_SEND_UNKNOWN",
+        invoiceId,
+      }
     );
-    await recordAuditEvent(db, {
-      organizationId,
-      actorUserId,
-      action: "INVOICE_SEND_UNKNOWN",
-      entityType: "invoice",
-      entityId: invoiceId,
-    });
     return (await getInvoice(db, organizationId, invoiceId)).invoice;
   }
 
@@ -977,42 +1065,84 @@ export async function resendInvoice(
     }
   }
 
-  // Atomic command claim (see claimSendCommand). commandId correlates this
-  // call back to the specific Resend form submission -- a concurrent replay
-  // of the SAME submission (double-click, browser retry) is recognized as
-  // DUPLICATE_COMMAND and converges on the one real dispatch's outcome
-  // rather than triggering a second one; a genuinely later, separate click
-  // gets a fresh commandId and is free to resend again once this one is no
-  // longer in flight.
-  const claim = await claimSendCommand(
-    db,
-    organizationId,
-    invoiceId,
-    "RESEND",
-    commandId
-  );
+  // Atomic command claim loop (see claimSendCommand). commandId correlates
+  // this call back to the specific Resend form submission -- a concurrent
+  // replay of the SAME submission (double-click, browser retry) is
+  // recognized as DUPLICATE_COMMAND and converges on the one real
+  // dispatch's outcome rather than triggering a second one; a genuinely
+  // later, separate click gets a fresh commandId and is free to resend
+  // again once this one is no longer in flight.
+  //
+  // IN_FLIGHT is reconciled the same way sendInvoice's claim loop does
+  // (reconcileAttemptForInvoice), not treated as permanently blocking: a
+  // crashed Worker that died right after claiming a resend (or after
+  // dispatching, before finalizing) must not leave the invoice stuck
+  // showing "Sending in progress..." forever with no way to recover it.
+  let attempt: InvoiceSendAttempt;
 
-  if (claim.outcome === "IN_FLIGHT") {
-    throw new ConflictError(
-      "A delivery attempt is currently in progress for this invoice; wait for it to finish before resending."
-    );
-  }
-  if (claim.outcome === "DUPLICATE_COMMAND") {
-    return waitForAttemptSettlement(
+  while (true) {
+    const claim = await claimSendCommand(
       db,
       organizationId,
       invoiceId,
-      claim.attempt.id
+      "RESEND",
+      commandId
     );
-  }
-  // ALREADY_SENT / UNKNOWN_BLOCKS_SEND are FIRST_SEND-only outcomes, never
-  // returned for mode "RESEND".
-  if (claim.outcome !== "CLAIMED") {
+
+    if (claim.outcome === "CLAIMED") {
+      attempt = claim.attempt;
+      break;
+    }
+    if (claim.outcome === "DUPLICATE_COMMAND") {
+      return waitForAttemptSettlement(
+        db,
+        organizationId,
+        invoiceId,
+        claim.attempt.id
+      );
+    }
+    if (claim.outcome !== "IN_FLIGHT") {
+      // ALREADY_SENT / UNKNOWN_BLOCKS_SEND / INELIGIBLE_CASE_STATUS are
+      // FIRST_SEND-only outcomes, never returned for mode "RESEND".
+      throw new ConflictError(
+        "A delivery attempt is currently in progress for this invoice; wait for it to finish before resending."
+      );
+    }
+
+    // IN_FLIGHT: check whether it's actually stale (a crashed worker)
+    // before treating it as a live, healthy dispatch that must simply be
+    // waited out.
+    const existingAttempt = claim.attempt;
+    const outcome = await reconcileAttemptForInvoice(
+      db,
+      organizationId,
+      invoiceId,
+      invoice.billingCaseId,
+      existingAttempt,
+      actorUserId
+    );
+
+    if (outcome.action === "RETRY_CLAIM") {
+      continue;
+    }
+    if (outcome.action === "FINALIZED") {
+      // The stale attempt already had confirmed EMAIL delivery evidence --
+      // this resend converges on that outcome rather than dispatching again.
+      return outcome.invoice;
+    }
+    if (outcome.action === "THROW_UNKNOWN") {
+      throw new ConflictError(UNCONFIRMED_DELIVERY_ERROR_MESSAGE);
+    }
+
+    // Reconciled status is unchanged: this is a genuinely LIVE attempt (not
+    // stale), so unlike sendInvoice's idempotent "just make sure it's
+    // sent" semantics, resendInvoice is an explicit admin action -- fail
+    // fast with a clear message rather than silently waiting up to
+    // CONCURRENT_WAIT_MS for a response.
     throw new ConflictError(
       "A delivery attempt is currently in progress for this invoice; wait for it to finish before resending."
     );
   }
-  const attempt = claim.attempt;
 
   // deliver() itself performs the CLAIMED->DISPATCHING CAS immediately
   // before the provider call.
@@ -1058,31 +1188,28 @@ export async function resendInvoice(
     return finalizedInvoice;
   }
 
-  if (success) {
-    await markSent(db, attempt.id);
-  } else if (deliverResult.emailOutcome === "UNKNOWN") {
-    await markUnknown(
-      db,
-      attempt.id,
-      deliverResult.emailErrorCode ?? "DELIVERY_OUTCOME_UNKNOWN"
-    );
-  } else {
-    await markFailed(
-      db,
-      attempt.id,
-      deliverResult.emailErrorCode ?? "DELIVERY_FAILED"
-    );
-  }
-
-  // If invoice.sentAt was already set when resendInvoice started (normal resend),
-  // or if resend failed, record resend audit event and return invoice unchanged.
-  await recordAuditEvent(db, {
-    organizationId,
-    actorUserId,
-    action: success ? "INVOICE_RESENT" : "INVOICE_RESEND_FAILED",
-    entityType: "invoice",
-    entityId: invoiceId,
-  });
+  // If invoice.sentAt was already set when resendInvoice started (normal
+  // resend), or if resend failed/came back UNKNOWN: mark the attempt's
+  // terminal outcome and record the resend audit event atomically, so a
+  // crash between the two can never leave one without the other.
+  const targetStatus =
+    deliverResult.emailOutcome === "SENT"
+      ? "SENT"
+      : deliverResult.emailOutcome === "UNKNOWN"
+        ? "UNKNOWN"
+        : "FAILED";
+  await markAttemptTerminalWithAudit(
+    db,
+    attempt.id,
+    targetStatus,
+    deliverResult.emailErrorCode,
+    {
+      organizationId,
+      actorUserId,
+      action: success ? "INVOICE_RESENT" : "INVOICE_RESEND_FAILED",
+      invoiceId,
+    }
+  );
   return (await getInvoice(db, organizationId, invoiceId)).invoice;
 }
 
@@ -1127,10 +1254,17 @@ export async function recordPaperDispatch(
       throw new NotFoundError("Invoice not found");
     }
 
+    // Locked (invoices-then-billing_cases order, consistent with
+    // claimSendCommand) so a concurrent manual case-status override can't
+    // race between this read and finalizeInvoiceSentInTx's later write --
+    // without the lock, overrideCaseStatus could move the case to DRAFT
+    // right after this read, and this transaction would silently overwrite
+    // it back to SENT.
     const [billingCase] = await tx
       .select({ status: billingCases.status })
       .from(billingCases)
       .where(eq(billingCases.id, invoice.billingCaseId))
+      .for("update")
       .limit(1);
     const caseStatus = billingCase?.status;
 
@@ -1145,7 +1279,9 @@ export async function recordPaperDispatch(
     }
     if (
       !caseStatus ||
-      !["PREPARED", "SENT", "PAID", "OVERDUE"].includes(caseStatus)
+      !(FIRST_DELIVERY_ELIGIBLE_CASE_STATUSES as readonly string[]).includes(
+        caseStatus
+      )
     ) {
       throw new ConflictError(
         `Cannot record paper dispatch for an invoice in ${caseStatus ?? "unknown"} status`
