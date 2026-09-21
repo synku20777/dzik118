@@ -3,6 +3,7 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { getInvoice } from "../../../../../../../../domain/billing/generation";
+import { ensureCanonicalPdf } from "../../../../../../../../domain/billing/sending";
 import { requireOrganizationAccess } from "../../../../../../../../domain/authorization/guards";
 import { parseInvoiceLocale } from "../../../../../../../../domain/billing/invoice-i18n";
 import { renderInvoiceHtml } from "../../../../../../../../domain/billing/invoice-html";
@@ -15,6 +16,8 @@ import {
 import { toApiErrorResponse } from "../../../../../../../../lib/http/api-error";
 import { withRequestDb } from "../../../../../../../../lib/db-request";
 import { getSupabaseAdmin } from "../../../../../../../../actions/_supabase_admin";
+
+const CANONICAL_PDF_ELIGIBLE_STATUSES = ["PREPARED", "SENT", "PAID", "OVERDUE"];
 
 export const GET: APIRoute = async ({ params, locals, url }) => {
   const organizationId = params.orgId;
@@ -32,19 +35,38 @@ export const GET: APIRoute = async ({ params, locals, url }) => {
   const locale = parseInvoiceLocale(url.searchParams.get("locale"));
 
   try {
+    const { invoice, lines, caseStatus } = await withRequestDb(async (db) => {
+      const data = await getInvoice(db, organizationId, invoiceId);
+      if (
+        data.caseStatus &&
+        CANONICAL_PDF_ELIGIBLE_STATUSES.includes(data.caseStatus) &&
+        !data.invoice.pdfObjectKey
+      ) {
+        const canonical = await ensureCanonicalPdf(
+          db,
+          organizationId,
+          invoiceId,
+          {
+            renderPdf: (html) => renderPdf(env.BROWSER, html),
+            supabaseAdmin: getSupabaseAdmin(),
+          }
+        );
+        data.invoice.pdfObjectKey = canonical.pdfObjectKey;
+        data.invoice.pdfSha256 = canonical.pdfSha256;
+      }
+      return data;
+    });
+
+    if (caseStatus === "DRAFT" || !invoice.pdfObjectKey) {
+      return invoicePdfNotReadyResponse();
+    }
+
     if (locale === "lv") {
-      const invoice = await withRequestDb(async (db) => {
-        const { invoice } = await getInvoice(db, organizationId, invoiceId);
-        return invoice;
-      });
       return await invoicePdfResponse(getSupabaseAdmin(), invoice);
     }
+
     // EN/RU: rendered fresh on every request, never uploaded/persisted --
     // see invoiceCopyPdfResponse's header comment.
-    const { invoice, lines } = await withRequestDb((db) =>
-      getInvoice(db, organizationId, invoiceId)
-    );
-    if (!invoice.pdfObjectKey) return invoicePdfNotReadyResponse();
     const html = renderInvoiceHtml(invoice, lines, locale);
     const pdfBytes = await renderPdf(env.BROWSER, html);
     return invoiceCopyPdfResponse(pdfBytes, invoice.invoiceNumber, locale);

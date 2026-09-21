@@ -36,6 +36,8 @@ import {
 import { prepareInvoice } from "../../src/domain/billing/generation";
 import {
   ConflictError,
+  ensureCanonicalPdf,
+  recordPaperDispatch,
   resendInvoice,
   sendInvoice,
   type SendInvoiceDeps,
@@ -48,6 +50,7 @@ import {
   resolveInvoiceAccessToken,
   NotFoundError as TokenNotFoundError,
 } from "../../src/domain/billing/invoice-tokens";
+import { listAuditLogs } from "../../src/domain/audit/audit-log";
 import { createSupabaseAdminClient } from "../../src/lib/supabase/admin";
 import type {
   EmailService,
@@ -85,6 +88,14 @@ function stubDeps(overrides: Partial<SendInvoiceDeps> = {}): SendInvoiceDeps {
     appBaseUrl: "https://billing.example.test",
     ...overrides,
   };
+}
+
+function createDeferredGate() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
 }
 
 beforeAll(async () => {
@@ -367,7 +378,7 @@ describe("invoice sending", () => {
     await cleanupOrg(org.id);
   });
 
-  it("resendInvoice requires a prior successful send and reuses the same PDF metadata", async () => {
+  it("resendInvoice requires a prior successful send and reuses the same PDF metadata (Test 4: proves new attempt created, sentAt unchanged, INVOICE_RESENT recorded once)", async () => {
     const { org, invoice } = await setupPreparedInvoice("IT-G Org 4", 4);
     await expect(
       resendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId)
@@ -389,6 +400,7 @@ describe("invoice sending", () => {
     );
     expect(resent.pdfObjectKey).toBe(sent.pdfObjectKey);
     expect(resent.pdfSha256).toBe(sent.pdfSha256);
+    expect(resent.sentAt?.getTime()).toBe(sent.sentAt?.getTime());
 
     const deliveryCount = await db.$client
       .query("select count(*) from invoice_deliveries where invoice_id = $1", [
@@ -396,6 +408,33 @@ describe("invoice sending", () => {
       ])
       .then((r) => Number(r.rows[0].count));
     expect(deliveryCount).toBe(2);
+
+    // Verify a NEW invoice_send_attempts row was created (not attemptId: null as before)
+    const attempts = await db.$client
+      .query(
+        "select id, status from invoice_send_attempts where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0].status).toBe("SENT");
+    expect(attempts[1].status).toBe("SENT");
+    expect(attempts[1].id).not.toBe(attempts[0].id);
+
+    // Verify deliveries reference the attempts
+    const deliveries = await db.$client
+      .query(
+        "select attempt_id from invoice_deliveries where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(deliveries[0].attempt_id).toBe(attempts[0].id);
+    expect(deliveries[1].attempt_id).toBe(attempts[1].id);
+
+    // Verify INVOICE_RESENT is recorded exactly once
+    const logs = await listAuditLogs(db, org.id);
+    const resentLogs = logs.filter((l) => l.action === "INVOICE_RESENT");
+    expect(resentLogs).toHaveLength(1);
 
     await cleanupOrg(org.id);
   });
@@ -736,35 +775,35 @@ describe("invoice sending", () => {
     await cleanupOrg(org.id);
   });
 
-  it("a paper-only dwelling sends without a billing email, recording a PAPER delivery", async () => {
+  it("Package 2 (5): PAPER no longer auto-succeeds: paper-only PREPARED invoice throws ConflictError, remains PREPARED, sentAt null, NO delivery row created", async () => {
     const { org, invoice } = await setupPreparedInvoice("IT-G Org Paper", 7, {
       billingEmail: undefined,
       invoiceByEmail: false,
       invoiceByPaper: true,
     });
-    const sent = await sendInvoice(
+    await expect(
+      sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId)
+    ).rejects.toThrow(ConflictError);
+
+    const { invoice: currentInvoice, caseStatus } = await getInvoice(
       db,
       org.id,
-      invoice.id,
-      stubDeps(),
-      seedAdminId
+      invoice.id
     );
-    expect(sent.sentAt).not.toBeNull();
+    expect(caseStatus).toBe("PREPARED");
+    expect(currentInvoice.sentAt).toBeNull();
 
     const deliveries = await db.$client
-      .query(
-        "select method, destination_email, status from invoice_deliveries where invoice_id = $1",
-        [invoice.id]
-      )
-      .then((r) => r.rows);
-    expect(deliveries).toEqual([
-      { method: "PAPER", destination_email: null, status: "SENT" },
-    ]);
+      .query("select count(*) from invoice_deliveries where invoice_id = $1", [
+        invoice.id,
+      ])
+      .then((r) => Number(r.rows[0].count));
+    expect(deliveries).toBe(0);
 
     await cleanupOrg(org.id);
   });
 
-  it("a dwelling with both email and paper enabled records one delivery per method", async () => {
+  it("a dwelling with both email and paper enabled records only EMAIL delivery during electronic send", async () => {
     const { org, invoice } = await setupPreparedInvoice("IT-G Org Both", 8, {
       invoiceByEmail: true,
       invoiceByPaper: true,
@@ -780,14 +819,11 @@ describe("invoice sending", () => {
 
     const deliveries = await db.$client
       .query(
-        "select method, status from invoice_deliveries where invoice_id = $1 order by method",
+        "select method, status from invoice_deliveries where invoice_id = $1",
         [invoice.id]
       )
       .then((r) => r.rows);
-    expect(deliveries).toEqual([
-      { method: "EMAIL", status: "SENT" },
-      { method: "PAPER", status: "SENT" },
-    ]);
+    expect(deliveries).toEqual([{ method: "EMAIL", status: "SENT" }]);
 
     await cleanupOrg(org.id);
   });
@@ -975,9 +1011,9 @@ describe("invoice sending", () => {
     await cleanupOrg(org.id);
   });
 
-  it("Package 3 (4): EMAIL+PAPER invoice where email is AMBIGUOUS but paper succeeds sets sentAt and SENT, but attempt and EMAIL delivery remain UNKNOWN", async () => {
+  it("Package 2 (6): EMAIL+PAPER, email fails definitively: sendInvoice leaves invoice PREPARED, sentAt null, and NO paper delivery row created", async () => {
     const { org, invoice } = await setupPreparedInvoice(
-      "IT-G Org BothAmbiguous",
+      "IT-G Org BothDefinitiveFail",
       1,
       {
         invoiceByEmail: true,
@@ -990,14 +1026,14 @@ describe("invoice sending", () => {
         sendInvoice: async () => ({
           success: false,
           provider: "smtp" as const,
-          errorCode: "FAKE_AMBIGUOUS",
-          failureClassification: "AMBIGUOUS" as const,
+          errorCode: "MAILBOX_FULL",
+          failureClassification: "DEFINITIVE" as const,
         }),
       },
     });
 
     const sent = await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
-    expect(sent.sentAt).not.toBeNull();
+    expect(sent.sentAt).toBeNull();
 
     const [caseRow] = await db.$client
       .query(
@@ -1005,52 +1041,48 @@ describe("invoice sending", () => {
         [invoice.id]
       )
       .then((r) => r.rows);
-    expect(caseRow.status).toBe("SENT");
+    expect(caseRow.status).toBe("PREPARED");
 
-    // The attempt row for this invoice still shows status UNKNOWN (not overwritten to SENT)
-    const [attemptRow] = await db.$client
-      .query(
-        "select status, error_code from invoice_send_attempts where invoice_id = $1",
-        [invoice.id]
-      )
-      .then((r) => r.rows);
-    expect(attemptRow.status).toBe("UNKNOWN");
-    expect(attemptRow.error_code).toBe("FAKE_AMBIGUOUS");
-
-    // Deliveries: EMAIL is UNKNOWN, PAPER is SENT
     const deliveries = await db.$client
       .query(
-        "select method, status, error_code from invoice_deliveries where invoice_id = $1 order by method",
+        "select method, status, error_code from invoice_deliveries where invoice_id = $1",
         [invoice.id]
       )
       .then((r) => r.rows);
     expect(deliveries).toEqual([
-      { method: "EMAIL", status: "UNKNOWN", error_code: "FAKE_AMBIGUOUS" },
-      { method: "PAPER", status: "SENT", error_code: null },
+      { method: "EMAIL", status: "FAILED", error_code: "MAILBOX_FULL" },
     ]);
 
-    // Calling sendInvoice again is a fast no-op returning the sent invoice, without throwing
-    const again = await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
-    expect(again.sentAt?.getTime()).toBe(sent.sentAt?.getTime());
+    const paperDeliveries = await db.$client
+      .query(
+        "select count(*) from invoice_deliveries where invoice_id = $1 and method = 'PAPER'",
+        [invoice.id]
+      )
+      .then((r) => Number(r.rows[0].count));
+    expect(paperDeliveries).toBe(0);
 
     await cleanupOrg(org.id);
   });
 
-  it("Package 3 (5): resendInvoice succeeds on an invoice whose only attempt is UNKNOWN, finalizes sentAt, and sets case to SENT", async () => {
+  it("Package 2 (3) / Package 3 (5): Explicit email resend of an UNKNOWN invoice succeeds and finalizes, new attempt row created, sentAt set, case SENT, original attempt untouched", async () => {
     const { org, invoice } = await setupPreparedInvoice(
       "IT-G Org ResendUnknown",
       2
     );
 
     // First send has ambiguous failure -> sentAt stays null, attempt is UNKNOWN
+    let emailCallCount = 0;
     const ambiguousDeps = stubDeps({
       emailService: {
-        sendInvoice: async () => ({
-          success: false,
-          provider: "smtp" as const,
-          errorCode: "FAKE_AMBIGUOUS",
-          failureClassification: "AMBIGUOUS" as const,
-        }),
+        sendInvoice: async () => {
+          emailCallCount++;
+          return {
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "FAKE_AMBIGUOUS",
+            failureClassification: "AMBIGUOUS" as const,
+          };
+        },
       },
     });
     const firstSend = await sendInvoice(
@@ -1061,18 +1093,27 @@ describe("invoice sending", () => {
       seedAdminId
     );
     expect(firstSend.sentAt).toBeNull();
+    expect(emailCallCount).toBe(1);
 
     // resendInvoice succeeds and does not throw ConflictError
+    const succeedingDeps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          return { success: true, provider: "smtp" as const };
+        },
+      },
+    });
     const resent = await resendInvoice(
       db,
       org.id,
       invoice.id,
-      stubDeps(),
+      succeedingDeps,
       seedAdminId
     );
     expect(resent.id).toBe(invoice.id);
-    // Fix 2: successful resend of previously-UNKNOWN invoice finalizes sentAt
     expect(resent.sentAt).not.toBeNull();
+    expect(emailCallCount).toBe(2);
 
     const [caseRow] = await db.$client
       .query(
@@ -1092,7 +1133,27 @@ describe("invoice sending", () => {
     expect(deliveries[0].status).toBe("UNKNOWN");
     expect(deliveries[0].attempt_id).not.toBeNull();
     expect(deliveries[1].status).toBe("SENT");
-    expect(deliveries[1].attempt_id).toBeNull();
+    expect(deliveries[1].attempt_id).not.toBeNull();
+    expect(deliveries[1].attempt_id).not.toBe(deliveries[0].attempt_id);
+
+    // Assert a NEW attempt row exists (different id from original UNKNOWN one)
+    const attempts = await db.$client
+      .query(
+        "select id, status, error_code from invoice_send_attempts where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0].id).toBe(deliveries[0].attempt_id);
+    expect(attempts[0].status).toBe("UNKNOWN");
+    expect(attempts[0].error_code).toBe("FAKE_AMBIGUOUS");
+    expect(attempts[1].id).toBe(deliveries[1].attempt_id);
+    expect(attempts[1].status).toBe("SENT");
+
+    // Exactly one INVOICE_SENT audit event
+    const logs = await listAuditLogs(db, org.id);
+    const sentLogs = logs.filter((l) => l.action === "INVOICE_SENT");
+    expect(sentLogs).toHaveLength(1);
 
     await cleanupOrg(org.id);
   });
@@ -1203,5 +1264,480 @@ describe("invoice sending", () => {
     expect(attemptRow.status).toBe("SENT");
 
     await cleanupOrg(org.id);
+  });
+
+  it("Package 2 (1): resend vs scheduler retry after FAILED races with gated email service - exactly one provider call total", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org RaceResendSend",
+      5
+    );
+
+    // 1. Create a FAILED first attempt
+    const failingDeps = stubDeps({
+      emailService: {
+        sendInvoice: async () => ({
+          success: false,
+          provider: "smtp" as const,
+          errorCode: "SIMULATED_FAIL",
+          failureClassification: "DEFINITIVE" as const,
+        }),
+      },
+    });
+    const failedSend = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      failingDeps,
+      seedAdminId
+    );
+    expect(failedSend.sentAt).toBeNull();
+
+    // 2. Setup gated EmailService
+    let emailCallCount = 0;
+    const gate = createDeferredGate();
+    const gatedDeps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          await gate.promise;
+          return { success: true, provider: "smtp" as const };
+        },
+      },
+    });
+
+    // 3. Race resendInvoice against sendInvoice
+    const p1 = resendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      gatedDeps,
+      seedAdminId
+    ).catch((err) => err);
+    const p2 = sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      gatedDeps,
+      seedAdminId
+    ).catch((err) => err);
+
+    // Wait briefly for one caller to acquire the claim and enter the email provider
+    await new Promise((r) => setTimeout(r, 60));
+    gate.resolve();
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+
+    // Exactly one email provider call total
+    expect(emailCallCount).toBe(1);
+
+    // Invoice is now finalized as SENT
+    const { invoice: finalInvoice, caseStatus } = await getInvoice(
+      db,
+      org.id,
+      invoice.id
+    );
+    expect(finalInvoice.sentAt).not.toBeNull();
+    expect(caseStatus).toBe("SENT");
+
+    // One promise resolved to final invoice, the other either threw ConflictError (if resend collided) or returned the sent invoice (if sendInvoice waited)
+    if (r1 instanceof ConflictError) {
+      expect(r2).toHaveProperty("sentAt");
+    } else {
+      expect(r1).toHaveProperty("sentAt");
+    }
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Package 2 (2): resend vs resend concurrent calls on already-SENT invoice - exactly one provider call, one new attempt, one INVOICE_RESENT audit", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org RaceResendResend",
+      6
+    );
+
+    // First send succeeds normally
+    const sent = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps(),
+      seedAdminId
+    );
+    expect(sent.sentAt).not.toBeNull();
+
+    let emailCallCount = 0;
+    const gate = createDeferredGate();
+    const gatedDeps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          await gate.promise;
+          return { success: true, provider: "smtp" as const };
+        },
+      },
+    });
+
+    const p1 = resendInvoice(db, org.id, invoice.id, gatedDeps, seedAdminId);
+    const p2 = resendInvoice(db, org.id, invoice.id, gatedDeps, seedAdminId);
+    const all = Promise.allSettled([p1, p2]);
+
+    // Wait briefly so one claims and enters gated provider
+    await new Promise((r) => setTimeout(r, 60));
+    gate.resolve();
+
+    const results = await all;
+    const fulfilled = results.filter((r) => r.status === "fulfilled");
+    const rejected = results.filter((r) => r.status === "rejected");
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(
+      ConflictError
+    );
+
+    // Exactly one provider call total during resend
+    expect(emailCallCount).toBe(1);
+
+    // Exactly one new attempt row created (2 total: 1 original + 1 from successful resend)
+    const attempts = await db.$client
+      .query(
+        "select id, status from invoice_send_attempts where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0].status).toBe("SENT");
+    expect(attempts[1].status).toBe("SENT");
+
+    // Exactly one INVOICE_RESENT audit event
+    const logs = await listAuditLogs(db, org.id);
+    const resentLogs = logs.filter((l) => l.action === "INVOICE_RESENT");
+    expect(resentLogs).toHaveLength(1);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Package 2 (7): recordPaperDispatch basic success sets sentAt, case SENT, one PAPER delivery, one INVOICE_SENT audit, zero send attempts", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org PaperBasic",
+      9,
+      {
+        invoiceByPaper: true,
+        invoiceByEmail: false,
+      }
+    );
+
+    const sent = await recordPaperDispatch(db, org.id, invoice.id, seedAdminId);
+    expect(sent.sentAt).not.toBeNull();
+
+    const [caseRow] = await db.$client
+      .query(
+        "select status from billing_cases where id = (select billing_case_id from invoices where id = $1)",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(caseRow.status).toBe("SENT");
+
+    const deliveries = await db.$client
+      .query(
+        "select method, status, destination_email, attempt_id from invoice_deliveries where invoice_id = $1",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(deliveries).toEqual([
+      {
+        method: "PAPER",
+        status: "SENT",
+        destination_email: null,
+        attempt_id: null,
+      },
+    ]);
+
+    // Paper dispatch never touches invoice_send_attempts
+    const attempts = await db.$client
+      .query(
+        "select count(*) from invoice_send_attempts where invoice_id = $1",
+        [invoice.id]
+      )
+      .then((r) => Number(r.rows[0].count));
+    expect(attempts).toBe(0);
+
+    // Exactly one INVOICE_SENT audit event
+    const logs = await listAuditLogs(db, org.id);
+    const sentLogs = logs.filter((l) => l.action === "INVOICE_SENT");
+    expect(sentLogs).toHaveLength(1);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Package 2 (8): recordPaperDispatch idempotent replay does not throw, still one PAPER row, one audit", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org PaperReplay",
+      10,
+      {
+        invoiceByPaper: true,
+        invoiceByEmail: false,
+      }
+    );
+
+    const first = await recordPaperDispatch(
+      db,
+      org.id,
+      invoice.id,
+      seedAdminId
+    );
+    expect(first.sentAt).not.toBeNull();
+
+    // Second call on same invoice
+    const second = await recordPaperDispatch(
+      db,
+      org.id,
+      invoice.id,
+      seedAdminId
+    );
+    expect(second.sentAt?.getTime()).toBe(first.sentAt?.getTime());
+
+    const deliveries = await db.$client
+      .query("select count(*) from invoice_deliveries where invoice_id = $1", [
+        invoice.id,
+      ])
+      .then((r) => Number(r.rows[0].count));
+    expect(deliveries).toBe(1);
+
+    const logs = await listAuditLogs(db, org.id);
+    const sentLogs = logs.filter((l) => l.action === "INVOICE_SENT");
+    expect(sentLogs).toHaveLength(1);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Package 2 (9): recordPaperDispatch concurrency race produces exactly one PAPER row, one sentAt transition, one INVOICE_SENT audit", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org PaperRace",
+      11,
+      {
+        invoiceByPaper: true,
+        invoiceByEmail: false,
+      }
+    );
+
+    const [r1, r2] = await Promise.all([
+      recordPaperDispatch(db, org.id, invoice.id, seedAdminId),
+      recordPaperDispatch(db, org.id, invoice.id, seedAdminId),
+    ]);
+
+    expect(r1.sentAt).not.toBeNull();
+    expect(r2.sentAt).not.toBeNull();
+    expect(r1.sentAt?.getTime()).toBe(r2.sentAt?.getTime());
+
+    const deliveries = await db.$client
+      .query("select count(*) from invoice_deliveries where invoice_id = $1", [
+        invoice.id,
+      ])
+      .then((r) => Number(r.rows[0].count));
+    expect(deliveries).toBe(1);
+
+    const [caseRow] = await db.$client
+      .query(
+        "select status from billing_cases where id = (select billing_case_id from invoices where id = $1)",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(caseRow.status).toBe("SENT");
+
+    const logs = await listAuditLogs(db, org.id);
+    const sentLogs = logs.filter((l) => l.action === "INVOICE_SENT");
+    expect(sentLogs).toHaveLength(1);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Package 2 (10): EMAIL UNKNOWN then PAPER dispatch finalizes invoice, original attempt/delivery remain UNKNOWN, provider not recalled", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org EmailUnknownThenPaper",
+      2,
+      {
+        invoiceByEmail: true,
+        invoiceByPaper: true,
+      }
+    );
+
+    let emailCallCount = 0;
+    const ambiguousDeps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          return {
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "AMBIGUOUS_TEST",
+            failureClassification: "AMBIGUOUS" as const,
+          };
+        },
+      },
+    });
+
+    // 1. First send: email ambiguous failure -> sentAt null, attempt UNKNOWN
+    const first = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      ambiguousDeps,
+      seedAdminId
+    );
+    expect(first.sentAt).toBeNull();
+    expect(emailCallCount).toBe(1);
+
+    // 2. Record paper dispatch
+    const dispatched = await recordPaperDispatch(
+      db,
+      org.id,
+      invoice.id,
+      seedAdminId
+    );
+    expect(dispatched.sentAt).not.toBeNull();
+
+    // Provider was never called again
+    expect(emailCallCount).toBe(1);
+
+    // Billing case is SENT
+    const [caseRow] = await db.$client
+      .query(
+        "select status from billing_cases where id = (select billing_case_id from invoices where id = $1)",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(caseRow.status).toBe("SENT");
+
+    // Exactly one INVOICE_SENT audit event
+    const logs = await listAuditLogs(db, org.id);
+    const sentLogs = logs.filter((l) => l.action === "INVOICE_SENT");
+    expect(sentLogs).toHaveLength(1);
+
+    // Original attempt row STILL shows UNKNOWN
+    const attempts = await db.$client
+      .query(
+        "select status, error_code from invoice_send_attempts where invoice_id = $1",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0].status).toBe("UNKNOWN");
+    expect(attempts[0].error_code).toBe("AMBIGUOUS_TEST");
+
+    // Deliveries: EMAIL is still UNKNOWN, PAPER is SENT
+    const deliveries = await db.$client
+      .query(
+        "select method, status, error_code from invoice_deliveries where invoice_id = $1 order by method",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(deliveries).toEqual([
+      { method: "EMAIL", status: "UNKNOWN", error_code: "AMBIGUOUS_TEST" },
+      { method: "PAPER", status: "SENT", error_code: null },
+    ]);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Package 3 (1): ensureCanonicalPdf generates canonical PDF for a PAPER-only PREPARED invoice without sending", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org PaperPdfOnly",
+      3,
+      {
+        invoiceByEmail: false,
+        invoiceByPaper: true,
+      }
+    );
+
+    try {
+      expect(invoice.pdfObjectKey).toBeNull();
+      expect(invoice.pdfSha256).toBeNull();
+
+      const canonical = await ensureCanonicalPdf(
+        db,
+        org.id,
+        invoice.id,
+        stubDeps()
+      );
+
+      expect(canonical.pdfObjectKey).toContain(org.id);
+      expect(canonical.pdfSha256).toHaveLength(64);
+
+      const { invoice: reloaded, caseStatus } = await getInvoice(
+        db,
+        org.id,
+        invoice.id
+      );
+      expect(reloaded.pdfObjectKey).toBe(canonical.pdfObjectKey);
+      expect(reloaded.pdfSha256).toBe(canonical.pdfSha256);
+      expect(reloaded.sentAt).toBeNull();
+      expect(caseStatus).toBe("PREPARED");
+
+      const deliveryCount = await db.$client
+        .query(
+          "select count(*) from invoice_deliveries where invoice_id = $1",
+          [invoice.id]
+        )
+        .then((r) => Number(r.rows[0].count));
+      expect(deliveryCount).toBe(0);
+
+      const attemptCount = await db.$client
+        .query(
+          "select count(*) from invoice_send_attempts where invoice_id = $1",
+          [invoice.id]
+        )
+        .then((r) => Number(r.rows[0].count));
+      expect(attemptCount).toBe(0);
+    } finally {
+      await cleanupOrg(org.id);
+    }
+  });
+
+  it("Package 3 (2): concurrent ensureCanonicalPdf calls serialize via row lock and return identical metadata", async () => {
+    const { org, invoice } = await setupPreparedInvoice("IT-G Org PdfRace", 4, {
+      invoiceByEmail: false,
+      invoiceByPaper: true,
+    });
+
+    let renderCount = 0;
+    const deps = stubDeps({
+      renderPdf: async () => {
+        renderCount++;
+        // Simulate non-deterministic render bytes (e.g. timestamp metadata) and async delay
+        await new Promise((r) => setTimeout(r, 50));
+        return new TextEncoder().encode(
+          `%PDF-1.4 render-${renderCount}-${Date.now()}`
+        );
+      },
+    });
+
+    // Two separate connections, like two real concurrent HTTP requests
+    // (withRequestDb opens a fresh createDb() per request) -- reusing one
+    // connection would serialize on the client and hide the row-level DB lock race.
+    const dbA = await createIntegrationDb();
+    const dbB = await createIntegrationDb();
+
+    try {
+      const [res1, res2] = await Promise.all([
+        ensureCanonicalPdf(dbA, org.id, invoice.id, deps),
+        ensureCanonicalPdf(dbB, org.id, invoice.id, deps),
+      ]);
+
+      expect(res1.pdfObjectKey).toBe(res2.pdfObjectKey);
+      expect(res1.pdfSha256).toBe(res2.pdfSha256);
+
+      // Because the second caller blocked on FOR UPDATE, once unblocked it found
+      // pdfObjectKey/pdfSha256 already set and returned early without calling renderPdf again
+      expect(renderCount).toBe(1);
+
+      const { invoice: reloaded } = await getInvoice(db, org.id, invoice.id);
+      expect(reloaded.pdfObjectKey).toBe(res1.pdfObjectKey);
+      expect(reloaded.pdfSha256).toBe(res1.pdfSha256);
+    } finally {
+      await dbA.$client.end();
+      await dbB.$client.end();
+      await cleanupOrg(org.id);
+    }
   });
 });

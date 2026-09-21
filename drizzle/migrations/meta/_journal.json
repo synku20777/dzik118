@@ -64,6 +64,13 @@
       "when": 1789932873755,
       "tag": "0008_invoice_send_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789945803909,
+      "tag": "0009_delivery_safety_indexes",
+      "breakpoints": true
     }
   ]
 }

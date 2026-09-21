@@ -26,6 +26,7 @@ import { getOrganization } from "../../../../../../../domain/organizations/organ
 import { getPeriod } from "../../../../../../../domain/periods/periods";
 import { getInvoice } from "../../../../../../../domain/billing/generation";
 import { listDeliveries } from "../../../../../../../domain/billing/sending";
+import { getLatestSendAttempt } from "../../../../../../../domain/billing/send-attempts";
 import {
   parseInvoiceLocale,
   INVOICE_LOCALES,
@@ -46,37 +47,84 @@ const prepareResult = Astro.getActionResult(actions.billing.prepare);
 const sendResult = Astro.getActionResult(actions.invoices.send);
 const resendResult = Astro.getActionResult(actions.invoices.resend);
 const revokeResult = Astro.getActionResult(actions.invoices.revokeAccess);
+const recordPaperDispatchResult = Astro.getActionResult(
+  actions.invoices.recordPaperDispatch
+);
 
-let organization, period, invoice, lines, caseStatus, deliveries;
+let organization, period, invoice, lines, caseStatus, deliveries, latestAttempt;
 try {
-  ({ organization, period, invoice, lines, caseStatus, deliveries } =
-    await withRequestDb(async (db) => {
-      const { invoice, lines, caseStatus } = await getInvoice(
-        db,
-        organizationId,
-        invoiceId
-      );
-      return {
-        organization: await getOrganization(db, organizationId),
-        period: await getPeriod(db, organizationId, periodId),
-        invoice,
-        lines,
-        caseStatus,
-        deliveries: await listDeliveries(db, organizationId, invoiceId),
-      };
-    }));
+  ({
+    organization,
+    period,
+    invoice,
+    lines,
+    caseStatus,
+    deliveries,
+    latestAttempt,
+  } = await withRequestDb(async (db) => {
+    const { invoice, lines, caseStatus } = await getInvoice(
+      db,
+      organizationId,
+      invoiceId
+    );
+    return {
+      organization: await getOrganization(db, organizationId),
+      period: await getPeriod(db, organizationId, periodId),
+      invoice,
+      lines,
+      caseStatus,
+      deliveries: await listDeliveries(db, organizationId, invoiceId),
+      latestAttempt: await getLatestSendAttempt(db, organizationId, invoiceId),
+    };
+  }));
 } catch {
   return Astro.redirect(`/admin/o/${organizationId}/periods/${periodId}`);
 }
 
 const issuer = invoice.issuerSnapshot as Record<string, string | null>;
-const recipient = invoice.recipientSnapshot as Record<string, string | null>;
+const recipient = invoice.recipientSnapshot as {
+  billingName?: string | null;
+  occupantName?: string | null;
+  billingAddress?: string | null;
+  billingEmail?: string | null;
+  invoiceByEmail?: boolean;
+  invoiceByPaper?: boolean;
+  [key: string]: unknown;
+};
 const payment = invoice.paymentSnapshot as Record<string, string | null>;
 const recipientIncomplete =
   (!recipient.billingName && !recipient.occupantName) ||
   !recipient.billingAddress;
 const organizationIncomplete =
   !issuer.name || !issuer.addressLine1 || !payment.iban || !payment.bankName;
+
+const invoiceByEmail = recipient.invoiceByEmail ?? true;
+const invoiceByPaper = recipient.invoiceByPaper ?? false;
+const hasValidEmail = !!recipient.billingEmail;
+const alreadyDispatchedPaper = deliveries.some((d) => d.method === "PAPER");
+const hasEmailDelivery = deliveries.some((d) => d.method === "EMAIL");
+
+type ElectronicState = "NONE" | "IN_PROGRESS" | "UNKNOWN" | "FAILED" | "SENT";
+
+let electronicState: ElectronicState;
+if (invoice.sentAt || latestAttempt?.status === "SENT") {
+  electronicState = "SENT";
+} else if (
+  latestAttempt?.status === "CLAIMED" ||
+  latestAttempt?.status === "DISPATCHING"
+) {
+  electronicState = "IN_PROGRESS";
+} else if (latestAttempt?.status === "UNKNOWN") {
+  electronicState = "UNKNOWN";
+} else if (
+  latestAttempt?.status === "FAILED" ||
+  (!latestAttempt &&
+    deliveries.some((d) => d.method === "EMAIL" && d.status === "FAILED"))
+) {
+  electronicState = "FAILED";
+} else {
+  electronicState = "NONE";
+}
 const docLocale = parseInvoiceLocale(Astro.url.searchParams.get("docLocale"));
 const invoiceHtml = renderInvoiceHtml(invoice, lines, docLocale);
 const pdfHref =
@@ -119,98 +167,141 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
           {formatDate(invoice.dueDate, locale)}
         </p>
       </div>
-      <div class="page-actions">
-        {
-          invoice.pdfObjectKey && (
-            <a
-              href={pdfHref}
-              target="_blank"
-              class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
-            >
-              {t("Download PDF")}
-            </a>
-          )
-        }
-        {
-          caseStatus === "DRAFT" && (
-            <form method="POST" action={actions.billing.prepare}>
-              <input
-                type="hidden"
-                name="organizationId"
-                value={organizationId}
-              />
-              <input type="hidden" name="invoiceId" value={invoice.id} />
-              <button
-                type="submit"
-                disabled={recipientIncomplete || organizationIncomplete}
-                aria-describedby={
-                  recipientIncomplete || organizationIncomplete
-                    ? "invoice-validation"
-                    : undefined
-                }
-                class="btn-primary "
-              >
-                {t("Prepare")}
-              </button>
-            </form>
-          )
-        }
-        {
-          caseStatus === "PREPARED" && !invoice.sentAt && (
-            <form method="POST" action={actions.invoices.send}>
-              <input
-                type="hidden"
-                name="organizationId"
-                value={organizationId}
-              />
-              <input type="hidden" name="invoiceId" value={invoice.id} />
-              <button
-                type="submit"
-                disabled={!recipient.billingEmail}
-                aria-describedby={
-                  !recipient.billingEmail ? "email-validation" : undefined
-                }
-                class="btn-primary "
-              >
-                {t("Send")}
-              </button>
-            </form>
-          )
-        }
-        {
-          (invoice.sentAt || deliveries.length > 0) && (
-            <form method="POST" action={actions.invoices.resend}>
-              <input
-                type="hidden"
-                name="organizationId"
-                value={organizationId}
-              />
-              <input type="hidden" name="invoiceId" value={invoice.id} />
-              <button
-                type="submit"
+      <div class="flex flex-col items-start sm:items-end gap-2">
+        <div class="page-actions">
+          {
+            caseStatus !== "DRAFT" && (
+              <a
+                href={pdfHref}
+                target="_blank"
                 class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
               >
-                {t("Resend")}
-              </button>
-            </form>
-          )
-        }
+                {t("Download PDF")}
+              </a>
+            )
+          }
+          {
+            caseStatus === "DRAFT" && (
+              <form method="POST" action={actions.billing.prepare}>
+                <input
+                  type="hidden"
+                  name="organizationId"
+                  value={organizationId}
+                />
+                <input type="hidden" name="invoiceId" value={invoice.id} />
+                <button
+                  type="submit"
+                  disabled={recipientIncomplete || organizationIncomplete}
+                  aria-describedby={
+                    recipientIncomplete || organizationIncomplete
+                      ? "invoice-validation"
+                      : undefined
+                  }
+                  class="btn-primary"
+                >
+                  {t("Prepare")}
+                </button>
+              </form>
+            )
+          }
+          {
+            caseStatus !== "DRAFT" && invoiceByEmail && (
+              <>
+                {(electronicState === "NONE" ||
+                  electronicState === "FAILED") && (
+                  <form method="POST" action={actions.invoices.send}>
+                    <input
+                      type="hidden"
+                      name="organizationId"
+                      value={organizationId}
+                    />
+                    <input type="hidden" name="invoiceId" value={invoice.id} />
+                    <button
+                      type="submit"
+                      disabled={!hasValidEmail}
+                      aria-describedby={
+                        !hasValidEmail ? "email-validation" : undefined
+                      }
+                      class="btn-primary"
+                    >
+                      {t("Send")}
+                    </button>
+                  </form>
+                )}
+                {electronicState === "IN_PROGRESS" && (
+                  <span class="text-sm text-muted">
+                    {t("Sending in progress…")}
+                  </span>
+                )}
+                {(electronicState === "SENT" ||
+                  electronicState === "UNKNOWN") && (
+                  <form method="POST" action={actions.invoices.resend}>
+                    <input
+                      type="hidden"
+                      name="organizationId"
+                      value={organizationId}
+                    />
+                    <input type="hidden" name="invoiceId" value={invoice.id} />
+                    <button
+                      type="submit"
+                      class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
+                    >
+                      {t("Resend")}
+                    </button>
+                  </form>
+                )}
+              </>
+            )
+          }
+          {
+            invoice.sentAt && (
+              <form method="POST" action={actions.invoices.revokeAccess}>
+                <input
+                  type="hidden"
+                  name="organizationId"
+                  value={organizationId}
+                />
+                <input type="hidden" name="invoiceId" value={invoice.id} />
+                <button
+                  type="submit"
+                  class="rounded-control border border-destructive px-4 py-2 text-sm text-destructive hover:bg-danger-surface"
+                >
+                  {t("Revoke access link")}
+                </button>
+              </form>
+            )
+          }
+        </div>
         {
-          invoice.sentAt && (
-            <form method="POST" action={actions.invoices.revokeAccess}>
-              <input
-                type="hidden"
-                name="organizationId"
-                value={organizationId}
-              />
-              <input type="hidden" name="invoiceId" value={invoice.id} />
-              <button
-                type="submit"
-                class="rounded-control border border-destructive px-4 py-2 text-sm text-destructive hover:bg-danger-surface"
-              >
-                {t("Revoke access link")}
-              </button>
-            </form>
+          caseStatus !== "DRAFT" && invoiceByPaper && (
+            <div class="flex flex-wrap items-center gap-2 pt-1 text-sm">
+              <span class="text-xs font-semibold uppercase tracking-wider text-muted">
+                {t("Paper delivery")}:
+              </span>
+              {alreadyDispatchedPaper ? (
+                <span class="text-sm text-success font-medium">
+                  ✓ {t("Paper dispatched")}
+                </span>
+              ) : (
+                <form
+                  method="POST"
+                  action={actions.invoices.recordPaperDispatch}
+                >
+                  <input
+                    type="hidden"
+                    name="organizationId"
+                    value={organizationId}
+                  />
+                  <input type="hidden" name="invoiceId" value={invoice.id} />
+                  <button
+                    type="submit"
+                    class="rounded-control border border-border px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover"
+                  >
+                    {t("Record paper dispatch")}
+                  </button>
+                </form>
+              )}
+            </div>
           )
         }
       </div>
@@ -219,12 +310,14 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
       (prepareResult?.error ||
         sendResult?.error ||
         resendResult?.error ||
-        revokeResult?.error) && (
+        revokeResult?.error ||
+        recordPaperDispatchResult?.error) && (
         <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
           {prepareResult?.error?.message ??
             sendResult?.error?.message ??
             resendResult?.error?.message ??
-            revokeResult?.error?.message}
+            revokeResult?.error?.message ??
+            recordPaperDispatchResult?.error?.message}
         </p>
       )
     }
@@ -277,11 +370,32 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
         )
     }
     {
-      caseStatus === "PREPARED" && !recipient.billingEmail && (
-        <p id="email-validation" class="notice notice-danger" role="alert">
-          {t("Invoice email is missing. Add a billing email before sending.")}
-        </p>
-      )
+      caseStatus !== "DRAFT" &&
+        invoiceByEmail &&
+        (electronicState === "NONE" || electronicState === "FAILED") &&
+        !hasValidEmail && (
+          <p id="email-validation" class="notice notice-danger" role="alert">
+            {t("Invoice email is missing. Add a billing email before sending.")}
+          </p>
+        )
+    }
+    {
+      caseStatus !== "DRAFT" &&
+        invoiceByEmail &&
+        electronicState === "UNKNOWN" && (
+          <div class="notice notice-warning" role="alert">
+            <p>
+              {t(
+                "Delivery outcome could not be confirmed. The email provider may have accepted this invoice, but the application did not receive confirmation. Verify the recipient mailbox or provider logs before resending."
+              )}
+            </p>
+            {!hasEmailDelivery && (
+              <p class="mt-2 text-xs font-semibold">
+                {t("Email")} — {t("Needs attention")}
+              </p>
+            )}
+          </div>
+        )
     }
     {
       caseStatus === "DRAFT" && (

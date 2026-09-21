@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type { DbOrTx } from "../../db/client";
 import {
   invoiceSendAttempts,
@@ -64,11 +64,11 @@ export function classifyAttemptStaleness(
 }
 
 /**
- * Attempts to claim first-send concurrency for an invoice.
+ * Attempts to claim send concurrency for an invoice.
  *
  * Atomically inserts an invoice_send_attempts row with status 'CLAIMED'.
- * If another non-FAILED attempt already exists for this invoice, the partial
- * unique index on (invoice_id) WHERE status IN ('CLAIMED', 'DISPATCHING', 'SENT', 'UNKNOWN')
+ * If another active-dispatch attempt already exists for this invoice, the partial
+ * unique index on (invoice_id) WHERE status IN ('CLAIMED', 'DISPATCHING')
  * violates uniqueness. In that event, the conflict is caught and the existing active attempt
  * row is selected and returned with `claimed: false`.
  */
@@ -89,18 +89,18 @@ export async function claimSendAttempt(
     return { claimed: true, attempt };
   } catch (err) {
     if (isUniqueViolation(err)) {
+      // Must match the active-dispatch index's own status list exactly: with
+      // the narrower index, multiple historical SENT/UNKNOWN/FAILED rows can
+      // now legitimately coexist per invoice, so a wider filter here (with no
+      // ORDER BY) could return an unrelated terminal row instead of the one
+      // CLAIMED/DISPATCHING row that actually caused this violation.
       const [existing] = await db
         .select()
         .from(invoiceSendAttempts)
         .where(
           and(
             eq(invoiceSendAttempts.invoiceId, invoiceId),
-            inArray(invoiceSendAttempts.status, [
-              "CLAIMED",
-              "DISPATCHING",
-              "SENT",
-              "UNKNOWN",
-            ])
+            inArray(invoiceSendAttempts.status, ["CLAIMED", "DISPATCHING"])
           )
         )
         .limit(1);
@@ -115,6 +115,26 @@ export async function claimSendAttempt(
     }
     throw err;
   }
+}
+
+export async function getLatestSendAttempt(
+  db: DbOrTx,
+  organizationId: string,
+  invoiceId: string
+): Promise<InvoiceSendAttempt | null> {
+  const [attempt] = await db
+    .select()
+    .from(invoiceSendAttempts)
+    .where(
+      and(
+        eq(invoiceSendAttempts.invoiceId, invoiceId),
+        eq(invoiceSendAttempts.organizationId, organizationId)
+      )
+    )
+    .orderBy(desc(invoiceSendAttempts.createdAt))
+    .limit(1);
+
+  return attempt ?? null;
 }
 
 export async function markDispatching(

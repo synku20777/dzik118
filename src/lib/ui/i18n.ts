@@ -1050,6 +1050,11 @@ const lv: Record<string, string> = {
     "Ievadiet derīgu skaitītāja rādījumu, piemēram, 123,456. Izmantojiet ne vairāk kā 3 zīmes aiz komata.",
   "Enter a valid value, for example 12.3456. Use up to 4 decimal places.":
     "Ievadiet derīgu vērtību, piemēram, 12,3456. Izmantojiet ne vairāk kā 4 zīmes aiz komata.",
+  "Delivery outcome could not be confirmed. The email provider may have accepted this invoice, but the application did not receive confirmation. Verify the recipient mailbox or provider logs before resending.":
+    "Piegādes rezultātu neizdevās apstiprināt. E-pasta pakalpojumu sniedzējs, iespējams, pieņēma šo rēķinu, taču lietojumprogramma nesaņēma apstiprinājumu. Pirms atkārtotas nosūtīšanas pārbaudiet saņēmēja pastkasti vai pakalpojumu sniedzēja žurnālus.",
+  "Sending in progress…": "Notiek nosūtīšana…",
+  "Record paper dispatch": "Reģistrēt papīra nosūtīšanu",
+  "Paper dispatched": "Papīrs nosūtīts",
 };
 
 const ru: Record<string, string> = {
@@ -2091,6 +2096,11 @@ const ru: Record<string, string> = {
     "Введите корректное показание счётчика, например 123,456. Используйте не более 3 знаков после запятой.",
   "Enter a valid value, for example 12.3456. Use up to 4 decimal places.":
     "Введите корректное значение, например 12,3456. Используйте не более 4 знаков после запятой.",
+  "Delivery outcome could not be confirmed. The email provider may have accepted this invoice, but the application did not receive confirmation. Verify the recipient mailbox or provider logs before resending.":
+    "Не удалось подтвердить результат доставки. Почтовый провайдер мог принять этот счет, но приложение не получило подтверждения. Проверьте почтовый ящик получателя или логи провайдера перед повторной отправкой.",
+  "Sending in progress…": "Выполняется отправка…",
+  "Record paper dispatch": "Зафиксировать отправку на бумаге",
+  "Paper dispatched": "Отправлено на бумаге",
 };
 
 export function translate(locale: Locale, text: string): string {

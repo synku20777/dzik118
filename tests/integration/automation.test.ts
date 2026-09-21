@@ -517,6 +517,225 @@ describe("autoSendForOrganization", () => {
 
     await cleanupOrg(org.id);
   });
+
+  it("Package 2 (11): Scheduler PAPER-only autoSend skips safely with zero provider calls, zero PAPER delivery rows, zero sentAt transitions", async () => {
+    const org = await createOrganization(
+      db,
+      {
+        name: "IT-L Org PaperOnlySched",
+        addressLine1: "Addr 1",
+        bankName: "Test Bank",
+        iban: "LV00TEST0000000000000",
+      },
+      seedAdminId
+    );
+    const dwelling = await createDwelling(
+      db,
+      org.id,
+      {
+        number: "1",
+        occupantName: "Jane Doe",
+        billingAddress: "1 Test St",
+        billingEmail: undefined,
+        invoiceByEmail: false,
+        invoiceByPaper: true,
+      },
+      seedAdminId
+    );
+    const period = await createPeriod(
+      db,
+      org.id,
+      {
+        year: 2026,
+        month: 7,
+        startsOn: "2026-07-01",
+        endsOn: "2026-07-28",
+        invoiceIssueDate: "2026-07-28",
+        invoiceDueDate: "2026-08-14",
+      },
+      seedAdminId
+    );
+    await createRule(
+      db,
+      org.id,
+      {
+        name: "Fee",
+        code: "fee",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "10.00",
+        vatRate: "21",
+        effectiveFrom: "2025-01-01",
+      },
+      seedAdminId
+    );
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    await prepareInvoice(db, org.id, invoice.id, seedAdminId);
+
+    let emailCallCount = 0;
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          return { success: true, provider: "smtp" as const };
+        },
+      },
+    });
+
+    const sendResult = await autoSendForOrganization(
+      db,
+      org.id,
+      deps,
+      seedAdminId
+    );
+    expect(sendResult.sent).toBe(0);
+    expect(emailCallCount).toBe(0);
+
+    // Zero PAPER delivery rows created
+    const deliveries = await db.$client
+      .query("select count(*) from invoice_deliveries where invoice_id = $1", [
+        invoice.id,
+      ])
+      .then((r) => Number(r.rows[0].count));
+    expect(deliveries).toBe(0);
+
+    // Zero sentAt transitions
+    const invoiceAfter = await getInvoice(db, org.id, invoice.id);
+    expect(invoiceAfter.invoice.sentAt).toBeNull();
+    expect(invoiceAfter.caseStatus).toBe("PREPARED");
+
+    // Surfaces safely in bulkSendInvoices skipped list
+    const bulkResult = await bulkSendInvoices(
+      db,
+      org.id,
+      [invoice.id],
+      deps,
+      seedAdminId
+    );
+    expect(bulkResult.sent).toHaveLength(0);
+    expect(bulkResult.skipped).toHaveLength(1);
+    expect(bulkResult.skipped[0].invoiceId).toBe(invoice.id);
+    expect(bulkResult.skipped[0].reason).toContain(
+      "This dwelling has no electronic delivery method enabled; use Record paper dispatch instead."
+    );
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Package 2 (12): Scheduler EMAIL+PAPER with no usable email skips safely without paper fabrication", async () => {
+    const org = await createOrganization(
+      db,
+      {
+        name: "IT-L Org NoEmailSched",
+        addressLine1: "Addr 1",
+        bankName: "Test Bank",
+        iban: "LV00TEST0000000000000",
+      },
+      seedAdminId
+    );
+    const dwelling = await createDwelling(
+      db,
+      org.id,
+      {
+        number: "1",
+        occupantName: "Jane Doe",
+        billingAddress: "1 Test St",
+        billingEmail: undefined,
+        invoiceByEmail: true,
+        invoiceByPaper: true,
+      },
+      seedAdminId
+    );
+    const period = await createPeriod(
+      db,
+      org.id,
+      {
+        year: 2026,
+        month: 8,
+        startsOn: "2026-08-01",
+        endsOn: "2026-08-28",
+        invoiceIssueDate: "2026-08-28",
+        invoiceDueDate: "2026-09-14",
+      },
+      seedAdminId
+    );
+    await createRule(
+      db,
+      org.id,
+      {
+        name: "Fee",
+        code: "fee",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "10.00",
+        vatRate: "21",
+        effectiveFrom: "2025-01-01",
+      },
+      seedAdminId
+    );
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    await prepareInvoice(db, org.id, invoice.id, seedAdminId);
+
+    let emailCallCount = 0;
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          return { success: true, provider: "smtp" as const };
+        },
+      },
+    });
+
+    const sendResult = await autoSendForOrganization(
+      db,
+      org.id,
+      deps,
+      seedAdminId
+    );
+    expect(sendResult.sent).toBe(0);
+    expect(emailCallCount).toBe(0);
+
+    // Zero PAPER delivery rows created
+    const paperDeliveries = await db.$client
+      .query(
+        "select count(*) from invoice_deliveries where invoice_id = $1 and method = 'PAPER'",
+        [invoice.id]
+      )
+      .then((r) => Number(r.rows[0].count));
+    expect(paperDeliveries).toBe(0);
+
+    // Zero sentAt transitions
+    const invoiceAfter = await getInvoice(db, org.id, invoice.id);
+    expect(invoiceAfter.invoice.sentAt).toBeNull();
+    expect(invoiceAfter.caseStatus).toBe("PREPARED");
+
+    // Surfaces in bulkSendInvoices skipped list
+    const bulkResult = await bulkSendInvoices(
+      db,
+      org.id,
+      [invoice.id],
+      deps,
+      seedAdminId
+    );
+    expect(bulkResult.sent).toHaveLength(0);
+    expect(bulkResult.skipped).toHaveLength(1);
+    expect(bulkResult.skipped[0].invoiceId).toBe(invoice.id);
+    expect(bulkResult.skipped[0].reason).toBe("Delivery failed");
+
+    await cleanupOrg(org.id);
+  });
 });
 
 describe("runScheduledJobs", () => {

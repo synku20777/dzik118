@@ -18,6 +18,7 @@ import {
 } from "../../src/domain/billing/generation";
 import {
   claimSendAttempt,
+  getLatestSendAttempt,
   markDispatching,
   markFailed,
   markSent,
@@ -60,16 +61,18 @@ async function setupTestInvoice(name: string, month: number = 1) {
     },
     seedAdminId
   );
+  const m = String(month).padStart(2, "0");
+  const nextM = String(month + 1).padStart(2, "0");
   const period = await createPeriod(
     db,
     org.id,
     {
       year: 2026,
       month,
-      startsOn: `2026-0${month}-01`,
-      endsOn: `2026-0${month}-28`,
-      invoiceIssueDate: `2026-0${month}-28`,
-      invoiceDueDate: `2026-0${month + 1}-14`,
+      startsOn: `2026-${m}-01`,
+      endsOn: `2026-${m}-28`,
+      invoiceIssueDate: `2026-${m}-28`,
+      invoiceDueDate: `2026-${nextM}-14`,
     },
     seedAdminId
   );
@@ -167,7 +170,7 @@ describe("invoice send attempts state model", () => {
     }
   });
 
-  it("4. after markSent or markUnknown, subsequent claimSendAttempt calls FAIL to claim forever", async () => {
+  it("4. after markSent or markUnknown, subsequent claimSendAttempt calls on the SAME invoice SUCCEED with a new row", async () => {
     const { org: orgSent, invoice: invoiceSent } = await setupTestInvoice(
       "IT-SA Org 4a",
       4
@@ -180,14 +183,16 @@ describe("invoice send attempts state model", () => {
       expect(sent.status).toBe("SENT");
       expect(sent.completedAt).toBeInstanceOf(Date);
 
+      // Core Package 1 behavior: narrower partial unique index allows a new attempt
+      // after SENT (for explicit resend)
       const claimAfterSent = await claimSendAttempt(
         db,
         orgSent.id,
         invoiceSent.id
       );
-      expect(claimAfterSent.claimed).toBe(false);
-      expect(claimAfterSent.attempt.id).toBe(claim1.attempt.id);
-      expect(claimAfterSent.attempt.status).toBe("SENT");
+      expect(claimAfterSent.claimed).toBe(true);
+      expect(claimAfterSent.attempt.id).not.toBe(claim1.attempt.id);
+      expect(claimAfterSent.attempt.status).toBe("CLAIMED");
     } finally {
       await cleanupOrganization(db, orgSent.id);
     }
@@ -213,14 +218,16 @@ describe("invoice send attempts state model", () => {
       expect(unknown.errorCode).toBe("PROVIDER_TIMEOUT");
       expect(unknown.completedAt).toBeInstanceOf(Date);
 
+      // Core Package 1 behavior: narrower partial unique index allows a new attempt
+      // after UNKNOWN (for explicit resend / recovery)
       const claimAfterUnknown = await claimSendAttempt(
         db,
         orgUnknown.id,
         invoiceUnknown.id
       );
-      expect(claimAfterUnknown.claimed).toBe(false);
-      expect(claimAfterUnknown.attempt.id).toBe(claim2.attempt.id);
-      expect(claimAfterUnknown.attempt.status).toBe("UNKNOWN");
+      expect(claimAfterUnknown.claimed).toBe(true);
+      expect(claimAfterUnknown.attempt.id).not.toBe(claim2.attempt.id);
+      expect(claimAfterUnknown.attempt.status).toBe("CLAIMED");
     } finally {
       await cleanupOrganization(db, orgUnknown.id);
     }
@@ -333,6 +340,82 @@ describe("invoice send attempts state model", () => {
         .where(eq(invoiceSendAttempts.id, claim.attempt.id))
         .limit(1);
       expect(dbRow.status).toBe("DISPATCHING");
+    } finally {
+      await cleanupOrganization(db, org.id);
+    }
+  });
+
+  it("8. getLatestSendAttempt returns null when absent, single attempt when present, and most recent across time", async () => {
+    const { org, invoice } = await setupTestInvoice("IT-SA Org 8", 8);
+    try {
+      // 8a. Returns null when no attempt exists
+      const none = await getLatestSendAttempt(db, org.id, invoice.id);
+      expect(none).toBeNull();
+
+      // 8b. Returns the correct single row when one exists
+      const firstClaim = await claimSendAttempt(db, org.id, invoice.id);
+      expect(firstClaim.claimed).toBe(true);
+
+      const single = await getLatestSendAttempt(db, org.id, invoice.id);
+      expect(single).not.toBeNull();
+      expect(single?.id).toBe(firstClaim.attempt.id);
+      expect(single?.status).toBe("CLAIMED");
+
+      // 8c. Tenant-scoped: query with wrong orgId returns null
+      const wrongOrg = await getLatestSendAttempt(
+        db,
+        "00000000-0000-0000-0000-000000000000",
+        invoice.id
+      );
+      expect(wrongOrg).toBeNull();
+
+      // 8d. Complete first attempt, claim a second attempt
+      await markSent(db, firstClaim.attempt.id);
+      await new Promise((r) => setTimeout(r, 20));
+
+      const secondClaim = await claimSendAttempt(db, org.id, invoice.id);
+      expect(secondClaim.claimed).toBe(true);
+      expect(secondClaim.attempt.id).not.toBe(firstClaim.attempt.id);
+
+      // Returns the MOST RECENT row (by createdAt)
+      const latest = await getLatestSendAttempt(db, org.id, invoice.id);
+      expect(latest).not.toBeNull();
+      expect(latest?.id).toBe(secondClaim.attempt.id);
+      expect(latest?.status).toBe("CLAIMED");
+    } finally {
+      await cleanupOrganization(db, org.id);
+    }
+  });
+
+  it("9. invoice_deliveries partial unique index enforces at most one PAPER delivery per invoice", async () => {
+    const { org, invoice } = await setupTestInvoice("IT-SA Org 9", 9);
+    try {
+      // 9a. First PAPER delivery insert succeeds
+      const firstPaper = await db.$client.query(
+        `INSERT INTO invoice_deliveries (id, organization_id, invoice_id, method, provider, status)
+         VALUES (gen_random_uuid(), $1, $2, 'PAPER', 'paper', 'SENT')
+         RETURNING id`,
+        [org.id, invoice.id]
+      );
+      expect(firstPaper.rows.length).toBe(1);
+
+      // 9b. Second PAPER delivery insert for SAME invoice fails with unique constraint violation
+      await expect(
+        db.$client.query(
+          `INSERT INTO invoice_deliveries (id, organization_id, invoice_id, method, provider, status)
+           VALUES (gen_random_uuid(), $1, $2, 'PAPER', 'paper', 'SENT')`,
+          [org.id, invoice.id]
+        )
+      ).rejects.toThrow(/invoice_deliveries_invoice_id_paper_idx|unique/i);
+
+      // 9c. EMAIL delivery for same invoice succeeds (partial index does not constrain EMAIL)
+      const emailDelivery = await db.$client.query(
+        `INSERT INTO invoice_deliveries (id, organization_id, invoice_id, method, provider, status)
+         VALUES (gen_random_uuid(), $1, $2, 'EMAIL', 'resend', 'SENT')
+         RETURNING id`,
+        [org.id, invoice.id]
+      );
+      expect(emailDelivery.rows.length).toBe(1);
     } finally {
       await cleanupOrganization(db, org.id);
     }

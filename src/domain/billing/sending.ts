@@ -7,11 +7,12 @@
 // the first successful send -- a resend reuses the same pdf_object_key/
 // pdf_sha256, never regenerates it (Section 21: "canonical PDF
 // immutable").
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import { billingCases, billingPeriods } from "../../db/schema/billing";
 import {
   invoiceDeliveries,
+  invoiceLines,
   invoiceSendAttempts,
   invoices,
 } from "../../db/schema/invoices";
@@ -23,6 +24,7 @@ import {
 } from "../../lib/storage/invoices";
 import { sha256Hex } from "../../lib/hash";
 import { recordAuditEvent } from "../../lib/logging/audit";
+import { isUniqueViolation } from "../../lib/db-errors";
 import { ConflictError, NotFoundError, toSafeSkipReason } from "../errors";
 import { renderInvoiceHtml } from "./invoice-html";
 import { createInvoiceAccessToken } from "./invoice-tokens";
@@ -30,6 +32,7 @@ import { getInvoice } from "./generation";
 import {
   claimSendAttempt,
   classifyAttemptStaleness,
+  getLatestSendAttempt,
   markDispatching,
   markFailed,
   markSent,
@@ -78,36 +81,80 @@ export interface SendInvoiceDeps {
 export interface DeliverResult {
   emailOutcome: "SENT" | "FAILED" | "UNKNOWN" | "NOT_ENABLED";
   emailErrorCode?: string;
-  paperOutcome: "SENT" | "NOT_ENABLED";
 }
 
-async function ensureCanonicalPdf(
+export type EnsureCanonicalPdfDeps = Pick<
+  SendInvoiceDeps,
+  "renderPdf" | "supabaseAdmin"
+>;
+
+export async function ensureCanonicalPdf(
   db: Db,
   organizationId: string,
   invoiceId: string,
-  deps: SendInvoiceDeps
+  deps: EnsureCanonicalPdfDeps
 ): Promise<{ pdfObjectKey: string; pdfSha256: string }> {
-  const { invoice, lines } = await getInvoice(db, organizationId, invoiceId);
-  if (invoice.pdfObjectKey && invoice.pdfSha256) {
-    return { pdfObjectKey: invoice.pdfObjectKey, pdfSha256: invoice.pdfSha256 };
-  }
-  const html = renderInvoiceHtml(invoice, lines);
-  const pdfBytes = await deps.renderPdf(html);
-  const pdfSha256 = await sha256Hex(pdfBytes);
-  const [year, month] = invoice.issueDate.split("-").map(Number);
-  const pdfObjectKey = invoicePdfObjectKey(
-    organizationId,
-    year,
-    month,
-    invoiceId,
-    invoice.version
-  );
-  await uploadInvoicePdf(deps.supabaseAdmin, pdfObjectKey, pdfBytes);
-  await db
-    .update(invoices)
-    .set({ pdfObjectKey, pdfSha256 })
-    .where(eq(invoices.id, invoiceId));
-  return { pdfObjectKey, pdfSha256 };
+  return db.transaction(async (tx) => {
+    // FOR UPDATE: serializes concurrent PDF generation for the same invoice.
+    // While holding a DB transaction open across external I/O (PDF render + upload)
+    // is generally avoided for frequently-raced hot paths, canonical PDF generation
+    // is a rare, one-time-per-invoice-version operation (canonical/immutable).
+    // Holding the lock ensures a second concurrent caller waits and then re-reads the
+    // already-persisted canonical metadata, guaranteeing uploaded bytes and persisted
+    // sha256 never diverge across concurrent callers. Matches established precedent in
+    // generateInvoice.
+    const [invoice] = await tx
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.id, invoiceId),
+          eq(invoices.organizationId, organizationId)
+        )
+      )
+      .for("update")
+      .limit(1);
+
+    if (!invoice) {
+      throw new NotFoundError("Invoice not found");
+    }
+
+    if (invoice.pdfObjectKey && invoice.pdfSha256) {
+      return {
+        pdfObjectKey: invoice.pdfObjectKey,
+        pdfSha256: invoice.pdfSha256,
+      };
+    }
+
+    const lines = await tx
+      .select()
+      .from(invoiceLines)
+      .where(
+        and(
+          eq(invoiceLines.invoiceId, invoiceId),
+          eq(invoiceLines.organizationId, organizationId)
+        )
+      )
+      .orderBy(invoiceLines.sortOrder);
+
+    const html = renderInvoiceHtml(invoice, lines);
+    const pdfBytes = await deps.renderPdf(html);
+    const pdfSha256 = await sha256Hex(pdfBytes);
+    const [year, month] = invoice.issueDate.split("-").map(Number);
+    const pdfObjectKey = invoicePdfObjectKey(
+      organizationId,
+      year,
+      month,
+      invoiceId,
+      invoice.version
+    );
+    await uploadInvoicePdf(deps.supabaseAdmin, pdfObjectKey, pdfBytes);
+    await tx
+      .update(invoices)
+      .set({ pdfObjectKey, pdfSha256 })
+      .where(eq(invoices.id, invoiceId));
+    return { pdfObjectKey, pdfSha256 };
+  });
 }
 
 async function deliver(
@@ -134,7 +181,6 @@ async function deliver(
   // neither key -- treat it as the email-only behavior that was the only
   // option back then, not as "no delivery method".
   const invoiceByEmail = recipient.invoiceByEmail ?? true;
-  const invoiceByPaper = recipient.invoiceByPaper ?? false;
 
   let emailOutcome: "SENT" | "FAILED" | "UNKNOWN" | "NOT_ENABLED" =
     "NOT_ENABLED";
@@ -222,30 +268,9 @@ async function deliver(
     }
   }
 
-  // No print/mail integration exists (nor was one asked for): the canonical
-  // PDF is already generated by ensureCanonicalPdf before deliver() runs, so
-  // marking this delivered just records that the admin's next step is to
-  // print and hand or mail out that document -- there is nothing else for
-  // the system to do, so it's recorded as an immediate success.
-  let paperOutcome: "SENT" | "NOT_ENABLED" = "NOT_ENABLED";
-  if (invoiceByPaper) {
-    await db.insert(invoiceDeliveries).values({
-      organizationId,
-      invoiceId,
-      attemptId,
-      method: "PAPER",
-      destinationEmail: null,
-      provider: "paper",
-      status: "SENT",
-      sentAt: new Date(),
-    });
-    paperOutcome = "SENT";
-  }
-
   return {
     emailOutcome,
     ...(emailErrorCode ? { emailErrorCode } : {}),
-    paperOutcome,
   };
 }
 
@@ -266,15 +291,22 @@ interface FinalizeInvoiceSentParams {
   expectedAttemptStatus?: InvoiceSendAttemptStatus;
 }
 
+export interface FinalizeInvoiceSentResult {
+  invoice: typeof invoices.$inferSelect;
+  wasFirstTransition: boolean;
+}
+
 /**
  * Shared atomic finalization transaction: marks attempt status if provided,
- * sets invoices.sentAt = now(), sets billingCases.status = 'SENT',
- * and records an INVOICE_SENT audit event.
+ * sets invoices.sentAt = now() (guarded by WHERE sent_at IS NULL),
+ * sets billingCases.status = 'SENT', and records an INVOICE_SENT audit event
+ * only if this invocation won the first transition.
  */
 async function finalizeInvoiceSent(
   db: Db,
   params: FinalizeInvoiceSentParams
-): Promise<typeof invoices.$inferSelect> {
+): Promise<FinalizeInvoiceSentResult> {
+  let wasFirstTransition = false;
   let updatedInvoice: typeof invoices.$inferSelect | undefined;
 
   await db.transaction(async (tx) => {
@@ -316,31 +348,39 @@ async function finalizeInvoiceSent(
     const [inv] = await tx
       .update(invoices)
       .set({ sentAt: new Date(), updatedAt: new Date() })
-      .where(eq(invoices.id, params.invoiceId))
+      .where(and(eq(invoices.id, params.invoiceId), isNull(invoices.sentAt)))
       .returning();
-    updatedInvoice = inv;
 
-    await tx
-      .update(billingCases)
-      .set({ status: "SENT", statusUpdatedAt: new Date() })
-      .where(eq(billingCases.id, params.billingCaseId));
+    if (inv) {
+      wasFirstTransition = true;
+      updatedInvoice = inv;
 
-    await recordAuditEvent(tx, {
-      organizationId: params.organizationId,
-      actorUserId: params.actorUserId,
-      action: "INVOICE_SENT",
-      entityType: "invoice",
-      entityId: params.invoiceId,
-      afterData: updatedInvoice,
-    });
+      await tx
+        .update(billingCases)
+        .set({ status: "SENT", statusUpdatedAt: new Date() })
+        .where(eq(billingCases.id, params.billingCaseId));
+
+      await recordAuditEvent(tx, {
+        organizationId: params.organizationId,
+        actorUserId: params.actorUserId,
+        action: "INVOICE_SENT",
+        entityType: "invoice",
+        entityId: params.invoiceId,
+        afterData: updatedInvoice,
+      });
+    }
   });
 
-  const { invoice: sentInvoice } = await getInvoice(
+  const { invoice: authoritativeInvoice } = await getInvoice(
     db,
     params.organizationId,
     params.invoiceId
   );
-  return sentInvoice;
+
+  return {
+    invoice: authoritativeInvoice,
+    wasFirstTransition,
+  };
 }
 
 /**
@@ -420,7 +460,7 @@ async function reconcileAttemptForInvoice(
       attemptErrorCode = emailDelivery.errorCode ?? "DELIVERY_FAILED";
     }
 
-    const sentInvoice = await finalizeInvoiceSent(db, {
+    const { invoice: sentInvoice } = await finalizeInvoiceSent(db, {
       organizationId,
       invoiceId,
       billingCaseId,
@@ -457,9 +497,6 @@ export async function sendInvoice(
   const { invoice } = await getInvoice(db, organizationId, invoiceId);
 
   // 2. Business fact check: already sent is an immediate no-op.
-  // Must run before any attempt-table logic: if EMAIL+PAPER are both enabled and email ends up UNKNOWN
-  // while paper succeeds, sentAt WILL be set even though the email attempt itself is UNKNOWN.
-  // Checking sentAt first means subsequent calls are fast no-ops rather than throwing ConflictError.
   if (invoice.sentAt) {
     return invoice;
   }
@@ -472,6 +509,48 @@ export async function sendInvoice(
     .limit(1);
   if (!billingCase || billingCase.status !== "PREPARED") {
     throw new ConflictError("Only a PREPARED invoice can be sent");
+  }
+
+  // Bug 2 fix: inspect attempt history BEFORE calling claimSendAttempt
+  const latestAttempt = await getLatestSendAttempt(
+    db,
+    organizationId,
+    invoiceId
+  );
+  if (latestAttempt) {
+    if (latestAttempt.status === "UNKNOWN") {
+      throw new ConflictError(UNCONFIRMED_DELIVERY_ERROR_MESSAGE);
+    }
+    if (latestAttempt.status === "SENT") {
+      let latest = (await getInvoice(db, organizationId, invoiceId)).invoice;
+      if (!latest.sentAt) {
+        // Narrow timing window: another caller marked SENT on the attempt but hasn't committed
+        // sentAt on the invoice yet; wait briefly for finalization transaction to commit.
+        await new Promise((r) => setTimeout(r, 20));
+        latest = (await getInvoice(db, organizationId, invoiceId)).invoice;
+      }
+      return latest;
+    }
+    // If CLAIMED or DISPATCHING, fall through to claimSendAttempt / reconcile loop below.
+    // If FAILED, proceed to retry below.
+  }
+
+  // Bug 3 fix: Validate dwelling has electronic delivery enabled before claiming an attempt
+  const recipient = invoice.recipientSnapshot as {
+    billingEmail?: string | null;
+    invoiceByEmail?: boolean;
+    invoiceByPaper?: boolean;
+  };
+  const invoiceByEmail = recipient.invoiceByEmail ?? true;
+  if (
+    !invoiceByEmail &&
+    (!latestAttempt ||
+      (latestAttempt.status !== "CLAIMED" &&
+        latestAttempt.status !== "DISPATCHING"))
+  ) {
+    throw new ConflictError(
+      "This dwelling has no electronic delivery method enabled; use Record paper dispatch instead."
+    );
   }
 
   // 4. Concurrency claim loop
@@ -584,40 +663,23 @@ export async function sendInvoice(
     attempt.id
   );
 
-  const overallConfirmed =
-    deliverResult.emailOutcome === "SENT" ||
-    deliverResult.paperOutcome === "SENT";
+  const overallConfirmed = deliverResult.emailOutcome === "SENT";
   const overallDefinitivelyFailed =
     !overallConfirmed && deliverResult.emailOutcome !== "UNKNOWN";
   const overallUnknown =
     !overallConfirmed && deliverResult.emailOutcome === "UNKNOWN";
 
   if (overallConfirmed) {
-    const attemptTargetStatus =
-      deliverResult.emailOutcome === "SENT"
-        ? "SENT"
-        : deliverResult.emailOutcome === "UNKNOWN"
-          ? "UNKNOWN"
-          : deliverResult.emailOutcome === "FAILED"
-            ? "FAILED"
-            : "SENT";
-
-    const attemptErrorCode =
-      deliverResult.emailOutcome === "UNKNOWN"
-        ? (deliverResult.emailErrorCode ?? "DELIVERY_OUTCOME_UNKNOWN")
-        : deliverResult.emailOutcome === "FAILED"
-          ? (deliverResult.emailErrorCode ?? "DELIVERY_FAILED")
-          : null;
-
-    return finalizeInvoiceSent(db, {
+    const { invoice: sentInvoice } = await finalizeInvoiceSent(db, {
       organizationId,
       invoiceId,
       billingCaseId: billingCase.id,
       actorUserId,
       attemptId: attempt.id,
-      attemptTargetStatus,
-      attemptErrorCode,
+      attemptTargetStatus: "SENT",
+      attemptErrorCode: null,
     });
+    return sentInvoice;
   } else if (overallDefinitivelyFailed) {
     await markFailed(
       db,
@@ -720,35 +782,37 @@ export async function resendInvoice(
   const { invoice } = await getInvoice(db, organizationId, invoiceId);
   const wasAlreadySent = !!invoice.sentAt;
 
+  // Electronic-only check: if dwelling has no email enabled, reject immediately
+  const recipient = invoice.recipientSnapshot as {
+    billingEmail?: string | null;
+    invoiceByEmail?: boolean;
+    invoiceByPaper?: boolean;
+  };
+  const invoiceByEmail = recipient.invoiceByEmail ?? true;
+  if (!invoiceByEmail) {
+    throw new ConflictError(
+      "This dwelling has no electronic delivery method enabled; use Record paper dispatch instead."
+    );
+  }
+
+  // Check latest attempt status (read-only check)
+  const latestAttempt = await getLatestSendAttempt(
+    db,
+    organizationId,
+    invoiceId
+  );
+  if (
+    latestAttempt &&
+    (latestAttempt.status === "CLAIMED" ||
+      latestAttempt.status === "DISPATCHING")
+  ) {
+    throw new ConflictError(
+      "A delivery attempt is currently in progress for this invoice; wait for it to finish before resending."
+    );
+  }
+
   if (!wasAlreadySent) {
-    // Fix 3: check the invoice's MOST RECENT attempt
-    const [latestAttempt] = await db
-      .select({
-        id: invoiceSendAttempts.id,
-        status: invoiceSendAttempts.status,
-      })
-      .from(invoiceSendAttempts)
-      .where(
-        and(
-          eq(invoiceSendAttempts.invoiceId, invoiceId),
-          eq(invoiceSendAttempts.organizationId, organizationId)
-        )
-      )
-      .orderBy(desc(invoiceSendAttempts.createdAt))
-      .limit(1);
-
-    // If latest attempt is CLAIMED or DISPATCHING, a send is actively in flight
-    if (
-      latestAttempt &&
-      (latestAttempt.status === "CLAIMED" ||
-        latestAttempt.status === "DISPATCHING")
-    ) {
-      throw new ConflictError(
-        "A delivery attempt is currently in progress for this invoice; wait for it to finish before resending."
-      );
-    }
-
-    // Fix 5: check whether this invoice has prior delivery history at all
+    // Check whether this invoice has prior delivery history at all
     // (covers pre-migration historical failures that have invoice_deliveries rows
     // but no invoice_send_attempts row, matching the UI condition)
     const [hasDelivery] = await db
@@ -769,27 +833,68 @@ export async function resendInvoice(
     }
   }
 
+  // Bug 1 fix: acquire a durable concurrency claim before calling deliver()
+  const claimResult = await claimSendAttempt(db, organizationId, invoiceId);
+  if (!claimResult.claimed) {
+    throw new ConflictError(
+      "A delivery attempt is currently in progress for this invoice; wait for it to finish before resending."
+    );
+  }
+  const attempt = claimResult.attempt;
+
+  await markDispatching(db, attempt.id);
+
   const deliverResult = await deliver(
     db,
     organizationId,
     invoiceId,
     deps,
     actorUserId,
-    null
+    attempt.id
   );
-  const success =
-    deliverResult.emailOutcome === "SENT" ||
-    deliverResult.paperOutcome === "SENT";
+  const success = deliverResult.emailOutcome === "SENT";
 
-  // Fix 2: if invoice.sentAt was null when resendInvoice started, AND this resend
+  // If invoice.sentAt was null when resendInvoice started, AND this resend
   // succeeded, finalize the invoice (sentAt, billing case SENT, audit event INVOICE_SENT).
   if (!wasAlreadySent && success) {
-    return finalizeInvoiceSent(db, {
-      organizationId,
-      invoiceId,
-      billingCaseId: invoice.billingCaseId,
-      actorUserId,
-    });
+    const { invoice: finalizedInvoice, wasFirstTransition } =
+      await finalizeInvoiceSent(db, {
+        organizationId,
+        invoiceId,
+        billingCaseId: invoice.billingCaseId,
+        actorUserId,
+        attemptId: attempt.id,
+        attemptTargetStatus: "SENT",
+      });
+
+    // If a concurrent operation already set sentAt, record INVOICE_RESENT instead
+    if (!wasFirstTransition) {
+      await recordAuditEvent(db, {
+        organizationId,
+        actorUserId,
+        action: "INVOICE_RESENT",
+        entityType: "invoice",
+        entityId: invoiceId,
+      });
+    }
+
+    return finalizedInvoice;
+  }
+
+  if (success) {
+    await markSent(db, attempt.id);
+  } else if (deliverResult.emailOutcome === "UNKNOWN") {
+    await markUnknown(
+      db,
+      attempt.id,
+      deliverResult.emailErrorCode ?? "DELIVERY_OUTCOME_UNKNOWN"
+    );
+  } else {
+    await markFailed(
+      db,
+      attempt.id,
+      deliverResult.emailErrorCode ?? "DELIVERY_FAILED"
+    );
   }
 
   // If invoice.sentAt was already set when resendInvoice started (normal resend),
@@ -801,5 +906,89 @@ export async function resendInvoice(
     entityType: "invoice",
     entityId: invoiceId,
   });
-  return invoice;
+  return (await getInvoice(db, organizationId, invoiceId)).invoice;
+}
+
+/**
+ * Explicit, idempotent, concurrency-safe manual paper dispatch confirmation.
+ *
+ * Records that a physical paper copy was printed and dispatched.
+ * Inserts a PAPER invoice_deliveries row (enforced unique per invoice via partial unique index).
+ * If this is the first confirmed delivery for the invoice, transitions sentAt, sets billing
+ * case to SENT, and records an INVOICE_SENT audit event.
+ * Never touches invoice_send_attempts (electronic attempts only).
+ */
+export async function recordPaperDispatch(
+  db: Db,
+  organizationId: string,
+  invoiceId: string,
+  actorUserId: string
+): Promise<typeof invoices.$inferSelect> {
+  // 1. Fetch the invoice and its billing case
+  const { invoice, caseStatus } = await getInvoice(
+    db,
+    organizationId,
+    invoiceId
+  );
+
+  // 2. Validate PAPER is enabled in the recipientSnapshot
+  const recipient = invoice.recipientSnapshot as {
+    invoiceByPaper?: boolean;
+  };
+  const invoiceByPaper = recipient.invoiceByPaper ?? false;
+  if (!invoiceByPaper) {
+    throw new ConflictError("Paper delivery is not enabled for this dwelling");
+  }
+
+  // 3. Validate invoice state: PREPARED, SENT, PAID, OVERDUE are allowed; DRAFT and others are rejected
+  if (
+    !caseStatus ||
+    !["PREPARED", "SENT", "PAID", "OVERDUE"].includes(caseStatus)
+  ) {
+    throw new ConflictError(
+      `Cannot record paper dispatch for an invoice in ${caseStatus ?? "unknown"} status`
+    );
+  }
+
+  // 4. Idempotent insert: catch partial unique index violation
+  let inserted = false;
+  try {
+    await db.insert(invoiceDeliveries).values({
+      organizationId,
+      invoiceId,
+      attemptId: null,
+      method: "PAPER",
+      destinationEmail: null,
+      provider: "paper",
+      status: "SENT",
+      sentAt: new Date(),
+    });
+    inserted = true;
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      // Idempotent no-op: row already exists. If the concurrent winning caller's
+      // finalization transaction is still in flight, wait briefly so callers converge.
+      let latest = (await getInvoice(db, organizationId, invoiceId)).invoice;
+      const deadline = Date.now() + 1000;
+      while (!latest.sentAt && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 10));
+        latest = (await getInvoice(db, organizationId, invoiceId)).invoice;
+      }
+      return latest;
+    }
+    throw err;
+  }
+
+  // 5. If insert succeeded, finalize the invoice as sent if not already sent
+  if (inserted) {
+    const { invoice: sentInvoice } = await finalizeInvoiceSent(db, {
+      organizationId,
+      invoiceId,
+      billingCaseId: invoice.billingCaseId,
+      actorUserId,
+    });
+    return sentInvoice;
+  }
+
+  return (await getInvoice(db, organizationId, invoiceId)).invoice;
 }

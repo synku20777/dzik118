@@ -7,6 +7,7 @@ import { APP_BASE_URL, INVOICE_TOKEN_SECRET } from "astro:env/server";
 import { requireOrganizationAccess } from "../domain/authorization/guards";
 import {
   bulkSendInvoices,
+  recordPaperDispatch,
   resendInvoice,
   sendInvoice,
 } from "../domain/billing/sending";
@@ -64,6 +65,20 @@ export const invoices = {
           sendDeps(),
           locals.auth!.userId
         )
+      );
+    }),
+  }),
+
+  recordPaperDispatch: defineAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      invoiceId: z.uuid(),
+    }),
+    handler: safeHandler(async ({ organizationId, invoiceId }, { locals }) => {
+      requireOrganizationAccess(locals.auth, organizationId);
+      return withDb((db) =>
+        recordPaperDispatch(db, organizationId, invoiceId, locals.auth!.userId)
       );
     }),
   }),

@@ -227,9 +227,7 @@ export const invoiceSendAttempts = pgTable(
     index("invoice_send_attempts_invoice_id_idx").on(table.invoiceId),
     uniqueIndex("invoice_send_attempts_invoice_id_active_idx")
       .on(table.invoiceId)
-      .where(
-        sql`${table.status} in ('CLAIMED', 'DISPATCHING', 'SENT', 'UNKNOWN')`
-      ),
+      .where(sql`${table.status} in ('CLAIMED', 'DISPATCHING')`),
   ]
 );
 
@@ -262,6 +260,9 @@ export const invoiceDeliveries = pgTable(
   (table) => [
     index("invoice_deliveries_invoice_id_idx").on(table.invoiceId),
     index("invoice_deliveries_attempt_id_idx").on(table.attemptId),
+    uniqueIndex("invoice_deliveries_invoice_id_paper_idx")
+      .on(table.invoiceId)
+      .where(sql`${table.method} = 'PAPER'`),
   ]
 );
 
