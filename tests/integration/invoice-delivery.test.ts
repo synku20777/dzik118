@@ -986,7 +986,7 @@ describe("invoice sending", () => {
     );
     const claim = await claimSendAttempt(db, org.id, invoice.id);
     expect(claim.claimed).toBe(true);
-    await markDispatching(db, claim.attempt.id);
+    await markDispatching(db, claim.attempt.id, org.id, invoice.id);
 
     // Simulate worker crash after dispatch started by backdating dispatch_started_at past STALE_DISPATCH_MS (5m)
     await db.$client.query(
@@ -1202,7 +1202,7 @@ describe("invoice sending", () => {
     expect(emailCallCount).toBe(0);
 
     // Transition to DISPATCHING and verify it still blocks resend
-    await markDispatching(db, claim.attempt.id);
+    await markDispatching(db, claim.attempt.id, org.id, invoice.id);
 
     await expect(
       resendInvoice(db, org.id, invoice.id, deps, seedAdminId)
@@ -1228,7 +1228,7 @@ describe("invoice sending", () => {
     // Claim an attempt for a PAPER-only invoice
     const claim = await claimSendAttempt(db, org.id, invoice.id);
     expect(claim.claimed).toBe(true);
-    await markDispatching(db, claim.attempt.id);
+    await markDispatching(db, claim.attempt.id, org.id, invoice.id);
 
     // Manually insert a PAPER invoice_deliveries row with status SENT and attempt_id set to that attempt's id
     // (mirroring what deliver() would have done before a worker crash)
@@ -1871,5 +1871,400 @@ describe("invoice sending", () => {
       await dbB.$client.end();
       await cleanupOrg(org.id);
     }
+  });
+
+  it("CASE 1: PAPER dispatched first, then EMAIL sent later -- provider called once, PAPER unchanged, sentAt unchanged, no duplicate INVOICE_SENT", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org PaperFirstEmail",
+      8,
+      { invoiceByEmail: true, invoiceByPaper: true }
+    );
+
+    const afterPaper = await recordPaperDispatch(
+      db,
+      org.id,
+      invoice.id,
+      seedAdminId
+    );
+    expect(afterPaper.sentAt).not.toBeNull();
+    const originalSentAt = afterPaper.sentAt!.getTime();
+
+    const emailRowsBefore = await db.$client
+      .query(
+        "select count(*) from invoice_deliveries where invoice_id = $1 and method = 'EMAIL'",
+        [invoice.id]
+      )
+      .then((r) => Number(r.rows[0].count));
+    expect(emailRowsBefore).toBe(0);
+
+    let emailCallCount = 0;
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          return { success: true, provider: "smtp" as const };
+        },
+      },
+    });
+
+    // The "send by email" action for a PAPER-first invoice: no EMAIL
+    // attempt has ever been made, so sendInvoice is the correct command
+    // (electronicState NONE in the UI's model) -- it must NOT be a no-op
+    // just because invoice.sentAt is already set by PAPER.
+    const afterEmail = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      deps,
+      seedAdminId
+    );
+
+    expect(emailCallCount).toBe(1);
+    expect(afterEmail.sentAt?.getTime()).toBe(originalSentAt);
+
+    const deliveries = await db.$client
+      .query(
+        "select method, status from invoice_deliveries where invoice_id = $1 order by method",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(deliveries).toEqual([
+      { method: "EMAIL", status: "SENT" },
+      { method: "PAPER", status: "SENT" },
+    ]);
+
+    const logs = await listAuditLogs(db, org.id);
+    expect(logs.filter((l) => l.action === "INVOICE_SENT")).toHaveLength(1);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("CASE 2: EMAIL sent, explicit resend fails, then a further explicit resend succeeds -- working retry, no duplicate INVOICE_SENT", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org SentFailedRetry",
+      9
+    );
+
+    const firstSend = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps(),
+      seedAdminId
+    );
+    expect(firstSend.sentAt).not.toBeNull();
+    const originalSentAt = firstSend.sentAt!.getTime();
+
+    const failingResend = await resendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => ({
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "SIMULATED_FAIL",
+            failureClassification: "DEFINITIVE" as const,
+          }),
+        },
+      }),
+      seedAdminId,
+      "retry-1"
+    );
+    expect(failingResend.sentAt?.getTime()).toBe(originalSentAt);
+
+    const attemptsAfterFail = await db.$client
+      .query(
+        "select status from invoice_send_attempts where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows.map((row) => row.status));
+    expect(attemptsAfterFail).toEqual(["SENT", "FAILED"]);
+
+    let retryEmailCallCount = 0;
+    const successfulRetry = await resendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => {
+            retryEmailCallCount++;
+            return { success: true, provider: "smtp" as const };
+          },
+        },
+      }),
+      seedAdminId,
+      "retry-2"
+    );
+    expect(retryEmailCallCount).toBe(1);
+    expect(successfulRetry.sentAt?.getTime()).toBe(originalSentAt);
+
+    const attemptsAfterRetry = await db.$client
+      .query(
+        "select status from invoice_send_attempts where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows.map((row) => row.status));
+    expect(attemptsAfterRetry).toEqual(["SENT", "FAILED", "SENT"]);
+
+    const logs = await listAuditLogs(db, org.id);
+    expect(logs.filter((l) => l.action === "INVOICE_SENT")).toHaveLength(1);
+    expect(
+      logs.filter((l) => l.action === "INVOICE_RESEND_FAILED")
+    ).toHaveLength(1);
+    expect(logs.filter((l) => l.action === "INVOICE_RESENT")).toHaveLength(1);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("CASE 3: EMAIL sent, explicit resend comes back UNKNOWN -- overall stays SENT, original success preserved, UNKNOWN never auto-retried", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org SentThenUnknown",
+      10
+    );
+
+    const firstSend = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps(),
+      seedAdminId
+    );
+    const originalSentAt = firstSend.sentAt!.getTime();
+
+    await resendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => ({
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "TIMEOUT",
+            failureClassification: "AMBIGUOUS" as const,
+          }),
+        },
+      }),
+      seedAdminId,
+      "unknown-attempt"
+    );
+
+    const { invoice: afterUnknown } = await getInvoice(db, org.id, invoice.id);
+    expect(afterUnknown.sentAt?.getTime()).toBe(originalSentAt);
+
+    const deliveries = await db.$client
+      .query(
+        "select status from invoice_deliveries where invoice_id = $1 and method = 'EMAIL' order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows.map((row) => row.status));
+    expect(deliveries).toEqual(["SENT", "UNKNOWN"]);
+
+    // UNKNOWN is never auto-retried, even via the "first send" path.
+    await expect(
+      sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId)
+    ).rejects.toThrow(ConflictError);
+
+    // An explicit follow-up resend remains safe and available.
+    let followUpCallCount = 0;
+    const followUp = await resendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => {
+            followUpCallCount++;
+            return { success: true, provider: "smtp" as const };
+          },
+        },
+      }),
+      seedAdminId,
+      "follow-up"
+    );
+    expect(followUpCallCount).toBe(1);
+    expect(followUp.sentAt?.getTime()).toBe(originalSentAt);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("CASE 4: PAPER dispatched + EMAIL first send comes back UNKNOWN -- overall SENT via paper, EMAIL warning evidence preserved, normal Send blocked, explicit Resend works", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org PaperPlusEmailUnknown",
+      11,
+      { invoiceByEmail: true, invoiceByPaper: true }
+    );
+
+    await recordPaperDispatch(db, org.id, invoice.id, seedAdminId);
+
+    await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => ({
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "TIMEOUT",
+            failureClassification: "AMBIGUOUS" as const,
+          }),
+        },
+      }),
+      seedAdminId
+    );
+
+    const attempt = await db.$client
+      .query("select status from invoice_send_attempts where invoice_id = $1", [
+        invoice.id,
+      ])
+      .then((r) => r.rows[0]);
+    expect(attempt.status).toBe("UNKNOWN");
+
+    // Normal first-send is blocked (never auto-retry UNKNOWN), regardless
+    // of the invoice being overall SENT via paper.
+    await expect(
+      sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId)
+    ).rejects.toThrow(ConflictError);
+
+    // Explicit resend still works.
+    let emailCallCount = 0;
+    await resendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => {
+            emailCallCount++;
+            return { success: true, provider: "smtp" as const };
+          },
+        },
+      }),
+      seedAdminId,
+      "recovery"
+    );
+    expect(emailCallCount).toBe(1);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("CASE 5: markDispatching loses ownership when another worker already moved the attempt off CLAIMED -- CAS fails", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org LostOwnership",
+      6
+    );
+
+    const claim = await claimSendAttempt(db, org.id, invoice.id);
+    expect(claim.claimed).toBe(true);
+
+    // Simulate a concurrent worker/reconciler moving this attempt to a
+    // terminal state before the original claimant reaches its own
+    // CLAIMED->DISPATCHING transition.
+    await db.$client.query(
+      "update invoice_send_attempts set status = 'FAILED', completed_at = now() where id = $1",
+      [claim.attempt.id]
+    );
+
+    const dispatching = await markDispatching(
+      db,
+      claim.attempt.id,
+      org.id,
+      invoice.id
+    );
+    expect(dispatching).toBeNull();
+
+    const [current] = await db.$client
+      .query("select status from invoice_send_attempts where id = $1", [
+        claim.attempt.id,
+      ])
+      .then((r) => r.rows);
+    expect(current.status).toBe("FAILED");
+
+    await cleanupOrg(org.id);
+  });
+
+  it("CASE 6: FIRST_SEND claim re-validates authoritative case status -- a case moved off PREPARED before the claim is rejected without calling the provider", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org CaseChangedBeforeClaim",
+      1
+    );
+
+    const { invoice: withCase } = await getInvoice(db, org.id, invoice.id);
+    await overrideCaseStatus(
+      db,
+      org.id,
+      withCase.billingCaseId,
+      "DRAFT",
+      "test: simulate a case status change racing ahead of the claim",
+      seedAdminId
+    );
+
+    let emailCallCount = 0;
+    await expect(
+      sendInvoice(
+        db,
+        org.id,
+        invoice.id,
+        stubDeps({
+          emailService: {
+            sendInvoice: async () => {
+              emailCallCount++;
+              return { success: true, provider: "smtp" as const };
+            },
+          },
+        }),
+        seedAdminId
+      )
+    ).rejects.toThrow(ConflictError);
+    expect(emailCallCount).toBe(0);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("CASE 8: a legacy (unverified) PAPER row does not block Record paper dispatch; a new verified dispatch coexists with it", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org LegacyPaper",
+      2,
+      { invoiceByEmail: false, invoiceByPaper: true }
+    );
+
+    // Simulate an old-style auto-created PAPER row from before the manual
+    // dispatch feature existed -- isInitialPaperDispatch defaults to false,
+    // and this migration never backfills it to true (issue 3).
+    await db.insert(invoiceDeliveries).values({
+      organizationId: org.id,
+      invoiceId: invoice.id,
+      attemptId: null,
+      method: "PAPER",
+      destinationEmail: null,
+      provider: "paper",
+      status: "SENT",
+      isInitialPaperDispatch: false,
+    });
+
+    const result = await recordPaperDispatch(
+      db,
+      org.id,
+      invoice.id,
+      seedAdminId
+    );
+    expect(result.sentAt).not.toBeNull();
+
+    const paperRows = await db.$client
+      .query(
+        "select is_initial_paper_dispatch from invoice_deliveries where invoice_id = $1 and method = 'PAPER' order by is_initial_paper_dispatch",
+        [invoice.id]
+      )
+      .then((r) => r.rows.map((row) => row.is_initial_paper_dispatch));
+    expect(paperRows).toEqual([false, true]);
+
+    const logs = await listAuditLogs(db, org.id);
+    expect(logs.filter((l) => l.action === "INVOICE_SENT")).toHaveLength(1);
+
+    await cleanupOrg(org.id);
   });
 });

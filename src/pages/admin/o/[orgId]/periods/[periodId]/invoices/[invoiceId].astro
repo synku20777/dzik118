@@ -101,7 +101,14 @@ const organizationIncomplete =
 const invoiceByEmail = recipient.invoiceByEmail ?? true;
 const invoiceByPaper = recipient.invoiceByPaper ?? false;
 const hasValidEmail = !!recipient.billingEmail;
-const alreadyDispatchedPaper = deliveries.some((d) => d.method === "PAPER");
+// A verified initial paper dispatch is one explicitly confirmed through the
+// "Record paper dispatch" action -- NEVER inferred from an old, possibly
+// auto-generated legacy row (issue: legacy PAPER rows must not masquerade
+// as verified manual dispatch). Any legacy row (isInitialPaperDispatch ===
+// false) is still shown in delivery history, just not as "dispatched".
+const verifiedPaperDispatch = deliveries.some(
+  (d) => d.method === "PAPER" && d.isInitialPaperDispatch
+);
 const hasEmailDelivery = deliveries.some((d) => d.method === "EMAIL");
 
 type ElectronicState = "NONE" | "IN_PROGRESS" | "UNKNOWN" | "FAILED" | "SENT";
@@ -119,6 +126,15 @@ const hasLegacyEmailFailed =
   !latestAttempt &&
   deliveries.some((d) => d.method === "EMAIL" && d.status === "FAILED");
 
+// A confirmed historical delivery is independent of the LATEST attempt's
+// outcome: an invoice can have been genuinely delivered once, then a later
+// explicit resend can fail or come back ambiguous. Both facts must survive
+// into the UI rather than collapsing into whichever happened most recently
+// (issue: "electronic state is too lossy").
+const hasConfirmedEmailDelivery =
+  deliveries.some((d) => d.method === "EMAIL" && d.status === "SENT") ||
+  hasLegacyEmailSent;
+
 let electronicState: ElectronicState;
 if (
   latestAttempt?.status === "CLAIMED" ||
@@ -134,6 +150,17 @@ if (
 } else {
   electronicState = "NONE";
 }
+// Which command a click should invoke: sendInvoice is the FIRST-ever EMAIL
+// attempt (electronicState NONE, or a FAILED attempt that has never once
+// succeeded -- sendInvoice's own claim loop already retries a fresh FAILED
+// attempt correctly). Once EMAIL has EVER been confirmed delivered, every
+// subsequent action -- including retrying after a later FAILED/UNKNOWN
+// resend -- is resendInvoice, both for correct INVOICE_RESENT audit
+// semantics and because "Send" would misleadingly suggest nothing was ever
+// delivered (issue: "successful EMAIL + failed resend" needs a working,
+// clearly-labeled retry, not a silent no-op or a misleading "Send").
+const useResendCommand =
+  electronicState === "UNKNOWN" || hasConfirmedEmailDelivery;
 // Fresh per page render: two submissions of the SAME rendered Resend form
 // (double-click, browser retry) carry this same value and are recognized
 // as one logical click by resendInvoice/claimSendCommand; reloading the
@@ -221,8 +248,12 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
           {
             caseStatus !== "DRAFT" && invoiceByEmail && (
               <>
-                {(electronicState === "NONE" ||
-                  electronicState === "FAILED") && (
+                {electronicState === "IN_PROGRESS" && (
+                  <span class="text-sm text-muted">
+                    {t("Sending in progress…")}
+                  </span>
+                )}
+                {electronicState !== "IN_PROGRESS" && !useResendCommand && (
                   <form method="POST" action={actions.invoices.send}>
                     <input
                       type="hidden"
@@ -242,13 +273,7 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
                     </button>
                   </form>
                 )}
-                {electronicState === "IN_PROGRESS" && (
-                  <span class="text-sm text-muted">
-                    {t("Sending in progress…")}
-                  </span>
-                )}
-                {(electronicState === "SENT" ||
-                  electronicState === "UNKNOWN") && (
+                {electronicState !== "IN_PROGRESS" && useResendCommand && (
                   <form method="POST" action={actions.invoices.resend}>
                     <input
                       type="hidden"
@@ -297,7 +322,7 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
               <span class="text-xs font-semibold uppercase tracking-wider text-muted">
                 {t("Paper delivery")}:
               </span>
-              {alreadyDispatchedPaper ? (
+              {verifiedPaperDispatch ? (
                 <span class="text-sm text-success font-medium">
                   ✓ {t("Paper dispatched")}
                 </span>
@@ -391,7 +416,8 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
     {
       caseStatus !== "DRAFT" &&
         invoiceByEmail &&
-        (electronicState === "NONE" || electronicState === "FAILED") &&
+        !useResendCommand &&
+        electronicState !== "IN_PROGRESS" &&
         !hasValidEmail && (
           <p id="email-validation" class="notice notice-danger" role="alert">
             {t("Invoice email is missing. Add a billing email before sending.")}
@@ -404,15 +430,33 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
         electronicState === "UNKNOWN" && (
           <div class="notice notice-warning" role="alert">
             <p>
-              {t(
-                "Delivery outcome could not be confirmed. The email provider may have accepted this invoice, but the application did not receive confirmation. Verify the recipient mailbox or provider logs before resending."
-              )}
+              {hasConfirmedEmailDelivery
+                ? t(
+                    "This invoice was delivered by email previously. A later attempt's outcome could not be confirmed -- verify the recipient mailbox or provider logs before resending."
+                  )
+                : t(
+                    "Delivery outcome could not be confirmed. The email provider may have accepted this invoice, but the application did not receive confirmation. Verify the recipient mailbox or provider logs before resending."
+                  )}
             </p>
             {!hasEmailDelivery && (
               <p class="mt-2 text-xs font-semibold">
                 {t("Email")} — {t("Needs attention")}
               </p>
             )}
+          </div>
+        )
+    }
+    {
+      caseStatus !== "DRAFT" &&
+        invoiceByEmail &&
+        electronicState === "FAILED" &&
+        hasConfirmedEmailDelivery && (
+          <div class="notice notice-warning" role="alert">
+            <p>
+              {t(
+                "This invoice was delivered by email previously. The most recent resend failed -- use Resend to try again."
+              )}
+            </p>
           </div>
         )
     }
@@ -505,11 +549,22 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
                     <td class="px-4 py-2">{d.destinationEmail ?? "—"}</td>
                     <td class="px-4 py-2">
                       {d.status === "SENT" ? (
-                        <span class="text-success">
-                          {d.method === "PAPER"
-                            ? t("Paper dispatched")
-                            : t("Sent")}
-                        </span>
+                        d.method === "PAPER" && !d.isInitialPaperDispatch ? (
+                          <span
+                            class="text-muted"
+                            title={t(
+                              "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch."
+                            )}
+                          >
+                            {t("Paper (unverified legacy record)")}
+                          </span>
+                        ) : (
+                          <span class="text-success">
+                            {d.method === "PAPER"
+                              ? t("Paper dispatched")
+                              : t("Sent")}
+                          </span>
+                        )
                       ) : d.status === "UNKNOWN" ? (
                         <span class="text-warning">{t("Needs attention")}</span>
                       ) : (

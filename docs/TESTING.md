@@ -74,13 +74,11 @@ The integration test suite (`tests/integration/payments.test.ts`) verifies:
 - **Bank CSV statement import**: Duplicate import hash prevention, invalid header handling, and transaction row ingestion.
 - **Exact payment matching**: Candidate matching against invoice payment reference, match proposal confirmation, transaction and invoice status updates.
 - **Idempotency and concurrency**: Repeated match confirmation idempotency, rejection handling, and double-claim prevention across concurrent match attempts.
+- **Partial payment reconciliation** ("PACKAGE F1"): Matching a transaction where `amount < remainingBalance`, verifying that the transaction is fully credited to the dwelling ledger, an allocation is posted for the partial amount, the invoice remains open (`paidAt` is null), and a second payment can subsequently match against the remaining balance to mark the invoice `PAID`.
+- **Overpayment reconciliation** ("PACKAGE F2"): Matching a transaction where `amount > remainingBalance`, verifying that the invoice is marked `PAID`, allocation is capped at remaining balance, and the excess amount is held as unallocated dwelling account credit (`NEGATIVE` account balance).
+- **Credit carry-forward cycle** ("PACKAGE F3"): Verifying that unallocated dwelling credit from an overpayment is automatically consumed in `prepareInvoice` for the next billing period to reduce the new invoice's `amountDue`, including the boundary case where the credit exceeds the new charges.
 
-*Recommended test additions for complete financial coverage:*
-While implemented in the domain services and database schema, the following financial workflows should be added to the integration suite to ensure ongoing regression safety:
-- **Partial payment reconciliation**: Matching a transaction where `amount < remainingBalance`, verifying that the transaction is fully credited to the dwelling ledger, an allocation is posted for the partial amount, the invoice remains open (`paidAt` is null), and a second payment can subsequently match against the remaining balance to mark the invoice `PAID`.
-- **Overpayment reconciliation**: Matching a transaction where `amount > remainingBalance`, verifying that the invoice is marked `PAID`, allocation is capped at remaining balance, and the excess amount is held as unallocated dwelling account credit (`NEGATIVE` account balance).
-- **Credit carry-forward cycle**: Verifying that unallocated dwelling credit from an overpayment is automatically consumed in `prepareInvoice` for the next billing period to reduce the new invoice's `amountDue`.
-- **Append-only ledger triggers**: Verifying that executing an `UPDATE` or `DELETE` query against `account_entries`, `payment_allocations`, or `late_fee_adjustments` fails with a PostgreSQL trigger exception.
+`tests/integration/append-only-triggers.test.ts` verifies the append-only ledger triggers: executing an `UPDATE` or `DELETE` query against `payment_allocations` or `late_fee_adjustments` fails with a PostgreSQL trigger exception, preserving the original row.
 
 ### Invoice template & snapshot coverage in integration tests
 
@@ -134,8 +132,38 @@ npm run typecheck          # run the TypeScript strict compiler check
 npm run astro:check        # run the Astro diagnostic check
 npm run test                # run unit tests
 npm run test:integration    # run integration tests (needs the local stack)
+npm run test:e2e            # run the Playwright end-to-end suite
 npm run build                # verify the production build
 ```
+
+### What GitHub Actions CI actually runs
+
+`.github/workflows/ci.yml` runs `format:check`, `lint`, `typecheck`,
+`astro:check`, `test` (unit), and `build` on every push/PR. It does **not**
+run `test:integration` or `test:e2e`. This is a real gap, not a documented
+trade-off elsewhere: the durable-attempt/paper-dispatch concurrency
+invariants this app relies on are only exercised by the integration suite
+against a real Postgres, and by the E2E suite against a real browser and
+the full local Supabase stack (Auth, Storage, Mailpit) -- CI passing today
+attests none of that.
+
+Adding `test:integration` to CI needs more than a bare Postgres service
+container: these tests also call real Supabase Storage (PDF upload) and
+Supabase Auth (dwelling/resident provisioning) through
+`createSupabaseAdminClient`, so a correct CI job needs the full local
+Supabase stack running (`supabase start` inside the runner, e.g. via
+`supabase/setup-cli`), not just a `postgres:16` service container. Adding
+`test:e2e` needs that same stack plus Playwright's browser binaries. Both
+are practical to run in CI, but neither could be safely verified from this
+task without a real GitHub Actions run, so no CI workflow change was made
+here -- committing an unverified Supabase-in-CI job risked landing a
+silently broken pipeline. The recommended follow-up: add `test:integration`
+to a full-stack CI job (`supabase start` + `npm run test:integration`) on
+every PR, and keep `test:e2e` as a separate, manually-triggered release
+workflow given its extra runtime and browser dependency. Until that
+follow-up lands, `test:integration` and `test:e2e` remain required manual
+gates before merging or releasing -- CI passing is necessary but not
+sufficient.
 
 ## Manual testing
 

@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
+import { billingCases } from "../../db/schema/billing";
 import {
   invoices,
   invoiceSendAttempts,
@@ -7,6 +8,19 @@ import {
 } from "../../db/schema/invoices";
 import { isUniqueViolation } from "../../lib/db-errors";
 import { NotFoundError } from "../errors";
+
+// The set of billing-case statuses a first EMAIL delivery (or a manual
+// PAPER dispatch) may legitimately be attempted from. Not PREPARED-only:
+// PAPER dispatch can advance the case to SENT/PAID/OVERDUE before EMAIL is
+// ever attempted at all (issue: "PAPER first -> EMAIL later" must remain
+// possible), so a first EMAIL send must accept the case having already
+// moved past PREPARED via a different, independent delivery channel.
+export const FIRST_DELIVERY_ELIGIBLE_CASE_STATUSES = [
+  "PREPARED",
+  "SENT",
+  "PAID",
+  "OVERDUE",
+] as const;
 
 export type InvoiceSendAttemptStatus =
   (typeof invoiceSendAttemptStatusEnum.enumValues)[number];
@@ -133,7 +147,11 @@ export type ClaimSendCommandResult =
   | { outcome: "ALREADY_SENT"; invoice: typeof invoices.$inferSelect }
   | { outcome: "UNKNOWN_BLOCKS_SEND" }
   | { outcome: "IN_FLIGHT"; attempt: InvoiceSendAttempt }
-  | { outcome: "DUPLICATE_COMMAND"; attempt: InvoiceSendAttempt };
+  | { outcome: "DUPLICATE_COMMAND"; attempt: InvoiceSendAttempt }
+  | {
+      outcome: "INELIGIBLE_CASE_STATUS";
+      caseStatus: (typeof billingCases.$inferSelect)["status"] | null;
+    };
 
 /**
  * Atomically decides whether a send/resend command may claim a new attempt,
@@ -157,6 +175,16 @@ export type ClaimSendCommandResult =
  * the same commandId; the second one to reach this lock is recognized as a
  * replay of the same logical click (DUPLICATE_COMMAND) rather than being
  * treated as a distinct, later resend.
+ *
+ * FIRST_SEND's "already handled" check is keyed on the EMAIL channel's own
+ * latest attempt, never on invoice.sentAt: a manual PAPER dispatch can set
+ * sentAt while EMAIL has never been attempted at all (spec: independent
+ * delivery channels), so sentAt must never suppress a still-valid first
+ * EMAIL send. For the same reason, FIRST_SEND's case-status eligibility
+ * check also re-reads (and locks, invoices-then-billing_cases order,
+ * consistent with every other mutator so no deadlock is possible) the
+ * billing case here rather than trusting a pre-claim read the caller may
+ * have taken before another request changed it.
  */
 export async function claimSendCommand(
   db: Db,
@@ -181,8 +209,24 @@ export async function claimSendCommand(
       throw new NotFoundError("Invoice not found");
     }
 
-    if (mode === "FIRST_SEND" && invoice.sentAt) {
-      return { outcome: "ALREADY_SENT", invoice };
+    if (mode === "FIRST_SEND") {
+      const [billingCase] = await tx
+        .select({ status: billingCases.status })
+        .from(billingCases)
+        .where(eq(billingCases.id, invoice.billingCaseId))
+        .for("update")
+        .limit(1);
+      if (
+        !billingCase ||
+        !(FIRST_DELIVERY_ELIGIBLE_CASE_STATUSES as readonly string[]).includes(
+          billingCase.status
+        )
+      ) {
+        return {
+          outcome: "INELIGIBLE_CASE_STATUS",
+          caseStatus: billingCase?.status ?? null,
+        };
+      }
     }
 
     const [latestAttempt] = await tx
@@ -196,6 +240,12 @@ export async function claimSendCommand(
       )
       .orderBy(desc(invoiceSendAttempts.createdAt))
       .limit(1);
+
+    if (mode === "FIRST_SEND" && latestAttempt?.status === "SENT") {
+      // The EMAIL channel's own history already confirms delivery -- a true
+      // idempotent no-op, regardless of how invoice.sentAt got set.
+      return { outcome: "ALREADY_SENT", invoice };
+    }
 
     if (
       latestAttempt &&
@@ -262,10 +312,23 @@ export async function getLatestSendAttempt(
   return attempt ?? null;
 }
 
+/**
+ * CAS CLAIMED -> DISPATCHING only -- never revives a terminal (SENT/FAILED/
+ * UNKNOWN) attempt. organizationId/invoiceId are included in the predicate
+ * as defense-in-depth (matching claimSendCommand's own scoped selects),
+ * though attemptId alone is already globally unique.
+ *
+ * Returns null (not a thrown error) when the CAS matches zero rows: the
+ * caller has lost ownership of this attempt (e.g. a stale-attempt
+ * reconciler already moved it elsewhere) and MUST NOT proceed to call the
+ * email provider.
+ */
 export async function markDispatching(
   db: DbOrTx,
-  attemptId: string
-): Promise<InvoiceSendAttempt> {
+  attemptId: string,
+  organizationId: string,
+  invoiceId: string
+): Promise<InvoiceSendAttempt | null> {
   const [updated] = await db
     .update(invoiceSendAttempts)
     .set({
@@ -273,12 +336,16 @@ export async function markDispatching(
       dispatchStartedAt: new Date(),
       updatedAt: new Date(),
     })
-    .where(eq(invoiceSendAttempts.id, attemptId))
+    .where(
+      and(
+        eq(invoiceSendAttempts.id, attemptId),
+        eq(invoiceSendAttempts.organizationId, organizationId),
+        eq(invoiceSendAttempts.invoiceId, invoiceId),
+        eq(invoiceSendAttempts.status, "CLAIMED")
+      )
+    )
     .returning();
-  if (!updated) {
-    throw new NotFoundError("Invoice send attempt not found");
-  }
-  return updated;
+  return updated ?? null;
 }
 
 export async function markSent(

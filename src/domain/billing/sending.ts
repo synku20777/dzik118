@@ -31,6 +31,7 @@ import { getInvoice } from "./generation";
 import {
   claimSendCommand,
   classifyAttemptStaleness,
+  FIRST_DELIVERY_ELIGIBLE_CASE_STATUSES,
   getLatestSendAttempt,
   markDispatching,
   markFailed,
@@ -78,7 +79,8 @@ export interface SendInvoiceDeps {
 }
 
 export interface DeliverResult {
-  emailOutcome: "SENT" | "FAILED" | "UNKNOWN" | "NOT_ENABLED";
+  emailOutcome:
+    "SENT" | "FAILED" | "UNKNOWN" | "NOT_ENABLED" | "LOST_OWNERSHIP";
   emailErrorCode?: string;
 }
 
@@ -162,7 +164,7 @@ async function deliver(
   invoiceId: string,
   deps: SendInvoiceDeps,
   actorUserId: string | null,
-  attemptId: string | null
+  attemptId: string
 ): Promise<DeliverResult> {
   const { invoice } = await getInvoice(db, organizationId, invoiceId);
   const [period] = await db
@@ -181,8 +183,7 @@ async function deliver(
   // option back then, not as "no delivery method".
   const invoiceByEmail = recipient.invoiceByEmail ?? true;
 
-  let emailOutcome: "SENT" | "FAILED" | "UNKNOWN" | "NOT_ENABLED" =
-    "NOT_ENABLED";
+  let emailOutcome: DeliverResult["emailOutcome"] = "NOT_ENABLED";
   let emailErrorCode: string | undefined;
 
   // A missing billing email is known locally before any dispatch is
@@ -209,6 +210,28 @@ async function deliver(
       tokenExpiresAt,
       actorUserId
     );
+
+    // CAS CLAIMED -> DISPATCHING as close to the provider call as this
+    // function's own preparation work allows -- everything above (PDF via
+    // the caller, period lookup, token creation) is local DB work that
+    // doesn't risk an ambiguous provider outcome, so DISPATCHING only
+    // begins immediately before the actual network call. A tiny
+    // process-crash window between this write and the request below is
+    // unavoidable and conservatively resolves to UNKNOWN on staleness --
+    // this only minimizes it, never eliminates it.
+    const dispatching = await markDispatching(
+      db,
+      attemptId,
+      organizationId,
+      invoiceId
+    );
+    if (!dispatching) {
+      // Lost ownership: another worker already moved this attempt to a
+      // terminal state (e.g. a stale-attempt reconciler ran concurrently).
+      // Must not call the provider without exclusive ownership of an
+      // active attempt.
+      return { emailOutcome: "LOST_OWNERSHIP" };
+    }
 
     const result = await deps.emailService.sendInvoice({
       to: recipient.billingEmail,
@@ -350,16 +373,54 @@ async function finalizeInvoiceSentInTx(
         )
         .returning({ id: invoiceSendAttempts.id });
 
-      // Zero rows: another worker already moved this attempt off
-      // expectedAttemptStatus (e.g. a concurrent reconciliation of the
-      // same stale DISPATCHING attempt already finalized it). Do not
-      // overwrite whatever it is now -- never regress an attempt's
-      // status. This is safe to leave as a no-op here: the sentAt CAS
-      // immediately below is an INDEPENDENT guarantee on a different row,
-      // so exactly one caller still wins the first invoices.sentAt
-      // transition (and therefore the single INVOICE_SENT audit event)
-      // regardless of which caller's attempt-status CAS happened to win.
-      void transitioned;
+      if (transitioned.length === 0) {
+        // Another worker already moved this attempt off expectedStatus
+        // before our CAS ran (e.g. a concurrent reconciler demoted a stale
+        // DISPATCHING attempt to UNKNOWN in the same narrow window this
+        // caller independently found confirmed SENT delivery evidence for
+        // it). The sentAt CAS below is an INDEPENDENT guarantee on a
+        // different row, so exactly one caller still wins the first
+        // invoices.sentAt transition regardless -- but the attempt row
+        // itself can be left contradicting its own linked evidence
+        // (UNKNOWN/FAILED while a delivery row proves SENT), which is a
+        // real inconsistency, not just cosmetic.
+        //
+        // Reconcile it: only ever forward-correct toward the caller's
+        // OWN attemptTargetStatus, and only when that target is SENT --
+        // reaching this code path at all already means the caller (see
+        // reconcileAttemptForInvoice's hasConfirmedSent branch) has
+        // independently verified a SENT delivery row exists for this
+        // attempt. Never force FROM an already-SENT row (no-op, someone
+        // else already agrees) and never force FROM CLAIMED/DISPATCHING
+        // (another process may still actively own it -- forcing it to a
+        // terminal state here would be a genuine ownership violation).
+        if (params.attemptTargetStatus === "SENT") {
+          const [current] = await tx
+            .select({ status: invoiceSendAttempts.status })
+            .from(invoiceSendAttempts)
+            .where(eq(invoiceSendAttempts.id, params.attemptId))
+            .limit(1);
+          if (
+            current &&
+            (current.status === "UNKNOWN" || current.status === "FAILED")
+          ) {
+            await tx
+              .update(invoiceSendAttempts)
+              .set({
+                status: "SENT",
+                errorCode: null,
+                completedAt: new Date(),
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(invoiceSendAttempts.id, params.attemptId),
+                  eq(invoiceSendAttempts.status, current.status)
+                )
+              );
+          }
+        }
+      }
     } else {
       if (params.attemptTargetStatus === "SENT") {
         await markSent(tx, params.attemptId);
@@ -550,19 +611,37 @@ export async function sendInvoice(
   // 1. Fetch invoice
   const { invoice } = await getInvoice(db, organizationId, invoiceId);
 
-  // 2. Business fact check: already sent is an immediate no-op.
-  if (invoice.sentAt) {
+  // 2. Business fact check: "already sent" for the purpose of a FIRST EMAIL
+  // send means the EMAIL channel's own history already has a SENT attempt
+  // -- NOT invoice.sentAt, which a manual PAPER dispatch can set on its own
+  // while EMAIL has never been attempted at all (independent channels). A
+  // fast, unlocked read here is just an optimization; claimSendCommand's
+  // locked re-read below is the actual authority.
+  const latestAttempt = await getLatestSendAttempt(
+    db,
+    organizationId,
+    invoiceId
+  );
+  if (latestAttempt?.status === "SENT") {
     return invoice;
   }
 
-  // 3. Validation: only PREPARED can be sent
+  // 3. Validation: PREPARED, or a later status a different delivery channel
+  // (PAPER) already advanced it to while EMAIL is still untried.
   const [billingCase] = await db
     .select()
     .from(billingCases)
     .where(eq(billingCases.id, invoice.billingCaseId))
     .limit(1);
-  if (!billingCase || billingCase.status !== "PREPARED") {
-    throw new ConflictError("Only a PREPARED invoice can be sent");
+  if (
+    !billingCase ||
+    !(FIRST_DELIVERY_ELIGIBLE_CASE_STATUSES as readonly string[]).includes(
+      billingCase.status
+    )
+  ) {
+    throw new ConflictError(
+      `Cannot send an invoice in ${billingCase?.status ?? "unknown"} status`
+    );
   }
 
   // Validate dwelling has electronic delivery enabled and reachable before
@@ -582,12 +661,9 @@ export async function sendInvoice(
   // if the dwelling's preference has since changed (or was seeded before
   // this preference existed) -- only reject outright when there is no
   // active attempt to fall through and reconcile.
-  const latestAttemptForValidation = invoiceByEmail
-    ? null
-    : await getLatestSendAttempt(db, organizationId, invoiceId);
   const hasActiveAttempt =
-    latestAttemptForValidation?.status === "CLAIMED" ||
-    latestAttemptForValidation?.status === "DISPATCHING";
+    latestAttempt?.status === "CLAIMED" ||
+    latestAttempt?.status === "DISPATCHING";
   if (!invoiceByEmail && !hasActiveAttempt) {
     throw new ConflictError(
       "This dwelling has no electronic delivery method enabled; use Record paper dispatch instead."
@@ -602,7 +678,8 @@ export async function sendInvoice(
   // 4. Atomic command claim loop (see claimSendCommand: the invoice row
   // lock closes the late-claim race where a loser re-checking for an active
   // attempt AFTER the winner already went terminal could otherwise start a
-  // second, duplicate dispatch).
+  // second, duplicate dispatch; it also re-validates case eligibility and
+  // the EMAIL channel's own SENT status under the same lock).
   let attempt: InvoiceSendAttempt;
 
   while (true) {
@@ -622,6 +699,11 @@ export async function sendInvoice(
     }
     if (claim.outcome === "UNKNOWN_BLOCKS_SEND") {
       throw new ConflictError(UNCONFIRMED_DELIVERY_ERROR_MESSAGE);
+    }
+    if (claim.outcome === "INELIGIBLE_CASE_STATUS") {
+      throw new ConflictError(
+        `Cannot send an invoice in ${claim.caseStatus ?? "unknown"} status`
+      );
     }
 
     // IN_FLIGHT: a CLAIMED/DISPATCHING attempt genuinely exists right now.
@@ -693,8 +775,9 @@ export async function sendInvoice(
   // Note: any genuinely unexpected error (e.g. DB error, PDF rendering error)
   // is left to bubble up without catching/marking failed; the attempt row is left as-is so
   // a later call's reconcileStaleAttempt can classify it once it exceeds staleness thresholds.
+  // deliver() itself performs the CLAIMED->DISPATCHING CAS immediately
+  // before the provider call (see deliver()'s own comment).
   await ensureCanonicalPdf(db, organizationId, invoiceId, deps);
-  await markDispatching(db, attempt.id);
   const deliverResult = await deliver(
     db,
     organizationId,
@@ -704,6 +787,14 @@ export async function sendInvoice(
     attempt.id
   );
 
+  if (deliverResult.emailOutcome === "LOST_OWNERSHIP") {
+    // Another worker already moved this attempt off CLAIMED before we
+    // reached the provider boundary; the provider was never called. Return
+    // current authoritative state rather than writing anything further to
+    // an attempt we no longer own.
+    return (await getInvoice(db, organizationId, invoiceId)).invoice;
+  }
+
   const overallConfirmed = deliverResult.emailOutcome === "SENT";
   const overallDefinitivelyFailed =
     !overallConfirmed && deliverResult.emailOutcome !== "UNKNOWN";
@@ -711,15 +802,30 @@ export async function sendInvoice(
     !overallConfirmed && deliverResult.emailOutcome === "UNKNOWN";
 
   if (overallConfirmed) {
-    const { invoice: sentInvoice } = await finalizeInvoiceSent(db, {
-      organizationId,
-      invoiceId,
-      billingCaseId: billingCase.id,
-      actorUserId,
-      attemptId: attempt.id,
-      attemptTargetStatus: "SENT",
-      attemptErrorCode: null,
-    });
+    const { invoice: sentInvoice, wasFirstTransition } =
+      await finalizeInvoiceSent(db, {
+        organizationId,
+        invoiceId,
+        billingCaseId: billingCase.id,
+        actorUserId,
+        attemptId: attempt.id,
+        attemptTargetStatus: "SENT",
+        attemptErrorCode: null,
+      });
+    // Not the first transition: invoice.sentAt was already set before this
+    // dispatch (e.g. by an earlier successful EMAIL send, or by PAPER) --
+    // this call reached sendInvoice's claim loop because the latest EMAIL
+    // attempt wasn't itself SENT (a FAILED retry, reconciled here). Record
+    // it as an explicit resend, not a silent no-op with no audit trail.
+    if (!wasFirstTransition) {
+      await recordAuditEvent(db, {
+        organizationId,
+        actorUserId,
+        action: "INVOICE_RESENT",
+        entityType: "invoice",
+        entityId: invoiceId,
+      });
+    }
     return sentInvoice;
   } else if (overallDefinitivelyFailed) {
     await markFailed(
@@ -842,32 +948,34 @@ export async function resendInvoice(
     );
   }
 
-  if (!wasAlreadySent) {
-    // Check whether this invoice has prior delivery history at all
-    // (covers pre-migration historical failures that have invoice_deliveries rows
-    // but no invoice_send_attempts row, matching the UI condition)
-    const [hasDelivery] = await db
-      .select({ id: invoiceDeliveries.id })
-      .from(invoiceDeliveries)
-      .where(
-        and(
-          eq(invoiceDeliveries.invoiceId, invoiceId),
-          eq(invoiceDeliveries.organizationId, organizationId)
-        )
+  // Resend requires prior EMAIL-channel history specifically -- checked
+  // regardless of overall wasAlreadySent, since a PAPER dispatch can set
+  // invoice.sentAt while EMAIL has never been attempted at all (independent
+  // channels: a PAPER delivery row must never satisfy "this was resent by
+  // email before"). Also covers pre-migration historical failures that
+  // have an invoice_deliveries row but no invoice_send_attempts row.
+  const [hasEmailDelivery] = await db
+    .select({ id: invoiceDeliveries.id })
+    .from(invoiceDeliveries)
+    .where(
+      and(
+        eq(invoiceDeliveries.invoiceId, invoiceId),
+        eq(invoiceDeliveries.organizationId, organizationId),
+        eq(invoiceDeliveries.method, "EMAIL")
       )
-      .limit(1);
+    )
+    .limit(1);
 
-    if (!hasDelivery) {
-      const latestAttempt = await getLatestSendAttempt(
-        db,
-        organizationId,
-        invoiceId
+  if (!hasEmailDelivery) {
+    const latestAttempt = await getLatestSendAttempt(
+      db,
+      organizationId,
+      invoiceId
+    );
+    if (!latestAttempt) {
+      throw new ConflictError(
+        "This invoice has not been sent by email yet; use Send instead."
       );
-      if (!latestAttempt) {
-        throw new ConflictError(
-          "This invoice has not been sent yet; send it first"
-        );
-      }
     }
   }
 
@@ -908,8 +1016,8 @@ export async function resendInvoice(
   }
   const attempt = claim.attempt;
 
-  await markDispatching(db, attempt.id);
-
+  // deliver() itself performs the CLAIMED->DISPATCHING CAS immediately
+  // before the provider call.
   const deliverResult = await deliver(
     db,
     organizationId,
@@ -918,6 +1026,11 @@ export async function resendInvoice(
     actorUserId,
     attempt.id
   );
+
+  if (deliverResult.emailOutcome === "LOST_OWNERSHIP") {
+    return (await getInvoice(db, organizationId, invoiceId)).invoice;
+  }
+
   const success = deliverResult.emailOutcome === "SENT";
 
   // If invoice.sentAt was null when resendInvoice started, AND this resend

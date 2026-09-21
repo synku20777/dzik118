@@ -1055,6 +1055,14 @@ const lv: Record<string, string> = {
   "Sending in progress…": "Notiek nosūtīšana…",
   "Record paper dispatch": "Reģistrēt papīra nosūtīšanu",
   "Paper dispatched": "Papīrs nosūtīts",
+  "This invoice was delivered by email previously. A later attempt's outcome could not be confirmed -- verify the recipient mailbox or provider logs before resending.":
+    "Šis rēķins iepriekš tika nosūtīts pa e-pastu. Vēlākā mēģinājuma rezultātu neizdevās apstiprināt -- pirms atkārtotas nosūtīšanas pārbaudiet saņēmēja pastkasti vai pakalpojumu sniedzēja žurnālus.",
+  "This invoice was delivered by email previously. The most recent resend failed -- use Resend to try again.":
+    'Šis rēķins iepriekš tika nosūtīts pa e-pastu. Jaunākais atkārtotas nosūtīšanas mēģinājums neizdevās -- izmantojiet "Nosūtīt atkārtoti", lai mēģinātu vēlreiz.',
+  "Paper (unverified legacy record)":
+    "Papīrs (nepārbaudīts vēsturisks ieraksts)",
+  "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch.":
+    "Automātiski reģistrēts saskaņā ar veco piegādes darbplūsmu -- nav apstiprināta manuāla fiziska nosūtīšana.",
 };
 
 const ru: Record<string, string> = {
@@ -2101,6 +2109,14 @@ const ru: Record<string, string> = {
   "Sending in progress…": "Выполняется отправка…",
   "Record paper dispatch": "Зафиксировать отправку на бумаге",
   "Paper dispatched": "Отправлено на бумаге",
+  "This invoice was delivered by email previously. A later attempt's outcome could not be confirmed -- verify the recipient mailbox or provider logs before resending.":
+    "Этот счёт ранее был доставлен по электронной почте. Результат более позднего мероприятия не удалось подтвердить -- проверьте почтовый ящик получателя или логи провайдера перед повторной отправкой.",
+  "This invoice was delivered by email previously. The most recent resend failed -- use Resend to try again.":
+    "Этот счёт ранее был доставлен по электронной почте. Последняя повторная отправка не удалась -- используйте «Отправить повторно», чтобы попробовать снова.",
+  "Paper (unverified legacy record)":
+    "Бумага (непроверенная историческая запись)",
+  "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch.":
+    "Зафиксировано автоматически по старому процессу доставки -- не является подтверждённой ручной физической отправкой.",
 };
 
 export function translate(locale: Locale, text: string): string {

@@ -132,9 +132,15 @@ describe("invoice send attempts state model", () => {
       expect(second.attempt.status).toBe("CLAIMED");
 
       // Move to DISPATCHING: third claim still fails
-      const dispatching = await markDispatching(db, first.attempt.id);
-      expect(dispatching.status).toBe("DISPATCHING");
-      expect(dispatching.dispatchStartedAt).toBeInstanceOf(Date);
+      const dispatching = await markDispatching(
+        db,
+        first.attempt.id,
+        org.id,
+        invoice.id
+      );
+      expect(dispatching).not.toBeNull();
+      expect(dispatching!.status).toBe("DISPATCHING");
+      expect(dispatching!.dispatchStartedAt).toBeInstanceOf(Date);
 
       const third = await claimSendAttempt(db, org.id, invoice.id);
       expect(third.claimed).toBe(false);
@@ -257,9 +263,15 @@ describe("invoice send attempts state model", () => {
       const claim2 = await claimSendAttempt(db, org.id, invoice.id);
       expect(claim2.claimed).toBe(true);
 
-      const dispatching = await markDispatching(db, claim2.attempt.id);
+      const dispatching = await markDispatching(
+        db,
+        claim2.attempt.id,
+        org.id,
+        invoice.id
+      );
+      expect(dispatching).not.toBeNull();
       // 5d. Fresh DISPATCHING row: returned unchanged
-      const recFreshDispatch = await reconcileStaleAttempt(db, dispatching);
+      const recFreshDispatch = await reconcileStaleAttempt(db, dispatching!);
       expect(recFreshDispatch.id).toBe(claim2.attempt.id);
       expect(recFreshDispatch.status).toBe("DISPATCHING");
 
@@ -268,7 +280,7 @@ describe("invoice send attempts state model", () => {
         "UPDATE invoice_send_attempts SET dispatch_started_at = now() - interval '10 minutes' WHERE id = $1",
         [claim2.attempt.id]
       );
-      const recStaleDispatch = await reconcileStaleAttempt(db, dispatching);
+      const recStaleDispatch = await reconcileStaleAttempt(db, dispatching!);
       expect(recStaleDispatch.id).toBe(claim2.attempt.id);
       expect(recStaleDispatch.status).toBe("UNKNOWN");
       expect(recStaleDispatch.errorCode).toBe("STALE_DISPATCH_NO_CONFIRMATION");
@@ -322,8 +334,14 @@ describe("invoice send attempts state model", () => {
       expect(staleSnapshot.status).toBe("CLAIMED");
 
       // Before calling reconcileStaleAttempt, the real owner makes progress and transitions to DISPATCHING
-      const dispatching = await markDispatching(db, claim.attempt.id);
-      expect(dispatching.status).toBe("DISPATCHING");
+      const dispatching = await markDispatching(
+        db,
+        claim.attempt.id,
+        org.id,
+        invoice.id
+      );
+      expect(dispatching).not.toBeNull();
+      expect(dispatching!.status).toBe("DISPATCHING");
 
       // Call reconcileStaleAttempt with the stale-claimed snapshot captured earlier
       const result = await reconcileStaleAttempt(db, staleSnapshot);

@@ -311,7 +311,7 @@ describe("workbench bulk actions", () => {
     expect(result.skipped).toEqual([
       {
         invoiceId: draftInvoice.id,
-        reason: "Only a PREPARED invoice can be sent",
+        reason: "Cannot send an invoice in DRAFT status",
       },
     ]);
 
