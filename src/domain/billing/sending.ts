@@ -501,11 +501,14 @@ async function finalizeInvoiceSent(
 /**
  * Reconciles stale CLAIMED or DISPATCHING attempts within the invoice domain.
  *
- * If a DISPATCHING attempt has exceeded the staleness threshold, but an
- * invoice_deliveries row linked to that attempt already shows a confirmed
- * SENT outcome (e.g. worker crashed after paper/email delivery insert but
- * before finalization transaction), completes the finalization rather than
- * falsely demoting to UNKNOWN.
+ * If a DISPATCHING attempt has exceeded the staleness threshold, but the
+ * EMAIL invoice_deliveries row linked to that attempt already shows a
+ * confirmed SENT outcome (e.g. worker crashed after the delivery insert but
+ * before the finalization transaction), completes the finalization rather
+ * than falsely demoting to UNKNOWN. PAPER delivery is never considered here
+ * -- manual PAPER dispatch is a separate, unattempted-linked channel (see
+ * recordPaperDispatch), so it can never be this electronic attempt's own
+ * evidence.
  */
 async function reconcileAttemptForInvoice(
   db: Db,
@@ -545,11 +548,17 @@ async function reconcileAttemptForInvoice(
     return { action: "IN_FLIGHT", attempt: reconciled };
   }
 
-  // targetStatus is UNKNOWN (stale DISPATCHING)
-  // Fix 6: Check whether any invoice_deliveries row linked to that attempt_id
-  // already shows a confirmed SENT outcome (PAPER always qualifies since it's never ambiguous;
-  // EMAIL qualifies too, since if the delivery row says SENT, the email genuinely was confirmed
-  // even if the finalization transaction itself never ran).
+  // targetStatus is UNKNOWN (stale DISPATCHING). This attempt is an
+  // ELECTRONIC (invoice_send_attempts) attempt, so only an EMAIL delivery
+  // row can ever legitimately prove IT was confirmed -- manual PAPER
+  // dispatch always sets attemptId: null (recordPaperDispatch never links
+  // to an electronic attempt), so a PAPER row should never be able to
+  // satisfy this check. Scoped to method='EMAIL' explicitly (rather than
+  // "any linked row with status SENT") so a legacy/pre-refactor PAPER row
+  // that might still carry a non-null attemptId from the old auto-success
+  // era can never masquerade as confirmed evidence for an electronic
+  // attempt -- the same reasoning that made isInitialPaperDispatch
+  // unverified-by-default for old rows applies here too.
   const deliveries = await db
     .select()
     .from(invoiceDeliveries)
@@ -560,29 +569,18 @@ async function reconcileAttemptForInvoice(
       )
     );
 
-  const hasConfirmedSent = deliveries.some((d) => d.status === "SENT");
+  const emailDelivery = deliveries.find((d) => d.method === "EMAIL");
+  const hasConfirmedSent = emailDelivery?.status === "SENT";
 
   if (hasConfirmedSent) {
-    let attemptTargetStatus: "SENT" | "UNKNOWN" | "FAILED" = "SENT";
-    let attemptErrorCode: string | null = null;
-
-    const emailDelivery = deliveries.find((d) => d.method === "EMAIL");
-    if (emailDelivery?.status === "UNKNOWN") {
-      attemptTargetStatus = "UNKNOWN";
-      attemptErrorCode = emailDelivery.errorCode ?? "DELIVERY_OUTCOME_UNKNOWN";
-    } else if (emailDelivery?.status === "FAILED") {
-      attemptTargetStatus = "FAILED";
-      attemptErrorCode = emailDelivery.errorCode ?? "DELIVERY_FAILED";
-    }
-
     const { invoice: sentInvoice } = await finalizeInvoiceSent(db, {
       organizationId,
       invoiceId,
       billingCaseId,
       actorUserId,
       attemptId: row.id,
-      attemptTargetStatus,
-      attemptErrorCode,
+      attemptTargetStatus: "SENT",
+      attemptErrorCode: null,
       expectedAttemptStatus: "DISPATCHING",
     });
 

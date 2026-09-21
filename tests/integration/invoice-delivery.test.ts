@@ -1214,31 +1214,26 @@ describe("invoice sending", () => {
     await cleanupOrg(org.id);
   });
 
-  it("Fix 6: stale DISPATCHING attempt with confirmed PAPER delivery completes finalization instead of UNKNOWN", async () => {
+  it("Fix 6 (revised): stale DISPATCHING electronic attempt with confirmed EMAIL delivery completes finalization instead of UNKNOWN", async () => {
     const { org, invoice } = await setupPreparedInvoice(
-      "IT-G Org StalePaperConfirm",
-      4,
-      {
-        billingEmail: undefined,
-        invoiceByEmail: false,
-        invoiceByPaper: true,
-      }
+      "IT-G Org StaleEmailConfirm",
+      4
     );
 
-    // Claim an attempt for a PAPER-only invoice
     const claim = await claimSendAttempt(db, org.id, invoice.id);
     expect(claim.claimed).toBe(true);
     await markDispatching(db, claim.attempt.id, org.id, invoice.id);
 
-    // Manually insert a PAPER invoice_deliveries row with status SENT and attempt_id set to that attempt's id
-    // (mirroring what deliver() would have done before a worker crash)
+    // Manually insert an EMAIL invoice_deliveries row with status SENT and
+    // attempt_id set to that attempt's id (mirroring what deliver() would
+    // have done before a worker crash).
     await db.insert(invoiceDeliveries).values({
       organizationId: org.id,
       invoiceId: invoice.id,
       attemptId: claim.attempt.id,
-      method: "PAPER",
-      destinationEmail: null,
-      provider: "paper",
+      method: "EMAIL",
+      destinationEmail: "resident@example.com",
+      provider: "smtp",
       status: "SENT",
       sentAt: new Date(),
     });
@@ -1275,6 +1270,163 @@ describe("invoice sending", () => {
       )
       .then((r) => r.rows);
     expect(attemptRow.status).toBe("SENT");
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Regression: stale DISPATCHING electronic attempt with ONLY a linked PAPER/SENT row (no EMAIL evidence) reconciles to UNKNOWN, never SENT", async () => {
+    // The previous version of this reconciliation logic treated ANY linked
+    // delivery row with status SENT as confirmation, which let an
+    // (architecturally unrealistic, but historically possible) PAPER-linked
+    // row falsely confirm an electronic attempt. Only EMAIL evidence may
+    // confirm an electronic attempt now.
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org StalePaperCannotConfirm",
+      5
+    );
+
+    const claim = await claimSendAttempt(db, org.id, invoice.id);
+    expect(claim.claimed).toBe(true);
+    await markDispatching(db, claim.attempt.id, org.id, invoice.id);
+
+    await db.insert(invoiceDeliveries).values({
+      organizationId: org.id,
+      invoiceId: invoice.id,
+      attemptId: claim.attempt.id,
+      method: "PAPER",
+      destinationEmail: null,
+      provider: "paper",
+      status: "SENT",
+      sentAt: new Date(),
+    });
+
+    await db.$client.query(
+      "update invoice_send_attempts set dispatch_started_at = now() - interval '10 minutes' where id = $1",
+      [claim.attempt.id]
+    );
+
+    await expect(
+      sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId)
+    ).rejects.toThrow(ConflictError);
+
+    const [attemptRow] = await db.$client
+      .query("select status from invoice_send_attempts where id = $1", [
+        claim.attempt.id,
+      ])
+      .then((r) => r.rows);
+    expect(attemptRow.status).toBe("UNKNOWN");
+
+    const { invoice: reloaded, caseStatus } = await getInvoice(
+      db,
+      org.id,
+      invoice.id
+    );
+    expect(reloaded.sentAt).toBeNull();
+    expect(caseStatus).toBe("PREPARED");
+
+    await cleanupOrg(org.id);
+  });
+
+  it("CASE 7: expected-attempt CAS updating zero rows (another finalizer already won) still reconciles to a coherent SENT state with exactly one audit", async () => {
+    // Deterministically forces the exact zero-row expected-attempt CAS
+    // window using REAL Postgres row locking as the synchronization
+    // primitive, not an artificial gate or a sleep: a manually-held open
+    // transaction on a second raw connection performs the SAME conditional
+    // UPDATE finalizeInvoiceSentInTx would run and holds it uncommitted,
+    // so a concurrent sendInvoice() call's own attempt-status CAS is
+    // guaranteed to block on that row lock and then see zero rows once the
+    // held transaction commits first.
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org CasZeroRowConflict",
+      6
+    );
+
+    const claim = await claimSendAttempt(db, org.id, invoice.id);
+    await markDispatching(db, claim.attempt.id, org.id, invoice.id);
+    await db.insert(invoiceDeliveries).values({
+      organizationId: org.id,
+      invoiceId: invoice.id,
+      attemptId: claim.attempt.id,
+      method: "EMAIL",
+      destinationEmail: "resident@example.com",
+      provider: "smtp",
+      status: "SENT",
+      sentAt: new Date(),
+    });
+    await db.$client.query(
+      "update invoice_send_attempts set dispatch_started_at = now() - interval '10 minutes' where id = $1",
+      [claim.attempt.id]
+    );
+
+    // A second raw connection stands in for "another finalizer that wins
+    // the race": it performs the exact conditional attempt-status
+    // transition finalizeInvoiceSentInTx uses (DISPATCHING -> SENT,
+    // expected-status guarded) inside an open, uncommitted transaction.
+    const lockHolder = await createIntegrationDb();
+    try {
+      // Simulates a DIFFERENT reconciler racing on the same stale attempt
+      // and (having independently seen no confirmed evidence, or simply
+      // losing its own race) demoting it to UNKNOWN -- exactly
+      // markUnknownConditional's own CAS shape.
+      await lockHolder.$client.query("BEGIN");
+      const held = await lockHolder.$client.query(
+        `UPDATE invoice_send_attempts
+         SET status = 'UNKNOWN', error_code = 'STALE_DISPATCH_NO_CONFIRMATION', completed_at = now(), updated_at = now()
+         WHERE id = $1 AND status = 'DISPATCHING'
+         RETURNING id`,
+        [claim.attempt.id]
+      );
+      expect(held.rowCount).toBe(1);
+
+      // sendInvoice's own reconciliation path will hit IN_FLIGHT on this
+      // stale attempt, find the confirmed EMAIL evidence, and attempt the
+      // SAME conditional UPDATE -- which blocks on lockHolder's open
+      // transaction's row lock.
+      const dbB = await createIntegrationDb();
+      let sendPromiseSettled = false;
+      const sendPromise = sendInvoice(
+        dbB,
+        org.id,
+        invoice.id,
+        stubDeps(),
+        seedAdminId
+      ).finally(() => {
+        sendPromiseSettled = true;
+      });
+
+      // Give the second call time to actually reach and block on the row
+      // lock before releasing it (bounded wait to sequence the test step,
+      // not the correctness mechanism -- the row lock itself is).
+      await new Promise((r) => setTimeout(r, 100));
+      expect(sendPromiseSettled).toBe(false);
+
+      await lockHolder.$client.query("COMMIT");
+
+      const result = await sendPromise;
+      expect(result.sentAt).not.toBeNull();
+
+      await dbB.$client.end();
+    } finally {
+      await lockHolder.$client.end();
+    }
+
+    const [attemptRow] = await db.$client
+      .query("select status from invoice_send_attempts where id = $1", [
+        claim.attempt.id,
+      ])
+      .then((r) => r.rows);
+    expect(attemptRow.status).toBe("SENT");
+
+    const { invoice: reloaded, caseStatus } = await getInvoice(
+      db,
+      org.id,
+      invoice.id
+    );
+    expect(reloaded.sentAt).not.toBeNull();
+    expect(caseStatus).toBe("SENT");
+
+    const logs = await listAuditLogs(db, org.id);
+    expect(logs.filter((l) => l.action === "INVOICE_SENT")).toHaveLength(1);
 
     await cleanupOrg(org.id);
   });
@@ -2019,6 +2171,186 @@ describe("invoice sending", () => {
     await cleanupOrg(org.id);
   });
 
+  it("Regression: sendInvoice() called directly is a no-op (zero provider calls) once EMAIL has ever been confirmed delivered, even if the LATEST attempt is FAILED", async () => {
+    // The exact stale-tab scenario: attempt 1 SENT, an explicit resend
+    // FAILED -- the latest attempt is FAILED, but EMAIL has definitely
+    // already been delivered once. sendInvoice must not treat this as "no
+    // attempt has ever succeeded" and claim a fresh duplicate dispatch.
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org StaleSendTab",
+      3
+    );
+
+    await sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId);
+
+    await resendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => ({
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "SIMULATED_FAIL",
+            failureClassification: "DEFINITIVE" as const,
+          }),
+        },
+      }),
+      seedAdminId,
+      "resend-1"
+    );
+
+    const attemptsBefore = await db.$client
+      .query(
+        "select status from invoice_send_attempts where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows.map((row) => row.status));
+    expect(attemptsBefore).toEqual(["SENT", "FAILED"]);
+
+    let emailCallCount = 0;
+    const result = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => {
+            emailCallCount++;
+            return { success: true, provider: "smtp" as const };
+          },
+        },
+      }),
+      seedAdminId
+    );
+
+    expect(emailCallCount).toBe(0);
+    const attemptsAfter = await db.$client
+      .query(
+        "select status from invoice_send_attempts where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows.map((row) => row.status));
+    expect(attemptsAfter).toEqual(["SENT", "FAILED"]);
+    expect(result.id).toBe(invoice.id);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Regression: sendInvoice() is a no-op against a legacy EMAIL/SENT delivery row with no invoice_send_attempts row at all", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org LegacyEmailSent",
+      4
+    );
+
+    // Simulate pre-attempts-model historical data: an EMAIL/SENT delivery
+    // row exists, but no invoice_send_attempts row was ever created for it
+    // (this predates that table). The invoice itself is already SENT.
+    await db.insert(invoiceDeliveries).values({
+      organizationId: org.id,
+      invoiceId: invoice.id,
+      attemptId: null,
+      method: "EMAIL",
+      destinationEmail: "resident@example.com",
+      provider: "smtp",
+      status: "SENT",
+      sentAt: new Date(),
+    });
+    await db.$client.query(
+      "update invoices set sent_at = now() where id = $1",
+      [invoice.id]
+    );
+    await db.$client.query(
+      "update billing_cases set status = 'SENT' where id = (select billing_case_id from invoices where id = $1)",
+      [invoice.id]
+    );
+
+    let emailCallCount = 0;
+    await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => {
+            emailCallCount++;
+            return { success: true, provider: "smtp" as const };
+          },
+        },
+      }),
+      seedAdminId
+    );
+
+    expect(emailCallCount).toBe(0);
+    const attemptCount = await db.$client
+      .query(
+        "select count(*) from invoice_send_attempts where invoice_id = $1",
+        [invoice.id]
+      )
+      .then((r) => Number(r.rows[0].count));
+    expect(attemptCount).toBe(0);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Regression: an unverified legacy PAPER/SENT row cannot serve as confirmed evidence during stale electronic-attempt reconciliation", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org LegacyPaperEvidence",
+      5,
+      { invoiceByEmail: true, invoiceByPaper: true }
+    );
+
+    const claim = await claimSendAttempt(db, org.id, invoice.id);
+    expect(claim.claimed).toBe(true);
+    await markDispatching(db, claim.attempt.id, org.id, invoice.id);
+
+    // An unverified legacy PAPER row -- NOT linked to this attempt in the
+    // current architecture (recordPaperDispatch always sets attemptId:
+    // null), but present in the invoice's overall delivery history. It
+    // must not be able to prove that the electronic attempt was confirmed.
+    await db.insert(invoiceDeliveries).values({
+      organizationId: org.id,
+      invoiceId: invoice.id,
+      attemptId: null,
+      method: "PAPER",
+      destinationEmail: null,
+      provider: "paper",
+      status: "SENT",
+      isInitialPaperDispatch: false,
+    });
+
+    // Backdate past the staleness threshold (5 minutes).
+    await db.$client.query(
+      "update invoice_send_attempts set dispatch_started_at = now() - interval '10 minutes' where id = $1",
+      [claim.attempt.id]
+    );
+
+    // No EMAIL delivery row exists for this attempt -- reconciliation must
+    // demote it to UNKNOWN, never finalize it as SENT off the strength of
+    // the unrelated legacy PAPER row.
+    await expect(
+      sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId)
+    ).rejects.toThrow(ConflictError);
+
+    const [attemptRow] = await db.$client
+      .query("select status from invoice_send_attempts where id = $1", [
+        claim.attempt.id,
+      ])
+      .then((r) => r.rows);
+    expect(attemptRow.status).toBe("UNKNOWN");
+
+    const { invoice: reloaded, caseStatus } = await getInvoice(
+      db,
+      org.id,
+      invoice.id
+    );
+    expect(reloaded.sentAt).toBeNull();
+    expect(caseStatus).toBe("PREPARED");
+
+    await cleanupOrg(org.id);
+  });
+
   it("CASE 3: EMAIL sent, explicit resend comes back UNKNOWN -- overall stays SENT, original success preserved, UNKNOWN never auto-retried", async () => {
     const { org, invoice } = await setupPreparedInvoice(
       "IT-G Org SentThenUnknown",
@@ -2063,10 +2395,28 @@ describe("invoice sending", () => {
       .then((r) => r.rows.map((row) => row.status));
     expect(deliveries).toEqual(["SENT", "UNKNOWN"]);
 
-    // UNKNOWN is never auto-retried, even via the "first send" path.
-    await expect(
-      sendInvoice(db, org.id, invoice.id, stubDeps(), seedAdminId)
-    ).rejects.toThrow(ConflictError);
+    // EMAIL has already been confirmed delivered once (the historical SENT
+    // attempt), so sendInvoice's own "first send" semantics are already
+    // satisfied -- it is a safe, idempotent no-op here (not a retry, not a
+    // throw), the same as it would be if the latest attempt were still
+    // SENT. It must NOT call the provider again.
+    let staleSendCallCount = 0;
+    const afterStaleSend = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => {
+            staleSendCallCount++;
+            return { success: true, provider: "smtp" as const };
+          },
+        },
+      }),
+      seedAdminId
+    );
+    expect(staleSendCallCount).toBe(0);
+    expect(afterStaleSend.sentAt?.getTime()).toBe(originalSentAt);
 
     // An explicit follow-up resend remains safe and available.
     let followUpCallCount = 0;

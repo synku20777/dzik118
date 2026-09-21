@@ -15,6 +15,7 @@ import {
   markFailed,
   markUnknown,
 } from "../../src/domain/billing/send-attempts";
+import { recordPaperDispatch } from "../../src/domain/billing/sending";
 import { createSupabaseAdminClient } from "../../src/lib/supabase/admin";
 import {
   invoicePdfObjectKey,
@@ -1858,6 +1859,194 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
         exact: true,
       })
     ).toBeVisible();
+
+    // =========================================================================
+    // Scenario 7: PAPER DISPATCHED FIRST, THEN SEND EMAIL FOR REAL
+    // - Record paper dispatch via the domain layer (as an admin would have
+    //   via the UI in an earlier session) -- invoice becomes overall SENT
+    //   with EMAIL never attempted.
+    // Assert:
+    // 1. The page still offers "Send" (not "Resend"), since no EMAIL
+    //    attempt has ever been made -- this is exactly the routing bug
+    //    this pass fixed.
+    // 2. Clicking it actually sends a real email via Mailpit.
+    // 3. After sending, the PAPER record is unchanged and both delivery
+    //    history rows are visible independently.
+    // =========================================================================
+    const paperFirstEmail = `e2e-pfirst-${Date.now()}@example.com`;
+    const inv7 = await setupPreparedE2EInvoice(
+      db,
+      supabaseAdmin,
+      orgId,
+      periodId,
+      adminUserId,
+      {
+        invoiceByEmail: true,
+        invoiceByPaper: true,
+        billingEmail: paperFirstEmail,
+      }
+    );
+    createdDwellingIds.push(inv7.dwelling.id);
+    createdInvoiceIds.push(inv7.invoice.id);
+
+    await recordPaperDispatch(db, orgId, inv7.invoice.id, adminUserId);
+
+    const inv7Url = `${base}/periods/${periodId}/invoices/${inv7.invoice.id}`;
+    await page.goto(inv7Url);
+
+    // Overall invoice is already SENT (via paper), but the electronic
+    // action must still be "Send", not "Resend" -- no EMAIL attempt exists.
+    await expect(page.locator("h1 .status-badge")).toContainText("Sent");
+    const sendBtn7 = page.getByRole("button", { name: "Send", exact: true });
+    await expect(sendBtn7).toBeVisible();
+    await expect(sendBtn7).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "Resend", exact: true })
+    ).toHaveCount(0);
+
+    await sendBtn7.click();
+
+    // Real SMTP send actually happened.
+    await expect
+      .poll(async () => {
+        const resp = await page.request.get(
+          "http://127.0.0.1:54324/api/v1/messages"
+        );
+        if (!resp.ok()) return false;
+        const data = (await resp.json()) as {
+          messages: { To: { Address: string }[]; Subject: string }[];
+        };
+        return data.messages?.some(
+          (m) =>
+            m.To?.some((t) => t.Address === paperFirstEmail) &&
+            m.Subject?.includes(inv7.invoice.invoiceNumber)
+        );
+      })
+      .toBe(true);
+
+    // Page now offers Resend, not Send, and both channels' history are
+    // independently visible.
+    await expect(
+      page.getByRole("button", { name: "Send", exact: true })
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Resend", exact: true })
+    ).toBeVisible();
+    await expect(page.getByText("✓ Paper dispatched")).toBeVisible();
+    const historySection7 = page.locator("section", {
+      hasText: "Delivery history",
+    });
+    await expect(
+      historySection7.locator("tbody tr", { hasText: "Email" })
+    ).toContainText("Sent");
+    await expect(
+      historySection7.locator("tbody tr", { hasText: "Paper" })
+    ).toContainText("Paper dispatched");
+
+    // =========================================================================
+    // Scenario 8: EMAIL SENT, THEN A RESEND FAILS, THEN RESEND WORKS FOR REAL
+    // - Send for real through the UI (as Scenario 6 does).
+    // - Directly seed a failed explicit resend (a real browser-driven
+    //   DEFINITIVE provider failure isn't practical to force against a
+    //   local Mailpit that accepts everything -- matches this file's own
+    //   established convention of direct DB seeding for states impractical
+    //   to reproduce through the UI alone, e.g. Scenario 1/5).
+    // Assert:
+    // 1. The page shows "Resend" (not "Send") and the "delivered
+    //    previously, most recent resend failed" notice.
+    // 2. Clicking Resend actually retries -- a further real email arrives.
+    // =========================================================================
+    const resendWorksEmail = `e2e-resendworks-${Date.now()}@example.com`;
+    const inv8 = await setupPreparedE2EInvoice(
+      db,
+      supabaseAdmin,
+      orgId,
+      periodId,
+      adminUserId,
+      {
+        invoiceByEmail: true,
+        invoiceByPaper: false,
+        billingEmail: resendWorksEmail,
+      }
+    );
+    createdDwellingIds.push(inv8.dwelling.id);
+    createdInvoiceIds.push(inv8.invoice.id);
+
+    const inv8Url = `${base}/periods/${periodId}/invoices/${inv8.invoice.id}`;
+    await page.goto(inv8Url);
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const resp = await page.request.get(
+          "http://127.0.0.1:54324/api/v1/messages"
+        );
+        if (!resp.ok()) return false;
+        const data = (await resp.json()) as {
+          messages: { To: { Address: string }[]; Subject: string }[];
+        };
+        return data.messages?.some(
+          (m) =>
+            m.To?.some((t) => t.Address === resendWorksEmail) &&
+            m.Subject?.includes(inv8.invoice.invoiceNumber)
+        );
+      })
+      .toBe(true);
+
+    const claim8 = await claimSendAttempt(db, orgId, inv8.invoice.id);
+    await markFailed(db, claim8.attempt.id, "SMTP_REJECTED");
+    await db.insert(invoiceDeliveries).values({
+      organizationId: orgId,
+      invoiceId: inv8.invoice.id,
+      attemptId: claim8.attempt.id,
+      method: "EMAIL",
+      destinationEmail: resendWorksEmail,
+      provider: "smtp",
+      status: "FAILED",
+      errorCode: "SMTP_REJECTED",
+    });
+
+    await page.reload();
+
+    // Resend (not Send) is offered, with the "delivered previously" notice.
+    await expect(
+      page.getByRole("button", { name: "Send", exact: true })
+    ).toHaveCount(0);
+    const resendBtn8 = page.getByRole("button", {
+      name: "Resend",
+      exact: true,
+    });
+    await expect(resendBtn8).toBeVisible();
+    await expect(page.getByText(/most recent resend failed/i)).toBeVisible();
+
+    const mailCountBeforeRetry = await page.request
+      .get("http://127.0.0.1:54324/api/v1/messages")
+      .then((r) => r.json())
+      .then(
+        (d: { messages: { To: { Address: string }[] }[] }) =>
+          d.messages?.filter((m) =>
+            m.To?.some((t) => t.Address === resendWorksEmail)
+          ).length ?? 0
+      );
+
+    await resendBtn8.click();
+
+    // Clicking Resend actually retried: one MORE real message arrives.
+    await expect
+      .poll(async () => {
+        const resp = await page.request.get(
+          "http://127.0.0.1:54324/api/v1/messages"
+        );
+        if (!resp.ok()) return false;
+        const data = (await resp.json()) as {
+          messages: { To: { Address: string }[] }[];
+        };
+        const count =
+          data.messages?.filter((m) =>
+            m.To?.some((t) => t.Address === resendWorksEmail)
+          ).length ?? 0;
+        return count;
+      })
+      .toBe(mailCountBeforeRetry + 1);
   } finally {
     await cleanupTestDwellingsAndInvoices(
       db,

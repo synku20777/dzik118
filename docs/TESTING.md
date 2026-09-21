@@ -78,7 +78,7 @@ The integration test suite (`tests/integration/payments.test.ts`) verifies:
 - **Overpayment reconciliation** ("PACKAGE F2"): Matching a transaction where `amount > remainingBalance`, verifying that the invoice is marked `PAID`, allocation is capped at remaining balance, and the excess amount is held as unallocated dwelling account credit (`NEGATIVE` account balance).
 - **Credit carry-forward cycle** ("PACKAGE F3"): Verifying that unallocated dwelling credit from an overpayment is automatically consumed in `prepareInvoice` for the next billing period to reduce the new invoice's `amountDue`, including the boundary case where the credit exceeds the new charges.
 
-`tests/integration/append-only-triggers.test.ts` verifies the append-only ledger triggers: executing an `UPDATE` or `DELETE` query against `payment_allocations` or `late_fee_adjustments` fails with a PostgreSQL trigger exception, preserving the original row.
+`tests/integration/append-only-triggers.test.ts` verifies the append-only ledger triggers: executing an `UPDATE` or `DELETE` query against `account_entries`, `payment_allocations`, or `late_fee_adjustments` fails with a PostgreSQL trigger exception, preserving the original row.
 
 ### Invoice template & snapshot coverage in integration tests
 

@@ -2,6 +2,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
 import { billingCases } from "../../db/schema/billing";
 import {
+  invoiceDeliveries,
   invoices,
   invoiceSendAttempts,
   type invoiceSendAttemptStatusEnum,
@@ -241,18 +242,48 @@ export async function claimSendCommand(
       .orderBy(desc(invoiceSendAttempts.createdAt))
       .limit(1);
 
-    if (mode === "FIRST_SEND" && latestAttempt?.status === "SENT") {
-      // The EMAIL channel's own history already confirms delivery -- a true
-      // idempotent no-op, regardless of how invoice.sentAt got set.
-      return { outcome: "ALREADY_SENT", invoice };
-    }
-
+    // An active (CLAIMED/DISPATCHING) attempt takes priority over the
+    // historical-confirmed-EMAIL check below: even if an EARLIER attempt
+    // already delivered successfully, an attempt currently in flight might
+    // be a crashed worker whose own delivery row was written but whose
+    // finalization transaction never ran -- that must still go through
+    // reconcileAttemptForInvoice (IN_FLIGHT) to actually finalize it, not
+    // be short-circuited into a stale-invoice ALREADY_SENT no-op.
     if (
       latestAttempt &&
       (latestAttempt.status === "CLAIMED" ||
         latestAttempt.status === "DISPATCHING")
     ) {
       return { outcome: "IN_FLIGHT", attempt: latestAttempt };
+    }
+
+    if (mode === "FIRST_SEND") {
+      // "Already sent" for FIRST_SEND must be based on ANY historical
+      // confirmed EMAIL delivery, not merely the LATEST attempt: once
+      // attempt 1 -> SENT and a later explicit resend -> FAILED, the
+      // latest attempt is FAILED even though the EMAIL channel has
+      // definitely already delivered once. Without this check, a stale
+      // "Send" form (e.g. a second browser tab that never saw the resend)
+      // could call sendInvoice, see a non-SENT latest attempt, and claim a
+      // genuinely duplicate dispatch -- bypassing resendInvoice's
+      // commandId replay protection entirely. This also covers legacy
+      // EMAIL/SENT delivery rows with no linked invoice_send_attempts row
+      // at all (pre-migration data).
+      const [confirmedEmailDelivery] = await tx
+        .select({ id: invoiceDeliveries.id })
+        .from(invoiceDeliveries)
+        .where(
+          and(
+            eq(invoiceDeliveries.invoiceId, invoiceId),
+            eq(invoiceDeliveries.organizationId, organizationId),
+            eq(invoiceDeliveries.method, "EMAIL"),
+            eq(invoiceDeliveries.status, "SENT")
+          )
+        )
+        .limit(1);
+      if (confirmedEmailDelivery) {
+        return { outcome: "ALREADY_SENT", invoice };
+      }
     }
 
     if (mode === "FIRST_SEND" && latestAttempt?.status === "UNKNOWN") {

@@ -69,6 +69,18 @@ The email provider adapters (`src/lib/email/ses.ts`, `src/lib/email/smtp.ts`) no
 
 **Remaining boundary, not fixable by this application alone:** AWS SES's `SendEmail` v2 API has no client-supplied idempotency token and no practical way to look up "did I already send this" after a lost response, without building SNS/webhook-based reconciliation infrastructure (deliberately out of scope -- see the "Out of scope" notes in the relevant implementation). This means a genuinely ambiguous provider outcome can never be resolved to an exact-once guarantee automatically; it is held as `UNKNOWN` and surfaced for manual admin judgment (visible in the invoice's delivery history), which is the safest correct behavior given the provider's actual capabilities, not a workaround for an application bug.
 
+### Operator action required: old auto-PAPER-success data may show a contradictory delivery history
+
+Before migration `0009`, `sendInvoice`/`deliver` treated a dwelling's `invoiceByPaper` preference being enabled as automatic delivery success -- it populated `invoices.sent_at`, transitioned the billing case to `SENT`, and inserted a PAPER delivery row, with zero administrator action. Migration `0009` correctly stopped treating those old rows as verified (`is_initial_paper_dispatch` defaults to `false` for all historical data, and the admin UI renders them as "Paper (unverified legacy record)," never "Paper dispatched"), but it cannot retroactively fix the OLD business facts those rows already caused: `invoices.sent_at` and the billing case's `SENT` status.
+
+This means a real, pre-existing invoice can now legitimately display:
+
+- Invoice status: **SENT**
+- Delivery history: **Paper (unverified legacy record)**
+- No delivery marked as verified
+
+This is not a new bug -- it is the old bug's already-committed business fact, now correctly labeled as unverified rather than hidden behind a falsely-confident "Paper dispatched" label. It cannot be auto-corrected by any migration: the application has no way to know whether an administrator genuinely printed and physically posted/handed over that specific invoice at the time. If this matters for a given deployment, it requires a manual operator review -- for example, cross-referencing old PAPER-flagged invoices against physical mailing records or resident correspondence -- and, where warranted, an administrator can use the current "Record paper dispatch" action to add a new, genuinely verified record for that invoice (it does not touch or require clearing the old `sent_at`).
+
 ### Accepted: an explicit resend after a lost HTTP response can send a genuine duplicate
 
 The Resend action's `commandId` (a fresh value rendered into the form on each page load) deduplicates two submissions of the *same* rendered form -- a double-click or a browser's automatic retry of one POST. It deliberately does not survive a hard page reload: if the provider actually succeeded but the admin's browser never saw the response (a lost connection, a closed tab), reloading the page and clicking Resend again generates a new `commandId` and will send a genuine second email. This is accepted, not a bug: explicit resend is an intentionally repeatable admin action, and the alternative (a durable, reload-surviving idempotency key) is unwarranted complexity for a rare, admin-supervised, low-volume operation. An admin who suspects a lost response should check the invoice's delivery history or the mailbox/provider logs before resending, exactly as the UNKNOWN-outcome guidance already advises.
