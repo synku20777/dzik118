@@ -1084,6 +1084,26 @@ const lv: Record<string, string> = {
   "Not assigned yet": "Vēl nav piešķirts",
   dwellings: "dzīvokļi",
   "Applies to": "Attiecas uz",
+
+  // Tariff drawer (create/edit form) -- section headings, field hints,
+  // and scope-option descriptive copy.
+  TARIFF: "TARIFS",
+  General: "Vispārīgi",
+  Calculation: "Aprēķins",
+  "A price of 0.00 is valid and will show on the invoice.":
+    "Cena 0,00 ir derīga un tiks rādīta rēķinā.",
+  "Applies to every current and future dwelling.":
+    "Attiecas uz visiem esošajiem un turpmākajiem dzīvokļiem.",
+  "Applies to exactly one dwelling.": "Attiecas tieši uz vienu dzīvokli.",
+  "Applies only to the dwellings you choose. New dwellings are not included automatically.":
+    "Attiecas tikai uz jūsu izvēlētajiem dzīvokļiem. Jauni dzīvokļi netiek pievienoti automātiski.",
+  "Search dwellings": "Meklēt dzīvokļus",
+  "Filter by dwelling number...": "Filtrēt pēc dzīvokļa numura...",
+  "Select all visible": "Atlasīt visus redzamos",
+  "-- select a dwelling --": "-- izvēlieties dzīvokli --",
+  Validity: "Derīgums",
+  Advanced: "Papildu",
+  "Sort order": "Kārtošanas secība",
 };
 
 const ru: Record<string, string> = {
@@ -2159,6 +2179,26 @@ const ru: Record<string, string> = {
   "Not assigned yet": "Пока не назначено",
   dwellings: "квартир",
   "Applies to": "Применяется к",
+
+  // Tariff drawer (create/edit form) -- section headings, field hints,
+  // and scope-option descriptive copy.
+  TARIFF: "ТАРИФ",
+  General: "Общее",
+  Calculation: "Расчёт",
+  "A price of 0.00 is valid and will show on the invoice.":
+    "Цена 0,00 действительна и будет отображена в счёте.",
+  "Applies to every current and future dwelling.":
+    "Применяется ко всем текущим и будущим квартирам.",
+  "Applies to exactly one dwelling.": "Применяется ровно к одной квартире.",
+  "Applies only to the dwellings you choose. New dwellings are not included automatically.":
+    "Применяется только к выбранным вами квартирам. Новые квартиры не добавляются автоматически.",
+  "Search dwellings": "Поиск квартир",
+  "Filter by dwelling number...": "Фильтр по номеру квартиры...",
+  "Select all visible": "Выбрать все видимые",
+  "-- select a dwelling --": "-- выберите квартиру --",
+  Validity: "Срок действия",
+  Advanced: "Дополнительно",
+  "Sort order": "Порядок сортировки",
 };
 
 export function translate(locale: Locale, text: string): string {

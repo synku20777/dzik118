@@ -555,6 +555,40 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       dwellingsSelected: t("dwellings selected"),
       dwellingSelected: t("dwelling selected"),
       genericError: t("Something went wrong. Please try again."),
+      // Every Zod field message and domain ValidationError/ConflictError
+      // string createRule/updateRule can throw, keyed by its exact English
+      // text -- same convention as workbench-drawer.ts's `config.strings`.
+      // The client submits via the JS action client directly (not a real
+      // form POST), so Astro.getActionResult/friendlyActionErrorMessage
+      // never run for this flow; translation has to happen client-side by
+      // looking the raw message up in this dictionary.
+      "Enter a valid unit price, for example 0.35 or 12.50. Use up to 4 decimal places.":
+        t(
+          "Enter a valid unit price, for example 0.35 or 12.50. Use up to 4 decimal places."
+        ),
+      "Enter a valid VAT percentage, for example 21 or 21.5.": t(
+        "Enter a valid VAT percentage, for example 21 or 21.5."
+      ),
+      "A meter consumption rule requires a meter type": t(
+        "A meter consumption rule requires a meter type"
+      ),
+      "This rule requires a unit price (it would otherwise always bill 0)": t(
+        "This rule requires a unit price (it would otherwise always bill 0)"
+      ),
+      "A rule that applies to all dwellings cannot also have specific dwelling assignments":
+        t(
+          "A rule that applies to all dwellings cannot also have specific dwelling assignments"
+        ),
+      "A one-to-one rule must be assigned to exactly one dwelling": t(
+        "A one-to-one rule must be assigned to exactly one dwelling"
+      ),
+      "A selected-dwellings rule must be assigned to at least one dwelling": t(
+        "A selected-dwellings rule must be assigned to at least one dwelling"
+      ),
+      "One or more selected dwellings do not belong to this organization": t(
+        "One or more selected dwellings do not belong to this organization"
+      ),
+      "Billing rule not found": t("Billing rule not found"),
     })}
   >
     <header class="context-drawer-header">
@@ -579,16 +613,13 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       </button>
     </header>
     <div class="context-drawer-body">
-      {
-        (createResult?.error || updateResult?.error) && (
-          <p class="notice notice-danger" role="alert" data-tariff-drawer-error>
-            {friendlyActionErrorMessage(
-              createResult?.error ?? updateResult?.error,
-              locale
-            )}
-          </p>
-        )
-      }
+      <p
+        class="notice notice-danger"
+        role="alert"
+        data-tariff-drawer-error
+        hidden
+      >
+      </p>
       <form id="tariff-form" novalidate>
         <input type="hidden" name="organizationId" value={organizationId} />
         <input type="hidden" name="ruleId" id="tariff-ruleId" />
@@ -1267,9 +1298,17 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
 
         if (error) {
           if (errorBanner) {
-            errorBanner.textContent = isInputError(error)
+            const rawMessage = isInputError(error)
               ? (Object.values(error.fields).flat()[0] ?? error.message)
               : error.message;
+            // The action client returns the raw English message (Zod
+            // regex message or a domain Error's own text) -- translate it
+            // through the same dictionary the drawer's static labels use,
+            // falling back to the raw string for a message this dictionary
+            // doesn't have an entry for (e.g. a dynamic "code already
+            // exists" conflict, which embeds the submitted code and so
+            // can't be a fixed dictionary key).
+            errorBanner.textContent = strings[rawMessage] ?? rawMessage;
             errorBanner.hidden = false;
           }
           return;
