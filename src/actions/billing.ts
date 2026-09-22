@@ -8,12 +8,7 @@ import {
 } from "../db/schema/billing";
 import { meterTypeEnum } from "../db/schema/dwellings";
 import { requireOrganizationAccess } from "../domain/authorization/guards";
-import {
-  archiveRule,
-  createRule,
-  setDwellingRuleParticipation,
-  updateRule,
-} from "../domain/billing/rules";
+import { archiveRule, createRule, updateRule } from "../domain/billing/rules";
 import { decimalInput } from "../lib/decimal-input";
 import {
   bulkGenerateInvoices,
@@ -128,33 +123,6 @@ export const billing = {
         requireOrganizationAccess(locals.auth, organizationId);
         return withDb((db) =>
           updateRule(db, organizationId, ruleId, input, locals.auth!.userId)
-        );
-      }
-    ),
-  }),
-
-  // Dwelling-side "Manage tariffs" -- toggles THIS dwelling's participation
-  // in ONE_TO_MANY/ONE_TO_ONE rules only. Never edits a rule's own fields
-  // (spec: "must NEVER edit the tariff's own price/type/etc from the
-  // dwelling side").
-  updateDwellingTariffAssignments: defineAction({
-    accept: "form",
-    input: z.object({
-      organizationId: z.uuid(),
-      dwellingId: z.uuid(),
-      billingRuleIds: z.array(z.uuid()).optional(),
-    }),
-    handler: safeHandler(
-      async ({ organizationId, dwellingId, billingRuleIds }, { locals }) => {
-        requireOrganizationAccess(locals.auth, organizationId);
-        return withDb((db) =>
-          setDwellingRuleParticipation(
-            db,
-            organizationId,
-            dwellingId,
-            billingRuleIds ?? [],
-            locals.auth!.userId
-          )
         );
       }
     ),

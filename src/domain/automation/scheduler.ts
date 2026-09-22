@@ -18,19 +18,7 @@ import {
 } from "../billing/generation";
 import { bulkSendInvoices, type SendInvoiceDeps } from "../billing/sending";
 import { getCurrentOpenPeriod } from "../periods/periods";
-
-// "Today" as YYYY-MM-DD in the organization's own timezone (spec Section
-// 32: "organization billing decisions use organizations.timezone") --
-// en-CA formats as YYYY-MM-DD directly, which sorts/compares correctly
-// against the date-typed due_date column without a date-math library.
-function orgLocalDateString(now: Date, timezone: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
-}
+import { orgLocalDateString } from "../../lib/org-time";
 
 // billing-overdue-scan. No audit event: spec Section 31's list has no
 // dedicated OVERDUE action (BILLING_STATUS_OVERRIDDEN is for manual admin

@@ -20,11 +20,9 @@ import {
 import { dwellings, meterTypeEnum } from "../../db/schema/dwellings";
 import { isUniqueViolation } from "../../lib/db-errors";
 import { recordAuditEvent } from "../../lib/logging/audit";
+import { orgLocalDateString } from "../../lib/org-time";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
-import {
-  recalculateCaseReadinessForOpenPeriods,
-  recalculateCaseReadinessForOrganizationOpenPeriods,
-} from "../periods/case-readiness";
+import { recalculateCaseReadinessForOrganizationOpenPeriods } from "../periods/case-readiness";
 
 export { ConflictError, NotFoundError, ValidationError };
 
@@ -317,10 +315,10 @@ export async function updateRule(
   const { dwellingIds, ...patch } = input;
   try {
     return await db.transaction(async (tx) => {
-      // FOR UPDATE: this rule's scope/assignments can also change from the
-      // dwelling side (setDwellingRuleParticipation) -- locking here
-      // serializes the two paths against the same rule the same way
-      // setDwellingRuleParticipation locks a ONE_TO_ONE rule it's touching.
+      // FOR UPDATE: updateRule is the ONLY writer of billing_rule_assignments
+      // (see the note after listRuleAssignmentsWithDwellingNumbers below) --
+      // this lock still matters for two concurrent saves of the SAME rule
+      // racing each other's read-modify-write of its assignment set.
       const [lockedBefore] = await tx
         .select()
         .from(billingRules)
@@ -538,17 +536,27 @@ export async function getRuleAssignedDwellingIds(
   return rows.map((r) => r.dwellingId);
 }
 
-// Dwelling page's "Recurring tariffs" section -- which ONE_TO_MANY/
-// ONE_TO_ONE rules THIS dwelling currently participates in.
-export async function getAssignedRuleIdsForDwelling(
+// Dwelling page's "Recurring tariffs" section: the tariffs that are LIVE
+// right now (enabled, not archived, today falls in the effective window)
+// and applicable to this specific dwelling -- not tied to any billing
+// period, since the dwelling page isn't period-scoped. Reuses the exact
+// same applicability resolver as generation/readiness (evaluated with
+// today as both bounds of the date range) rather than re-deriving scope
+// logic in the page. "Today" is computed in the ORGANIZATION's own
+// timezone (spec Section 32 convention), not UTC -- near local midnight,
+// UTC's date can be a day off in either direction, wrongly keeping an
+// expired rule visible or hiding one that already started.
+export async function listCurrentApplicableRulesForDwelling(
   db: DbOrTx,
-  dwellingId: string
-): Promise<Set<string>> {
-  const rows = await db
-    .select({ billingRuleId: billingRuleAssignments.billingRuleId })
-    .from(billingRuleAssignments)
-    .where(eq(billingRuleAssignments.dwellingId, dwellingId));
-  return new Set(rows.map((r) => r.billingRuleId));
+  organizationId: string,
+  dwellingId: string,
+  organizationTimezone: string
+) {
+  const today = orgLocalDateString(new Date(), organizationTimezone);
+  return getApplicableRulesForDwelling(db, organizationId, dwellingId, {
+    startsOn: today,
+    endsOn: today,
+  });
 }
 
 // Batch form of the above for the tariff list page -- one query for every
@@ -576,170 +584,12 @@ export async function listRuleAssignmentsWithDwellingNumbers(
   return map;
 }
 
-// Dwelling-side "Manage tariffs": a resident/admin can toggle THIS
-// dwelling's participation in ONE_TO_MANY/ONE_TO_ONE rules, never touch a
-// rule's own definition (name/price/scope/etc -- that's Tariffs & Rules'
-// job only). ONE_TO_ALL rules are never accepted here (informational-only
-// on the dwelling side, per spec: "cannot be individually unchecked").
-// A ONE_TO_ONE rule already assigned to a DIFFERENT dwelling is rejected
-// outright rather than silently moved -- the UI is expected to disable
-// that checkbox up front (see the dwelling page's drawer), this is
-// defense in depth against a stale/tampered submission.
-export async function setDwellingRuleParticipation(
-  db: Db,
-  organizationId: string,
-  dwellingId: string,
-  billingRuleIds: string[],
-  actorUserId: string
-) {
-  return db.transaction(async (tx) => {
-    const [dwelling] = await tx
-      .select({ id: dwellings.id })
-      .from(dwellings)
-      .where(
-        and(
-          eq(dwellings.id, dwellingId),
-          eq(dwellings.organizationId, organizationId)
-        )
-      )
-      .limit(1);
-    if (!dwelling) throw new NotFoundError("Dwelling not found");
-
-    // Matches the dwelling page's own filter exactly (enabled, non-archived,
-    // non-ONE_TO_ALL) -- a rule this call doesn't consider "eligible" must
-    // never be touched, disabled included. Without the enabled filter here,
-    // a disabled rule the UI never rendered as a checkbox (so it can never
-    // appear in `billingRuleIds`) would still count as "currently assigned
-    // but not desired" below and get silently unassigned by an unrelated
-    // save.
-    const eligibleRules = await tx
-      .select({
-        id: billingRules.id,
-        applicationScope: billingRules.applicationScope,
-      })
-      .from(billingRules)
-      .where(
-        and(
-          eq(billingRules.organizationId, organizationId),
-          eq(billingRules.enabled, true),
-          isNull(billingRules.archivedAt),
-          inArray(billingRules.applicationScope, ["ONE_TO_MANY", "ONE_TO_ONE"])
-        )
-      );
-    const eligibleIds = new Set(eligibleRules.map((r) => r.id));
-    const desired = [...new Set(billingRuleIds)];
-    const invalid = desired.filter((id) => !eligibleIds.has(id));
-    if (invalid.length > 0) {
-      throw new ValidationError(
-        "One or more selected tariffs are not eligible for dwelling-level assignment"
-      );
-    }
-
-    // Only assignments to a currently-eligible rule are in scope for this
-    // call -- an assignment to an ineligible rule (disabled, archived, or
-    // switched to ONE_TO_ALL since assigned) is left completely alone.
-    const currentRows = await tx
-      .select({ billingRuleId: billingRuleAssignments.billingRuleId })
-      .from(billingRuleAssignments)
-      .where(eq(billingRuleAssignments.dwellingId, dwellingId));
-    const current = new Set(
-      currentRows
-        .map((r) => r.billingRuleId)
-        .filter((id) => eligibleIds.has(id))
-    );
-
-    const toAdd = desired.filter((id) => !current.has(id));
-    const toRemove = [...current].filter((id) => !desired.includes(id));
-
-    const scopeById = new Map(
-      eligibleRules.map((r) => [r.id, r.applicationScope])
-    );
-    // Every ONE_TO_ONE rule this call touches (add OR remove) gets its
-    // billing_rules row locked first, serializing concurrent calls against
-    // the SAME rule so the "is it already assigned elsewhere" check below
-    // can't race with another transaction's insert of a competing
-    // assignment (the unique constraint only prevents the same (rule,
-    // dwelling) pair twice, not two different dwellings for one ONE_TO_ONE
-    // rule).
-    // Sorted so two concurrent calls touching the same two ONE_TO_ONE rules
-    // always lock them in the same order (deadlock avoidance).
-    const oneToOneTouched = [...toAdd, ...toRemove]
-      .filter((id) => scopeById.get(id) === "ONE_TO_ONE")
-      .sort();
-    for (const ruleId of oneToOneTouched) {
-      await tx
-        .select({ id: billingRules.id })
-        .from(billingRules)
-        .where(eq(billingRules.id, ruleId))
-        .for("update");
-    }
-    // A ONE_TO_ONE tariff can never be unassigned from here down to zero
-    // dwellings -- that would violate "exactly one dwelling at all times".
-    // Moving it is only possible by assigning it to a different dwelling
-    // directly (which itself requires editing the tariff, per the conflict
-    // check below) or by editing the tariff's own scope/assignment in
-    // Tariffs & Rules.
-    const orphanedOneToOne = toRemove.find(
-      (id) => scopeById.get(id) === "ONE_TO_ONE"
-    );
-    if (orphanedOneToOne) {
-      throw new ConflictError(
-        "A one-to-one tariff cannot be unassigned this way; edit the tariff directly to move or remove it"
-      );
-    }
-    for (const ruleId of toAdd) {
-      if (scopeById.get(ruleId) !== "ONE_TO_ONE") continue;
-      const [conflict] = await tx
-        .select({ dwellingId: billingRuleAssignments.dwellingId })
-        .from(billingRuleAssignments)
-        .where(eq(billingRuleAssignments.billingRuleId, ruleId))
-        .limit(1);
-      if (conflict && conflict.dwellingId !== dwellingId) {
-        throw new ConflictError(
-          "This tariff is already assigned to another dwelling; edit the tariff directly to move it"
-        );
-      }
-    }
-
-    if (toRemove.length > 0) {
-      await tx
-        .delete(billingRuleAssignments)
-        .where(
-          and(
-            eq(billingRuleAssignments.dwellingId, dwellingId),
-            inArray(billingRuleAssignments.billingRuleId, toRemove)
-          )
-        );
-    }
-    if (toAdd.length > 0) {
-      await tx.insert(billingRuleAssignments).values(
-        toAdd.map((billingRuleId) => ({
-          organizationId,
-          billingRuleId,
-          dwellingId,
-        }))
-      );
-    }
-
-    if (toAdd.length > 0 || toRemove.length > 0) {
-      await recordAuditEvent(tx, {
-        organizationId,
-        actorUserId,
-        action: "DWELLING_TARIFF_ASSIGNMENTS_UPDATED",
-        entityType: "dwelling",
-        entityId: dwellingId,
-        beforeData: { billingRuleIds: [...current] },
-        afterData: { billingRuleIds: desired },
-      });
-      // A newly assigned/unassigned MANUAL_QUANTITY/MANUAL_AMOUNT rule
-      // changes this dwelling's missing-data requirement immediately.
-      await recalculateCaseReadinessForOpenPeriods(
-        tx,
-        organizationId,
-        dwellingId
-      );
-    }
-
-    return { added: toAdd, removed: toRemove };
-  });
-}
+// NOTE: recurring tariff assignment has exactly ONE mutation path --
+// updateRule() above. There is deliberately no dwelling-side assignment
+// mutation: a prior version of this feature had one
+// (setDwellingRuleParticipation, removed here), and it duplicated every
+// scope/cardinality invariant updateRule already enforces (ONE_TO_ONE
+// exactly one, ONE_TO_MANY at least one, tenant isolation, locking) behind
+// a second code path. Two mutators for the same relationship is exactly
+// the ambiguity/concurrency-complexity this simplification removes --
+// see the dwelling page's read-only "Recurring tariffs" section instead.

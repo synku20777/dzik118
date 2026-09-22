@@ -16,13 +16,10 @@ import { createDwelling } from "../../src/domain/organizations/dwellings";
 import { createMeter } from "../../src/domain/organizations/meters";
 import { createPeriod } from "../../src/domain/periods/periods";
 import {
-  ConflictError,
   ValidationError,
   createRule,
   getApplicableRulesForDwelling,
-  getAssignedRuleIdsForDwelling,
   getRuleAssignedDwellingIds,
-  setDwellingRuleParticipation,
   updateRule,
 } from "../../src/domain/billing/rules";
 import {
@@ -296,49 +293,6 @@ describe("billing rule applicability scope", () => {
     ).rejects.toThrow(ValidationError);
     await cleanupOrg(org1.id);
     await cleanupOrg(org2.id);
-  });
-
-  it("dwelling-side participation toggling never silently reassigns a ONE_TO_ONE rule", async () => {
-    const org = await createOrg("Scope Org 5");
-    const owner = await createDwelling(
-      db,
-      org.id,
-      { number: "1", areaM2: "10", residentCount: 1 },
-      seedAdminId
-    );
-    const other = await createDwelling(
-      db,
-      org.id,
-      { number: "2", areaM2: "10", residentCount: 1 },
-      seedAdminId
-    );
-    const rule = await createRule(
-      db,
-      org.id,
-      {
-        name: "Reserved spot",
-        code: "reserved_spot",
-        calculationType: "FIXED",
-        unit: "month",
-        unitPrice: "20.00",
-        effectiveFrom: "2026-01-01",
-        applicationScope: "ONE_TO_ONE",
-        dwellingIds: [owner.id],
-      },
-      seedAdminId
-    );
-    await expect(
-      setDwellingRuleParticipation(db, org.id, other.id, [rule.id], seedAdminId)
-    ).rejects.toThrow(ConflictError);
-    // The rule must still belong only to its original owner.
-    const stillOnOwner = await getApplicableRulesForDwelling(
-      db,
-      org.id,
-      owner.id,
-      PERIOD_RANGE
-    );
-    expect(stillOnOwner.map((r) => r.id)).toContain(rule.id);
-    await cleanupOrg(org.id);
   });
 
   it("switching an existing ONE_TO_MANY rule to ONE_TO_ONE re-validates cardinality", async () => {
@@ -687,99 +641,6 @@ describe("billing rule applicability scope", () => {
     await cleanupOrg(org.id);
   });
 
-  it("dwelling-side unassign can never orphan a ONE_TO_ONE rule to zero dwellings", async () => {
-    const org = await createOrg("Scope Org 10");
-    const owner = await createDwelling(
-      db,
-      org.id,
-      { number: "1", areaM2: "10", residentCount: 1 },
-      seedAdminId
-    );
-    const rule = await createRule(
-      db,
-      org.id,
-      {
-        name: "Reserved spot 2",
-        code: "reserved_spot_2",
-        calculationType: "FIXED",
-        unit: "month",
-        unitPrice: "20.00",
-        effectiveFrom: "2026-01-01",
-        applicationScope: "ONE_TO_ONE",
-        dwellingIds: [owner.id],
-      },
-      seedAdminId
-    );
-    // Unchecking its own one-to-one tariff must be rejected, not silently
-    // leave the rule with zero dwellings.
-    await expect(
-      setDwellingRuleParticipation(db, org.id, owner.id, [], seedAdminId)
-    ).rejects.toThrow(ConflictError);
-    const stillAssigned = await getApplicableRulesForDwelling(
-      db,
-      org.id,
-      owner.id,
-      PERIOD_RANGE
-    );
-    expect(stillAssigned.map((r) => r.id)).toContain(rule.id);
-    await cleanupOrg(org.id);
-  });
-
-  it("saving unrelated dwelling checkboxes never unassigns a disabled scoped rule", async () => {
-    const org = await createOrg("Scope Org 11");
-    const dwelling = await createDwelling(
-      db,
-      org.id,
-      { number: "1", areaM2: "10", residentCount: 1 },
-      seedAdminId
-    );
-    const otherEligible = await createRule(
-      db,
-      org.id,
-      {
-        name: "Bike storage",
-        code: "bike_storage",
-        calculationType: "FIXED",
-        unit: "month",
-        unitPrice: "2.00",
-        effectiveFrom: "2026-01-01",
-        applicationScope: "ONE_TO_MANY",
-        dwellingIds: [dwelling.id],
-      },
-      seedAdminId
-    );
-    const disabledRule = await createRule(
-      db,
-      org.id,
-      {
-        name: "Legacy storage",
-        code: "legacy_storage",
-        calculationType: "FIXED",
-        unit: "month",
-        unitPrice: "1.00",
-        effectiveFrom: "2026-01-01",
-        applicationScope: "ONE_TO_MANY",
-        dwellingIds: [dwelling.id],
-        enabled: false,
-      },
-      seedAdminId
-    );
-    // Re-submit only the still-eligible rule (the disabled one is never
-    // rendered as a checkbox, so a real form submit would never include it
-    // either) -- the disabled rule's assignment must survive untouched.
-    await setDwellingRuleParticipation(
-      db,
-      org.id,
-      dwelling.id,
-      [otherEligible.id],
-      seedAdminId
-    );
-    const assignedIds = await getAssignedRuleIdsForDwelling(db, dwelling.id);
-    expect(assignedIds.has(otherEligible.id)).toBe(true);
-    expect(assignedIds.has(disabledRule.id)).toBe(true);
-    await cleanupOrg(org.id);
-  });
-
   it("a ONE_TO_ONE manual rule only requires input from its assigned dwelling", async () => {
     const org = await createOrg("Scope Org 9");
     const target = await createDwelling(
@@ -815,6 +676,235 @@ describe("billing rule applicability scope", () => {
     expect(
       (targetCase?.missingData as unknown[] | undefined)?.length
     ).toBeGreaterThan(0);
+    await cleanupOrg(org.id);
+  });
+});
+
+describe("dwelling-side tariff assignment mutation (removed)", () => {
+  it("no dwelling-side assignment mutation is exported -- the tariff editor is the only writer", async () => {
+    const rulesModule = await import("../../src/domain/billing/rules");
+    expect("setDwellingRuleParticipation" in rulesModule).toBe(false);
+
+    // src/actions/billing.ts imports the virtual "astro:actions" module,
+    // which only resolves inside Astro's own pipeline -- a plain source
+    // check (not a dynamic import) is what actually runs under vitest here.
+    const fs = await import("node:fs/promises");
+    const actionsSource = await fs.readFile(
+      new URL("../../src/actions/billing.ts", import.meta.url),
+      "utf-8"
+    );
+    expect(actionsSource).not.toContain("updateDwellingTariffAssignments");
+    expect(actionsSource).not.toContain("setDwellingRuleParticipation");
+  });
+
+  it("exactly one write site exists for billing_rule_assignments anywhere in src/, inside replaceRuleAssignments (createRule/updateRule only)", async () => {
+    // A name-based check alone (above) can't catch a re-introduced writer
+    // under a DIFFERENT name in a DIFFERENT file -- this walks the whole
+    // src/ tree and counts actual `.insert(`/`.delete(` call sites against
+    // the table, so a second writer anywhere fails this even if it avoids
+    // the old symbol names and lives outside rules.ts entirely.
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const srcRoot = fileURLToPath(new URL("../../src", import.meta.url));
+
+    async function collectFiles(dir: string): Promise<string[]> {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      const files = await Promise.all(
+        entries.map(async (entry) => {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) return collectFiles(full);
+          if (/\.(ts|astro)$/.test(entry.name)) return [full];
+          return [];
+        })
+      );
+      return files.flat();
+    }
+
+    const files = await collectFiles(srcRoot);
+    let insertCount = 0;
+    let deleteCount = 0;
+    for (const file of files) {
+      const content = await fs.readFile(file, "utf-8");
+      insertCount += (
+        content.match(/\.insert\(billingRuleAssignments\)/g) ?? []
+      ).length;
+      deleteCount += (
+        content.match(/\.delete\(billingRuleAssignments\)/g) ?? []
+      ).length;
+    }
+    expect(insertCount).toBe(1);
+    expect(deleteCount).toBe(1);
+  });
+});
+
+describe("current applicable tariffs for a dwelling (read-only dwelling page)", () => {
+  it("shows ONE_TO_ALL, assigned ONE_TO_MANY, and assigned ONE_TO_ONE; hides an unassigned selective tariff", async () => {
+    const org = await createOrg("Scope Org 15");
+    const dwellingA = await createDwelling(
+      db,
+      org.id,
+      { number: "1", areaM2: "10", residentCount: 1 },
+      seedAdminId
+    );
+    const dwellingB = await createDwelling(
+      db,
+      org.id,
+      { number: "2", areaM2: "10", residentCount: 1 },
+      seedAdminId
+    );
+    const allRule = await createRule(
+      db,
+      org.id,
+      {
+        name: "Management fee 2",
+        code: "mgmt_current",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "10.00",
+        effectiveFrom: "2020-01-01",
+      },
+      seedAdminId
+    );
+    const manyRuleOnA = await createRule(
+      db,
+      org.id,
+      {
+        name: "Parking current",
+        code: "parking_current",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "15.00",
+        effectiveFrom: "2020-01-01",
+        applicationScope: "ONE_TO_MANY",
+        dwellingIds: [dwellingA.id],
+      },
+      seedAdminId
+    );
+    const oneRuleOnA = await createRule(
+      db,
+      org.id,
+      {
+        name: "Board parking current",
+        code: "board_parking_current",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "0",
+        effectiveFrom: "2020-01-01",
+        applicationScope: "ONE_TO_ONE",
+        dwellingIds: [dwellingA.id],
+      },
+      seedAdminId
+    );
+    const manyRuleOnB = await createRule(
+      db,
+      org.id,
+      {
+        name: "Storage current",
+        code: "storage_current",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "3.00",
+        effectiveFrom: "2020-01-01",
+        applicationScope: "ONE_TO_MANY",
+        dwellingIds: [dwellingB.id],
+      },
+      seedAdminId
+    );
+
+    const { listCurrentApplicableRulesForDwelling } =
+      await import("../../src/domain/billing/rules");
+    const currentForA = await listCurrentApplicableRulesForDwelling(
+      db,
+      org.id,
+      dwellingA.id,
+      "UTC"
+    );
+    const ids = currentForA.map((r) => r.id);
+    expect(ids).toContain(allRule.id);
+    expect(ids).toContain(manyRuleOnA.id);
+    expect(ids).toContain(oneRuleOnA.id);
+    expect(ids).not.toContain(manyRuleOnB.id);
+    await cleanupOrg(org.id);
+  });
+
+  it("excludes a disabled, archived, or out-of-window tariff from the current list", async () => {
+    const org = await createOrg("Scope Org 16");
+    const dwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "1", areaM2: "10", residentCount: 1 },
+      seedAdminId
+    );
+    const disabled = await createRule(
+      db,
+      org.id,
+      {
+        name: "Disabled rule",
+        code: "disabled_rule",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "1.00",
+        effectiveFrom: "2020-01-01",
+        enabled: false,
+      },
+      seedAdminId
+    );
+    const future = await createRule(
+      db,
+      org.id,
+      {
+        name: "Future rule",
+        code: "future_rule",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "1.00",
+        effectiveFrom: "2099-01-01",
+      },
+      seedAdminId
+    );
+    const expired = await createRule(
+      db,
+      org.id,
+      {
+        name: "Expired rule",
+        code: "expired_rule",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "1.00",
+        effectiveFrom: "2000-01-01",
+        effectiveUntil: "2001-01-01",
+      },
+      seedAdminId
+    );
+    const toArchive = await createRule(
+      db,
+      org.id,
+      {
+        name: "Soon archived rule",
+        code: "soon_archived_rule",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "1.00",
+        effectiveFrom: "2020-01-01",
+      },
+      seedAdminId
+    );
+    const { archiveRule, listCurrentApplicableRulesForDwelling } =
+      await import("../../src/domain/billing/rules");
+    await archiveRule(db, org.id, toArchive.id, seedAdminId);
+
+    const current = await listCurrentApplicableRulesForDwelling(
+      db,
+      org.id,
+      dwelling.id,
+      "UTC"
+    );
+    const ids = current.map((r) => r.id);
+    expect(ids).not.toContain(disabled.id);
+    expect(ids).not.toContain(future.id);
+    expect(ids).not.toContain(expired.id);
+    expect(ids).not.toContain(toArchive.id);
     await cleanupOrg(org.id);
   });
 });

@@ -76,6 +76,48 @@ function appliesToSummary(rule: {
   return `${targets.length} ${t("dwellings")}`;
 }
 
+type RuleRow = (typeof allRules)[number];
+
+// Shared shape for both the per-row Edit button's data-rule payload and the
+// `?edit=<ruleId>` deep-link's auto-open payload -- one place defining what
+// the client-side drawer needs, so the two entry points can never drift.
+function ruleToDrawerJson(rule: RuleRow) {
+  return {
+    id: rule.id,
+    name: rule.name,
+    nameEn: rule.nameEn,
+    nameRu: rule.nameRu,
+    code: rule.code,
+    description: rule.description,
+    calculationType: rule.calculationType,
+    meterType: rule.meterType,
+    unit: rule.unit,
+    unitPrice: rule.unitPrice,
+    vatRate: rule.vatRate,
+    effectiveFrom: rule.effectiveFrom,
+    effectiveUntil: rule.effectiveUntil,
+    applicationScope: rule.applicationScope,
+    sortOrder: rule.sortOrder,
+    enabled: rule.enabled,
+    dwellingIds: (assignmentsByRule.get(rule.id) ?? []).map(
+      (a) => a.dwellingId
+    ),
+  };
+}
+
+// Deep link (?edit=<ruleId>): looked up against allRules (already
+// organization-scoped by listRules -- a cross-org id simply won't be in
+// this array, and an isolated getRule() call would be redundant). Archived
+// rules are never editable via this page at all (their row has no Edit
+// button either), so one is never auto-opened even if `includeArchived`
+// happens to also be set. Missing/invalid/archived all resolve to `null`
+// here -- the page renders completely normally, per spec: "do not crash;
+// do not open another arbitrary tariff; ignore the query param."
+const editRuleId = Astro.url.searchParams.get("edit");
+const editRule = editRuleId
+  ? (allRules.find((r) => r.id === editRuleId && !r.archivedAt) ?? null)
+  : null;
+
 const filtered = allRules
   .filter((r) => !typeFilter || r.calculationType === typeFilter)
   .filter((r) => {
@@ -369,27 +411,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
                         type="button"
                         class="btn-secondary btn-sm"
                         data-open-tariff-drawer="edit"
-                        data-rule={JSON.stringify({
-                          id: rule.id,
-                          name: rule.name,
-                          nameEn: rule.nameEn,
-                          nameRu: rule.nameRu,
-                          code: rule.code,
-                          description: rule.description,
-                          calculationType: rule.calculationType,
-                          meterType: rule.meterType,
-                          unit: rule.unit,
-                          unitPrice: rule.unitPrice,
-                          vatRate: rule.vatRate,
-                          effectiveFrom: rule.effectiveFrom,
-                          effectiveUntil: rule.effectiveUntil,
-                          applicationScope: rule.applicationScope,
-                          sortOrder: rule.sortOrder,
-                          enabled: rule.enabled,
-                          dwellingIds: (
-                            assignmentsByRule.get(rule.id) ?? []
-                          ).map((a) => a.dwellingId),
-                        })}
+                        data-rule={JSON.stringify(ruleToDrawerJson(rule))}
                       >
                         <Icon name="pencil" size="sm" />
                         {t("Edit")}
@@ -520,6 +542,9 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     id="tariff-drawer"
     class="context-drawer tariff-drawer"
     aria-labelledby="tariff-drawer-title"
+    data-deep-link-rule={editRule
+      ? JSON.stringify(ruleToDrawerJson(editRule))
+      : ""}
     data-strings={JSON.stringify({
       createTitle: t("Create tariff"),
       createLabel: t("Create tariff"),
@@ -1140,6 +1165,16 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
         returnFocusTo.focus();
       }
       returnFocusTo = null;
+      // Deep-linked opens land on ?edit=<ruleId>; once closed, that id no
+      // longer describes anything open, so drop it -- replaceState (not
+      // pushState) so closing never creates its own extra Back stop, and
+      // Back from here goes straight to wherever the deep link was
+      // followed from (e.g. the dwelling page), not to a "closed" state.
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("edit")) {
+        url.searchParams.delete("edit");
+        history.replaceState(null, "", url);
+      }
     }
 
     document.addEventListener(
@@ -1248,6 +1283,18 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     updateMeterTypeVisibility();
     updateScopeVisibility();
     updateDwellingCount();
+
+    // Deep link (?edit=<ruleId>, e.g. the dwelling page's "Edit tariff"
+    // shortcut): the server already validated the id (belongs to this org,
+    // not archived) and embedded that rule's data on the dialog if so --
+    // runs on every onPageLoad firing (direct load AND ClientRouter
+    // navigation to this URL), so no separate one-time-init path is
+    // needed. Nothing to do if the param was missing/invalid -- the
+    // dataset is empty and the page just renders normally.
+    const deepLinkRuleJson = dialog.dataset.deepLinkRule;
+    if (deepLinkRuleJson) {
+      openEdit(JSON.parse(deepLinkRuleJson) as TariffRule);
+    }
 
     return () => controller.abort();
   });
@@ -1498,7 +1545,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .rule-field label {
-    display: block;
+    /* display: block; */
     margin-bottom: 0.5rem;
     font-size: 0.875rem;
     font-weight: 600;
@@ -1735,7 +1782,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     display: grid;
     gap: 0.5rem;
   }
-  .tariff-scope-option {
+  label.tariff-scope-option {
     display: flex;
     gap: 0.625rem;
     padding: 0.75rem;
@@ -1748,7 +1795,16 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     background: var(--color-surface-hover);
   }
   .tariff-scope-option input {
+    /* Resets the shared `.rule-field input` text-input styling (width:100%,
+       padding, border, background) that would otherwise stretch this radio
+       button to fill the row -- that rule and this one have equal
+       specificity, so properties THIS rule doesn't set (width, padding,
+       border, ...) still fall through from it. */
+    width: auto;
+    padding: 0;
     margin-top: 0.2rem;
+    border: none;
+    background: none;
   }
   .tariff-scope-option strong {
     display: block;
@@ -1781,7 +1837,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
   }
-  .tariff-dwelling-row {
+  label.tariff-dwelling-row {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -1791,5 +1847,14 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   }
   .tariff-dwelling-row:hover {
     background: var(--color-surface-hover);
+  }
+  .tariff-dwelling-row input {
+    /* Same reset as .tariff-scope-option input above -- without it, the
+       shared `.rule-field input` rule stretches this checkbox to fill the
+       row instead of its natural checkbox size. */
+    width: auto;
+    padding: 0;
+    border: none;
+    background: none;
   }
 </style>

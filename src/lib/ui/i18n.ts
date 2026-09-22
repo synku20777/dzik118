@@ -1063,6 +1063,27 @@ const lv: Record<string, string> = {
     "Papīrs (nepārbaudīts vēsturisks ieraksts)",
   "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch.":
     "Automātiski reģistrēts saskaņā ar veco piegādes darbplūsmu -- nav apstiprināta manuāla fiziska nosūtīšana.",
+
+  // Recurring tariffs (Tariffs & rules + dwelling read-only view).
+  "Recurring tariffs": "Regulārie tarifi",
+  "Automatically applied": "Automātiski piemēroti",
+  "Assigned specifically": "Piešķirti konkrēti",
+  "All dwellings": "Visi dzīvokļi",
+  "Selected dwellings": "Izvēlētie dzīvokļi",
+  "One dwelling": "Viens dzīvoklis",
+  "assigned here": "piešķirts šeit",
+  automatic: "automātiski",
+  "this dwelling": "šim dzīvoklim",
+  "Edit tariff": "Rediģēt tarifu",
+  "View all tariffs": "Skatīt visus tarifus",
+  "No recurring tariffs apply to this dwelling.":
+    "Šim dzīvoklim nav piemērojams neviens regulārs tarifs.",
+  "Recurring tariffs are configured and assigned from Tariffs & rules.":
+    "Regulārie tarifi tiek konfigurēti un piešķirti sadaļā “Tarifi un noteikumi”.",
+  "Amount set per period": "Summa tiek noteikta katram periodam",
+  "Not assigned yet": "Vēl nav piešķirts",
+  dwellings: "dzīvokļi",
+  "Applies to": "Attiecas uz",
 };
 
 const ru: Record<string, string> = {
@@ -2117,6 +2138,27 @@ const ru: Record<string, string> = {
     "Бумага (непроверенная историческая запись)",
   "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch.":
     "Зафиксировано автоматически по старому процессу доставки -- не является подтверждённой ручной физической отправкой.",
+
+  // Recurring tariffs (Tariffs & rules + dwelling read-only view).
+  "Recurring tariffs": "Регулярные тарифы",
+  "Automatically applied": "Применяются автоматически",
+  "Assigned specifically": "Назначены отдельно",
+  "All dwellings": "Все квартиры",
+  "Selected dwellings": "Выбранные квартиры",
+  "One dwelling": "Одна квартира",
+  "assigned here": "назначено здесь",
+  automatic: "автоматически",
+  "this dwelling": "этой квартире",
+  "Edit tariff": "Редактировать тариф",
+  "View all tariffs": "Смотреть все тарифы",
+  "No recurring tariffs apply to this dwelling.":
+    "К этой квартире не применяется ни один регулярный тариф.",
+  "Recurring tariffs are configured and assigned from Tariffs & rules.":
+    "Регулярные тарифы настраиваются и назначаются в разделе «Тарифы и правила».",
+  "Amount set per period": "Сумма указывается за каждый период",
+  "Not assigned yet": "Пока не назначено",
+  dwellings: "квартир",
+  "Applies to": "Применяется к",
 };
 
 export function translate(locale: Locale, text: string): string {
