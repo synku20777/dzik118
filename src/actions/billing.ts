@@ -98,22 +98,26 @@ export const billing = {
       nameEn: z.string().max(200).nullable(),
       nameRu: z.string().max(200).nullable(),
       code: z.string().min(1).max(50).optional(),
-      description: z.string().max(1000).nullable().optional(),
+      // The drawer always resubmits this whole form (never a partial patch
+      // of just one field), so -- same reasoning as nameEn/nameRu above --
+      // these are `.nullable()` WITHOUT `.optional()`: a blank submitted
+      // value must clear the column, not be read as "don't touch it" (that
+      // reading is what `.optional()` alone would give a blank field, per
+      // Astro's own form-to-object conversion).
+      description: z.string().max(1000).nullable(),
       calculationType: z.enum(billingCalculationTypeEnum.enumValues).optional(),
-      // `.nullable()` without `.optional()`, same reasoning as nameEn/nameRu
-      // above -- clearing meterType (e.g. switching away from
-      // METER_CONSUMPTION) must be expressible, not just "don't touch it".
-      meterType: z.enum(meterTypeEnum.enumValues).nullable().optional(),
+      meterType: z.enum(meterTypeEnum.enumValues).nullable(),
       unit: z.string().min(1).max(20).optional(),
-      unitPrice: decimalInput(/^\d{1,10}(\.\d{1,4})?$/, UNIT_PRICE_MESSAGE)
-        .nullable()
-        .optional(),
+      unitPrice: decimalInput(
+        /^\d{1,10}(\.\d{1,4})?$/,
+        UNIT_PRICE_MESSAGE
+      ).nullable(),
       vatRate: decimalInput(
         /^\d{1,3}(\.\d{1,4})?$/,
         VAT_RATE_MESSAGE
       ).optional(),
       effectiveFrom: z.iso.date().optional(),
-      effectiveUntil: z.iso.date().nullable().optional(),
+      effectiveUntil: z.iso.date().nullable(),
       applicationScope: z.enum(billingRuleScopeEnum.enumValues).optional(),
       dwellingIds: z.array(z.uuid()).optional(),
       sortOrder: z.coerce.number().int().optional(),

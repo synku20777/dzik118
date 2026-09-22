@@ -110,6 +110,18 @@ async function validateAssignmentTargets(
       "A one-to-one rule must be assigned to exactly one dwelling"
     );
   }
+  // ONE_TO_MANY is "explicit dwelling selection", not "zero or more" --
+  // a rule stuck at zero dwellings is indistinguishable from a disabled/
+  // pointless one, and (before this check existed) a browser's own
+  // inability to submit an empty multi-value field made "clear all
+  // selections, then Save" silently keep the old selection instead of
+  // erroring or clearing it. Requiring >=1 here turns that into a clear,
+  // correct validation error instead of a silent no-op.
+  if (scope === "ONE_TO_MANY" && unique.length === 0) {
+    throw new ValidationError(
+      "A selected-dwellings rule must be assigned to at least one dwelling"
+    );
+  }
   if (unique.length === 0) return unique;
   const rows = await tx
     .select({ id: dwellings.id })
@@ -154,16 +166,21 @@ async function replaceRuleAssignments(
   );
 }
 
-// Only these two calculation types can ever produce missing_data (spec
-// Section 18) -- FIXED/AREA/RESIDENT_COUNT/METER_CONSUMPTION are either
-// always derivable or already tracked via meters, so a create/update/
-// archive of one of those never needs the (org-wide, all-open-periods)
-// readiness recalculation below.
-function isManualCalculationType(
+// FIXED/AREA/RESIDENT_COUNT never produce missing_data -- they're always
+// derivable with no admin input. MANUAL_QUANTITY/MANUAL_AMOUNT always can.
+// METER_CONSUMPTION now can too: case-readiness.ts's requiredMetersForPeriod
+// only requires a reading for a meter type an APPLICABLE METER_CONSUMPTION
+// rule actually consumes, so creating/editing/archiving/rescoping one of
+// these can change missing_data (previously false when every meter's
+// requirement was independent of any rule's existence at all).
+function calculationTypeAffectsReadiness(
   calculationType: string
-): calculationType is "MANUAL_QUANTITY" | "MANUAL_AMOUNT" {
+): calculationType is
+  "MANUAL_QUANTITY" | "MANUAL_AMOUNT" | "METER_CONSUMPTION" {
   return (
-    calculationType === "MANUAL_QUANTITY" || calculationType === "MANUAL_AMOUNT"
+    calculationType === "MANUAL_QUANTITY" ||
+    calculationType === "MANUAL_AMOUNT" ||
+    calculationType === "METER_CONSUMPTION"
   );
 }
 
@@ -205,7 +222,10 @@ export async function createRule(
       // unrelated write (a reading, a meter change) happened to recalculate
       // them. Org-wide recalculation is still correct for a scoped rule:
       // recalculateCaseReadiness resolves applicability per dwelling.
-      if (isManualCalculationType(rule.calculationType) && rule.enabled) {
+      if (
+        calculationTypeAffectsReadiness(rule.calculationType) &&
+        rule.enabled
+      ) {
         await recalculateCaseReadinessForOrganizationOpenPeriods(
           tx,
           organizationId
@@ -318,30 +338,42 @@ export async function updateRule(
       validateRuleShape(candidate);
 
       const scope = candidate.applicationScope;
+      const previousDwellingIds = (
+        await tx
+          .select({ dwellingId: billingRuleAssignments.dwellingId })
+          .from(billingRuleAssignments)
+          .where(eq(billingRuleAssignments.billingRuleId, ruleId))
+      ).map((r) => r.dwellingId);
+
       let targets: string[] | undefined;
-      if (dwellingIds !== undefined) {
+      if (patch.applicationScope !== undefined) {
+        // A scope change always fully re-specifies the assignment set for
+        // the NEW scope -- `dwellingIds` (defaulting to none) is
+        // authoritative, never "whatever happened to exist before". This
+        // is what makes switching to ONE_TO_ALL actually clear the old
+        // assignments (a plain HTML form never submits an empty
+        // multi-value field, so "no dwellingIds sent" must mean "none",
+        // not "don't touch" -- the drawer always sends applicationScope,
+        // so this branch runs on every save from it).
+        targets = await validateAssignmentTargets(
+          tx,
+          organizationId,
+          scope,
+          dwellingIds ?? []
+        );
+      } else if (dwellingIds !== undefined) {
+        // Scope unchanged, but the caller explicitly sent a dwellingIds
+        // list (e.g. a non-drawer caller patching only the assignment set)
+        // -- same "explicit list is authoritative" rule applies.
         targets = await validateAssignmentTargets(
           tx,
           organizationId,
           scope,
           dwellingIds
         );
-      } else if (patch.applicationScope !== undefined) {
-        // Scope changed but no explicit dwellingIds given -- re-validate
-        // whatever assignments already exist against the NEW scope (e.g. a
-        // rule with 3 dwellings switched to ONE_TO_ONE must be rejected,
-        // not silently left with 3 rows under a scope that forbids that).
-        const existing = await tx
-          .select({ dwellingId: billingRuleAssignments.dwellingId })
-          .from(billingRuleAssignments)
-          .where(eq(billingRuleAssignments.billingRuleId, ruleId));
-        targets = await validateAssignmentTargets(
-          tx,
-          organizationId,
-          scope,
-          existing.map((r) => r.dwellingId)
-        );
       }
+      // Neither applicationScope nor dwellingIds were part of this patch --
+      // leave assignments untouched (targets stays undefined).
 
       const [after] = await tx
         .update(billingRules)
@@ -364,8 +396,11 @@ export async function updateRule(
         action: "BILLING_RULE_UPDATED",
         entityType: "billing_rule",
         entityId: ruleId,
-        beforeData: before,
-        afterData: { ...after, dwellingIds: targets },
+        beforeData: { ...before, dwellingIds: previousDwellingIds },
+        afterData: {
+          ...after,
+          dwellingIds: targets ?? previousDwellingIds,
+        },
       });
       // enabled, the effective window, calculation type, or scope/assignment
       // changes can all change whether a manual rule currently applies to a
@@ -373,8 +408,8 @@ export async function updateRule(
       // missingData re-derived. Org-wide is still correct: readiness now
       // resolves applicability per dwelling.
       if (
-        isManualCalculationType(after.calculationType) ||
-        isManualCalculationType(before.calculationType)
+        calculationTypeAffectsReadiness(after.calculationType) ||
+        calculationTypeAffectsReadiness(before.calculationType)
       ) {
         await recalculateCaseReadinessForOrganizationOpenPeriods(
           tx,
@@ -418,7 +453,7 @@ export async function archiveRule(
       entityType: "billing_rule",
       entityId: ruleId,
     });
-    if (isManualCalculationType(rule.calculationType)) {
+    if (calculationTypeAffectsReadiness(rule.calculationType)) {
       await recalculateCaseReadinessForOrganizationOpenPeriods(
         tx,
         organizationId

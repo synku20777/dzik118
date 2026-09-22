@@ -66,11 +66,25 @@ export function wasMeterActiveDuringPeriod(
   return true;
 }
 
+type ApplicableRule = Awaited<
+  ReturnType<typeof getApplicableRulesForDwelling>
+>[number];
+
+// A meter only requires a reading if some APPLICABLE METER_CONSUMPTION rule
+// actually consumes its type -- before per-dwelling scoping existed, every
+// METER_CONSUMPTION rule was implicitly org-wide, so "this meter type has a
+// rule somewhere in the org" and "this rule applies to this dwelling" were
+// the same fact. They no longer are: a ONE_TO_ONE/ONE_TO_MANY meter rule
+// scoped to OTHER dwellings must not make an unrelated dwelling's same-type
+// meter seem billable, or block that dwelling's invoice on a reading nothing
+// will ever use (spec: "don't let an unrelated tariff's existence make every
+// org meter seem billable").
 async function requiredMetersForPeriod(
   tx: DbOrTx,
   organizationId: string,
   dwellingId: string,
-  period: PeriodDateRange
+  period: PeriodDateRange,
+  applicableRules: ApplicableRule[]
 ) {
   const dwellingMeters = await tx
     .select()
@@ -81,26 +95,24 @@ async function requiredMetersForPeriod(
         eq(meters.organizationId, organizationId)
       )
     );
-  return dwellingMeters.filter((m) => wasMeterActiveDuringPeriod(m, period));
+  const active = dwellingMeters.filter((m) =>
+    wasMeterActiveDuringPeriod(m, period)
+  );
+  if (active.length === 0) return active;
+  const meteredTypes = new Set(
+    applicableRules
+      .filter((r) => r.calculationType === "METER_CONSUMPTION" && r.meterType)
+      .map((r) => r.meterType)
+  );
+  return active.filter((m) => meteredTypes.has(m.type));
 }
 
-async function requiredManualRulesForPeriod(
-  tx: DbOrTx,
-  organizationId: string,
-  dwellingId: string,
-  period: PeriodDateRange
-) {
-  // Dwelling-scoped: a ONE_TO_ONE/ONE_TO_MANY manual rule must only ever
-  // require input from the dwellings it's actually assigned to (spec: "a
-  // ONE_TO_ONE manual rule on Apartment 5 must not require input from
-  // Apartment 6").
-  const rules = await getApplicableRulesForDwelling(
-    tx,
-    organizationId,
-    dwellingId,
-    period
-  );
-  return rules.filter(
+// Dwelling-scoped: a ONE_TO_ONE/ONE_TO_MANY manual rule must only ever
+// require input from the dwellings it's actually assigned to (spec: "a
+// ONE_TO_ONE manual rule on Apartment 5 must not require input from
+// Apartment 6").
+function requiredManualRulesForPeriod(applicableRules: ApplicableRule[]) {
+  return applicableRules.filter(
     (r) =>
       r.calculationType === "MANUAL_QUANTITY" ||
       r.calculationType === "MANUAL_AMOUNT"
@@ -114,18 +126,20 @@ export async function computeMissingData(
   periodId: string,
   period: PeriodDateRange
 ): Promise<MissingDataItem[]> {
+  const applicableRules = await getApplicableRulesForDwelling(
+    tx,
+    organizationId,
+    dwellingId,
+    period
+  );
   const requiredMeters = await requiredMetersForPeriod(
     tx,
     organizationId,
     dwellingId,
-    period
+    period,
+    applicableRules
   );
-  const requiredManualRules = await requiredManualRulesForPeriod(
-    tx,
-    organizationId,
-    dwellingId,
-    period
-  );
+  const requiredManualRules = requiredManualRulesForPeriod(applicableRules);
   if (requiredMeters.length === 0 && requiredManualRules.length === 0) {
     return [];
   }

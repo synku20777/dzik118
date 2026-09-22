@@ -683,7 +683,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               <span>
                 <strong>{t("All dwellings")}</strong>
                 <p>
-                  {t("Applies to every current and future dwelling.")} (1:N)
+                  {t("Applies to every current and future dwelling.")} (1:All)
                 </p>
               </span>
             </label>
@@ -968,11 +968,24 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     let mode: "create" | "edit" = "create";
     let returnFocusTo: HTMLElement | null = null;
 
+    const meterTypeSelect = form.querySelector(
+      "#tariff-meterType"
+    ) as unknown as HTMLSelectElement;
+    const unitPriceInput =
+      form.querySelector<HTMLInputElement>("#tariff-unitPrice")!;
+
     function updateMeterTypeVisibility() {
       const isMeter = calculationTypeSelect.value === "METER_CONSUMPTION";
       meterTypeField.hidden = !isMeter;
+      // Hiding the field must also clear its value -- a hidden (but not
+      // disabled) form control still submits, so a leftover meterType from
+      // a previous METER_CONSUMPTION selection would otherwise be saved
+      // alongside a FIXED/AREA/etc calculation type (wrong icon on the
+      // list, and stale metadata on the row).
+      if (!isMeter) meterTypeSelect.value = "";
       const isManualAmount = calculationTypeSelect.value === "MANUAL_AMOUNT";
       unitPriceField.hidden = isManualAmount;
+      if (isManualAmount) unitPriceInput.value = "";
     }
 
     function updateDwellingCount() {

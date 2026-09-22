@@ -31,6 +31,7 @@ import {
   submitResidentReading,
 } from "../../src/domain/periods/readings";
 import { lookupMutationReceipt } from "../../src/domain/mutations/receipts";
+import { createRule } from "../../src/domain/billing/rules";
 
 let db: Db;
 let seedAdminId: string;
@@ -66,6 +67,24 @@ async function setupOrgWithDwellingAndMeter(name: string) {
     org.id,
     dwelling.id,
     { type: "COLD_WATER", unit: "m3" },
+    seedAdminId
+  );
+  // A meter only counts as required missing data if an applicable
+  // METER_CONSUMPTION rule actually consumes its type (case-readiness.ts) --
+  // without this, every test in this file relying on the cold-water meter
+  // producing NO_READING missing data would see none at all.
+  await createRule(
+    db,
+    org.id,
+    {
+      name: "Cold water",
+      code: "cold_water",
+      calculationType: "METER_CONSUMPTION",
+      meterType: "COLD_WATER",
+      unit: "m3",
+      unitPrice: "1.00",
+      effectiveFrom: "2026-01-01",
+    },
     seedAdminId
   );
   return { org, dwelling, meter };

@@ -92,6 +92,13 @@
       "when": 1790150000000,
       "tag": "0012_billing_rule_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790200000000,
+      "tag": "0013_billing_rule_assignments_rls",
+      "breakpoints": true
     }
   ]
 }

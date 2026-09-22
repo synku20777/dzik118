@@ -13,6 +13,7 @@ import {
 } from "./_helpers";
 import { createOrganization } from "../../src/domain/organizations/organizations";
 import { createDwelling } from "../../src/domain/organizations/dwellings";
+import { createMeter } from "../../src/domain/organizations/meters";
 import { createPeriod } from "../../src/domain/periods/periods";
 import {
   ConflictError,
@@ -20,6 +21,7 @@ import {
   createRule,
   getApplicableRulesForDwelling,
   getAssignedRuleIdsForDwelling,
+  getRuleAssignedDwellingIds,
   setDwellingRuleParticipation,
   updateRule,
 } from "../../src/domain/billing/rules";
@@ -385,6 +387,172 @@ describe("billing rule applicability scope", () => {
       seedAdminId
     );
     expect(updated.applicationScope).toBe("ONE_TO_ONE");
+    await cleanupOrg(org.id);
+  });
+
+  it("switching ONE_TO_MANY to ONE_TO_ALL clears its old assignments even when the caller sends no dwellingIds", async () => {
+    // Mirrors the drawer's real submission shape for "All dwellings": the
+    // browser never sends an empty multi-value field, so this update omits
+    // dwellingIds entirely -- the fix must still clear the 2 existing rows.
+    const org = await createOrg("Scope Org 12");
+    const d1 = await createDwelling(
+      db,
+      org.id,
+      { number: "1", areaM2: "10", residentCount: 1 },
+      seedAdminId
+    );
+    const d2 = await createDwelling(
+      db,
+      org.id,
+      { number: "2", areaM2: "10", residentCount: 1 },
+      seedAdminId
+    );
+    const rule = await createRule(
+      db,
+      org.id,
+      {
+        name: "Bike room",
+        code: "bike_room",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "4.00",
+        effectiveFrom: "2026-01-01",
+        applicationScope: "ONE_TO_MANY",
+        dwellingIds: [d1.id, d2.id],
+      },
+      seedAdminId
+    );
+    const updated = await updateRule(
+      db,
+      org.id,
+      rule.id,
+      { applicationScope: "ONE_TO_ALL" },
+      seedAdminId
+    );
+    expect(updated.applicationScope).toBe("ONE_TO_ALL");
+    expect(await getRuleAssignedDwellingIds(db, rule.id)).toEqual([]);
+    await cleanupOrg(org.id);
+  });
+
+  it("a ONE_TO_MANY tariff can never be saved with zero dwellings, on create or update", async () => {
+    const org = await createOrg("Scope Org 13");
+    const dwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "1", areaM2: "10", residentCount: 1 },
+      seedAdminId
+    );
+    await expect(
+      createRule(
+        db,
+        org.id,
+        {
+          name: "Empty selection",
+          code: "empty_selection",
+          calculationType: "FIXED",
+          unit: "month",
+          unitPrice: "1.00",
+          effectiveFrom: "2026-01-01",
+          applicationScope: "ONE_TO_MANY",
+          dwellingIds: [],
+        },
+        seedAdminId
+      )
+    ).rejects.toThrow(ValidationError);
+
+    const rule = await createRule(
+      db,
+      org.id,
+      {
+        name: "Storage 3",
+        code: "storage_3",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "1.00",
+        effectiveFrom: "2026-01-01",
+        applicationScope: "ONE_TO_MANY",
+        dwellingIds: [dwelling.id],
+      },
+      seedAdminId
+    );
+    // "Clear selection, then Save" (no dwellingIds sent, scope unchanged)
+    // must be rejected, not silently keep the old assignment.
+    await expect(
+      updateRule(
+        db,
+        org.id,
+        rule.id,
+        { applicationScope: "ONE_TO_MANY" },
+        seedAdminId
+      )
+    ).rejects.toThrow(ValidationError);
+    expect(await getRuleAssignedDwellingIds(db, rule.id)).toEqual([
+      dwelling.id,
+    ]);
+    await cleanupOrg(org.id);
+  });
+
+  it("a meter reading is not required when the only tariff for that meter type doesn't apply to this dwelling", async () => {
+    const org = await createOrg("Scope Org 14");
+    const withRule = await createDwelling(
+      db,
+      org.id,
+      { number: "1", areaM2: "10", residentCount: 1 },
+      seedAdminId
+    );
+    const withoutRule = await createDwelling(
+      db,
+      org.id,
+      { number: "2", areaM2: "10", residentCount: 1 },
+      seedAdminId
+    );
+    await createMeter(
+      db,
+      org.id,
+      withRule.id,
+      { type: "COLD_WATER", unit: "m3" },
+      seedAdminId
+    );
+    await createMeter(
+      db,
+      org.id,
+      withoutRule.id,
+      { type: "COLD_WATER", unit: "m3" },
+      seedAdminId
+    );
+    const period = await createPeriodFor(org.id);
+    await createRule(
+      db,
+      org.id,
+      {
+        name: "Cold water",
+        code: "cold_water_scoped",
+        calculationType: "METER_CONSUMPTION",
+        meterType: "COLD_WATER",
+        unit: "m3",
+        unitPrice: "2.00",
+        effectiveFrom: "2026-01-01",
+        applicationScope: "ONE_TO_ONE",
+        dwellingIds: [withRule.id],
+      },
+      seedAdminId
+    );
+    const withRuleCase = await getCaseForDwelling(
+      org.id,
+      withRule.id,
+      period.id
+    );
+    const withoutRuleCase = await getCaseForDwelling(
+      org.id,
+      withoutRule.id,
+      period.id
+    );
+    expect(
+      (withRuleCase?.missingData as unknown[] | undefined)?.length
+    ).toBeGreaterThan(0);
+    // The dwelling whose cold-water tariff doesn't apply to it must not be
+    // blocked on a reading invoice generation will never use.
+    expect(withoutRuleCase?.missingData).toEqual([]);
     await cleanupOrg(org.id);
   });
 

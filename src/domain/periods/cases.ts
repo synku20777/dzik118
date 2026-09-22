@@ -12,7 +12,7 @@ import {
 } from "../../db/schema/billing";
 import { dwellings, meters } from "../../db/schema/dwellings";
 import { invoices } from "../../db/schema/invoices";
-import { getEffectiveRules } from "../billing/rules";
+import { getApplicableRulesForDwelling } from "../billing/rules";
 
 // Spec Section 27's required default sort: status priority first, then
 // natural dwelling number. Sorted client-side (post-fetch) rather than with
@@ -178,10 +178,12 @@ export interface ManualRuleInputForPeriod {
   value: string | null;
 }
 
-// Every effective MANUAL_QUANTITY/MANUAL_AMOUNT rule for this period
-// (applies to every dwelling unconditionally, same as FIXED/AREA/
-// RESIDENT_COUNT -- see case-readiness.ts) + this dwelling's existing input
-// value, if any -- the manual-input counterpart of
+// Every MANUAL_QUANTITY/MANUAL_AMOUNT rule APPLICABLE to this dwelling this
+// period (dwelling-scoped -- a ONE_TO_ONE/ONE_TO_MANY manual rule must never
+// be offered to a dwelling it isn't assigned to, same resolver
+// case-readiness.ts uses, or the workbench drawer could let an admin enter a
+// value invoice generation will never read) + this dwelling's existing
+// input value, if any -- the manual-input counterpart of
 // listMetersWithReadingForPeriod above, for the same drawer.
 export async function listManualRuleInputsForPeriod(
   db: Db,
@@ -190,7 +192,12 @@ export async function listManualRuleInputsForPeriod(
   periodId: string,
   period: { startsOn: string; endsOn: string }
 ): Promise<ManualRuleInputForPeriod[]> {
-  const rules = await getEffectiveRules(db, organizationId, period);
+  const rules = await getApplicableRulesForDwelling(
+    db,
+    organizationId,
+    dwellingId,
+    period
+  );
   const manualRules = rules.filter(
     (
       r
