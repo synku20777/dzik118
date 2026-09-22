@@ -86,7 +86,10 @@ const currentUserId = Astro.locals.auth!.userId;
                     value={organizationId}
                   />
                   <input type="hidden" name="userId" value={m.userId} />
-                  <button type="submit" class="text-destructive hover:underline">
+                  <button
+                    type="submit"
+                    class="text-destructive hover:underline"
+                  >
                     {t("Remove")}
                   </button>
                 </form>

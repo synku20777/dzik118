@@ -50,7 +50,7 @@ import {
 } from "../errors";
 import { wasMeterActiveDuringPeriod } from "../periods/case-readiness";
 import { buildInvoiceTemplateSnapshot } from "./invoice-template-schema";
-import { getEffectiveRules } from "./rules";
+import { getApplicableRulesForDwelling, getEffectiveRules } from "./rules";
 
 export { ConflictError, NotFoundError, ValidationError };
 
@@ -234,7 +234,15 @@ export async function generateInvoice(
       .limit(1);
     if (!dwelling) throw new NotFoundError("Dwelling not found");
 
-    const rules = await getEffectiveRules(tx, organizationId, period);
+    // Dwelling-scoped, not org-wide: ONE_TO_MANY/ONE_TO_ONE rules must
+    // never appear on a dwelling they aren't assigned to (spec: "every
+    // org-wide tariff into every dwelling's invoice -- that must stop").
+    const rules = await getApplicableRulesForDwelling(
+      tx,
+      organizationId,
+      dwellingId,
+      period
+    );
 
     const lineInputs: Array<{ rule: EffectiveRule; quantity: string }> = [];
     for (const rule of rules) {
@@ -244,7 +252,7 @@ export async function generateInvoice(
     }
     if (lineInputs.length === 0) {
       throw new ValidationError(
-        "No billable rules produced a line item for this dwelling in this period"
+        "No billing rules apply to this dwelling for this period"
       );
     }
 

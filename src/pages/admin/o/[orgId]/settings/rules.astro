@@ -10,7 +10,7 @@ const t = (text: string) => translate(locale, text);
 // 9.2, 27, BILL-RULE-001/002/003).
 import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
-import { ICONS, type IconName } from "../../../../../lib/ui/icons";
+import type { IconName } from "../../../../../lib/ui/icons";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import {
   ForbiddenError,
@@ -25,25 +25,18 @@ try {
   throw err;
 }
 
-import { actions, isInputError } from "astro:actions";
+import { actions } from "astro:actions";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
-import { listRules } from "../../../../../domain/billing/rules";
+import {
+  listRules,
+  listRuleAssignmentsWithDwellingNumbers,
+} from "../../../../../domain/billing/rules";
+import { listDwellings } from "../../../../../domain/organizations/dwellings";
 import { withRequestDb } from "../../../../../lib/db-request";
 
 const createResult = Astro.getActionResult(actions.billing.createRule);
 const updateResult = Astro.getActionResult(actions.billing.updateRule);
 const archiveResult = Astro.getActionResult(actions.billing.archiveRule);
-
-// Field-level annotation is only unambiguous on the single create form --
-// the edit form is repeated per rule row with no submitted-ruleId echo to
-// know which row's panel an updateRule error belongs to, so that one keeps
-// the translated top-of-form banner only (see below).
-const createUnitPriceError = isInputError(createResult?.error)
-  ? createResult.error.fields.unitPrice?.[0]
-  : undefined;
-const createVatRateError = isInputError(createResult?.error)
-  ? createResult.error.fields.vatRate?.[0]
-  : undefined;
 
 const base = `/admin/o/${organizationId}`;
 const settingsHref = `${base}/settings`;
@@ -59,10 +52,29 @@ const showArchivedChecked =
   Astro.url.searchParams.get("includeArchived") === "1";
 const includeArchived = showArchivedChecked || statusFilter === "ARCHIVED";
 
-const { organization, allRules } = await withRequestDb(async (db) => ({
-  organization: await getOrganization(db, organizationId),
-  allRules: await listRules(db, organizationId, { includeArchived }),
-}));
+const { organization, allRules, assignmentsByRule, dwellingOptions } =
+  await withRequestDb(async (db) => ({
+    organization: await getOrganization(db, organizationId),
+    allRules: await listRules(db, organizationId, { includeArchived }),
+    assignmentsByRule: await listRuleAssignmentsWithDwellingNumbers(
+      db,
+      organizationId
+    ),
+    dwellingOptions: await listDwellings(db, organizationId, { limit: 1000 }),
+  }));
+
+function appliesToSummary(rule: {
+  applicationScope: string;
+  id: string;
+}): string {
+  if (rule.applicationScope === "ONE_TO_ALL") return t("All dwellings");
+  const targets = assignmentsByRule.get(rule.id) ?? [];
+  if (targets.length === 0) return t("Not assigned yet");
+  if (rule.applicationScope === "ONE_TO_ONE") {
+    return `${t("Dwelling")} ${targets[0].number}`;
+  }
+  return `${targets.length} ${t("dwellings")}`;
+}
 
 const filtered = allRules
   .filter((r) => !typeFilter || r.calculationType === typeFilter)
@@ -154,23 +166,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   area: "ruler-2",
   users: "users",
   document: "file-description",
-};
-
-// Fed to the client-side live preview script below via define:vars (an
-// is:inline script, so it cannot import icons.ts directly) -- keeps the
-// preview's icons pulled from the same registry as every server-rendered
-// icon, rather than a separately hand-copied set that could drift.
-const RULE_ICON_BODIES: Record<string, string> = {
-  COLD_WATER: ICONS[RULE_ICON_NAMES.cold_water],
-  HOT_WATER: ICONS[RULE_ICON_NAMES.hot_water],
-  ELECTRICITY: ICONS[RULE_ICON_NAMES.electricity],
-  GAS: ICONS[RULE_ICON_NAMES.gas],
-  HEAT: ICONS[RULE_ICON_NAMES.heat],
-  OTHER: ICONS[RULE_ICON_NAMES.generic],
-  FIXED: ICONS[RULE_ICON_NAMES.fixed],
-  AREA: ICONS[RULE_ICON_NAMES.area],
-  RESIDENT_COUNT: ICONS[RULE_ICON_NAMES.users],
-  DEFAULT: ICONS[RULE_ICON_NAMES.document],
 };
 ---
 
@@ -285,10 +280,14 @@ const RULE_ICON_BODIES: Record<string, string> = {
           </a>
         )
       }
-      <a href="#create-rule" class="btn-primary rules-create-link">
+      <button
+        type="button"
+        class="btn-primary rules-create-link"
+        data-open-tariff-drawer="create"
+      >
         <span aria-hidden="true">+</span>
-        {t("Create rule")}
-      </a>
+        {t("Create tariff")}
+      </button>
     </form>
 
     <div class="table-wrap">
@@ -302,6 +301,7 @@ const RULE_ICON_BODIES: Record<string, string> = {
             <th class="px-4 py-2 text-right">{t("Unit price")}</th>
             <th class="px-4 py-2">{t("VAT")}</th>
             <th class="px-4 py-2">{t("Effective period")}</th>
+            <th class="px-4 py-2">{t("Applies to")}</th>
             <th class="px-4 py-2">{t("Status")}</th>
             <th class="px-4 py-2 text-right">{t("Actions")}</th>
           </tr>
@@ -342,6 +342,7 @@ const RULE_ICON_BODIES: Record<string, string> = {
                 <td class="px-4 py-2">
                   {rule.effectiveFrom} → {rule.effectiveUntil ?? t("ongoing")}
                 </td>
+                <td class="px-4 py-2 text-muted">{appliesToSummary(rule)}</td>
                 <td class="px-4 py-2">
                   <span
                     class="rule-status"
@@ -364,93 +365,35 @@ const RULE_ICON_BODIES: Record<string, string> = {
                 <td class="px-4 py-2 text-right">
                   {!rule.archivedAt && (
                     <div class="rule-actions">
-                      <details class="rule-edit">
-                        <summary class="btn-secondary btn-sm">
-                          <Icon name="pencil" size="sm" />
-                          {t("Edit")}
-                        </summary>
-                        <form
-                          method="POST"
-                          action={actions.billing.updateRule}
-                          class="rule-edit-panel"
-                        >
-                          <input
-                            type="hidden"
-                            name="organizationId"
-                            value={organizationId}
-                          />
-                          <input type="hidden" name="ruleId" value={rule.id} />
-                          <div>
-                            <label for={`nameEn-${rule.id}`}>
-                              {t("English invoice label")}
-                            </label>
-                            <input
-                              id={`nameEn-${rule.id}`}
-                              type="text"
-                              name="nameEn"
-                              maxlength="200"
-                              value={rule.nameEn ?? ""}
-                            />
-                          </div>
-                          <div>
-                            <label for={`nameRu-${rule.id}`}>
-                              {t("Russian invoice label")}
-                            </label>
-                            <input
-                              id={`nameRu-${rule.id}`}
-                              type="text"
-                              name="nameRu"
-                              maxlength="200"
-                              value={rule.nameRu ?? ""}
-                            />
-                          </div>
-                          <div>
-                            <label for={`unitPrice-${rule.id}`}>
-                              {t("Unit price")}
-                            </label>
-                            <input
-                              id={`unitPrice-${rule.id}`}
-                              type="text"
-                              name="unitPrice"
-                              value={rule.unitPrice ?? ""}
-                            />
-                          </div>
-                          <div>
-                            <label for={`vatRate-${rule.id}`}>
-                              {t("VAT %")}
-                            </label>
-                            <input
-                              id={`vatRate-${rule.id}`}
-                              type="text"
-                              name="vatRate"
-                              value={rule.vatRate}
-                            />
-                          </div>
-                          <div>
-                            <label for={`effectiveUntil-${rule.id}`}>
-                              {t("Effective until")}
-                            </label>
-                            <input
-                              id={`effectiveUntil-${rule.id}`}
-                              type="date"
-                              name="effectiveUntil"
-                              value={rule.effectiveUntil ?? ""}
-                            />
-                          </div>
-                          <label class="rule-edit-checkbox">
-                            <input
-                              type="checkbox"
-                              name="enabled"
-                              value="1"
-                              checked={rule.enabled}
-                            />
-                            {t("Enabled")}
-                          </label>
-                          <button type="submit" class="btn-primary btn-sm">
-                            {t("Save")}
-                          </button>
-                        </form>
-                      </details>
+                      <button
+                        type="button"
+                        class="btn-secondary btn-sm"
+                        data-open-tariff-drawer="edit"
+                        data-rule={JSON.stringify({
+                          id: rule.id,
+                          name: rule.name,
+                          nameEn: rule.nameEn,
+                          nameRu: rule.nameRu,
+                          code: rule.code,
+                          description: rule.description,
+                          calculationType: rule.calculationType,
+                          meterType: rule.meterType,
+                          unit: rule.unit,
+                          unitPrice: rule.unitPrice,
+                          vatRate: rule.vatRate,
+                          effectiveFrom: rule.effectiveFrom,
+                          effectiveUntil: rule.effectiveUntil,
+                          applicationScope: rule.applicationScope,
+                          sortOrder: rule.sortOrder,
+                          enabled: rule.enabled,
+                          dwellingIds: (
+                            assignmentsByRule.get(rule.id) ?? []
+                          ).map((a) => a.dwellingId),
+                        })}
+                      >
+                        <Icon name="pencil" size="sm" />
+                        {t("Edit")}
+                      </button>
                       <details class="row-menu">
                         <summary
                           aria-label={`${t("More actions")}: ${rule.name}`}
@@ -485,7 +428,7 @@ const RULE_ICON_BODIES: Record<string, string> = {
           {
             filtered.length === 0 && (
               <tr>
-                <td colspan="9" class="px-4 py-8 text-center text-muted">
+                <td colspan="10" class="px-4 py-8 text-center text-muted">
                   {t("No billing rules match this filter.")}
                 </td>
               </tr>
@@ -495,221 +438,8 @@ const RULE_ICON_BODIES: Record<string, string> = {
       </table>
     </div>
 
-    <div class="rules-split">
-      <section class="rules-create" id="create-rule">
-        <h2>{t("Create rule")}</h2>
-        <p class="rules-create-desc">
-          {t("Add a new tariff or billing rule. Fill in the details below.")}
-        </p>
-        <form
-          method="POST"
-          action={actions.billing.createRule}
-          id="create-rule-form"
-          data-calculation-type-labels={JSON.stringify(calculationTypeLabels)}
-        >
-          <input type="hidden" name="organizationId" value={organizationId} />
-
-          <div class="rule-field-row">
-            <div class="rule-field">
-              <label for="name">{t("Name")} *</label>
-              <input
-                id="name"
-                name="name"
-                type="text"
-                required
-                placeholder={t("e.g. Cold Water")}
-              />
-              <p class="rule-field-hint">
-                {t("A descriptive name for this rule.")}
-              </p>
-            </div>
-            <div class="rule-field">
-              <label for="code">{t("Code")} *</label>
-              <input
-                id="code"
-                name="code"
-                type="text"
-                required
-                placeholder={t("e.g. cold_water")}
-              />
-              <p class="rule-field-hint">
-                {t("Unique identifier (e.g. cold_water).")}
-              </p>
-            </div>
-          </div>
-
-          <div class="rule-field-row">
-            <div class="rule-field">
-              <label for="nameEn">{t("English invoice label")}</label>
-              <input
-                id="nameEn"
-                name="nameEn"
-                type="text"
-                maxlength="200"
-                placeholder={t("Optional -- falls back to the Latvian name")}
-              />
-            </div>
-            <div class="rule-field">
-              <label for="nameRu">{t("Russian invoice label")}</label>
-              <input
-                id="nameRu"
-                name="nameRu"
-                type="text"
-                maxlength="200"
-                placeholder={t("Optional -- falls back to the Latvian name")}
-              />
-            </div>
-          </div>
-
-          <div class="rule-field-row rule-field-row-3">
-            <div class="rule-field">
-              <label for="calculationType">{t("Type")} *</label>
-              <select id="calculationType" name="calculationType">
-                {
-                  calculationTypes.map((type) => (
-                    <option value={type}>{calculationTypeLabels[type]}</option>
-                  ))
-                }
-              </select>
-              <p class="rule-field-hint">
-                {t("How the charge is calculated.")}
-              </p>
-            </div>
-            <div class="rule-field">
-              <label for="unit">{t("Unit")} *</label>
-              <input
-                id="unit"
-                name="unit"
-                type="text"
-                required
-                placeholder={t("e.g. m3, month, person")}
-              />
-              <p class="rule-field-hint">{t("Unit of measurement.")}</p>
-            </div>
-            <div class="rule-field">
-              <label for="meterType">{t("Meter type")}</label>
-              <select id="meterType" name="meterType">
-                <option value="">{t("-- none --")}</option>
-                <option value="COLD_WATER">{t("Cold water")}</option>
-                <option value="HOT_WATER">{t("Hot water")}</option>
-                <option value="ELECTRICITY">{t("Electricity")}</option>
-                <option value="GAS">{t("Gas")}</option>
-                <option value="HEAT">{t("Heat")}</option>
-                <option value="OTHER">{t("Other")}</option>
-              </select>
-              <p class="rule-field-hint">
-                {t("Only for meter consumption rules.")}
-              </p>
-            </div>
-          </div>
-
-          <div class="rule-field-row">
-            <div class="rule-field">
-              <label for="unitPrice">{t("Unit price")} *</label>
-              <input
-                id="unitPrice"
-                name="unitPrice"
-                type="text"
-                placeholder="0.0000"
-                aria-invalid={createUnitPriceError ? "true" : undefined}
-                aria-describedby={createUnitPriceError
-                  ? "unitPrice-error"
-                  : undefined}
-              />
-              {
-                createUnitPriceError ? (
-                  <p id="unitPrice-error" class="rule-field-error" role="alert">
-                    {t(createUnitPriceError)}
-                  </p>
-                ) : (
-                  <p class="rule-field-hint">
-                    {t("Price per unit (excl. VAT).")}
-                  </p>
-                )
-              }
-            </div>
-            <div class="rule-field">
-              <label for="vatRate">{t("VAT %")} *</label>
-              <input
-                id="vatRate"
-                name="vatRate"
-                aria-invalid={createVatRateError ? "true" : undefined}
-                aria-describedby={createVatRateError
-                  ? "vatRate-error"
-                  : undefined}
-                type="text"
-                placeholder="21.0000"
-              />
-              {
-                createVatRateError ? (
-                  <p id="vatRate-error" class="rule-field-error" role="alert">
-                    {t(createVatRateError)}
-                  </p>
-                ) : (
-                  <p class="rule-field-hint">
-                    {t("Value added tax percentage.")}
-                  </p>
-                )
-              }
-            </div>
-          </div>
-
-          <div class="rule-field-row">
-            <div class="rule-field">
-              <label for="effectiveFrom">{t("Effective from")} *</label>
-              <input
-                id="effectiveFrom"
-                name="effectiveFrom"
-                type="date"
-                required
-              />
-              <p class="rule-field-hint">
-                {t("Date when this rule becomes active.")}
-              </p>
-            </div>
-            <div class="rule-field">
-              <label for="effectiveUntil">{t("Effective until")}</label>
-              <input id="effectiveUntil" name="effectiveUntil" type="date" />
-              <p class="rule-field-hint">{t("Leave empty for ongoing.")}</p>
-            </div>
-          </div>
-
-          <div class="rule-form-actions">
-            <a href={settingsHref} class="btn-secondary">{t("Cancel")}</a>
-            <button type="submit" class="btn-primary">{t("Create rule")}</button
-            >
-          </div>
-        </form>
-      </section>
-
+    <div class="rules-tips-row">
       <aside class="rules-sidebar">
-        <div class="rule-summary-card">
-          <div class="rule-summary-head">
-            <h2>{t("Rule summary")}</h2>
-            <span class="rule-summary-preview-label">
-              <Icon name="eye" size="sm" />
-              {t("Preview")}
-            </span>
-          </div>
-          <div id="rule-summary-body">
-            <div class="rule-summary-empty">
-              <Icon name="file-description" size="lg" />
-              <div>
-                <p class="rule-summary-empty-title">
-                  {t("Fill in the form to see a preview")}
-                </p>
-                <p class="rule-summary-empty-text">
-                  {
-                    t(
-                      "The summary will show how this rule will appear in the list and how it will be applied to bills."
-                    )
-                  }
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <div class="rule-info-banner">
           <span class="rule-info-icon" aria-hidden="true">i</span>
           <div>
@@ -785,16 +515,335 @@ const RULE_ICON_BODIES: Record<string, string> = {
       </aside>
     </div>
   </div>
+
+  <dialog
+    id="tariff-drawer"
+    class="context-drawer tariff-drawer"
+    aria-labelledby="tariff-drawer-title"
+    data-strings={JSON.stringify({
+      createTitle: t("Create tariff"),
+      createLabel: t("Create tariff"),
+      saveLabel: t("Save changes"),
+      savingLabel: t("Saving…"),
+      active: t("Active"),
+      disabled: t("Disabled"),
+      dwellingsSelected: t("dwellings selected"),
+      dwellingSelected: t("dwelling selected"),
+      genericError: t("Something went wrong. Please try again."),
+    })}
+  >
+    <header class="context-drawer-header">
+      <div class="context-drawer-heading">
+        <p class="context-drawer-eyebrow">{t("TARIFF")}</p>
+        <div class="context-drawer-title-row">
+          <h2 class="context-drawer-title" id="tariff-drawer-title"></h2>
+          <span
+            class="status-badge"
+            id="tariff-drawer-status"
+            data-tone="neutral"
+            hidden></span>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="context-drawer-close"
+        data-close-tariff-drawer
+        aria-label={t("Close")}
+      >
+        <span aria-hidden="true">×</span>
+      </button>
+    </header>
+    <div class="context-drawer-body">
+      {
+        (createResult?.error || updateResult?.error) && (
+          <p class="notice notice-danger" role="alert" data-tariff-drawer-error>
+            {friendlyActionErrorMessage(
+              createResult?.error ?? updateResult?.error,
+              locale
+            )}
+          </p>
+        )
+      }
+      <form id="tariff-form" novalidate>
+        <input type="hidden" name="organizationId" value={organizationId} />
+        <input type="hidden" name="ruleId" id="tariff-ruleId" />
+
+        <h3 class="drawer-section-heading">{t("General")}</h3>
+        <div class="rule-field-row">
+          <div class="rule-field">
+            <label for="tariff-name">{t("Name")} *</label>
+            <input id="tariff-name" name="name" type="text" required />
+          </div>
+          <div class="rule-field">
+            <label for="tariff-code">{t("Code")} *</label>
+            <input id="tariff-code" name="code" type="text" required />
+            <p class="rule-field-hint">
+              {t("Unique identifier (e.g. cold_water).")}
+            </p>
+          </div>
+        </div>
+        <div class="rule-field-row">
+          <div class="rule-field">
+            <label for="tariff-nameEn">{t("English invoice label")}</label>
+            <input
+              id="tariff-nameEn"
+              name="nameEn"
+              type="text"
+              maxlength="200"
+            />
+          </div>
+          <div class="rule-field">
+            <label for="tariff-nameRu">{t("Russian invoice label")}</label>
+            <input
+              id="tariff-nameRu"
+              name="nameRu"
+              type="text"
+              maxlength="200"
+            />
+          </div>
+        </div>
+        <div class="rule-field">
+          <label for="tariff-description">{t("Description")}</label>
+          <textarea
+            id="tariff-description"
+            name="description"
+            class="drawer-textarea-box"
+            rows="2"></textarea>
+        </div>
+
+        <h3 class="drawer-section-heading">{t("Calculation")}</h3>
+        <div class="rule-field-row rule-field-row-3">
+          <div class="rule-field">
+            <label for="tariff-calculationType">{t("Type")} *</label>
+            <select id="tariff-calculationType" name="calculationType">
+              {
+                calculationTypes.map((type) => (
+                  <option value={type}>{calculationTypeLabels[type]}</option>
+                ))
+              }
+            </select>
+          </div>
+          <div class="rule-field">
+            <label for="tariff-unit">{t("Unit")} *</label>
+            <input
+              id="tariff-unit"
+              name="unit"
+              type="text"
+              required
+              placeholder={t("e.g. m3, month, person")}
+            />
+          </div>
+          <div class="rule-field" data-meter-type-field>
+            <label for="tariff-meterType">{t("Meter type")}</label>
+            <select id="tariff-meterType" name="meterType">
+              <option value="">{t("-- none --")}</option>
+              <option value="COLD_WATER">{t("Cold water")}</option>
+              <option value="HOT_WATER">{t("Hot water")}</option>
+              <option value="ELECTRICITY">{t("Electricity")}</option>
+              <option value="GAS">{t("Gas")}</option>
+              <option value="HEAT">{t("Heat")}</option>
+              <option value="OTHER">{t("Other")}</option>
+            </select>
+          </div>
+        </div>
+        <div class="rule-field-row">
+          <div class="rule-field" data-unit-price-field>
+            <label for="tariff-unitPrice">{t("Unit price")} *</label>
+            <input
+              id="tariff-unitPrice"
+              name="unitPrice"
+              type="text"
+              placeholder="0.0000"
+            />
+            <p class="rule-field-hint">
+              {t("A price of 0.00 is valid and will show on the invoice.")}
+            </p>
+          </div>
+          <div class="rule-field">
+            <label for="tariff-vatRate">{t("VAT %")}</label>
+            <input
+              id="tariff-vatRate"
+              name="vatRate"
+              type="text"
+              placeholder="21.0000"
+            />
+          </div>
+        </div>
+
+        <h3 class="drawer-section-heading">{t("Applies to")}</h3>
+        <div class="rule-field">
+          <div class="tariff-scope-options" role="radiogroup">
+            <label class="tariff-scope-option">
+              <input
+                type="radio"
+                name="applicationScope"
+                value="ONE_TO_ALL"
+                checked
+              />
+              <span>
+                <strong>{t("All dwellings")}</strong>
+                <p>
+                  {t("Applies to every current and future dwelling.")} (1:N)
+                </p>
+              </span>
+            </label>
+            <label class="tariff-scope-option">
+              <input type="radio" name="applicationScope" value="ONE_TO_MANY" />
+              <span>
+                <strong>{t("Selected dwellings")}</strong>
+                <p>
+                  {
+                    t(
+                      "Applies only to the dwellings you choose. New dwellings are not included automatically."
+                    )
+                  }{" "}
+                  (1:N)
+                </p>
+              </span>
+            </label>
+            <label class="tariff-scope-option">
+              <input type="radio" name="applicationScope" value="ONE_TO_ONE" />
+              <span>
+                <strong>{t("One dwelling")}</strong>
+                <p>{t("Applies to exactly one dwelling.")} (1:1)</p>
+              </span>
+            </label>
+          </div>
+        </div>
+        <div class="rule-field" data-scope-panel="ONE_TO_MANY" hidden>
+          <label for="tariff-dwelling-search">
+            {t("Search dwellings")}
+          </label>
+          <input
+            id="tariff-dwelling-search"
+            type="text"
+            data-dwelling-search
+            placeholder={t("Filter by dwelling number...")}
+          />
+          <div class="tariff-dwelling-actions">
+            <button
+              type="button"
+              class="btn-secondary btn-sm"
+              data-select-all-visible
+            >
+              {t("Select all visible")}
+            </button>
+            <button
+              type="button"
+              class="btn-secondary btn-sm"
+              data-clear-selection
+            >
+              {t("Clear selection")}
+            </button>
+            <span data-dwelling-count-label>{t("0 dwellings selected")}</span>
+          </div>
+          <div class="tariff-dwelling-list" data-dwelling-checklist>
+            {
+              dwellingOptions.map((d) => (
+                <label
+                  class="tariff-dwelling-row"
+                  data-dwelling-number={d.number.toLowerCase()}
+                >
+                  <input type="checkbox" name="dwellingIds" value={d.id} />
+                  {t("Dwelling")} {d.number}
+                </label>
+              ))
+            }
+          </div>
+        </div>
+        <div class="rule-field" data-scope-panel="ONE_TO_ONE" hidden>
+          <label for="tariff-dwelling-single">{t("Dwelling")} *</label>
+          <select id="tariff-dwelling-single" name="dwellingIdSingle">
+            <option value="">{t("-- select a dwelling --")}</option>
+            {
+              dwellingOptions.map((d) => (
+                <option value={d.id}>
+                  {t("Dwelling")} {d.number}
+                </option>
+              ))
+            }
+          </select>
+        </div>
+
+        <h3 class="drawer-section-heading">{t("Validity")}</h3>
+        <div class="rule-field-row">
+          <div class="rule-field">
+            <label for="tariff-effectiveFrom">{t("Effective from")} *</label>
+            <input
+              id="tariff-effectiveFrom"
+              name="effectiveFrom"
+              type="date"
+              required
+            />
+          </div>
+          <div class="rule-field">
+            <label for="tariff-effectiveUntil">{t("Effective until")}</label>
+            <input
+              id="tariff-effectiveUntil"
+              name="effectiveUntil"
+              type="date"
+            />
+            <p class="rule-field-hint">{t("Leave empty for ongoing.")}</p>
+          </div>
+        </div>
+        <label class="rule-edit-checkbox">
+          <input
+            type="checkbox"
+            id="tariff-enabled"
+            name="enabled"
+            value="1"
+            checked
+          />
+          {t("Enabled")}
+        </label>
+
+        <h3 class="drawer-section-heading">{t("Advanced")}</h3>
+        <div class="rule-field">
+          <label for="tariff-sortOrder">{t("Sort order")}</label>
+          <input
+            id="tariff-sortOrder"
+            name="sortOrder"
+            type="number"
+            step="1"
+          />
+        </div>
+      </form>
+    </div>
+    <footer class="context-drawer-footer">
+      <button
+        type="button"
+        class="btn-secondary"
+        id="tariff-drawer-archive"
+        hidden
+      >
+        {t("Archive")}
+      </button>
+      <button type="button" class="btn-secondary" data-close-tariff-drawer>
+        {t("Cancel")}
+      </button>
+      <button
+        type="submit"
+        form="tariff-form"
+        class="btn-primary"
+        id="tariff-drawer-save"
+      >
+        {t("Save changes")}
+      </button>
+    </footer>
+  </dialog>
+
+  <form
+    method="POST"
+    action={actions.billing.archiveRule}
+    id="archive-tariff-form"
+    hidden
+  >
+    <input type="hidden" name="organizationId" value={organizationId} />
+    <input type="hidden" name="ruleId" id="archive-tariff-ruleId" />
+  </form>
 </AdminLayout>
 
-<script
-  is:inline
-  data-astro-rerun
-  define:vars={{
-    ongoingLabel: t("ongoing"),
-    iconBodies: RULE_ICON_BODIES,
-  }}
->
+<script is:inline data-astro-rerun>
   const filterForm = document.querySelector("[data-instant-filter]");
   const searchInput = document.querySelector("#search");
   const typeSelect = document.querySelector("#type-filter");
@@ -815,95 +864,380 @@ const RULE_ICON_BODIES: Record<string, string> = {
   archivedCheckbox?.addEventListener("change", () =>
     filterForm?.requestSubmit()
   );
+</script>
 
-  // Pure client-side preview of the create-rule form -- no backend call,
-  // just reflects the form's own current field values. Icon selection
-  // mirrors the server-rendered table rows' ruleIcon() logic above.
-  const form = document.querySelector("#create-rule-form");
-  const summaryBody = document.querySelector("#rule-summary-body");
-  if (form && summaryBody) {
-    const calculationTypeLabels = JSON.parse(
-      form.dataset.calculationTypeLabels || "{}"
-    );
-    // Captured once, before any mutation, so restoring the empty state
-    // below reuses the server-rendered (correctly localized) markup
-    // instead of a separately hard-coded copy that could drift out of
-    // sync with translations.
-    const emptyStateHtml = summaryBody.innerHTML;
-    const ICONS = iconBodies;
-    const iconKeyFor = (meterType, calculationType) => {
-      if (meterType && ICONS[meterType]) return meterType;
-      if (ICONS[calculationType]) return calculationType;
-      return "DEFAULT";
-    };
+<script>
+  import { actions, isInputError } from "astro:actions";
+  import { navigate } from "astro:transitions/client";
+  import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
 
-    const render = () => {
-      const data = new FormData(form);
-      const name = String(data.get("name") || "").trim();
-      const code = String(data.get("code") || "").trim();
-      if (!name && !code) {
-        summaryBody.innerHTML = emptyStateHtml;
-        return;
-      }
-      const calculationType = String(data.get("calculationType") || "FIXED");
-      const meterType = String(data.get("meterType") || "");
-      const unit = String(data.get("unit") || "");
-      const unitPrice = String(data.get("unitPrice") || "").trim();
-      const vatRate = String(data.get("vatRate") || "").trim();
-      const effectiveFrom = String(data.get("effectiveFrom") || "");
-      const effectiveUntil = String(data.get("effectiveUntil") || "");
-      const iconKey = iconKeyFor(meterType, calculationType);
-      const typeLabel =
-        calculationTypeLabels[calculationType] ?? calculationType;
-
-      const wrap = document.createElement("div");
-      wrap.className = "rule-summary-preview";
-
-      const head = document.createElement("div");
-      head.className = "rule-summary-preview-head";
-      const icon = document.createElement("span");
-      icon.className = "rule-icon";
-      icon.dataset.icon = iconKey.toLowerCase();
-      icon.setAttribute("aria-hidden", "true");
-      icon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${ICONS[iconKey]}</svg>`;
-      const text = document.createElement("div");
-      const nameEl = document.createElement("p");
-      nameEl.className = "rule-summary-preview-name";
-      nameEl.textContent = name || "—";
-      const codeEl = document.createElement("p");
-      codeEl.className = "rule-summary-preview-code";
-      codeEl.textContent = code || "—";
-      text.appendChild(nameEl);
-      text.appendChild(codeEl);
-      head.appendChild(icon);
-      head.appendChild(text);
-
-      const typeLine = document.createElement("p");
-      typeLine.className = "rule-summary-preview-line";
-      typeLine.textContent = unit ? `${typeLabel} · ${unit}` : typeLabel;
-
-      const priceLine = document.createElement("p");
-      priceLine.className = "rule-summary-preview-line";
-      const priceText = unitPrice ? unitPrice : "0.0000";
-      const vatText = vatRate ? vatRate : "0.0000";
-      priceLine.textContent = unit
-        ? `${priceText} / ${unit} + ${vatText}% VAT`
-        : `${priceText} + ${vatText}% VAT`;
-
-      const periodLine = document.createElement("p");
-      periodLine.className = "rule-summary-preview-line";
-      periodLine.textContent = `${effectiveFrom || "—"} → ${effectiveUntil || ongoingLabel}`;
-
-      wrap.appendChild(head);
-      wrap.appendChild(typeLine);
-      wrap.appendChild(priceLine);
-      wrap.appendChild(periodLine);
-      summaryBody.replaceChildren(wrap);
-    };
-
-    form.addEventListener("input", render);
-    form.addEventListener("change", render);
+  interface TariffRule {
+    id: string;
+    name: string;
+    nameEn: string | null;
+    nameRu: string | null;
+    code: string;
+    description: string | null;
+    calculationType: string;
+    meterType: string | null;
+    unit: string;
+    unitPrice: string | null;
+    vatRate: string;
+    effectiveFrom: string;
+    effectiveUntil: string | null;
+    applicationScope: "ONE_TO_ALL" | "ONE_TO_MANY" | "ONE_TO_ONE";
+    sortOrder: number;
+    enabled: boolean;
+    dwellingIds: string[];
   }
+
+  onPageLoad(() => {
+    const dialogEl =
+      document.querySelector<HTMLDialogElement>("#tariff-drawer");
+    const formEl = document.querySelector<HTMLFormElement>("#tariff-form");
+    if (!dialogEl || !formEl) return;
+    // Rebinding to a fresh const (rather than relying on control-flow
+    // narrowing of the original binding) is required for TS to carry the
+    // non-null type into the closures defined below -- same trick as
+    // workbench-drawer.ts's dialogEl/dialog pair.
+    const dialog = dialogEl;
+    const form = formEl;
+    const controller = new AbortController();
+    const strings: Record<string, string> = JSON.parse(
+      dialog.dataset.strings ?? "{}"
+    );
+
+    const titleEl = document.querySelector<HTMLElement>(
+      "#tariff-drawer-title"
+    )!;
+    const statusEl = document.querySelector<HTMLElement>(
+      "#tariff-drawer-status"
+    )!;
+    const ruleIdField =
+      document.querySelector<HTMLInputElement>("#tariff-ruleId")!;
+    const archiveButton = document.querySelector<HTMLButtonElement>(
+      "#tariff-drawer-archive"
+    )!;
+    const saveButton = document.querySelector<HTMLButtonElement>(
+      "#tariff-drawer-save"
+    )!;
+    const errorBanner = document.querySelector<HTMLElement>(
+      "[data-tariff-drawer-error]"
+    );
+    const meterTypeField = form.querySelector<HTMLElement>(
+      "[data-meter-type-field]"
+    )!;
+    const unitPriceField = form.querySelector<HTMLElement>(
+      "[data-unit-price-field]"
+    )!;
+    // Plain querySelector + cast, not querySelector<HTMLSelectElement>: the
+    // generic overload's `T extends Element` constraint fails to resolve
+    // for HTMLSelectElement under this project's workers-types/lib.dom.d.ts
+    // collision (see invoice-template-editor.ts's identical workaround).
+    const calculationTypeSelect = form.querySelector(
+      "#tariff-calculationType"
+    ) as unknown as HTMLSelectElement;
+    const scopeRadios = [
+      ...form.querySelectorAll<HTMLInputElement>(
+        'input[name="applicationScope"]'
+      ),
+    ];
+    const scopePanels = new Map(
+      [...form.querySelectorAll<HTMLElement>("[data-scope-panel]")].map(
+        (el) => [el.dataset.scopePanel, el]
+      )
+    );
+    const dwellingChecklist = form.querySelector<HTMLElement>(
+      "[data-dwelling-checklist]"
+    )!;
+    const dwellingCheckboxes = [
+      ...dwellingChecklist.querySelectorAll<HTMLInputElement>(
+        'input[name="dwellingIds"]'
+      ),
+    ];
+    const dwellingSearch = form.querySelector<HTMLInputElement>(
+      "[data-dwelling-search]"
+    )!;
+    const dwellingCountLabel = form.querySelector<HTMLElement>(
+      "[data-dwelling-count-label]"
+    )!;
+    const dwellingSingleSelect = form.querySelector(
+      "#tariff-dwelling-single"
+    ) as unknown as HTMLSelectElement;
+
+    let mode: "create" | "edit" = "create";
+    let returnFocusTo: HTMLElement | null = null;
+
+    function updateMeterTypeVisibility() {
+      const isMeter = calculationTypeSelect.value === "METER_CONSUMPTION";
+      meterTypeField.hidden = !isMeter;
+      const isManualAmount = calculationTypeSelect.value === "MANUAL_AMOUNT";
+      unitPriceField.hidden = isManualAmount;
+    }
+
+    function updateDwellingCount() {
+      const count = dwellingCheckboxes.filter((c) => c.checked).length;
+      const suffix =
+        count === 1
+          ? (strings.dwellingSelected ?? "dwelling selected")
+          : (strings.dwellingsSelected ?? "dwellings selected");
+      dwellingCountLabel.textContent = `${count} ${suffix}`;
+    }
+
+    function updateScopeVisibility() {
+      const selected =
+        scopeRadios.find((r) => r.checked)?.value ?? "ONE_TO_ALL";
+      for (const [key, panel] of scopePanels) {
+        panel.hidden = key !== selected;
+      }
+    }
+
+    for (const radio of scopeRadios) {
+      radio.addEventListener("change", updateScopeVisibility, {
+        signal: controller.signal,
+      });
+    }
+    calculationTypeSelect.addEventListener(
+      "change",
+      updateMeterTypeVisibility,
+      { signal: controller.signal }
+    );
+    for (const checkbox of dwellingCheckboxes) {
+      checkbox.addEventListener("change", updateDwellingCount, {
+        signal: controller.signal,
+      });
+    }
+    dwellingSearch.addEventListener(
+      "input",
+      () => {
+        const q = dwellingSearch.value.trim().toLowerCase();
+        for (const row of dwellingChecklist.querySelectorAll<HTMLElement>(
+          "[data-dwelling-number]"
+        )) {
+          row.hidden = q.length > 0 && !row.dataset.dwellingNumber?.includes(q);
+        }
+      },
+      { signal: controller.signal }
+    );
+    form.querySelector("[data-select-all-visible]")?.addEventListener(
+      "click",
+      () => {
+        for (const row of dwellingChecklist.querySelectorAll<HTMLElement>(
+          "[data-dwelling-number]"
+        )) {
+          if (!row.hidden) {
+            row.querySelector<HTMLInputElement>("input")!.checked = true;
+          }
+        }
+        updateDwellingCount();
+      },
+      { signal: controller.signal }
+    );
+    form.querySelector("[data-clear-selection]")?.addEventListener(
+      "click",
+      () => {
+        for (const checkbox of dwellingCheckboxes) checkbox.checked = false;
+        updateDwellingCount();
+      },
+      { signal: controller.signal }
+    );
+
+    function resetForm() {
+      form.reset();
+      for (const checkbox of dwellingCheckboxes) checkbox.checked = false;
+      updateMeterTypeVisibility();
+      updateScopeVisibility();
+      updateDwellingCount();
+      if (errorBanner) errorBanner.hidden = true;
+    }
+
+    function openCreate() {
+      mode = "create";
+      ruleIdField.value = "";
+      resetForm();
+      titleEl.textContent = strings.createTitle ?? "Create tariff";
+      statusEl.hidden = true;
+      archiveButton.hidden = true;
+      saveButton.textContent = strings.createLabel ?? "Create tariff";
+      returnFocusTo = document.activeElement as HTMLElement;
+      dialog.showModal();
+      form.querySelector<HTMLInputElement>("#tariff-name")?.focus();
+    }
+
+    function openEdit(rule: TariffRule) {
+      mode = "edit";
+      resetForm();
+      ruleIdField.value = rule.id;
+      (form.elements.namedItem("name") as HTMLInputElement).value = rule.name;
+      (form.elements.namedItem("nameEn") as HTMLInputElement).value =
+        rule.nameEn ?? "";
+      (form.elements.namedItem("nameRu") as HTMLInputElement).value =
+        rule.nameRu ?? "";
+      (form.elements.namedItem("code") as HTMLInputElement).value = rule.code;
+      (form.elements.namedItem("description") as HTMLTextAreaElement).value =
+        rule.description ?? "";
+      calculationTypeSelect.value = rule.calculationType;
+      (
+        form.elements.namedItem("meterType") as unknown as HTMLSelectElement
+      ).value = rule.meterType ?? "";
+      (form.elements.namedItem("unit") as HTMLInputElement).value = rule.unit;
+      (form.elements.namedItem("unitPrice") as HTMLInputElement).value =
+        rule.unitPrice ?? "";
+      (form.elements.namedItem("vatRate") as HTMLInputElement).value =
+        rule.vatRate;
+      (form.elements.namedItem("effectiveFrom") as HTMLInputElement).value =
+        rule.effectiveFrom;
+      (form.elements.namedItem("effectiveUntil") as HTMLInputElement).value =
+        rule.effectiveUntil ?? "";
+      (form.elements.namedItem("sortOrder") as HTMLInputElement).value = String(
+        rule.sortOrder
+      );
+      (form.elements.namedItem("enabled") as HTMLInputElement).checked =
+        rule.enabled;
+      for (const radio of scopeRadios) {
+        radio.checked = radio.value === rule.applicationScope;
+      }
+      if (rule.applicationScope === "ONE_TO_MANY") {
+        for (const checkbox of dwellingCheckboxes) {
+          checkbox.checked = rule.dwellingIds.includes(checkbox.value);
+        }
+      } else if (rule.applicationScope === "ONE_TO_ONE") {
+        dwellingSingleSelect.value = rule.dwellingIds[0] ?? "";
+      }
+      updateMeterTypeVisibility();
+      updateScopeVisibility();
+      updateDwellingCount();
+
+      titleEl.textContent = rule.name;
+      statusEl.hidden = false;
+      statusEl.dataset.tone = rule.enabled ? "success" : "neutral";
+      statusEl.textContent = rule.enabled
+        ? (strings.active ?? "Active")
+        : (strings.disabled ?? "Disabled");
+      archiveButton.hidden = false;
+      saveButton.textContent = strings.saveLabel ?? "Save changes";
+      returnFocusTo = document.activeElement as HTMLElement;
+      dialog.showModal();
+    }
+
+    function closeDrawer() {
+      if (!dialog.open) return;
+      dialog.close();
+      if (returnFocusTo && document.contains(returnFocusTo)) {
+        returnFocusTo.focus();
+      }
+      returnFocusTo = null;
+    }
+
+    document.addEventListener(
+      "click",
+      (event) => {
+        const trigger = (event.target as HTMLElement).closest<HTMLElement>(
+          "[data-open-tariff-drawer]"
+        );
+        if (!trigger) return;
+        if (trigger.dataset.openTariffDrawer === "create") {
+          openCreate();
+        } else {
+          const rule = JSON.parse(trigger.dataset.rule || "{}") as TariffRule;
+          openEdit(rule);
+        }
+      },
+      { signal: controller.signal }
+    );
+
+    for (const closeTrigger of document.querySelectorAll<HTMLElement>(
+      "[data-close-tariff-drawer]"
+    )) {
+      closeTrigger.addEventListener("click", () => closeDrawer(), {
+        signal: controller.signal,
+      });
+    }
+    dialog.addEventListener(
+      "cancel",
+      (event) => {
+        event.preventDefault();
+        closeDrawer();
+      },
+      { signal: controller.signal }
+    );
+
+    archiveButton.addEventListener(
+      "click",
+      () => {
+        const archiveForm = document.querySelector<HTMLFormElement>(
+          "#archive-tariff-form"
+        )!;
+        (
+          archiveForm.querySelector(
+            "#archive-tariff-ruleId"
+          ) as HTMLInputElement
+        ).value = ruleIdField.value;
+        archiveForm.requestSubmit();
+      },
+      { signal: controller.signal }
+    );
+
+    form.addEventListener(
+      "submit",
+      async (event) => {
+        event.preventDefault();
+        const scope = scopeRadios.find((r) => r.checked)?.value ?? "ONE_TO_ALL";
+        const fd = new FormData(form);
+        fd.delete("dwellingIds");
+        if (scope === "ONE_TO_MANY") {
+          for (const checkbox of dwellingCheckboxes) {
+            if (checkbox.checked) fd.append("dwellingIds", checkbox.value);
+          }
+        } else if (scope === "ONE_TO_ONE") {
+          if (dwellingSingleSelect.value) {
+            fd.append("dwellingIds", dwellingSingleSelect.value);
+          }
+        }
+        // A checkbox omits itself from FormData entirely when unchecked --
+        // z.coerce.boolean().optional() needs a present-but-empty value to
+        // actually coerce to false; an absent key parses as undefined,
+        // which updateRule then reads as "don't touch this column" (the
+        // usual .optional() convention), silently failing to re-enable a
+        // disabled rule's toggle.
+        fd.set(
+          "enabled",
+          form.querySelector<HTMLInputElement>("#tariff-enabled")!.checked
+            ? "1"
+            : ""
+        );
+
+        saveButton.disabled = true;
+        const originalLabel = saveButton.textContent;
+        saveButton.textContent = strings.savingLabel ?? "Saving…";
+        const { error } =
+          mode === "create"
+            ? await actions.billing.createRule(fd)
+            : await actions.billing.updateRule(fd);
+        saveButton.disabled = false;
+        saveButton.textContent = originalLabel;
+
+        if (error) {
+          if (errorBanner) {
+            errorBanner.textContent = isInputError(error)
+              ? (Object.values(error.fields).flat()[0] ?? error.message)
+              : error.message;
+            errorBanner.hidden = false;
+          }
+          return;
+        }
+        closeDrawer();
+        await navigate(window.location.pathname + window.location.search);
+      },
+      { signal: controller.signal }
+    );
+
+    updateMeterTypeVisibility();
+    updateScopeVisibility();
+    updateDwellingCount();
+
+    return () => controller.abort();
+  });
 </script>
 
 <style is:global>
@@ -1342,5 +1676,107 @@ const RULE_ICON_BODIES: Record<string, string> = {
     .rule-field-row-3 {
       grid-template-columns: 1fr;
     }
+  }
+
+  .rules-tips-row {
+    display: grid;
+  }
+
+  /* Tariff drawer: same .context-drawer shell as the workbench's meter/
+     billing-details drawer (src/styles/global.css), just wider -- this is
+     a full tariff editor, not a couple of reading inputs. */
+  .tariff-drawer {
+    width: min(600px, 100vw);
+  }
+  #tariff-form {
+    display: grid;
+    gap: 1rem;
+  }
+  /* Copied verbatim from AdminContextDrawer.astro's component-scoped
+     globals -- that component isn't rendered on this page, so its classes
+     never bundle here (Astro only ships a component's <style> onto pages
+     that render it). Not a new design language, the same rules. */
+  .drawer-section-heading {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1rem;
+    font-weight: 650;
+  }
+  .drawer-section-heading:first-of-type {
+    margin-top: 0;
+  }
+  .drawer-textarea-box {
+    display: block;
+    width: 100%;
+    min-height: 4.5rem;
+    padding: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    font-size: 0.875rem;
+    font-family: inherit;
+    resize: vertical;
+    box-sizing: border-box;
+    margin-top: 0.5rem;
+  }
+  .tariff-scope-options {
+    display: grid;
+    gap: 0.5rem;
+  }
+  .tariff-scope-option {
+    display: flex;
+    gap: 0.625rem;
+    padding: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    cursor: pointer;
+  }
+  .tariff-scope-option:has(input:checked) {
+    border-color: var(--color-primary);
+    background: var(--color-surface-hover);
+  }
+  .tariff-scope-option input {
+    margin-top: 0.2rem;
+  }
+  .tariff-scope-option strong {
+    display: block;
+    font-size: 0.875rem;
+  }
+  .tariff-scope-option p {
+    margin-top: 0.15rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .tariff-dwelling-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  .tariff-dwelling-actions span {
+    margin-left: auto;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .tariff-dwelling-list {
+    display: grid;
+    gap: 0.25rem;
+    max-height: 12rem;
+    margin-top: 0.75rem;
+    padding: 0.5rem;
+    overflow-y: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+  }
+  .tariff-dwelling-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    border-radius: var(--radius-control);
+    font-size: 0.875rem;
+  }
+  .tariff-dwelling-row:hover {
+    background: var(--color-surface-hover);
   }
 </style>

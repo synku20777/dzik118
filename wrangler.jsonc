@@ -1,71 +1,67 @@
 {
-	"name": "property-billing",
-	"compatibility_date": "2026-09-10",
-	// Required for node-postgres (the "pg" package, spec Section 3.2) to run at
-	// all in the Workers runtime -- without this it fails on node:net/node:tls.
-	"compatibility_flags": [
-		"nodejs_compat"
-	],
-	// Cloudflare Browser Rendering for invoice PDF generation (spec Section
-	// 3.4/3.5/22). Unlike Hyperdrive, this has no localConnectionString-style
-	// passthrough. Confirmed empirically: merely declaring this binding makes
-	// EVERY request to `wrangler dev` hang indefinitely in this sandbox (not
-	// just requests that call renderPdf) -- see src/lib/pdf/render.ts for the
-	// full diagnosis. Real Cloudflare deploys are unaffected; this is a local
-	// sandbox limitation only.
-	"browser": {
-		"binding": "BROWSER",
-	},
-	// Phase L (Automation/audit, spec Section 32): billing-overdue-scan,
-	// auto-invoice-generate, auto-invoice-send all run from one daily tick.
-	// 02:15 UTC keeps it well clear of any organization's local midnight
-	// rollover (spec: "cron runs in UTC; organization billing decisions use
-	// organizations.timezone").
-	"triggers": {
-		"crons": [
-			"15 2 * * *"
-		],
-	},
-	"hyperdrive": [
-		{
-			"binding": "HYPERDRIVE",
-			"id": "935a51fab52f464db770b6232c5dd9d1",
-			// Local dev only: wrangler dev/preview needs this to boot without a live
-			// Cloudflare account. Matches .env.example DATABASE_URL. Not used in production.
-			// "localConnectionString": "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
-		},
-	],
-	// Native platform rate limiting (spec Section 15.1: "endpoint
-	// rate-limited") for POST /api/v1/auth/request-link. namespace_id is an
-	// arbitrary string for local simulation; a real one isn't needed until
-	// production deploy.
-	"ratelimits": [
-		{
-			"name": "AUTH_RATE_LIMITER",
-			"namespace_id": "1001",
-			"simple": {
-				"limit": 5,
-				"period": 60
-			},
-		},
-		{
-			"name": "AUTH_IP_RATE_LIMITER",
-			"namespace_id": "1003",
-			"simple": {
-				"limit": 20,
-				"period": 60
-			},
-		},
-		// Spec Section 33: "auth/public token rate limiting" -- the public,
-		// unauthenticated /invoice/access/[token] routes need the same
-		// protection as the auth magic-link endpoint, keyed by client IP.
-		{
-			"name": "INVOICE_TOKEN_RATE_LIMITER",
-			"namespace_id": "1002",
-			"simple": {
-				"limit": 30,
-				"period": 60
-			},
-		},
-	],
+  "name": "property-billing",
+  "compatibility_date": "2026-09-10",
+  // Required for node-postgres (the "pg" package, spec Section 3.2) to run at
+  // all in the Workers runtime -- without this it fails on node:net/node:tls.
+  "compatibility_flags": ["nodejs_compat"],
+  // Cloudflare Browser Rendering for invoice PDF generation (spec Section
+  // 3.4/3.5/22). Unlike Hyperdrive, this has no localConnectionString-style
+  // passthrough. Confirmed empirically: merely declaring this binding makes
+  // EVERY request to `wrangler dev` hang indefinitely in this sandbox (not
+  // just requests that call renderPdf) -- see src/lib/pdf/render.ts for the
+  // full diagnosis. Real Cloudflare deploys are unaffected; this is a local
+  // sandbox limitation only.
+  "browser": {
+    "binding": "BROWSER",
+  },
+  // Phase L (Automation/audit, spec Section 32): billing-overdue-scan,
+  // auto-invoice-generate, auto-invoice-send all run from one daily tick.
+  // 02:15 UTC keeps it well clear of any organization's local midnight
+  // rollover (spec: "cron runs in UTC; organization billing decisions use
+  // organizations.timezone").
+  "triggers": {
+    "crons": ["15 2 * * *"],
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "935a51fab52f464db770b6232c5dd9d1",
+      // Local dev only: wrangler dev/preview needs this to boot without a live
+      // Cloudflare account. Matches .env.example DATABASE_URL. Not used in production.
+      // "localConnectionString": "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+    },
+  ],
+  // Native platform rate limiting (spec Section 15.1: "endpoint
+  // rate-limited") for POST /api/v1/auth/request-link. namespace_id is an
+  // arbitrary string for local simulation; a real one isn't needed until
+  // production deploy.
+  "ratelimits": [
+    {
+      "name": "AUTH_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 5,
+        "period": 60,
+      },
+    },
+    {
+      "name": "AUTH_IP_RATE_LIMITER",
+      "namespace_id": "1003",
+      "simple": {
+        "limit": 20,
+        "period": 60,
+      },
+    },
+    // Spec Section 33: "auth/public token rate limiting" -- the public,
+    // unauthenticated /invoice/access/[token] routes need the same
+    // protection as the auth magic-link endpoint, keyed by client IP.
+    {
+      "name": "INVOICE_TOKEN_RATE_LIMITER",
+      "namespace_id": "1002",
+      "simple": {
+        "limit": 30,
+        "period": 60,
+      },
+    },
+  ],
 }

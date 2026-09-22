@@ -36,6 +36,11 @@ import { listCasesForDwelling } from "../../../../../domain/periods/cases";
 import { getCurrentOpenPeriod } from "../../../../../domain/periods/periods";
 import { listAuditLogs } from "../../../../../domain/audit/audit-log";
 import { listConversationsWithMessagesForDwelling } from "../../../../../domain/messaging/conversations";
+import {
+  getAssignedRuleIdsForDwelling,
+  listRuleAssignmentsWithDwellingNumbers,
+  listRules,
+} from "../../../../../domain/billing/rules";
 
 const organizationId = Astro.params.orgId!;
 const dwellingId = Astro.params.dwellingId!;
@@ -60,6 +65,9 @@ const adjustmentResult = Astro.getActionResult(
   actions.accounts.createAdjustment
 );
 const archiveResult = Astro.getActionResult(actions.dwellings.archive);
+const tariffAssignmentResult = Astro.getActionResult(
+  actions.billing.updateDwellingTariffAssignments
+);
 
 let organization,
   dwelling,
@@ -70,7 +78,13 @@ let organization,
   caseHistory,
   currentOpenPeriod,
   auditEntries,
-  conversationsWithMessages;
+  conversationsWithMessages,
+  automaticRules: Awaited<ReturnType<typeof listRules>>,
+  eligibleRules: Awaited<ReturnType<typeof listRules>>,
+  assignedRuleIds: Awaited<ReturnType<typeof getAssignedRuleIdsForDwelling>>,
+  assignmentsByRule: Awaited<
+    ReturnType<typeof listRuleAssignmentsWithDwellingNumbers>
+  >;
 try {
   ({
     organization,
@@ -83,8 +97,13 @@ try {
     currentOpenPeriod,
     auditEntries,
     conversationsWithMessages,
+    automaticRules,
+    eligibleRules,
+    assignedRuleIds,
+    assignmentsByRule,
   } = await withRequestDb(async (db) => {
     const organization = await getOrganization(db, organizationId);
+    const allActiveRules = await listRules(db, organizationId);
     return {
       organization,
       dwelling: await getDwelling(db, organizationId, dwellingId),
@@ -113,10 +132,35 @@ try {
         db,
         dwellingId
       ),
+      // "Recurring tariffs" (spec: two entry points -- this page only VIEWS
+      // applicability and toggles THIS dwelling's participation, it never
+      // edits a rule's own definition; Tariffs & Rules owns that).
+      automaticRules: allActiveRules.filter(
+        (r) => r.applicationScope === "ONE_TO_ALL" && r.enabled
+      ),
+      eligibleRules: allActiveRules.filter(
+        (r) => r.applicationScope !== "ONE_TO_ALL" && r.enabled
+      ),
+      assignedRuleIds: await getAssignedRuleIdsForDwelling(db, dwellingId),
+      assignmentsByRule: await listRuleAssignmentsWithDwellingNumbers(
+        db,
+        organizationId
+      ),
     };
   }));
 } catch {
   return Astro.redirect(`/admin/o/${organizationId}/dwellings`);
+}
+
+const assignedRules = eligibleRules.filter((r) => assignedRuleIds.has(r.id));
+// For a ONE_TO_ONE rule this dwelling does NOT already have, disable its
+// checkbox in the manage-tariffs drawer rather than silently reassigning it
+// (spec: "must NOT silently move it... evaluate which is simpler/safer" --
+// requiring the tariff to be edited directly is the simpler, safer choice).
+function oneToOneOwner(ruleId: string): string | null {
+  const targets = assignmentsByRule.get(ruleId) ?? [];
+  const owner = targets.find((tgt) => tgt.dwellingId !== dwellingId);
+  return owner ? owner.number : null;
 }
 
 const dwellingTypeOptions = [
@@ -283,6 +327,14 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
         aria-selected="false"
       >
         {t("Meters")}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        data-filter="tariffs"
+        aria-selected="false"
+      >
+        {t("Recurring tariffs")}
       </button>
       <button
         type="button"
@@ -679,6 +731,98 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                 class="mt-4"
                 title={t("No account entries yet")}
                 description={t("Adjustments will appear here.")}
+              />
+            )
+          }
+        </section>
+
+        <section id="tariffs" class="panel p-6" data-panel="tariffs">
+          <div class="card-header">
+            <div>
+              <h2>{t("Recurring tariffs")}</h2>
+              <p class="text-body-sm text-muted">
+                {
+                  t(
+                    "Which recurring tariffs affect this dwelling. Edit a tariff's own details from Tariffs & rules."
+                  )
+                }
+              </p>
+            </div>
+            {
+              eligibleRules.length > 0 && (
+                <button
+                  type="button"
+                  class="btn-secondary"
+                  data-open-manage-tariffs
+                >
+                  {t("Manage tariffs")}
+                </button>
+              )
+            }
+          </div>
+          {
+            tariffAssignmentResult?.error && (
+              <p
+                class="notice notice-danger"
+                role="alert"
+                data-tariff-assignment-error
+              >
+                {friendlyActionErrorMessage(
+                  tariffAssignmentResult.error,
+                  locale
+                )}
+              </p>
+            )
+          }
+          <h3 class="tariff-group-heading">{t("Automatically applied")}</h3>
+          {
+            automaticRules.length > 0 ? (
+              <ul class="sidebar-item-list">
+                {automaticRules.map((rule) => (
+                  <li>
+                    <div class="sidebar-item-body">
+                      <strong>{rule.name}</strong>
+                      <p>
+                        {rule.unitPrice ?? "0.0000"} / {rule.unit}
+                      </p>
+                    </div>
+                    <span class="status-badge" data-tone="neutral">
+                      {t("All dwellings")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p class="text-body-sm text-muted">
+                {t("No tariffs apply to every dwelling.")}
+              </p>
+            )
+          }
+          <h3 class="tariff-group-heading">{t("Assigned specifically")}</h3>
+          {
+            assignedRules.length > 0 ? (
+              <ul class="sidebar-item-list">
+                {assignedRules.map((rule) => (
+                  <li>
+                    <div class="sidebar-item-body">
+                      <strong>{rule.name}</strong>
+                      <p>
+                        {rule.unitPrice ?? "0.0000"} / {rule.unit}
+                      </p>
+                    </div>
+                    <span class="status-badge" data-tone="neutral">
+                      {rule.applicationScope === "ONE_TO_ONE"
+                        ? t("One dwelling")
+                        : t("Selected dwellings")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState
+                title={t(
+                  "This dwelling is not individually assigned to any tariff."
+                )}
               />
             )
           }
@@ -1363,6 +1507,126 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
         </dialog>
       )
     }
+
+    {
+      eligibleRules.length > 0 && (
+        <dialog
+          class="context-drawer manage-tariffs-drawer"
+          id="manage-tariffs-drawer"
+        >
+          <header class="context-drawer-header">
+            <div class="context-drawer-heading">
+              <p class="context-drawer-eyebrow">
+                {t("DWELLING")} {dwelling.number}
+              </p>
+              <div class="context-drawer-title-row">
+                <h2 class="context-drawer-title">{t("Manage tariffs")}</h2>
+              </div>
+              <p class="context-drawer-meta">
+                {t(
+                  "Choose which selectable tariffs apply to this dwelling. Automatically applied tariffs are not shown here."
+                )}
+              </p>
+            </div>
+            <button
+              type="button"
+              class="context-drawer-close"
+              data-close-manage-tariffs
+              aria-label={t("Close")}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+          </header>
+          <div class="context-drawer-body">
+            <form
+              method="POST"
+              action={actions.billing.updateDwellingTariffAssignments}
+              id="manage-tariffs-form"
+            >
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="dwellingId" value={dwellingId} />
+              <div class="tariff-dwelling-list manage-tariffs-list">
+                {eligibleRules.map((rule) => {
+                  const owner = oneToOneOwner(rule.id);
+                  const isOwnOneToOne =
+                    rule.applicationScope === "ONE_TO_ONE" &&
+                    assignedRuleIds.has(rule.id);
+                  // A one-to-one tariff can never drop to zero dwellings
+                  // (server-enforced too) -- moving or removing it requires
+                  // editing the tariff directly, not unchecking it here.
+                  const locked = !!owner || isOwnOneToOne;
+                  return (
+                    <label
+                      class="tariff-dwelling-row manage-tariff-row"
+                      aria-disabled={locked ? "true" : undefined}
+                    >
+                      <input
+                        type="checkbox"
+                        name="billingRuleIds"
+                        value={rule.id}
+                        checked={assignedRuleIds.has(rule.id)}
+                        disabled={locked}
+                      />
+                      {
+                        // A disabled checkbox is excluded from form
+                        // submission even while checked -- this dwelling's
+                        // existing one-to-one assignment must still be
+                        // submitted as "kept" or the server would read its
+                        // absence as an (rejected, but still error-raising)
+                        // attempt to remove it.
+                        isOwnOneToOne && (
+                          <input
+                            type="hidden"
+                            name="billingRuleIds"
+                            value={rule.id}
+                          />
+                        )
+                      }
+                      <span>
+                        <strong>{rule.name}</strong>
+                        <p>
+                          {rule.applicationScope === "ONE_TO_ONE"
+                            ? t("One dwelling")
+                            : t("Selected dwellings")}
+                          {owner &&
+                            ` -- ${t("already assigned to")} ${t("Dwelling")} ${owner}`}
+                          {isOwnOneToOne &&
+                            ` -- ${t("edit the tariff to move or remove it")}`}
+                        </p>
+                      </span>
+                      {locked && (
+                        <a
+                          href={`${base}/settings/rules`}
+                          class="btn-secondary btn-sm"
+                        >
+                          {t("Edit tariff")}
+                        </a>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+              <div class="rule-form-actions">
+                <button
+                  type="button"
+                  class="btn-secondary"
+                  data-close-manage-tariffs
+                >
+                  {t("Cancel")}
+                </button>
+                <button type="submit" class="btn-primary">
+                  {t("Save changes")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </dialog>
+      )
+    }
   </div>
 </AdminLayout>
 
@@ -1391,6 +1655,29 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
         document.querySelector(".more-menu")?.removeAttribute("open");
         archiveDialog?.showModal();
       });
+    const manageTariffsDialog = document.querySelector<HTMLDialogElement>(
+      "#manage-tariffs-drawer"
+    );
+    document
+      .querySelector<HTMLButtonElement>("[data-open-manage-tariffs]")
+      ?.addEventListener("click", () => manageTariffsDialog?.showModal());
+    for (const closeButton of document.querySelectorAll<HTMLButtonElement>(
+      "[data-close-manage-tariffs]"
+    )) {
+      closeButton.addEventListener("click", () => manageTariffsDialog?.close());
+    }
+    manageTariffsDialog?.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      manageTariffsDialog.close();
+    });
+    // A failed save reloads the page (plain POST form, same convention as
+    // this page's other simple forms) -- reopen the drawer so the error
+    // banner in the tariffs section is immediately next to the form that
+    // produced it, instead of leaving the admin to go find it.
+    if (document.querySelector("[data-tariff-assignment-error]")) {
+      manageTariffsDialog?.showModal();
+    }
+
     archiveDialog?.addEventListener("click", (event) => {
       if (event.target === archiveDialog) archiveDialog.close();
     });
@@ -2853,5 +3140,55 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     .stat-grid {
       grid-template-columns: minmax(0, 1fr);
     }
+  }
+
+  .tariff-group-heading {
+    margin-top: 1.25rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 650;
+    color: var(--color-muted);
+  }
+  .tariff-group-heading:first-of-type {
+    margin-top: 0.5rem;
+  }
+  .manage-tariffs-drawer {
+    width: min(520px, 100vw);
+  }
+  .tariff-dwelling-list {
+    display: grid;
+    gap: 0.5rem;
+  }
+  .manage-tariff-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+  }
+  .manage-tariff-row[aria-disabled="true"] {
+    opacity: 0.7;
+  }
+  .manage-tariff-row span {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .manage-tariff-row strong {
+    display: block;
+    font-size: 0.875rem;
+  }
+  .manage-tariff-row p {
+    margin-top: 0.15rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .rule-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding-top: 1rem;
+    margin-top: 1rem;
+    border-top: 1px solid var(--color-border);
   }
 </style>

@@ -15,7 +15,7 @@ import {
   meterReadings,
 } from "../../db/schema/billing";
 import { meters } from "../../db/schema/dwellings";
-import { getEffectiveRules } from "../billing/rules";
+import { getApplicableRulesForDwelling } from "../billing/rules";
 
 export interface MissingMeterReadingItem {
   meterId: string;
@@ -87,9 +87,19 @@ async function requiredMetersForPeriod(
 async function requiredManualRulesForPeriod(
   tx: DbOrTx,
   organizationId: string,
+  dwellingId: string,
   period: PeriodDateRange
 ) {
-  const rules = await getEffectiveRules(tx, organizationId, period);
+  // Dwelling-scoped: a ONE_TO_ONE/ONE_TO_MANY manual rule must only ever
+  // require input from the dwellings it's actually assigned to (spec: "a
+  // ONE_TO_ONE manual rule on Apartment 5 must not require input from
+  // Apartment 6").
+  const rules = await getApplicableRulesForDwelling(
+    tx,
+    organizationId,
+    dwellingId,
+    period
+  );
   return rules.filter(
     (r) =>
       r.calculationType === "MANUAL_QUANTITY" ||
@@ -113,6 +123,7 @@ export async function computeMissingData(
   const requiredManualRules = await requiredManualRulesForPeriod(
     tx,
     organizationId,
+    dwellingId,
     period
   );
   if (requiredMeters.length === 0 && requiredManualRules.length === 0) {

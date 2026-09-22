@@ -85,6 +85,13 @@
       "when": 1790100000000,
       "tag": "0011_resend_retryable_command_id",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790150000000,
+      "tag": "0012_billing_rule_scope",
+      "breakpoints": true
     }
   ]
 }

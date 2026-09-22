@@ -2,10 +2,18 @@
 // (spec Section 10, BIL-001..005, INV-001/002/004).
 import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
-import { billingCalculationTypeEnum } from "../db/schema/billing";
+import {
+  billingCalculationTypeEnum,
+  billingRuleScopeEnum,
+} from "../db/schema/billing";
 import { meterTypeEnum } from "../db/schema/dwellings";
 import { requireOrganizationAccess } from "../domain/authorization/guards";
-import { archiveRule, createRule, updateRule } from "../domain/billing/rules";
+import {
+  archiveRule,
+  createRule,
+  setDwellingRuleParticipation,
+  updateRule,
+} from "../domain/billing/rules";
 import { decimalInput } from "../lib/decimal-input";
 import {
   bulkGenerateInvoices,
@@ -66,7 +74,10 @@ export const billing = {
       ).optional(),
       effectiveFrom: z.iso.date(),
       effectiveUntil: z.iso.date().optional(),
+      applicationScope: z.enum(billingRuleScopeEnum.enumValues).optional(),
+      dwellingIds: z.array(z.uuid()).optional(),
       sortOrder: z.coerce.number().int().optional(),
+      enabled: z.coerce.boolean().optional(),
     }),
     handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
       requireOrganizationAccess(locals.auth, organizationId);
@@ -86,7 +97,14 @@ export const billing = {
       // without `.optional()` so a cleared field actually clears the column.
       nameEn: z.string().max(200).nullable(),
       nameRu: z.string().max(200).nullable(),
+      code: z.string().min(1).max(50).optional(),
       description: z.string().max(1000).nullable().optional(),
+      calculationType: z.enum(billingCalculationTypeEnum.enumValues).optional(),
+      // `.nullable()` without `.optional()`, same reasoning as nameEn/nameRu
+      // above -- clearing meterType (e.g. switching away from
+      // METER_CONSUMPTION) must be expressible, not just "don't touch it".
+      meterType: z.enum(meterTypeEnum.enumValues).nullable().optional(),
+      unit: z.string().min(1).max(20).optional(),
       unitPrice: decimalInput(/^\d{1,10}(\.\d{1,4})?$/, UNIT_PRICE_MESSAGE)
         .nullable()
         .optional(),
@@ -96,6 +114,8 @@ export const billing = {
       ).optional(),
       effectiveFrom: z.iso.date().optional(),
       effectiveUntil: z.iso.date().nullable().optional(),
+      applicationScope: z.enum(billingRuleScopeEnum.enumValues).optional(),
+      dwellingIds: z.array(z.uuid()).optional(),
       sortOrder: z.coerce.number().int().optional(),
       enabled: z.coerce.boolean().optional(),
     }),
@@ -104,6 +124,33 @@ export const billing = {
         requireOrganizationAccess(locals.auth, organizationId);
         return withDb((db) =>
           updateRule(db, organizationId, ruleId, input, locals.auth!.userId)
+        );
+      }
+    ),
+  }),
+
+  // Dwelling-side "Manage tariffs" -- toggles THIS dwelling's participation
+  // in ONE_TO_MANY/ONE_TO_ONE rules only. Never edits a rule's own fields
+  // (spec: "must NEVER edit the tariff's own price/type/etc from the
+  // dwelling side").
+  updateDwellingTariffAssignments: defineAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      dwellingId: z.uuid(),
+      billingRuleIds: z.array(z.uuid()).optional(),
+    }),
+    handler: safeHandler(
+      async ({ organizationId, dwellingId, billingRuleIds }, { locals }) => {
+        requireOrganizationAccess(locals.auth, organizationId);
+        return withDb((db) =>
+          setDwellingRuleParticipation(
+            db,
+            organizationId,
+            dwellingId,
+            billingRuleIds ?? [],
+            locals.auth!.userId
+          )
         );
       }
     ),

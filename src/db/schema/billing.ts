@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -45,6 +46,20 @@ export const billingCalculationTypeEnum = pgEnum("billing_calculation_type", [
   "METER_CONSUMPTION",
   "MANUAL_QUANTITY",
   "MANUAL_AMOUNT",
+]);
+
+// ONE_TO_ALL: implicit for every current and future dwelling in the
+// organization, no billing_rule_assignments rows involved at all.
+// ONE_TO_MANY: applies only to dwellings with a billing_rule_assignments
+// row; a dwelling created after the rule is never auto-included.
+// ONE_TO_ONE: exactly one billing_rule_assignments row must exist at all
+// times -- enforced in the domain layer (updateRule's transaction), not by
+// a DB constraint, matching this codebase's existing convention of
+// enforcing cross-row invariants in the domain layer (see invoices.ts).
+export const billingRuleScopeEnum = pgEnum("billing_rule_scope", [
+  "ONE_TO_ALL",
+  "ONE_TO_MANY",
+  "ONE_TO_ONE",
 ]);
 
 export const billingPeriods = pgTable(
@@ -137,6 +152,9 @@ export const billingRules = pgTable(
       .default("0"),
     effectiveFrom: date("effective_from").notNull(),
     effectiveUntil: date("effective_until"),
+    applicationScope: billingRuleScopeEnum("application_scope")
+      .notNull()
+      .default("ONE_TO_ALL"),
     sortOrder: integer("sort_order").notNull().default(0),
     enabled: boolean("enabled").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -152,7 +170,59 @@ export const billingRules = pgTable(
       table.organizationId,
       table.code
     ),
+    // Referenced by billing_rule_assignments' composite FK below, same
+    // pattern as dwellings_id_organization_id_key.
+    unique("billing_rules_id_organization_id_key").on(
+      table.id,
+      table.organizationId
+    ),
     index("billing_rules_organization_id_idx").on(table.organizationId),
+  ]
+);
+
+// Explicit dwelling participation for ONE_TO_MANY/ONE_TO_ONE rules. Never
+// consulted for ONE_TO_ALL rules (those apply to every dwelling with no
+// rows here at all). A ONE_TO_ONE rule must have exactly one row at all
+// times -- see billingRuleScopeEnum's comment.
+export const billingRuleAssignments = pgTable(
+  "billing_rule_assignments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    billingRuleId: uuid("billing_rule_id")
+      .notNull()
+      .references(() => billingRules.id),
+    dwellingId: uuid("dwelling_id")
+      .notNull()
+      .references(() => dwellings.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("billing_rule_assignments_rule_id_dwelling_id_key").on(
+      table.billingRuleId,
+      table.dwellingId
+    ),
+    index("billing_rule_assignments_organization_id_idx").on(
+      table.organizationId
+    ),
+    index("billing_rule_assignments_dwelling_id_idx").on(table.dwellingId),
+    foreignKey({
+      columns: [table.billingRuleId, table.organizationId],
+      foreignColumns: [billingRules.id, billingRules.organizationId],
+      name: "billing_rule_assignments_billing_rule_id_organization_id_fk",
+    }),
+    foreignKey({
+      columns: [table.dwellingId, table.organizationId],
+      foreignColumns: [dwellings.id, dwellings.organizationId],
+      name: "billing_rule_assignments_dwelling_id_organization_id_fk",
+    }),
   ]
 );
 
