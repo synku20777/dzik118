@@ -1340,13 +1340,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
 </script>
 
 <style is:global>
-  /* Astro scopes component styles by adding a data-astro-cid attribute
-     that only elements written directly in this template receive --
-     the live preview built by the <script> above creates elements via
-     document.createElement/innerHTML at runtime, so .rule-summary-preview*
-     and .rule-icon must be styled globally, not in the scoped <style>
-     block below (same reasoning as the messages inbox page's .message-*
-     classes). */
   /* Table-row icon -- bare, no badge container (per the icon system's
      container rule: table rows/buttons/chips stay bare; only category
      cards, empty states, and summary/KPI cards keep the badge treatment). */
@@ -1361,29 +1354,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   }
   .rule-icon[data-icon="hot_water"] {
     color: var(--color-meter-hot-text);
-  }
-  .rule-summary-preview {
-    display: grid;
-    gap: 0.75rem;
-  }
-  .rule-summary-preview-head {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-  .rule-summary-preview-name {
-    font-weight: 700;
-    font-size: 1rem;
-  }
-  .rule-summary-preview-code {
-    margin-top: 0.1rem;
-    color: var(--color-muted);
-    font-size: 0.75rem;
-    font-family: monospace;
-  }
-  .rule-summary-preview-line {
-    color: var(--color-muted);
-    font-size: 0.8125rem;
   }
 </style>
 
@@ -1460,48 +1430,9 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     justify-content: flex-end;
     gap: 0.5rem;
   }
-  .rule-edit,
   .row-menu {
     position: relative;
     display: inline-block;
-  }
-  .rule-edit summary {
-    list-style: none;
-    cursor: pointer;
-  }
-  .rule-edit summary::-webkit-details-marker {
-    display: none;
-  }
-  .rule-edit-panel {
-    position: absolute;
-    z-index: 20;
-    top: calc(100% + 0.35rem);
-    right: 0;
-    display: grid;
-    gap: 0.75rem;
-    width: 14rem;
-    padding: 0.75rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-control);
-    background: var(--color-surface);
-    box-shadow: var(--elevation-1);
-    text-align: left;
-  }
-  .rule-edit-panel label {
-    display: block;
-    margin-bottom: 0.25rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--color-muted);
-  }
-  .rule-edit-panel input[type="text"],
-  .rule-edit-panel input[type="date"] {
-    width: 100%;
-    padding: 0.5rem 0.5rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-input);
-    font-size: 0.8125rem;
-    box-sizing: border-box;
   }
   .rule-edit-checkbox {
     display: flex;
@@ -1548,33 +1479,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   .row-menu button:hover {
     background: var(--color-surface-hover);
   }
-  .rules-split {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
-    gap: 1.25rem;
-    align-items: start;
-  }
-  .rules-create {
-    padding: 1.5rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-    box-shadow: var(--shadow-panel);
-  }
-  .rules-create h2 {
-    font-size: 1.125rem;
-    font-weight: 700;
-  }
-  .rules-create-desc {
-    margin-top: 0.25rem;
-    color: var(--color-muted);
-    font-size: 0.875rem;
-  }
-  .rules-create form {
-    display: grid;
-    gap: 1rem;
-    margin-top: 1.25rem;
-  }
   .rule-field-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1584,7 +1488,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .rule-field label {
-    /* display: block; */
     margin-bottom: 0.5rem;
     font-size: 0.875rem;
     font-weight: 600;
@@ -1635,61 +1538,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   .rules-sidebar {
     display: grid;
     gap: 1.25rem;
-  }
-  .rule-summary-card {
-    padding: 1.5rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-    box-shadow: var(--shadow-panel);
-  }
-  .rule-summary-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
-  .rule-summary-head h2 {
-    font-size: 1rem;
-    font-weight: 700;
-  }
-  .rule-summary-preview-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: var(--color-primary);
-    font-size: 0.8125rem;
-    font-weight: 650;
-  }
-  .rule-summary-preview-label svg {
-    width: 1rem;
-    height: 1rem;
-  }
-  #rule-summary-body {
-    margin-top: 1rem;
-  }
-  .rule-summary-empty {
-    display: flex;
-    gap: 0.75rem;
-    padding: 1rem;
-    border: 1px dashed var(--color-border);
-    border-radius: var(--radius-panel);
-    color: var(--color-muted);
-  }
-  .rule-summary-empty svg {
-    width: 1.5rem;
-    height: 1.5rem;
-    flex: 0 0 auto;
-  }
-  .rule-summary-empty-title {
-    font-size: 0.875rem;
-    font-weight: 650;
-    color: var(--color-foreground);
-  }
-  .rule-summary-empty-text {
-    margin-top: 0.25rem;
-    font-size: 0.8125rem;
-    line-height: 1.45;
   }
   .rule-info-banner {
     display: flex;
@@ -1765,11 +1613,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     line-height: 1.5;
   }
 
-  @media (max-width: 900px) {
-    .rules-split {
-      grid-template-columns: 1fr;
-    }
-  }
   @media (max-width: 640px) {
     .rule-field-row,
     .rule-field-row-3 {

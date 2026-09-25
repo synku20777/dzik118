@@ -10,6 +10,14 @@ jobs:
   quality-gates:
     name: Quality Gates
     runs-on: ubuntu-latest
+    # Dummy values only: astro.config.ts declares these as required secrets
+    # with no default, and .dev.vars (gitignored) doesn't exist in CI.
+    env:
+      SUPABASE_URL: http://127.0.0.1:54321
+      SUPABASE_PUBLISHABLE_KEY: ci-dummy-publishable-key
+      SUPABASE_SECRET_KEY: ci-dummy-secret-key
+      APP_BASE_URL: http://localhost:4321
+      INTERNAL_CRON_SECRET: ci-dummy-cron-secret
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -22,6 +30,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # astro:env/server and Locals types are generated into .astro/
+      # (gitignored); tsc needs them before typecheck runs.
+      - name: Generate Astro types
+        run: npx astro sync
 
       - name: Check formatting
         run: npm run format:check

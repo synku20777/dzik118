@@ -1,9 +1,5 @@
 import type { IconName } from "./icons";
 
-// Shared presentation only: billing_case remains the workflow authority.
-export type InvoiceCaseStatus =
-  "MISSING_DATA" | "READY" | "DRAFT" | "PREPARED" | "SENT" | "PAID" | "OVERDUE";
-
 // Strict status -> icon mapping (Tabler Icons, Outline). Never invent a new
 // icon per state -- the icon reinforces the text label, it never replaces
 // it, so states that share a meaning share an icon.

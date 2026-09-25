@@ -4,7 +4,10 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../../src/db/client";
-import { billingCases } from "../../src/db/schema/billing";
+import {
+  billingCases,
+  billingRuleAssignments,
+} from "../../src/db/schema/billing";
 import {
   cleanupOrganization,
   createIntegrationDb,
@@ -19,7 +22,6 @@ import {
   ValidationError,
   createRule,
   getApplicableRulesForDwelling,
-  getRuleAssignedDwellingIds,
   updateRule,
 } from "../../src/domain/billing/rules";
 import {
@@ -29,6 +31,14 @@ import {
 
 let db: Db;
 let seedAdminId: string;
+
+async function getRuleDwellingIds(billingRuleId: string): Promise<string[]> {
+  const rows = await db
+    .select({ dwellingId: billingRuleAssignments.dwellingId })
+    .from(billingRuleAssignments)
+    .where(eq(billingRuleAssignments.billingRuleId, billingRuleId));
+  return rows.map((r) => r.dwellingId);
+}
 
 async function getCaseForDwelling(
   organizationId: string,
@@ -384,7 +394,7 @@ describe("billing rule applicability scope", () => {
       seedAdminId
     );
     expect(updated.applicationScope).toBe("ONE_TO_ALL");
-    expect(await getRuleAssignedDwellingIds(db, rule.id)).toEqual([]);
+    expect(await getRuleDwellingIds(rule.id)).toEqual([]);
     await cleanupOrg(org.id);
   });
 
@@ -440,9 +450,7 @@ describe("billing rule applicability scope", () => {
         seedAdminId
       )
     ).rejects.toThrow(ValidationError);
-    expect(await getRuleAssignedDwellingIds(db, rule.id)).toEqual([
-      dwelling.id,
-    ]);
+    expect(await getRuleDwellingIds(rule.id)).toEqual([dwelling.id]);
     await cleanupOrg(org.id);
   });
 

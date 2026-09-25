@@ -524,18 +524,6 @@ export async function getApplicableRulesForDwelling(
   );
 }
 
-// For the tariff drawer's edit-mode prefill and the "Applies to" column.
-export async function getRuleAssignedDwellingIds(
-  db: DbOrTx,
-  billingRuleId: string
-): Promise<string[]> {
-  const rows = await db
-    .select({ dwellingId: billingRuleAssignments.dwellingId })
-    .from(billingRuleAssignments)
-    .where(eq(billingRuleAssignments.billingRuleId, billingRuleId));
-  return rows.map((r) => r.dwellingId);
-}
-
 // Dwelling page's "Recurring tariffs" section: the tariffs that are LIVE
 // right now (enabled, not archived, today falls in the effective window)
 // and applicable to this specific dwelling -- not tied to any billing
