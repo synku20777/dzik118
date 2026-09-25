@@ -6,10 +6,18 @@ on:
   pull_request:
     branches: ["main", "master"]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   quality-gates:
     name: Quality Gates
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Dummy values only: astro.config.ts declares these as required secrets
     # with no default, and .dev.vars (gitignored) doesn't exist in CI.
     env:
@@ -50,6 +58,20 @@ jobs:
 
       - name: Run unit tests
         run: npm run test
+
+      # Fails if src/db/schema/* changed without a matching committed
+      # migration (generate would emit a new file/journal entry).
+      - name: Check migration drift
+        run: |
+          npx drizzle-kit generate --name ci_drift
+          git status --porcelain drizzle
+          test -z "$(git status --porcelain drizzle)"
+
+      # Non-blocking for now: 7 high-severity advisories already exist.
+      # Remove continue-on-error once they're resolved.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
 
       - name: Build project
         run: npm run build

@@ -1,0 +1,64 @@
+name: Deploy
+
+# Manual only: `npm run deploy` runs production migrations. See
+# docs/deployment/DEPLOYMENT_RUNBOOK.md before the first run. The
+# `production` environment should have a required reviewer configured
+# (Settings -> Environments) so every run waits for approval.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  deploy:
+    name: Deploy to Cloudflare
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    env:
+      # Build-time validation of required astro:env secrets; runtime
+      # secrets live in Cloudflare (`wrangler secret put`).
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+      INTERNAL_CRON_SECRET: ${{ secrets.INTERNAL_CRON_SECRET }}
+      PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Require green CI for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          result=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" \
+            --status success --json databaseId --jq 'length')
+          if [ "$result" -lt 1 ]; then
+            echo "No successful CI run for $GITHUB_SHA; refusing to deploy."
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Astro types
+        run: npx astro sync
+
+      # build + db:migrate:production + wrangler deploy
+      - name: Deploy
+        run: npm run deploy
