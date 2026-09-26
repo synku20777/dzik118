@@ -22,9 +22,9 @@ export const CANONICAL_INVOICE_LOCALE: InvoiceLocale = "lv";
 // Bumped only when the *set* of system-generated label strings changes --
 // see the file header comment. invoice-template-schema.ts imports this to
 // stamp every newly generated invoice's snapshot.
-export const CURRENT_LABEL_SET_VERSION = 1;
+export const CURRENT_LABEL_SET_VERSION = 2;
 
-export type InvoiceLabelKey =
+type InvoiceLabelKeyV1 =
   | "invoice"
   | "invoiceNumber"
   | "issued"
@@ -51,10 +51,15 @@ export type InvoiceLabelKey =
   | "bic"
   | "scanToPay";
 
+// V2 adds the issuer identifiers Latvian invoices must show.
+export type InvoiceLabelKey =
+  InvoiceLabelKeyV1 | "registrationNumber" | "vatNumber";
+
+type InvoiceLabelDictionaryV1 = Record<InvoiceLabelKeyV1, string>;
 type InvoiceLabelDictionary = Record<InvoiceLabelKey, string>;
 
 // Never edit this object's values after it ships -- see header comment.
-const INVOICE_LABELS_V1: Record<InvoiceLocale, InvoiceLabelDictionary> = {
+const INVOICE_LABELS_V1: Record<InvoiceLocale, InvoiceLabelDictionaryV1> = {
   lv: {
     invoice: "Rēķins",
     invoiceNumber: "Rēķina numurs",
@@ -136,17 +141,40 @@ const INVOICE_LABELS_V1: Record<InvoiceLocale, InvoiceLabelDictionary> = {
     bic: "BIC",
     scanToPay: "Отсканируйте для оплаты",
   },
-} satisfies Record<InvoiceLocale, InvoiceLabelDictionary>;
+} satisfies Record<InvoiceLocale, InvoiceLabelDictionaryV1>;
 for (const dictionary of Object.values(INVOICE_LABELS_V1)) {
   Object.freeze(dictionary);
 }
 Object.freeze(INVOICE_LABELS_V1);
 
+const INVOICE_LABELS_V2: Record<InvoiceLocale, InvoiceLabelDictionary> = {
+  lv: {
+    ...INVOICE_LABELS_V1.lv,
+    registrationNumber: "Reģ. Nr.",
+    vatNumber: "PVN reģ. Nr.",
+  },
+  en: {
+    ...INVOICE_LABELS_V1.en,
+    registrationNumber: "Reg. No.",
+    vatNumber: "VAT No.",
+  },
+  ru: {
+    ...INVOICE_LABELS_V1.ru,
+    registrationNumber: "Рег. №",
+    vatNumber: "Номер плательщика НДС",
+  },
+};
+for (const dictionary of Object.values(INVOICE_LABELS_V2)) {
+  Object.freeze(dictionary);
+}
+Object.freeze(INVOICE_LABELS_V2);
+
 const LABEL_SETS: Record<
   number,
-  Record<InvoiceLocale, InvoiceLabelDictionary>
+  Record<InvoiceLocale, Partial<InvoiceLabelDictionary>>
 > = {
   1: INVOICE_LABELS_V1,
+  2: INVOICE_LABELS_V2,
 };
 
 // `labelSetVersion` comes from a frozen invoice snapshot -- an unrecognized
@@ -161,7 +189,7 @@ export function translateInvoiceLabel(
 ): string {
   const set =
     LABEL_SETS[labelSetVersion] ?? LABEL_SETS[CURRENT_LABEL_SET_VERSION];
-  return set[locale][key];
+  return set[locale][key] ?? "";
 }
 
 // Single fallback point for every translatable value on an invoice (tariff

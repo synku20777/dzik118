@@ -182,6 +182,19 @@ export function renderInvoiceHtml(
   const template = normalizeInvoiceTemplateSnapshot(invoice.templateSnapshot);
   const label = (key: Parameters<typeof translateInvoiceLabel>[1]) =>
     translateInvoiceLabel(locale, key, template.labelSetVersion);
+  // Labels for these exist from label set 2 on; older invoices never show them.
+  const issuerIds =
+    template.labelSetVersion >= 2
+      ? [
+          issuer.registrationNumber &&
+            `${label("registrationNumber")} ${escapeHtml(issuer.registrationNumber)}`,
+          issuer.vatNumber &&
+            `${label("vatNumber")} ${escapeHtml(issuer.vatNumber)}`,
+        ]
+          .filter(Boolean)
+          .map((line) => `${line}<br />`)
+          .join("\n      ")
+      : "";
   const headerText = localizedTemplateText(
     template.headerText,
     template.config.textTranslations?.headerText,
@@ -261,6 +274,7 @@ export function renderInvoiceHtml(
   <div class="parties"${spacing}>
     <div>
       <strong>${escapeHtml(issuer.name)}</strong><br />
+      ${issuerIds}
       ${escapeHtml(issuer.addressLine1)}<br />
       ${issuer.addressLine2 ? `${escapeHtml(issuer.addressLine2)}<br />` : ""}
       ${[issuer.postalCode, issuer.city].filter(Boolean).map(escapeHtml).join(" ")}

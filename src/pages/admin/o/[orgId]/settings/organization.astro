@@ -115,6 +115,31 @@ const cityLine = [organization.city, organization.postalCode]
             <FieldError name="name" error={updateResult?.error} />
           </div>
 
+          <div class="org-field-row">
+            <div class="org-field">
+              <label for="registrationNumber">{t("Registration number")}</label>
+              <input
+                id="registrationNumber"
+                name="registrationNumber"
+                aria-describedby="registrationNumber-error"
+                value={organization.registrationNumber ?? ""}
+              />
+              <FieldError
+                name="registrationNumber"
+                error={updateResult?.error}
+              />
+            </div>
+            <div class="org-field">
+              <label for="vatNumber">{t("VAT number")}</label>
+              <input
+                id="vatNumber"
+                name="vatNumber"
+                aria-describedby="vatNumber-error"
+                value={organization.vatNumber ?? ""}
+              />
+              <FieldError name="vatNumber" error={updateResult?.error} />
+            </div>
+          </div>
           <div class="org-field">
             <label for="addressLine1">{t("Address")}</label>
             <input
@@ -255,6 +280,14 @@ const cityLine = [organization.city, organization.postalCode]
                   )
                 }
               </dd>
+            </div>
+            <div>
+              <dt>{t("Registration number")}</dt>
+              <dd>{organization.registrationNumber ?? "—"}</dd>
+            </div>
+            <div>
+              <dt>{t("VAT number")}</dt>
+              <dd>{organization.vatNumber ?? "—"}</dd>
             </div>
             <div>
               <dt>{t("Email")}</dt>

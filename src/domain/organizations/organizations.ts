@@ -30,6 +30,8 @@ export interface CreateOrganizationInput {
   countryCode?: string;
   email?: string;
   phone?: string;
+  registrationNumber?: string;
+  vatNumber?: string;
   bankName?: string;
   iban?: string;
   bic?: string;
@@ -86,6 +88,8 @@ export interface UpdateOrganizationInput {
   countryCode?: string;
   email?: string | null;
   phone?: string | null;
+  registrationNumber?: string | null;
+  vatNumber?: string | null;
   bankName?: string | null;
   iban?: string | null;
   bic?: string | null;

@@ -690,7 +690,95 @@ const lv: Record<string, string> = {
   "Applying changes…": "Piemēro izmaiņas…",
   Saved: "Saglabāts",
   Dismiss: "Aizvērt",
+  "Sign in": "Pieteikties",
+  Password: "Parole",
+  "Resident sign in": "Iedzīvotāja pieteikšanās",
+  "Admin sign in": "Administratora pieteikšanās",
+  "Send sign-in link": "Nosūtīt pieteikšanās saiti",
+  "Incorrect email or password.": "Nepareizs e-pasts vai parole.",
+  "We couldn't find an account for that sign-in. If you believe this is a mistake, contact your administrator.":
+    "Šai pieteikšanās reizei konts netika atrasts. Ja uzskatāt, ka tā ir kļūda, sazinieties ar savu administratoru.",
+  "Too many sign-in attempts. Please wait a minute and try again.":
+    "Pārāk daudz pieteikšanās mēģinājumu. Uzgaidiet minūti un mēģiniet vēlreiz.",
+  "Enter your email and we'll send you a secure sign-in link.":
+    "Ievadiet savu e-pastu, un mēs nosūtīsim drošu pieteikšanās saiti.",
+  "If that email is registered, a sign-in link is on its way.":
+    "Ja šis e-pasts ir reģistrēts, pieteikšanās saite jau ir ceļā.",
+  "This sign-in link is invalid or has expired. Request a new one below.":
+    "Šī pieteikšanās saite nav derīga vai ir beigusies. Pieprasiet jaunu zemāk.",
+  "Page not found": "Lapa nav atrasta",
+  "The page you are looking for does not exist or has moved.":
+    "Meklētā lapa neeksistē vai ir pārvietota.",
+  "Go to sign in": "Uz pieteikšanos",
+  "Sign in as a resident with an email link, or as an administrator with a password.":
+    "Pieteikties kā iedzīvotājam ar e-pasta saiti vai kā administratoram ar paroli.",
+  "Access denied": "Piekļuve liegta",
+  "This area requires additional verification. Please complete sign-in with your second factor.":
+    "Šai sadaļai nepieciešama papildu verifikācija. Lūdzu, pabeidziet pieteikšanos ar otro faktoru.",
+  "You do not have access to this resource.":
+    "Jums nav piekļuves šim resursam.",
+  "Back to sign in": "Atpakaļ uz pieteikšanos",
+  "Confirm sign-in": "Apstiprināt pieteikšanos",
+  "Click below to finish signing in.":
+    "Noklikšķiniet zemāk, lai pabeigtu pieteikšanos.",
+  "Registration number": "Reģistrācijas numurs",
+  "VAT number": "PVN reģistrācijas numurs",
+  "View confirmed payments": "Skatīt apstiprinātos maksājumus",
+  "Confirm this payment? The invoice balance will be updated.":
+    "Vai apstiprināt šo maksājumu? Rēķina atlikums tiks atjaunināts.",
+  "The period start date must not be after its end date.":
+    "Perioda sākuma datums nedrīkst būt vēlāks par beigu datumu.",
+  "The due date must not be before the invoice issue date.":
+    "Apmaksas termiņš nedrīkst būt agrāks par rēķina izrakstīšanas datumu.",
+  "The reading deadline must not be after the invoice issue date.":
+    "Rādījumu iesniegšanas termiņš nedrīkst būt vēlāks par rēķina izrakstīšanas datumu.",
+  "Forgot password": "Paroles atjaunošana",
+  "Forgot password?": "Aizmirsāt paroli?",
+  "Enter your admin email and we'll send you a link to choose a new password.":
+    "Ievadiet administratora e-pastu, un mēs nosūtīsim saiti jaunas paroles iestatīšanai.",
+  "If that email belongs to an admin account, a reset link is on its way.":
+    "Ja šis e-pasts ir reģistrēts administratora kontam, saite paroles atjaunošanai ir nosūtīta.",
+  "This reset link is invalid or has expired. Request a new one.":
+    "Šī paroles atjaunošanas saite nav derīga vai ir beigusies. Pieprasiet jaunu.",
+  "Send reset link": "Nosūtīt atjaunošanas saiti",
+  "The password must be at least 8 characters.":
+    "Parolei jābūt vismaz 8 rakstzīmes garai.",
+  "The password is too long.": "Parole ir pārāk gara.",
+  "The two passwords do not match.": "Abas paroles nesakrīt.",
+  "The password could not be changed. Try a different password.":
+    "Paroli neizdevās nomainīt. Mēģiniet citu paroli.",
+  "Choose a new password": "Iestatiet jaunu paroli",
+  "Use at least 8 characters.": "Izmantojiet vismaz 8 rakstzīmes.",
+  "New password": "Jaunā parole",
+  "Repeat new password": "Atkārtojiet jauno paroli",
+  "Change password": "Nomainīt paroli",
+  "Password updated. Sign in with your new password.":
+    "Parole ir atjaunota. Piesakieties ar savu jauno paroli.",
+  "Reset your password": "Atjaunojiet savu paroli",
+  "Click below to choose a new password.":
+    "Lai iestatītu jaunu paroli, nospiediet «Turpināt».",
+  Continue: "Turpināt",
   "All changes saved": "Visas izmaiņas saglabātas",
+  "Send this invoice to the resident by email now? Sent invoices cannot be edited.":
+    "Vai nosūtīt šo rēķinu iedzīvotājam pa e-pastu tagad? Nosūtītos rēķinus nevar rediģēt.",
+  "Send this invoice to the resident again by email?":
+    "Vai nosūtīt šo rēķinu iedzīvotājam pa e-pastu vēlreiz?",
+  "Revoke the resident's access link? They will no longer be able to open this invoice with it.":
+    "Vai atsaukt iedzīvotāja piekļuves saiti? Ar to vairs nebūs iespējams atvērt šo rēķinu.",
+  "Record that this invoice was physically posted? This cannot be undone.":
+    "Vai atzīmēt, ka šis rēķins ir nosūtīts pa pastu? To nevar atsaukt.",
+  "Send all selected invoices to residents by email now? Sent invoices cannot be edited.":
+    "Vai nosūtīt visus atlasītos rēķinus iedzīvotājiem pa e-pastu tagad? Nosūtītos rēķinus nevar rediģēt.",
+  "Archive this tariff? It will no longer be used for new invoices.":
+    "Vai arhivēt šo tarifu? Tas vairs netiks izmantots jauniem rēķiniem.",
+  "Invoice prepared.": "Rēķins sagatavots.",
+  "Invoice sent.": "Rēķins nosūtīts.",
+  "Sending has not finished yet. Check the delivery status.":
+    "Sūtīšana vēl nav pabeigta. Pārbaudiet piegādes statusu.",
+  "Resend submitted. Check the delivery status.":
+    "Atkārtota sūtīšana iesniegta. Pārbaudiet piegādes statusu.",
+  "Access link revoked.": "Piekļuves saite atsaukta.",
+  "Paper dispatch recorded.": "Nosūtīšana pa pastu atzīmēta.",
   "1 change saving": "Tiek saglabāta 1 izmaiņa",
   "{n} changes saving": "Tiek saglabātas {n} izmaiņas",
   "1 change needs attention": "1 izmaiņai jāpievērš uzmanība",
@@ -1787,7 +1875,94 @@ const ru: Record<string, string> = {
   "Applying changes…": "Применение изменений…",
   Saved: "Сохранено",
   Dismiss: "Закрыть",
+  "Sign in": "Войти",
+  Password: "Пароль",
+  "Resident sign in": "Вход для жильцов",
+  "Admin sign in": "Вход для администраторов",
+  "Send sign-in link": "Отправить ссылку для входа",
+  "Incorrect email or password.": "Неверный e-mail или пароль.",
+  "We couldn't find an account for that sign-in. If you believe this is a mistake, contact your administrator.":
+    "Для этого входа аккаунт не найден. Если вы считаете, что это ошибка, обратитесь к администратору.",
+  "Too many sign-in attempts. Please wait a minute and try again.":
+    "Слишком много попыток входа. Подождите минуту и повторите.",
+  "Enter your email and we'll send you a secure sign-in link.":
+    "Введите свой e-mail, и мы отправим защищённую ссылку для входа.",
+  "If that email is registered, a sign-in link is on its way.":
+    "Если этот e-mail зарегистрирован, ссылка для входа уже отправлена.",
+  "This sign-in link is invalid or has expired. Request a new one below.":
+    "Эта ссылка для входа недействительна или истекла. Запросите новую ниже.",
+  "Page not found": "Страница не найдена",
+  "The page you are looking for does not exist or has moved.":
+    "Страница, которую вы ищете, не существует или была перемещена.",
+  "Go to sign in": "Перейти ко входу",
+  "Sign in as a resident with an email link, or as an administrator with a password.":
+    "Войдите как жилец по ссылке из e-mail или как администратор по паролю.",
+  "Access denied": "Доступ запрещён",
+  "This area requires additional verification. Please complete sign-in with your second factor.":
+    "Для этого раздела нужна дополнительная проверка. Завершите вход с помощью второго фактора.",
+  "You do not have access to this resource.":
+    "У вас нет доступа к этому ресурсу.",
+  "Back to sign in": "Назад ко входу",
+  "Confirm sign-in": "Подтвердить вход",
+  "Click below to finish signing in.": "Нажмите ниже, чтобы завершить вход.",
+  "Registration number": "Регистрационный номер",
+  "VAT number": "Номер плательщика НДС",
+  "View confirmed payments": "Показать подтверждённые платежи",
+  "Confirm this payment? The invoice balance will be updated.":
+    "Подтвердить этот платёж? Баланс счёта будет обновлён.",
+  "The period start date must not be after its end date.":
+    "Дата начала периода не может быть позже даты окончания.",
+  "The due date must not be before the invoice issue date.":
+    "Срок оплаты не может быть раньше даты выставления счёта.",
+  "The reading deadline must not be after the invoice issue date.":
+    "Срок передачи показаний не может быть позже даты выставления счёта.",
+  "Forgot password": "Забыли пароль",
+  "Forgot password?": "Забыли пароль?",
+  "Enter your admin email and we'll send you a link to choose a new password.":
+    "Введите e-mail администратора, и мы отправим ссылку для выбора нового пароля.",
+  "If that email belongs to an admin account, a reset link is on its way.":
+    "Если этот e-mail принадлежит аккаунту администратора, ссылка для сброса пароля уже отправлена.",
+  "This reset link is invalid or has expired. Request a new one.":
+    "Эта ссылка для сброса недействительна или истекла. Запросите новую.",
+  "Send reset link": "Отправить ссылку для сброса",
+  "The password must be at least 8 characters.":
+    "Пароль должен содержать не менее 8 символов.",
+  "The password is too long.": "Пароль слишком длинный.",
+  "The two passwords do not match.": "Пароли не совпадают.",
+  "The password could not be changed. Try a different password.":
+    "Не удалось изменить пароль. Попробуйте другой пароль.",
+  "Choose a new password": "Выберите новый пароль",
+  "Use at least 8 characters.": "Используйте не менее 8 символов.",
+  "New password": "Новый пароль",
+  "Repeat new password": "Повторите новый пароль",
+  "Change password": "Изменить пароль",
+  "Password updated. Sign in with your new password.":
+    "Пароль обновлён. Войдите с новым паролем.",
+  "Reset your password": "Сброс пароля",
+  "Click below to choose a new password.":
+    "Нажмите ниже, чтобы выбрать новый пароль.",
+  Continue: "Продолжить",
   "All changes saved": "Все изменения сохранены",
+  "Send this invoice to the resident by email now? Sent invoices cannot be edited.":
+    "Отправить этот счёт жильцу по e-mail сейчас? Отправленные счета нельзя редактировать.",
+  "Send this invoice to the resident again by email?":
+    "Отправить этот счёт жильцу по e-mail повторно?",
+  "Revoke the resident's access link? They will no longer be able to open this invoice with it.":
+    "Отозвать ссылку доступа жильца? С её помощью больше нельзя будет открыть этот счёт.",
+  "Record that this invoice was physically posted? This cannot be undone.":
+    "Отметить, что этот счёт отправлен по почте? Это нельзя отменить.",
+  "Send all selected invoices to residents by email now? Sent invoices cannot be edited.":
+    "Отправить все выбранные счета жильцам по e-mail сейчас? Отправленные счета нельзя редактировать.",
+  "Archive this tariff? It will no longer be used for new invoices.":
+    "Архивировать этот тариф? Он больше не будет использоваться для новых счетов.",
+  "Invoice prepared.": "Счёт подготовлен.",
+  "Invoice sent.": "Счёт отправлен.",
+  "Sending has not finished yet. Check the delivery status.":
+    "Отправка ещё не завершена. Проверьте статус доставки.",
+  "Resend submitted. Check the delivery status.":
+    "Повторная отправка запущена. Проверьте статус доставки.",
+  "Access link revoked.": "Ссылка доступа отозвана.",
+  "Paper dispatch recorded.": "Отправка по почте отмечена.",
   "1 change saving": "Сохраняется 1 изменение",
   "{n} changes saving": "Сохраняется изменений: {n}",
   "1 change needs attention": "1 изменение требует внимания",
@@ -2233,6 +2408,19 @@ export function friendlyActionErrorMessage(
     );
   }
   return translate(locale, error.message);
+}
+
+// Stored decimals ("15.0000") shown without trailing zeros, but never fewer
+// than `min` places and never rounding away real precision (up to 6).
+export function formatTrimmed(
+  value: string | number,
+  locale: Locale,
+  min = 2
+): string {
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: min,
+    maximumFractionDigits: 6,
+  }).format(Number(value));
 }
 
 export function formatNumber(

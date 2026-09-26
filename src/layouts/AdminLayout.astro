@@ -123,8 +123,10 @@ const t = (text: string) => translate(locale, text);
     <script>
       import "../lib/ui/forms";
       import { onPageLoad } from "../lib/ui/page-lifecycle";
+      import { labelStackTables } from "../lib/ui/stack-tables";
 
       onPageLoad(() => {
+        labelStackTables();
         const mobileNavDialog =
           document.querySelector<HTMLDialogElement>("#mobile-nav-drawer");
         if (!mobileNavDialog) return;

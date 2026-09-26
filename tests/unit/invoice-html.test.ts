@@ -76,6 +76,39 @@ describe("renderInvoiceHtml", () => {
     expect(html).toContain("12.10");
   });
 
+  it("shows the issuer registration and VAT numbers, labelled per document language, only from label set 2", () => {
+    const issuerSnapshot = {
+      name: "Demo Org",
+      addressLine1: "1 Main St",
+      registrationNumber: "40003<1>",
+      vatNumber: "LV40003",
+    };
+    const v2 = makeInvoice({
+      issuerSnapshot,
+      templateSnapshot: snapshot(createDefaultInvoiceTemplateConfig(), {
+        labelSetVersion: 2,
+      }),
+    });
+    const html = renderInvoiceHtml(v2, []);
+    expect(html).toContain("Reģ. Nr. 40003&lt;1&gt;");
+    expect(html).toContain("PVN reģ. Nr. LV40003");
+    expect(renderInvoiceHtml(v2, [], "en")).toContain("VAT No. LV40003");
+    // A frozen snapshot with no stamp at all is label set 1: never shown.
+    expect(
+      renderInvoiceHtml(makeInvoice({ issuerSnapshot }), [])
+    ).not.toContain("40003");
+    const v1 = renderInvoiceHtml(
+      makeInvoice({
+        issuerSnapshot,
+        templateSnapshot: snapshot(createDefaultInvoiceTemplateConfig(), {
+          labelSetVersion: 1,
+        }),
+      }),
+      []
+    );
+    expect(v1).not.toContain("40003");
+  });
+
   it("escapes HTML in every snapshot field to prevent injection into the rendered document", () => {
     const html = renderInvoiceHtml(
       makeInvoice({

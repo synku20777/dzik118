@@ -1057,7 +1057,11 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                         value={dwellingId}
                       />
                       <input type="hidden" name="userId" value={r.userId} />
-                      <button type="submit" class="sidebar-item-remove">
+                      <button
+                        type="submit"
+                        class="sidebar-item-remove"
+                        data-confirm={`${t("Remove")} ${r.email}?`}
+                      >
                         {t("Remove")}
                       </button>
                     </form>
@@ -1249,7 +1253,11 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                           value={organizationId}
                         />
                         <input type="hidden" name="meterId" value={m.id} />
-                        <button type="submit" class="sidebar-item-remove">
+                        <button
+                          type="submit"
+                          class="sidebar-item-remove"
+                          data-confirm={`${t("Archive")} ${m.label ?? entityLabel(m.type, locale)}?`}
+                        >
                           {t("Archive")}
                         </button>
                       </form>

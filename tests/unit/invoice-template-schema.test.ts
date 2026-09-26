@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildInvoiceTemplateSnapshot,
+  normalizeInvoiceTemplateSnapshot,
   createDefaultInvoiceTemplateConfig,
   invoiceTemplateConfigV2Schema,
   parseInvoiceTemplateConfig,
@@ -210,7 +211,7 @@ describe("buildInvoiceTemplateSnapshot", () => {
       footerText: "Footer",
       paymentInstructions: "Pay now",
       defaultNote: "Note",
-      labelSetVersion: 1,
+      labelSetVersion: 2,
       config: createDefaultInvoiceTemplateConfig(),
     });
   });
@@ -223,8 +224,13 @@ describe("buildInvoiceTemplateSnapshot", () => {
       footerText: null,
       paymentInstructions: null,
       defaultNote: null,
-      labelSetVersion: 1,
+      labelSetVersion: 2,
       config: createDefaultInvoiceTemplateConfig(),
     });
+  });
+
+  it("treats a stored snapshot with no labelSetVersion as label set 1, but stamps new ones with the current set", () => {
+    expect(normalizeInvoiceTemplateSnapshot({}).labelSetVersion).toBe(1);
+    expect(buildInvoiceTemplateSnapshot(null).labelSetVersion).toBe(2);
   });
 });

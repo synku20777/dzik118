@@ -7,6 +7,21 @@ document.addEventListener("click", (event) => {
   const details = document.getElementById(link.dataset.openDetails!);
   if (details instanceof HTMLDetailsElement) details.open = true;
 });
+// `data-confirm="message"` on a form or its submit button asks before
+// submitting. Capture phase, so it runs before any other submit handler.
+document.addEventListener(
+  "submit",
+  (event) => {
+    const message =
+      (event.submitter as HTMLElement | null)?.dataset.confirm ??
+      (event.target as HTMLElement).dataset.confirm;
+    if (message && !window.confirm(message)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  },
+  true
+);
 document.addEventListener("submit", (event) => {
   const form = event.target;
   if (

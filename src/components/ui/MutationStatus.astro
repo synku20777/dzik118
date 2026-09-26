@@ -372,6 +372,14 @@ const strings = {
       transform: rotate(360deg);
     }
   }
+  /* On phones the idle pill would sit over form fields and row actions;
+     only show the indicator while something is saving or has failed. */
+  @media (max-width: 40rem) {
+    #mutation-status:not([data-state="pending"]):not([data-state="error"])
+      .mutation-activity {
+      display: none;
+    }
+  }
   @media (prefers-reduced-motion: reduce) {
     .mutation-item-icon {
       animation: none !important;

@@ -188,7 +188,7 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
       href={`/admin/o/${organizationId}/periods/${periodId}`}
       class="text-sm text-muted hover:underline"
     >
-      ← {t("Period")}
+      ← {t("Period")}{" "}
       {period.year}-{String(period.month).padStart(2, "0")}
     </a>
 
@@ -204,7 +204,7 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
         <p class="mt-2 text-sm text-muted">
           {t("Amount due")}: <strong class="text-lg text-foreground"
             >{formatMoney(invoice.amountDue, invoice.currency, locale)}</strong
-          > · {t("Due date")}
+          > · {t("Due date")}{" "}
           {formatDate(invoice.dueDate, locale)}
         </p>
       </div>
@@ -275,6 +275,9 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
                       aria-describedby={
                         !hasValidEmail ? "email-validation" : undefined
                       }
+                      data-confirm={t(
+                        "Send this invoice to the resident by email now? Sent invoices cannot be edited."
+                      )}
                       class="btn-primary"
                     >
                       {t("Send")}
@@ -296,6 +299,9 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
                     />
                     <button
                       type="submit"
+                      data-confirm={t(
+                        "Send this invoice to the resident again by email?"
+                      )}
                       class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
                     >
                       {t("Resend")}
@@ -316,6 +322,9 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
                 <input type="hidden" name="invoiceId" value={invoice.id} />
                 <button
                   type="submit"
+                  data-confirm={t(
+                    "Revoke the resident's access link? They will no longer be able to open this invoice with it."
+                  )}
                   class="rounded-control border border-destructive px-4 py-2 text-sm text-destructive hover:bg-danger-surface"
                 >
                   {t("Revoke access link")}
@@ -347,6 +356,9 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
                   <input type="hidden" name="invoiceId" value={invoice.id} />
                   <button
                     type="submit"
+                    data-confirm={t(
+                      "Record that this invoice was physically posted? This cannot be undone."
+                    )}
                     class="rounded-control border border-border px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover"
                   >
                     {t("Record paper dispatch")}
@@ -372,6 +384,37 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
             recordPaperDispatchResult?.error?.message}
         </p>
       )
+    }
+
+    {
+      !(
+        prepareResult?.error ||
+        sendResult?.error ||
+        resendResult?.error ||
+        revokeResult?.error ||
+        recordPaperDispatchResult?.error
+      ) &&
+        (prepareResult ||
+          sendResult ||
+          resendResult ||
+          revokeResult ||
+          recordPaperDispatchResult) && (
+          <p class="notice" role="status">
+            {prepareResult
+              ? t("Invoice prepared.")
+              : sendResult
+                ? sendResult.data?.sentAt
+                  ? t("Invoice sent.")
+                  : t(
+                      "Sending has not finished yet. Check the delivery status."
+                    )
+                : resendResult
+                  ? t("Resend submitted. Check the delivery status.")
+                  : revokeResult
+                    ? t("Access link revoked.")
+                    : t("Paper dispatch recorded.")}
+          </p>
+        )
     }
 
     {

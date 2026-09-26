@@ -1355,6 +1355,60 @@
   }
 }
 
+/* Phones: `.stack-table` wrappers render each row as a labelled card
+   (labels come from stack-tables.ts). Unlayered + !important on the
+   structural bits so page-scoped table styles (min-width, borders) lose. */
+@media (max-width: 639px) {
+  .stack-table {
+    overflow: visible;
+    border: 0;
+    background: none;
+    box-shadow: none;
+  }
+  .stack-table table,
+  .stack-table tbody,
+  .stack-table tr,
+  .stack-table td {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .stack-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .stack-table tr {
+    margin-bottom: 0.75rem;
+    padding: 0.375rem 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+  }
+  .stack-table td {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.375rem 0.875rem !important;
+    border: 0 !important;
+    text-align: right;
+  }
+  .stack-table td[data-label]:not([data-label=""])::before {
+    content: attr(data-label);
+    flex: none;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: left;
+  }
+  .stack-table td:empty {
+    display: none !important;
+  }
+}
+
 @media print {
   .admin-sidebar,
   .admin-mobile,

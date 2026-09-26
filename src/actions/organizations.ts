@@ -27,6 +27,8 @@ const organizationFields = {
   countryCode: z.string().length(2).optional(),
   email: z.email().max(320).optional(),
   phone: z.string().max(50).optional(),
+  registrationNumber: z.string().max(50).optional(),
+  vatNumber: z.string().max(50).optional(),
   bankName: z.string().max(200).optional(),
   iban: z.string().max(50).optional(),
   bic: z.string().max(20).optional(),

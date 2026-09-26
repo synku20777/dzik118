@@ -62,19 +62,51 @@ const {
 const imports = [...rawImports].reverse();
 const views = ["PROPOSED", "UNMATCHED", "CONFIRMED", "REJECTED"] as const;
 const requestedView = Astro.url.searchParams.get("view");
-const view = views.find((v) => v === requestedView) ?? "PROPOSED";
-const matches =
-  view === "CONFIRMED"
-    ? confirmedMatches
-    : view === "REJECTED"
-      ? rejectedMatches
-      : proposedMatches;
 const counts = {
   PROPOSED: proposedMatches.length,
   UNMATCHED: unmatchedTransactions.length,
   CONFIRMED: confirmedMatches.length,
   REJECTED: rejectedMatches.length,
 };
+// Without an explicit ?view, open the first tab that has something to act on
+// (or, failing that, the confirmed history) instead of an empty Proposed tab.
+const view =
+  views.find((v) => v === requestedView) ??
+  (counts.PROPOSED
+    ? "PROPOSED"
+    : counts.UNMATCHED
+      ? "UNMATCHED"
+      : counts.CONFIRMED
+        ? "CONFIRMED"
+        : "PROPOSED");
+const matches =
+  view === "CONFIRMED"
+    ? confirmedMatches
+    : view === "REJECTED"
+      ? rejectedMatches
+      : proposedMatches;
+// Sums in whole cents; a mixed-currency import shows just the count.
+const total = (amounts: { amount: string; currency: string }[]) =>
+  amounts.length === 0 ||
+  amounts.some((a) => a.currency !== amounts[0].currency)
+    ? undefined
+    : formatMoney(
+        String(
+          amounts.reduce(
+            (sum, a) => sum + Math.round(Number(a.amount) * 100),
+            0
+          ) / 100
+        ),
+        amounts[0].currency,
+        locale
+      );
+const matchTotal = (list: typeof proposedMatches) =>
+  total(
+    list.map((m) => ({
+      amount: m.transactionAmount,
+      currency: m.transactionCurrency,
+    }))
+  );
 const labels = {
   PROPOSED: "Proposed",
   UNMATCHED: "Unmatched",
@@ -128,14 +160,17 @@ const payer = (name: string | null) => {
       <KpiCard label={t("Imports")} value={imports.length} /><KpiCard
         label={t("Proposed")}
         value={proposedMatches.length}
+        hint={matchTotal(proposedMatches)}
       /><KpiCard
         label={t("Confirmed")}
         tone="success"
         value={confirmedMatches.length}
+        hint={matchTotal(confirmedMatches)}
       /><KpiCard
         label={t("Unmatched")}
         tone="warning"
         value={unmatchedTransactions.length}
+        hint={total(unmatchedTransactions)}
       />
     </div>
     <section class="mt-8">
@@ -156,9 +191,15 @@ const payer = (name: string | null) => {
       </nav>
       {
         counts[view] === 0 ? (
-          <EmptyState title={t("No transactions in this view.")} />
+          <EmptyState title={t("No transactions in this view.")}>
+            {view !== "CONFIRMED" && counts.CONFIRMED > 0 && (
+              <a href="?view=CONFIRMED">
+                {t("View confirmed payments")} ({counts.CONFIRMED}) →
+              </a>
+            )}
+          </EmptyState>
         ) : (
-          <div class="table-wrap">
+          <div class="table-wrap stack-table">
             <table class="w-full text-left text-sm">
               <>
                 <thead>
@@ -250,7 +291,13 @@ const payer = (name: string | null) => {
                                     name="matchId"
                                     value={m.id}
                                   />
-                                  <button type="submit" class="btn-primary">
+                                  <button
+                                    type="submit"
+                                    class="btn-primary"
+                                    data-confirm={t(
+                                      "Confirm this payment? The invoice balance will be updated."
+                                    )}
+                                  >
                                     {t("Confirm")}
                                   </button>
                                 </form>
@@ -289,7 +336,7 @@ const payer = (name: string | null) => {
         imports.length === 0 ? (
           <EmptyState title={t("No imports yet.")} />
         ) : (
-          <div class="table-wrap">
+          <div class="table-wrap stack-table">
             <table class="w-full text-left text-sm">
               <>
                 <thead>

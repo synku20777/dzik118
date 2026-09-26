@@ -366,9 +366,7 @@ export function normalizeInvoiceTemplateSnapshot(
     paymentInstructions: safeNullableText(obj.paymentInstructions, 1000),
     defaultNote: safeNullableText(obj.defaultNote, 1000),
     labelSetVersion:
-      typeof obj.labelSetVersion === "number"
-        ? obj.labelSetVersion
-        : CURRENT_LABEL_SET_VERSION,
+      typeof obj.labelSetVersion === "number" ? obj.labelSetVersion : 1, // a frozen snapshot with no stamp predates label set 2
     config: parseInvoiceTemplateConfig(obj.config),
   };
 }
@@ -386,5 +384,9 @@ export function buildInvoiceTemplateSnapshot(
     config: unknown;
   } | null
 ): InvoiceTemplateSnapshotV2 {
-  return normalizeInvoiceTemplateSnapshot(template ?? {});
+  // Only new snapshots are stamped with the current label set.
+  return normalizeInvoiceTemplateSnapshot({
+    ...template,
+    labelSetVersion: CURRENT_LABEL_SET_VERSION,
+  });
 }

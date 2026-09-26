@@ -31,6 +31,29 @@ in inboxes, which would otherwise silently consume the one-time token before
 the real user clicks it (spec Section 15.1). Only a real user click, which
 `POST`s the token, actually calls `verifyOtp`.
 
+## Admin password reset templates (required)
+
+Admins reset a forgotten password from `/forgot-password`. Like the magic link,
+the reset link must go to our own `/auth/confirm` (not Supabase's `/verify`).
+In the Dashboard under Authentication > Email Templates:
+
+- **Reset Password**: link to
+  `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery`
+  (`supabase/templates/recovery.html`).
+- **Notifications > Password changed**: enable it
+  (`supabase/templates/password_changed_notification.html`). This is the
+  security notice sent whenever an admin's password changes; keep it on.
+
+Also set the minimum password length to 8 (Authentication > Providers >
+Email), matching `PASSWORD_MIN_LENGTH` in `src/lib/auth/password.ts`. There is
+no character-class requirement. Sending real email in production needs the
+project's SMTP settings configured (the built-in sender is rate limited).
+
+Only enabled `ADMIN` accounts are ever emailed a reset link; residents have no
+password. Signing in again is required after a reset (all sessions end). When
+`ADMIN_REQUIRE_AAL2` is turned on, re-check this flow: a recovery session is
+AAL1 and Supabase may require the second factor before allowing a password
+change.
 ## Auth Site URL and redirect allow-list (required)
 
 Set:

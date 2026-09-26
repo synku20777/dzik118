@@ -3,6 +3,7 @@ import {
   translate,
   uiLocale,
   friendlyActionErrorMessage,
+  formatTrimmed,
 } from "../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
@@ -332,7 +333,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       </button>
     </form>
 
-    <div class="table-wrap">
+    <div class="table-wrap stack-table">
       <table class="w-full text-left text-sm">
         <thead class="border-b border-border bg-surface-hover text-muted">
           <tr>
@@ -378,9 +379,11 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
                 </td>
                 <td class="px-4 py-2">{rule.unit}</td>
                 <td class="px-4 py-2 text-right tabular-nums">
-                  {rule.unitPrice ?? "—"}
+                  {rule.unitPrice ? formatTrimmed(rule.unitPrice, locale) : "—"}
                 </td>
-                <td class="px-4 py-2 tabular-nums">{rule.vatRate}%</td>
+                <td class="px-4 py-2 tabular-nums">
+                  {formatTrimmed(rule.vatRate, locale, 0)}%
+                </td>
                 <td class="px-4 py-2">
                   {rule.effectiveFrom} → {rule.effectiveUntil ?? t("ongoing")}
                 </td>
@@ -437,7 +440,14 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
                               name="ruleId"
                               value={rule.id}
                             />
-                            <button type="submit">{t("Archive")}</button>
+                            <button
+                              type="submit"
+                              data-confirm={t(
+                                "Archive this tariff? It will no longer be used for new invoices."
+                              )}
+                            >
+                              {t("Archive")}
+                            </button>
                           </form>
                         </div>
                       </details>
@@ -547,6 +557,9 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       : ""}
     data-strings={JSON.stringify({
       createTitle: t("Create tariff"),
+      discardConfirm: t(
+        "Discard unsaved changes? Your edits have not been saved."
+      ),
       createLabel: t("Create tariff"),
       saveLabel: t("Save changes"),
       savingLabel: t("Saving…"),
@@ -892,6 +905,9 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     method="POST"
     action={actions.billing.archiveRule}
     id="archive-tariff-form"
+    data-confirm={t(
+      "Archive this tariff? It will no longer be used for new invoices."
+    )}
     hidden
   >
     <input type="hidden" name="organizationId" value={organizationId} />
@@ -1023,6 +1039,11 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
 
     let mode: "create" | "edit" = "create";
     let returnFocusTo: HTMLElement | null = null;
+    // Form state right after the drawer opened; a differing snapshot on
+    // close means unsaved edits.
+    let openSnapshot = "";
+    const snapshotForm = () =>
+      JSON.stringify([...new FormData(form).entries()]);
 
     const meterTypeSelect = form.querySelector(
       "#tariff-meterType"
@@ -1130,6 +1151,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       saveButton.textContent = strings.createLabel ?? "Create tariff";
       returnFocusTo = document.activeElement as HTMLElement;
       dialog.showModal();
+      openSnapshot = snapshotForm();
       form.querySelector<HTMLInputElement>("#tariff-name")?.focus();
     }
 
@@ -1187,6 +1209,20 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       saveButton.textContent = strings.saveLabel ?? "Save changes";
       returnFocusTo = document.activeElement as HTMLElement;
       dialog.showModal();
+      openSnapshot = snapshotForm();
+    }
+
+    // User-initiated close (X, Cancel, Esc): confirm before dropping edits.
+    function requestClose() {
+      if (
+        snapshotForm() !== openSnapshot &&
+        !window.confirm(
+          strings.discardConfirm ??
+            "Discard unsaved changes? Your edits have not been saved."
+        )
+      )
+        return;
+      closeDrawer();
     }
 
     function closeDrawer() {
@@ -1228,7 +1264,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     for (const closeTrigger of document.querySelectorAll<HTMLElement>(
       "[data-close-tariff-drawer]"
     )) {
-      closeTrigger.addEventListener("click", () => closeDrawer(), {
+      closeTrigger.addEventListener("click", () => requestClose(), {
         signal: controller.signal,
       });
     }
@@ -1236,7 +1272,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       "cancel",
       (event) => {
         event.preventDefault();
-        closeDrawer();
+        requestClose();
       },
       { signal: controller.signal }
     );

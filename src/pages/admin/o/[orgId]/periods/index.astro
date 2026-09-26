@@ -78,7 +78,7 @@ const { organization, periods } = await withRequestDb(async (db) => ({
       />
     </div>
 
-    <div class="table-wrap">
+    <div class="table-wrap stack-table">
       <table class="w-full text-left text-sm">
         <thead class="border-b border-border bg-surface-hover text-muted">
           <tr>
@@ -145,7 +145,7 @@ const { organization, periods } = await withRequestDb(async (db) => ({
       {
         createResult?.error && (
           <p class="mt-3 rounded-control bg-danger-surface p-3 text-sm text-destructive">
-            {createResult.error.message}
+            {t(createResult.error.message)}
           </p>
         )
       }

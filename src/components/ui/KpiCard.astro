@@ -5,8 +5,9 @@ interface Props {
   value: string | number;
   tone?: "neutral" | "success" | "warning";
   icon?: "invoice" | "coins" | "clock" | "open" | "lock";
+  hint?: string;
 }
-const { label, value, tone = "neutral", icon } = Astro.props;
+const { label, value, tone = "neutral", icon, hint } = Astro.props;
 
 // Summary/KPI cards keep their icon-container badge treatment (Tabler
 // Icons system) -- unlike table rows, buttons, and status chips, which
@@ -31,6 +32,7 @@ const ICON_NAMES = {
   <div class="kpi-text">
     <h2>{label}</h2>
     <p>{value}</p>
+    {hint && <small class="text-muted">{hint}</small>}
   </div>
   <slot />
 </section>

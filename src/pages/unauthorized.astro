@@ -1,6 +1,9 @@
 ---
 // Phase C (Auth/security) - Access denied (spec Section 9.1).
 import AuthLayout from "../layouts/AuthLayout.astro";
+import { translate, uiLocale } from "../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 
 // Set by middleware.ts when an otherwise-permitted admin hasn't completed
 // their second authentication factor yet (spec's AAL2 boundary) -- a
@@ -9,18 +12,22 @@ import AuthLayout from "../layouts/AuthLayout.astro";
 const needsMfa = Astro.url.searchParams.get("reason") === "mfa";
 ---
 
-<AuthLayout title="Access Denied - Property Billing">
+<AuthLayout title={t("Access denied") + " - " + t("Property Billing")}>
   <div
     class="w-full max-w-md rounded-panel border border-border bg-surface p-8 text-center"
   >
-    <h1 class="text-xl font-bold text-foreground">Access denied</h1>
+    <h1 class="text-xl font-bold text-foreground">{t("Access denied")}</h1>
     <p class="mt-2 text-sm text-muted">
       {
         needsMfa
-          ? "This area requires additional verification. Please complete sign-in with your second factor."
-          : "You do not have access to this resource."
+          ? t(
+              "This area requires additional verification. Please complete sign-in with your second factor."
+            )
+          : t("You do not have access to this resource.")
       }
     </p>
-    <a href="/login" class="btn-primary mt-6 inline-flex"> Back to sign in </a>
+    <a href="/login" class="btn-primary mt-6 inline-flex"
+      >{t("Back to sign in")}</a
+    >
   </div>
 </AuthLayout>

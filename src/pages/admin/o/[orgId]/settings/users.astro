@@ -88,6 +88,7 @@ const currentUserId = Astro.locals.auth!.userId;
                   <input type="hidden" name="userId" value={m.userId} />
                   <button
                     type="submit"
+                    data-confirm={`${t("Remove")} ${m.email}?`}
                     class="text-destructive hover:underline"
                   >
                     {t("Remove")}

@@ -25,13 +25,17 @@ function hrefFor(code: Locale) {
           </span>
         )}
         {option.code === locale ? (
-          <span aria-current="true" lang={option.code}>
+          <span
+            aria-current="true"
+            lang={option.code}
+            class="rounded-control bg-surface-hover px-1.5 py-0.5 text-foreground"
+          >
             {option.label}
           </span>
         ) : (
           <a
             href={hrefFor(option.code)}
-            class="underline decoration-border underline-offset-4"
+            class="px-1.5 py-0.5 text-muted hover:text-foreground hover:underline"
             lang={option.code}
             aria-label={option.ariaLabel}
           >

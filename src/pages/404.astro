@@ -1,0 +1,23 @@
+---
+import AuthLayout from "../layouts/AuthLayout.astro";
+import { translate, uiLocale } from "../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+---
+
+<AuthLayout title={t("Page not found") + " - " + t("Property Billing")}>
+  <div
+    class="w-full max-w-md rounded-panel border border-border bg-surface p-8 text-center"
+  >
+    <p class="font-display text-2xl font-semibold text-foreground">404</p>
+    <h1 class="mt-2 text-xl font-bold text-foreground">
+      {t("Page not found")}
+    </h1>
+    <p class="mt-2 text-sm text-muted">
+      {t("The page you are looking for does not exist or has moved.")}
+    </p>
+    <a href="/login" class="btn-primary mt-6 inline-flex"
+      >{t("Go to sign in")}</a
+    >
+  </div>
+</AuthLayout>

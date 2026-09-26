@@ -183,7 +183,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
       )
     }
 
-    <div class="table-wrap">
+    <div class="table-wrap stack-table">
       <table class="w-full text-left text-body-sm">
         <thead class="border-b border-border bg-surface-hover text-muted">
           <tr>
@@ -254,7 +254,12 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
                             value={organizationId}
                           />
                           <input type="hidden" name="dwellingId" value={d.id} />
-                          <button type="submit">{t("Archive")}</button>
+                          <button
+                            type="submit"
+                            data-confirm={`${t("Archive dwelling")} ${d.number}?`}
+                          >
+                            {t("Archive")}
+                          </button>
                         </form>
                       </div>
                     </details>

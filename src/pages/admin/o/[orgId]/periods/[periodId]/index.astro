@@ -122,7 +122,7 @@ function filterHref(status?: CaseStatus) {
       workbenchPath={workbenchPath}
     />
     <a href={`/admin/o/${organizationId}/periods`} class="back-link">
-      <span aria-hidden="true">←</span>
+      <span aria-hidden="true">←</span>{" "}
       {t("Periods")}
     </a>
 
@@ -325,6 +325,15 @@ function filterHref(status?: CaseStatus) {
       )
     }
     {
+      sendResult && !sendResult.error && (
+        <p class="notice" role="status">
+          {sendResult.data?.sentAt
+            ? t("Invoice sent.")
+            : t("Sending has not finished yet. Check the delivery status.")}
+        </p>
+      )
+    }
+    {
       bulkGenerateResult?.data && (
         <p class="notice" role="status">
           {bulkGenerateResult.data.generated.length} {t("invoices generated")}.
@@ -468,6 +477,9 @@ function filterHref(status?: CaseStatus) {
             form="bulk-select-form"
             formaction={actions.invoices.bulkSend}
             data-bulk-status="PREPARED"
+            data-confirm={t(
+              "Send all selected invoices to residents by email now? Sent invoices cannot be edited."
+            )}
             class="btn-primary"
             disabled
           >
@@ -479,7 +491,7 @@ function filterHref(status?: CaseStatus) {
         </div>
       </div>
 
-      <div class="table-wrap case-table-wrap">
+      <div class="table-wrap case-table-wrap stack-table">
         <table class="case-table">
           <thead>
             <tr>
@@ -821,7 +833,13 @@ function filterHref(status?: CaseStatus) {
                             name="invoiceId"
                             value={billingCase.invoiceId!}
                           />
-                          <button type="submit" class="btn-primary btn-sm">
+                          <button
+                            type="submit"
+                            class="btn-primary btn-sm"
+                            data-confirm={t(
+                              "Send this invoice to the resident by email now? Sent invoices cannot be edited."
+                            )}
+                          >
                             {t("Send invoice")}
                           </button>
                         </form>
@@ -1250,6 +1268,16 @@ function filterHref(status?: CaseStatus) {
   }
   .workflow-filter:last-child {
     border-right: 0;
+  }
+  @media (max-width: 639px) {
+    /* 8 stages: a 2-column grid so none are hidden off-screen. */
+    .workflow-rail {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      min-width: 0;
+    }
+    .workflow-filter {
+      border-bottom: 1px solid var(--color-border);
+    }
   }
   .workflow-filter:hover {
     background: var(--color-surface-hover);

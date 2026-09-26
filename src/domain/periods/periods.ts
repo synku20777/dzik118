@@ -29,11 +29,22 @@ export interface CreatePeriodInput {
 // doesn't state.
 function validatePeriodDates(input: CreatePeriodInput) {
   if (new Date(input.startsOn) > new Date(input.endsOn)) {
-    throw new ValidationError("startsOn must not be after endsOn");
+    throw new ValidationError(
+      "The period start date must not be after its end date."
+    );
   }
   if (new Date(input.invoiceDueDate) < new Date(input.invoiceIssueDate)) {
     throw new ValidationError(
-      "invoiceDueDate must not be before invoiceIssueDate"
+      "The due date must not be before the invoice issue date."
+    );
+  }
+  // Invoices are generated from the readings, so readings must close first.
+  if (
+    input.readingDeadline &&
+    new Date(input.readingDeadline) > new Date(input.invoiceIssueDate)
+  ) {
+    throw new ValidationError(
+      "The reading deadline must not be after the invoice issue date."
     );
   }
 }

@@ -1,20 +1,26 @@
 ---
 import AuthLayout from "../layouts/AuthLayout.astro";
+import { translate, uiLocale } from "../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
 ---
 
-<AuthLayout title="Property Billing Platform">
+<AuthLayout title={t("Property Billing")}>
   <div
     class="max-w-md w-full rounded-panel bg-surface p-8 border border-border text-center"
   >
     <h1 class="font-display text-2xl tracking-tight text-foreground">
-      Property Billing Platform
+      {t("Property Billing")}
     </h1>
     <p class="mt-2 text-sm text-muted">
-      Multi-tenant property billing for apartment buildings and housing
-      associations.
+      {
+        t(
+          "Sign in as a resident with an email link, or as an administrator with a password."
+        )
+      }
     </p>
     <div class="mt-6 flex flex-col gap-3">
-      <a href="/login" class="btn-primary justify-center"> Sign in </a>
+      <a href="/login" class="btn-primary justify-center">{t("Sign in")}</a>
     </div>
   </div>
 </AuthLayout>
