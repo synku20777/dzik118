@@ -19,7 +19,7 @@ import { appUsers } from "./auth";
 import { dwellings } from "./dwellings";
 import { invoices } from "./invoices";
 import { organizations } from "./organizations";
-import { bankTransactions } from "./payments";
+import { bankTransactions, paymentMatches } from "./payments";
 
 export const accountEntryTypeEnum = pgEnum("account_entry_type", [
   "OPENING_BALANCE",
@@ -30,6 +30,7 @@ export const accountEntryTypeEnum = pgEnum("account_entry_type", [
   "MANUAL_ADJUSTMENT",
   "CREDIT_CARRY_FORWARD",
   "DEBT_CARRY_FORWARD",
+  "PAYMENT_REVERSAL",
 ]);
 
 export const paymentAllocationMethodEnum = pgEnum("payment_allocation_method", [
@@ -147,6 +148,59 @@ export const paymentAllocations = pgTable(
     check(
       "payment_allocations_amount_positive_check",
       sql`${table.allocatedAmount} > 0`
+    ),
+  ]
+);
+
+// Append-only (migration trigger). One row per reversed payment match. The
+// allocation row it cancels stays in place; invoice balances subtract this
+// table's reversedAllocationAmount (ADR 0006).
+export const paymentReversals = pgTable(
+  "payment_reversals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    dwellingId: uuid("dwelling_id")
+      .notNull()
+      .references(() => dwellings.id),
+    paymentMatchId: uuid("payment_match_id")
+      .notNull()
+      .unique()
+      .references(() => paymentMatches.id),
+    bankTransactionId: uuid("bank_transaction_id")
+      .notNull()
+      .references(() => bankTransactions.id),
+    invoiceId: uuid("invoice_id")
+      .notNull()
+      .references(() => invoices.id),
+    reversedAllocationAmount: numeric("reversed_allocation_amount", {
+      precision: 14,
+      scale: 2,
+    }).notNull(),
+    reversedCreditAmount: numeric("reversed_credit_amount", {
+      precision: 14,
+      scale: 2,
+    })
+      .notNull()
+      .default("0"),
+    reason: text("reason").notNull(),
+    actorUserId: uuid("actor_user_id")
+      .notNull()
+      .references(() => appUsers.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("payment_reversals_org_invoice_idx").on(
+      table.organizationId,
+      table.invoiceId
+    ),
+    check(
+      "payment_reversals_amounts_check",
+      sql`${table.reversedAllocationAmount} > 0 and ${table.reversedCreditAmount} >= 0`
     ),
   ]
 );

@@ -228,14 +228,15 @@ describe("resident dashboard read helpers", () => {
     expect(rows[0]).toEqual({
       year: 2026,
       month: 2,
-      coldWaterConsumption: "6.000",
-      hotWaterConsumption: null,
+      readings: [{ meterType: "COLD_WATER", unit: "m3", consumption: "6.000" }],
     });
     expect(rows[1]).toEqual({
       year: 2026,
       month: 1,
-      coldWaterConsumption: "10.000",
-      hotWaterConsumption: "5.000",
+      readings: [
+        { meterType: "COLD_WATER", unit: "m3", consumption: "10.000" },
+        { meterType: "HOT_WATER", unit: "m3", consumption: "5.000" },
+      ],
     });
 
     await cleanupOrg(org.id);
@@ -303,6 +304,81 @@ describe("resident dashboard read helpers", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].year).toBe(2026);
     expect(rows[0].month).toBe(1);
+    // Two meters of one type add up.
+    expect(rows[0].readings).toEqual([
+      { meterType: "COLD_WATER", unit: "m3", consumption: "3.000" },
+    ]);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("keeps other meter types, and never adds two units together", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT-I Org ConsumptionTypes", addressLine1: "Addr 1" },
+      seedAdminId
+    );
+    const dwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "1" },
+      seedAdminId
+    );
+    const electricity = await createMeter(
+      db,
+      org.id,
+      dwelling.id,
+      { type: "ELECTRICITY", unit: "kWh" },
+      seedAdminId
+    );
+    const heatMwh = await createMeter(
+      db,
+      org.id,
+      dwelling.id,
+      { type: "HEAT", unit: "MWh" },
+      seedAdminId
+    );
+    const heatGj = await createMeter(
+      db,
+      org.id,
+      dwelling.id,
+      { type: "HEAT", unit: "GJ" },
+      seedAdminId
+    );
+    const period = await createPeriod(
+      db,
+      org.id,
+      {
+        year: 2026,
+        month: 1,
+        startsOn: "2026-01-01",
+        endsOn: "2026-01-28",
+        invoiceIssueDate: "2026-01-28",
+        invoiceDueDate: "2026-02-14",
+      },
+      seedAdminId
+    );
+    for (const [meter, value] of [
+      [electricity, "120.000"],
+      [heatMwh, "1.500"],
+      [heatGj, "4.000"],
+    ] as const) {
+      await submitAdminReading(
+        db,
+        org.id,
+        period.id,
+        meter.id,
+        value,
+        seedAdminId
+      );
+    }
+
+    const [row] = await listConsumptionHistoryForDwelling(db, dwelling.id);
+    expect(row.readings).toEqual([
+      { meterType: "ELECTRICITY", unit: "kWh", consumption: "120.000" },
+      { meterType: "HEAT", unit: "GJ", consumption: "4.000" },
+      { meterType: "HEAT", unit: "MWh", consumption: "1.500" },
+    ]);
 
     await cleanupOrg(org.id);
   });

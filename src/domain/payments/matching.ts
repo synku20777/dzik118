@@ -1,7 +1,7 @@
 // Phase J (Payments) - payment match lifecycle (spec Section 25,
 // PAY-002/003). Callers must call requireOrganizationAccess() before
 // calling any of these (spec Section 14).
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
 import { paymentAllocations } from "../../db/schema/accounts";
 import { billingCases } from "../../db/schema/billing";
@@ -61,6 +61,8 @@ export async function proposeExactMatches(
   for (const txn of transactions) {
     // PAY-002: "no reference -> unmatched".
     if (!txn.reference) continue;
+    // Rows stored before the import rule can still be zero or negative.
+    if (compareExact(txn.amount, "0.00") <= 0) continue;
 
     const existingMatches = await db
       .select({ id: paymentMatches.id, status: paymentMatches.status })
@@ -182,6 +184,33 @@ export async function confirmMatch(
       .for("update")
       .limit(1);
     if (!transaction) throw new NotFoundError("Bank transaction not found");
+    // Rows stored before the import rule can be zero or negative. They would
+    // post an invalid ledger entry.
+    if (compareExact(transaction.amount, "0.00") <= 0) {
+      throw new ConflictError(
+        "Only an incoming payment can be applied to an invoice"
+      );
+    }
+
+    // One bank payment can be applied to one invoice at a time. The row lock
+    // above makes two confirmations of the same transaction run one after the
+    // other, so this check sees the first one.
+    const [appliedElsewhere] = await tx
+      .select({ id: paymentMatches.id })
+      .from(paymentMatches)
+      .where(
+        and(
+          eq(paymentMatches.bankTransactionId, transaction.id),
+          eq(paymentMatches.status, "CONFIRMED"),
+          ne(paymentMatches.id, matchId)
+        )
+      )
+      .limit(1);
+    if (appliedElsewhere) {
+      throw new ConflictError(
+        "This payment is already applied to another invoice"
+      );
+    }
 
     const [invoice] = await tx
       .select()
@@ -225,7 +254,7 @@ export async function confirmMatch(
       bankTransactionId: transaction.id,
       description: `Bank payment ${transaction.reference ?? transaction.id}`,
       metadata: { allocatedAmount, resultType },
-      idempotencyKey: `bank-transaction:${transaction.id}:payment`,
+      idempotencyKey: `bank-transaction:${transaction.id}:payment:${matchId}`,
     });
     await tx.insert(paymentAllocations).values({
       organizationId,
@@ -356,6 +385,7 @@ export async function listPaymentMatches(
       invoiceId: invoices.id,
       invoiceNumber: invoices.invoiceNumber,
       dwellingId: invoices.dwellingId,
+      periodId: invoices.periodId,
       currentCharges: invoices.currentCharges,
       amountDue: invoices.amountDue,
       transactionId: bankTransactions.id,
@@ -410,7 +440,10 @@ export async function listUnmatchedTransactions(
     .from(bankTransactions)
     .leftJoin(
       paymentMatches,
-      eq(paymentMatches.bankTransactionId, bankTransactions.id)
+      and(
+        eq(paymentMatches.bankTransactionId, bankTransactions.id),
+        ne(paymentMatches.status, "REVERSED")
+      )
     )
     .where(
       and(

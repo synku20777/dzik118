@@ -12,11 +12,18 @@ interface Props {
   title?: string;
   organizationId?: string;
   organizationName?: string;
+  // A page that just archived or restored the organization passes the fresh
+  // state. Astro.locals.auth was loaded before the action ran.
+  archived?: boolean;
 }
 const {
   title = "Admin - Property Billing",
   organizationId,
   organizationName,
+  archived = organizationId
+    ? (Astro.locals.auth?.archivedOrganizationIds?.includes(organizationId) ??
+      false)
+    : false,
 } = Astro.props;
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
@@ -61,7 +68,16 @@ const t = (text: string) => translate(locale, text);
           href="/admin/organizations"
           class="mt-2 inline-block text-xs text-muted hover:underline"
           >{t("Switch organization")} ↗</a
-        >
+        >{
+          (Astro.locals.auth?.dwellingIds.length ?? 0) > 0 && (
+            <a
+              href="/portal"
+              class="mt-2 block text-xs text-muted hover:underline"
+            >
+              {t("Switch to resident view")} ↗
+            </a>
+          )
+        }
       </div>
       {organizationId && <AppNavigation organizationId={organizationId} />}
       <div class="sidebar-account">
@@ -105,10 +121,11 @@ const t = (text: string) => translate(locale, text);
         <div
           class="mt-4 flex flex-wrap items-center gap-5 border-t border-border pt-4 text-sm"
         >
-          <a href="/admin/organizations">{t("Switch organization")}</a><form
-            method="POST"
-            action="/logout"
-          >
+          <a href="/admin/organizations">{t("Switch organization")}</a>{
+            (Astro.locals.auth?.dwellingIds.length ?? 0) > 0 && (
+              <a href="/portal">{t("Switch to resident view")}</a>
+            )
+          }<form method="POST" action="/logout">
             <button type="submit">{t("Sign out")}</button>
           </form><div class="ml-auto flex items-center gap-2">
             <ThemeToggle /><LanguageSwitch />
@@ -117,6 +134,15 @@ const t = (text: string) => translate(locale, text);
       </div>
     </dialog>
     <main id="main-content" tabindex="-1" class="admin-content app-content">
+      {
+        archived && (
+          <p class="notice notice-danger mb-4" role="status">
+            {t(
+              "This organization is archived. You can read it but not change it. Residents cannot sign in. Restore it in Settings > Organization."
+            )}
+          </p>
+        )
+      }
       <slot />
     </main>
     <MutationStatus />

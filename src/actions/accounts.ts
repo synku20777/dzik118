@@ -6,7 +6,7 @@ import {
   setInvoiceManualAdjustment,
 } from "../domain/accounts/adjustments";
 import { createLateFeePolicy } from "../domain/accounts/settings";
-import { requireOrganizationAccess } from "../domain/authorization/guards";
+import { requireActiveOrganization } from "../domain/authorization/guards";
 import { decimalInput } from "../lib/decimal-input";
 import { withRequestDb } from "../lib/db-request";
 import { safeHandler } from "./_errors";
@@ -38,7 +38,7 @@ export const accounts = {
       stopsAtCap: z.boolean().optional(),
     }),
     handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withRequestDb((db) =>
         createLateFeePolicy(db, {
           organizationId,
@@ -67,7 +67,7 @@ export const accounts = {
       note: z.string().max(1000).optional(),
     }),
     handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withRequestDb((db) =>
         adjustLateFee(db, {
           organizationId,
@@ -87,7 +87,7 @@ export const accounts = {
       note: z.string().max(1000).optional(),
     }),
     handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withRequestDb((db) =>
         setInvoiceManualAdjustment(db, {
           organizationId,
@@ -110,7 +110,7 @@ export const accounts = {
       note: z.string().max(1000).optional(),
     }),
     handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withRequestDb((db) =>
         createDwellingAccountAdjustment(db, {
           organizationId,

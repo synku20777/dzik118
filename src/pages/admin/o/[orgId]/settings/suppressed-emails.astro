@@ -1,0 +1,139 @@
+---
+import { actions } from "astro:actions";
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import EmptyState from "../../../../../components/ui/EmptyState.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { listSuppressedEmails } from "../../../../../domain/email/suppression";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { withRequestDb } from "../../../../../lib/db-request";
+import {
+  formatDate,
+  friendlyActionErrorMessage,
+  translate,
+  uiLocale,
+} from "../../../../../lib/ui/i18n";
+
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const removeResult = Astro.getActionResult(actions.emailSuppression.remove);
+const { organization, suppressed } = await withRequestDb(async (db) => ({
+  organization: await getOrganization(db, organizationId),
+  suppressed: await listSuppressedEmails(db, organizationId),
+}));
+const reasonLabel = { BOUNCE: "Bounce", COMPLAINT: "Complaint" } as const;
+---
+
+<AdminLayout
+  title={`${t("Suppressed email addresses")} - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <a
+    href={`/admin/o/${organizationId}/settings`}
+    class="text-body-sm text-muted hover:underline"
+  >
+    ← {t("Settings")}
+  </a>
+  <h1 class="mt-4 text-h2 text-foreground">
+    {t("Suppressed email addresses")}
+  </h1>
+  <p class="mt-2 max-w-2xl text-body-sm text-muted">
+    {
+      t(
+        "Invoices are not sent to these addresses. The email provider reported a permanent bounce or a complaint. Remove an address after you fix the problem."
+      )
+    }
+  </p>
+
+  {
+    removeResult?.error && (
+      <p class="notice notice-danger mt-4" role="alert">
+        {friendlyActionErrorMessage(removeResult.error, locale)}
+      </p>
+    )
+  }
+  {
+    removeResult?.data && (
+      <p class="notice mt-4" role="status">
+        {t("Address removed.")}
+      </p>
+    )
+  }
+
+  {
+    suppressed.length === 0 ? (
+      <div class="mt-6">
+        <EmptyState title={t("No suppressed email addresses.")} />
+      </div>
+    ) : (
+      <div class="table-wrap stack-table mt-6">
+        <table class="w-full text-left text-body-sm">
+          <caption class="sr-only">{t("Suppressed email addresses")}</caption>
+          <thead class="border-b border-border bg-surface-hover text-muted">
+            <tr>
+              <th scope="col" class="px-4 py-2">
+                {t("Email address")}
+              </th>
+              <th scope="col" class="px-4 py-2">
+                {t("Reason")}
+              </th>
+              <th scope="col" class="px-4 py-2">
+                {t("Added")}
+              </th>
+              <th scope="col" class="px-4 py-2">
+                <span class="sr-only">{t("Actions")}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border">
+            {suppressed.map((row) => (
+              <tr>
+                <td class="px-4 py-2">{row.email}</td>
+                <td class="px-4 py-2">
+                  {t(reasonLabel[row.reason])}
+                  {row.detail && (
+                    <div class="text-xs text-muted">{row.detail}</div>
+                  )}
+                </td>
+                <td class="px-4 py-2">
+                  {formatDate(row.createdAt, locale, organization.timezone)}
+                </td>
+                <td class="px-4 py-2">
+                  <form method="POST" action={actions.emailSuppression.remove}>
+                    <input
+                      type="hidden"
+                      name="organizationId"
+                      value={organizationId}
+                    />
+                    <input type="hidden" name="suppressionId" value={row.id} />
+                    <button
+                      type="submit"
+                      class="btn-secondary"
+                      data-confirm={t(
+                        "Remove this address from the suppressed list? Invoices can be sent to it again."
+                      )}
+                    >
+                      {t("Remove from list")}
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</AdminLayout>

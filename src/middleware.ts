@@ -4,15 +4,26 @@
 // per Section 15.3's "avoid database-heavy authorization globally".
 import { defineMiddleware } from "astro:middleware";
 import { env } from "cloudflare:workers";
-import { ADMIN_REQUIRE_AAL2 } from "astro:env/server";
+import { ADMIN_REQUIRE_AAL2, AUDIT_HASH_SECRET } from "astro:env/server";
 import { createDb } from "./db/client";
 import { loadAuthContext } from "./domain/authorization/context";
+import {
+  getRequestContext,
+  hashIp,
+  newRequestId,
+  runWithRequestContext,
+} from "./lib/logging/request-context";
 import { createSupabaseServerClient } from "./lib/supabase/server";
+import { localeFromAcceptLanguage } from "./lib/ui/i18n";
 
 function applySecurityHeaders<T extends Response>(
   response: T,
   isHttps: boolean
 ): T {
+  // The same ID is stored in audit_logs.request_id, so a person who reports a
+  // problem can give the ID from the response and support can trace it.
+  const requestId = getRequestContext()?.requestId;
+  if (requestId) response.headers.set("X-Request-Id", requestId);
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -27,7 +38,7 @@ function applySecurityHeaders<T extends Response>(
     // rules pointing at fonts.gstatic.com) -- without these, the stylesheet
     // request itself is blocked and every page silently falls back to the
     // OS default font instead of the design system's typefaces.
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; frame-ancestors 'none';"
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none';"
   );
   if (isHttps) {
     response.headers.set(
@@ -38,11 +49,25 @@ function applySecurityHeaders<T extends Response>(
   return response;
 }
 
-export const onRequest = defineMiddleware(async (context, next) => {
+const handle = defineMiddleware(async (context, next) => {
   const { request, cookies, locals, redirect, url } = context;
   const isHttps = url.protocol === "https:";
 
   locals.auth = null;
+
+  // First visit: choose the language from the browser. uiLocale reads this
+  // cookie, and an explicit ?lang= still wins (uiLocale overwrites it).
+  if (
+    !url.pathname.startsWith("/api") &&
+    !url.searchParams.has("lang") &&
+    !cookies.has("ui_locale")
+  ) {
+    cookies.set(
+      "ui_locale",
+      localeFromAcceptLanguage(request.headers.get("accept-language")),
+      { path: "/", sameSite: "lax", httpOnly: true }
+    );
+  }
 
   const { supabase, applyPendingHeaders } = createSupabaseServerClient(
     request,
@@ -79,11 +104,14 @@ export const onRequest = defineMiddleware(async (context, next) => {
       // hint) query param rather than bouncing to a blank /login.
       return respond(redirect(user ? "/login?error=2" : "/login"));
     }
-    if (isAdminPath && locals.auth.role !== "ADMIN") {
+    if (isAdminPath && locals.auth.organizationIds.length === 0) {
       return respond(redirect("/unauthorized"));
     }
-    if (isResidentPath && locals.auth.role !== "RESIDENT") {
-      return respond(redirect("/unauthorized"));
+    if (isResidentPath && locals.auth.dwellingIds.length === 0) {
+      // ADR 0009: a resident of an archived organization sees why.
+      return respond(
+        redirect(locals.auth.closedDwellingCount ? "/closed" : "/unauthorized")
+      );
     }
   }
 
@@ -100,7 +128,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (
     isAdminSensitivePath &&
     ADMIN_REQUIRE_AAL2 &&
-    locals.auth?.role === "ADMIN"
+    (locals.auth?.organizationIds.length ?? 0) > 0
   ) {
     const { data: aal } =
       await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
@@ -120,4 +148,20 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // instruction to reject disabled users only where it matters.
 
   return respond(await next());
+});
+
+// Every audit row written while this request runs carries its request ID and
+// hashed IP (see src/lib/logging/request-context.ts).
+export const onRequest = defineMiddleware(async (context, next) => {
+  const requestId = newRequestId();
+  const ipHash = await hashIp(
+    context.request.headers.get("cf-connecting-ip"),
+    AUDIT_HASH_SECRET
+  );
+  // handle() returns a Response on every path (each branch goes through
+  // respond()), which its declared `void | Response` type does not say.
+  return runWithRequestContext(
+    { requestId, ipHash },
+    () => handle(context, next) as Promise<Response>
+  );
 });

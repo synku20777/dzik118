@@ -5,6 +5,7 @@ const t = (text: string) => translate(locale, text);
 // Phase D (Organizations/dwellings) - organization selector/create (spec
 // Section 9.2, ORG-001).
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import StatusBadge from "../../components/ui/StatusBadge.astro";
 import { actions } from "astro:actions";
 import { withRequestDb } from "../../lib/db-request";
 import { listOrganizations } from "../../domain/organizations/organizations";
@@ -29,6 +30,9 @@ if (createResult && !createResult.error) {
 const organizations = await withRequestDb((db) =>
   listOrganizations(db, auth.organizationIds)
 );
+// Archived organizations are listed last (ADR 0009).
+const active = organizations.filter((o) => !o.archivedAt);
+const archived = organizations.filter((o) => o.archivedAt);
 ---
 
 <AdminLayout title="Organizations - Property Billing">
@@ -44,13 +48,20 @@ const organizations = await withRequestDb((db) =>
           </p>
         ) : (
           <ul class="mt-4 divide-y divide-border rounded-control border border-border bg-surface">
-            {organizations.map((org) => (
+            {[...active, ...archived].map((org) => (
               <li>
                 <a
                   href={`/admin/o/${org.id}/dashboard`}
                   class="flex items-center justify-between px-4 py-3 hover:bg-surface-hover"
                 >
-                  <span class="font-medium text-foreground">{org.name}</span>
+                  <span class="font-medium text-foreground">
+                    {org.name}
+                    {org.archivedAt && (
+                      <span class="ml-2">
+                        <StatusBadge status="ARCHIVED" />
+                      </span>
+                    )}
+                  </span>
                   <span class="text-body-sm text-muted">
                     {org.addressLine1}
                   </span>

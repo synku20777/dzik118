@@ -109,6 +109,70 @@ describe("renderInvoiceHtml", () => {
     expect(v1).not.toContain("40003");
   });
 
+  it("prints quantities without trailing zeros only from label set 3", () => {
+    const lines = [
+      {
+        description: "Water",
+        quantity: "12.3450",
+        unit: "m3",
+        unitPrice: "1.5000",
+        netAmount: "18.52",
+        vatAmount: "3.89",
+        grossAmount: "22.41",
+      },
+      {
+        description: "Fee",
+        quantity: "1.0000",
+        unit: "month",
+        unitPrice: "15.0000",
+        netAmount: "15.00",
+        vatAmount: "3.15",
+        grossAmount: "18.15",
+      },
+      {
+        description: "Rate",
+        quantity: "2.5000",
+        unit: "month",
+        unitPrice: "0.0712",
+        netAmount: "0.18",
+        vatAmount: "0.04",
+        grossAmount: "0.22",
+      },
+    ] as never[];
+    const v3 = renderInvoiceHtml(
+      makeInvoice({
+        templateSnapshot: snapshot(createDefaultInvoiceTemplateConfig(), {
+          labelSetVersion: 3,
+        }),
+      }),
+      lines
+    );
+    expect(v3).toContain(">12.345 m3<");
+    expect(v3).toContain(">1 month<");
+    expect(v3).toContain(">2.5 month<");
+    expect(v3).toContain(">1.50<");
+    expect(v3).toContain(">15.00<");
+    // Real precision stays.
+    expect(v3).toContain(">0.0712<");
+    expect(v3).not.toContain("12.3450");
+
+    // An invoice generated before set 3 prints the stored values as before,
+    // so its preview keeps matching the PDF it already has.
+    const v2 = renderInvoiceHtml(
+      makeInvoice({
+        templateSnapshot: snapshot(createDefaultInvoiceTemplateConfig(), {
+          labelSetVersion: 2,
+        }),
+      }),
+      lines
+    );
+    expect(v2).toContain(">12.3450 m3<");
+    expect(v2).toContain(">1.0000 month<");
+    expect(v2).toContain(">15.0000<");
+    const unstamped = renderInvoiceHtml(makeInvoice(), lines);
+    expect(unstamped).toContain(">1.0000 month<");
+  });
+
   it("escapes HTML in every snapshot field to prevent injection into the rendered document", () => {
     const html = renderInvoiceHtml(
       makeInvoice({

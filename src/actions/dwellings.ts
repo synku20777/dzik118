@@ -6,12 +6,13 @@
 import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
 import { dwellingTypeEnum } from "../db/schema/dwellings";
-import { requireOrganizationAccess } from "../domain/authorization/guards";
+import { requireActiveOrganization } from "../domain/authorization/guards";
 import {
   archiveDwelling,
   assignResident,
   createDwelling,
   removeResidentAccess,
+  setResidentDisabled,
   updateDwelling,
   updateInvoiceDeliveryPreferences,
 } from "../domain/organizations/dwellings";
@@ -48,7 +49,7 @@ export const dwellings = {
         { organizationId, clientMutationId, areaM2, ...input },
         { locals }
       ) => {
-        requireOrganizationAccess(locals.auth, organizationId);
+        requireActiveOrganization(locals.auth, organizationId);
         return withDb((db) =>
           createDwelling(
             db,
@@ -87,7 +88,7 @@ export const dwellings = {
         { organizationId, dwellingId, areaM2, ...input },
         { locals, request }
       ) => {
-        requireOrganizationAccess(locals.auth, organizationId);
+        requireActiveOrganization(locals.auth, organizationId);
         const clearable = await readClearableTextFields(request, [
           "displayName",
           "occupantName",
@@ -132,7 +133,7 @@ export const dwellings = {
         { organizationId, dwellingId, invoiceByEmail, invoiceByPaper },
         { locals }
       ) => {
-        requireOrganizationAccess(locals.auth, organizationId);
+        requireActiveOrganization(locals.auth, organizationId);
         return withDb((db) =>
           updateInvoiceDeliveryPreferences(
             db,
@@ -154,7 +155,7 @@ export const dwellings = {
       dwellingId: z.uuid(),
     }),
     handler: safeHandler(async ({ organizationId, dwellingId }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         archiveDwelling(db, organizationId, dwellingId, locals.auth!.userId)
       );
@@ -175,7 +176,7 @@ export const dwellings = {
         { organizationId, dwellingId, email, clientMutationId },
         { locals }
       ) => {
-        requireOrganizationAccess(locals.auth, organizationId);
+        requireActiveOrganization(locals.auth, organizationId);
         return withDb((db) =>
           assignResident(
             db,
@@ -200,13 +201,36 @@ export const dwellings = {
     }),
     handler: safeHandler(
       async ({ organizationId, dwellingId, userId }, { locals }) => {
-        requireOrganizationAccess(locals.auth, organizationId);
+        requireActiveOrganization(locals.auth, organizationId);
         return withDb((db) =>
           removeResidentAccess(
             db,
             organizationId,
             dwellingId,
             userId,
+            locals.auth!.userId
+          )
+        );
+      }
+    ),
+  }),
+
+  setResidentDisabled: defineAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      userId: z.uuid(),
+      disabled: z.enum(["true", "false"]),
+    }),
+    handler: safeHandler(
+      async ({ organizationId, userId, disabled }, { locals }) => {
+        requireActiveOrganization(locals.auth, organizationId);
+        return withDb((db) =>
+          setResidentDisabled(
+            db,
+            organizationId,
+            userId,
+            disabled === "true",
             locals.auth!.userId
           )
         );

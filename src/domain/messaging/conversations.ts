@@ -1,20 +1,32 @@
 // Phase K (Messaging) - resident/admin conversations (spec Section 13.19,
-// 35 MSG-001/002). createConversation is resident-only and resolve is
-// admin-only, so their guards run in the action layer as usual (spec
-// Section 14). reply() is the one operation both roles call through a
-// single action (spec Section 10 lists one `messages.reply`, not a
-// role-split pair like readings.submitAdmin/submitResident) -- so, unlike
-// every other domain function here, it takes the caller's full AuthContext
-// and does its own role-based tenant/dwelling check after loading the
-// conversation, since which check applies isn't known until then.
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+// 35 MSG-001/002). createConversation is called by two distinct actions
+// (resident-facing and admin-facing) and resolve is admin-only, so their
+// guards run in the action layer as usual (spec Section 14). reply() is the
+// one operation both call through a single shared action (spec Section 10
+// lists one `messages.reply`, not a role-split pair like
+// readings.submitAdmin/submitResident) -- so, unlike every other domain
+// function here, it takes the caller's full AuthContext and does its own
+// tenant/dwelling check after loading the conversation, since which scope
+// applies (a person can have both) isn't known until then.
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { Db } from "../../db/client";
 import type { AuthContext } from "../authorization/context";
 import { conversations, messages } from "../../db/schema/messaging";
-import { appUsers } from "../../db/schema/auth";
 import { dwellings } from "../../db/schema/dwellings";
+import { organizations } from "../../db/schema/organizations";
 import { recordAuditEvent } from "../../lib/logging/audit";
-import { NotFoundError } from "../errors";
+import { ORGANIZATION_ARCHIVED_MESSAGE } from "../authorization/guards";
+import { ConflictError, NotFoundError } from "../errors";
 
 export { NotFoundError };
 
@@ -23,7 +35,8 @@ export async function createConversation(
   dwellingId: string,
   subject: string,
   body: string,
-  residentUserId: string
+  userId: string,
+  actingRole: "ADMIN" | "RESIDENT"
 ) {
   const [dwelling] = await db
     .select({ organizationId: dwellings.organizationId })
@@ -39,18 +52,19 @@ export async function createConversation(
         organizationId: dwelling.organizationId,
         dwellingId,
         subject,
-        createdByUserId: residentUserId,
+        createdByUserId: userId,
       })
       .returning();
     await tx.insert(messages).values({
       organizationId: dwelling.organizationId,
       conversationId: conversation.id,
-      senderUserId: residentUserId,
+      senderUserId: userId,
+      senderRole: actingRole,
       body,
     });
     await recordAuditEvent(tx, {
       organizationId: dwelling.organizationId,
-      actorUserId: residentUserId,
+      actorUserId: userId,
       action: "CONVERSATION_CREATED",
       entityType: "conversation",
       entityId: conversation.id,
@@ -64,7 +78,12 @@ export async function reply(
   db: Db,
   conversationId: string,
   body: string,
-  auth: AuthContext
+  auth: AuthContext,
+  // The screen the reply was sent from. A person who is both an admin and a
+  // resident of this dwelling (ADR 0007) sends from the resident portal as a
+  // resident and from the inbox as an admin. Ignored when the person does not
+  // hold that capability for this conversation.
+  sentAs?: "ADMIN" | "RESIDENT"
 ) {
   // The tenant/dwelling check is baked into the WHERE clause itself (not a
   // separate check after an unscoped read): a foreign conversation and a
@@ -73,27 +92,51 @@ export async function reply(
   // exists". The row is also locked here, in the same transaction as the
   // status update below, so a concurrent resolveConversation() can't be
   // raced and overwritten by a reply computed from a stale status.
-  const scopeIds =
-    auth.role === "ADMIN" ? auth.organizationIds : auth.dwellingIds;
-  if (scopeIds.length === 0) throw new NotFoundError("Conversation not found");
-  const scopeColumn =
-    auth.role === "ADMIN"
-      ? conversations.organizationId
-      : conversations.dwellingId;
+  //
+  // A person can have admin capability, resident capability, or both --
+  // match on whichever scope the conversation actually belongs to. `sql`false``
+  // makes an empty scope array never match, rather than `inArray` on an
+  // empty list (which some drivers treat as always-false anyway, but this
+  // is explicit).
+  if (auth.organizationIds.length === 0 && auth.dwellingIds.length === 0) {
+    throw new NotFoundError("Conversation not found");
+  }
+  const scopeMatch = or(
+    auth.organizationIds.length
+      ? inArray(conversations.organizationId, auth.organizationIds)
+      : sql`false`,
+    auth.dwellingIds.length
+      ? inArray(conversations.dwellingId, auth.dwellingIds)
+      : sql`false`
+  );
 
   return db.transaction(async (tx) => {
     const [conversation] = await tx
       .select()
       .from(conversations)
-      .where(
-        and(
-          eq(conversations.id, conversationId),
-          inArray(scopeColumn, scopeIds)
-        )
-      )
+      .where(and(eq(conversations.id, conversationId), scopeMatch))
       .for("update")
       .limit(1);
     if (!conversation) throw new NotFoundError("Conversation not found");
+    // ADR 0009: an archived organization is read-only. A resident of it cannot
+    // reach this point (no dwellingIds), so this only stops an admin.
+    if (auth.archivedOrganizationIds?.includes(conversation.organizationId)) {
+      throw new ConflictError(ORGANIZATION_ARCHIVED_MESSAGE);
+    }
+
+    // The capabilities the person holds for THIS conversation. The screen
+    // they sent from picks between two when they hold both; the choice is
+    // checked here, so a forged value cannot grant a role they do not hold.
+    const canAdmin = auth.organizationIds.includes(conversation.organizationId);
+    const canResident = auth.dwellingIds.includes(conversation.dwellingId);
+    const actingRole: "ADMIN" | "RESIDENT" =
+      sentAs === "RESIDENT" && canResident
+        ? "RESIDENT"
+        : sentAs === "ADMIN" && canAdmin
+          ? "ADMIN"
+          : canAdmin
+            ? "ADMIN"
+            : "RESIDENT";
 
     const [message] = await tx
       .insert(messages)
@@ -101,6 +144,7 @@ export async function reply(
         organizationId: conversation.organizationId,
         conversationId,
         senderUserId: auth.userId,
+        senderRole: actingRole,
         body,
       })
       .returning();
@@ -177,9 +221,7 @@ export interface ListConversationsOptions {
 
 // Returns each conversation's last message and unread flag alongside its
 // own fields, so the inbox list can show a preview snippet and an unread
-// dot without a per-row query -- same two-query shape as
-// listConversationsWithMessagesForDwelling below, just aggregated instead
-// of returning every message.
+// dot without a per-row query -- aggregated instead of returning every message.
 export async function listConversationsForOrganization(
   db: Db,
   organizationId: string,
@@ -203,35 +245,43 @@ export async function listConversationsForOrganization(
     .from(conversations)
     .innerJoin(dwellings, eq(dwellings.id, conversations.dwellingId))
     .where(and(...conditions))
-    .orderBy(desc(conversations.updatedAt));
+    .orderBy(desc(conversations.updatedAt), desc(conversations.id));
   if (rows.length === 0) return [];
 
-  const allMessages = await db
-    .select()
-    .from(messages)
-    .where(
-      inArray(
-        messages.conversationId,
-        rows.map((r) => r.id)
-      )
-    )
-    .orderBy(messages.createdAt);
+  const ids = rows.map((r) => r.id);
 
-  const messagesByConversation = new Map<string, typeof allMessages>();
-  for (const m of allMessages) {
-    const list = messagesByConversation.get(m.conversationId) ?? [];
-    list.push(m);
-    messagesByConversation.set(m.conversationId, list);
+  const lastMessages = await db
+    .selectDistinctOn([messages.conversationId])
+    .from(messages)
+    .where(inArray(messages.conversationId, ids))
+    .orderBy(
+      messages.conversationId,
+      desc(messages.createdAt),
+      desc(messages.id)
+    );
+
+  const unreadRows = await db
+    .selectDistinct({ conversationId: messages.conversationId })
+    .from(messages)
+    .where(and(inArray(messages.conversationId, ids), isNull(messages.readAt)));
+
+  const lastMessageByConversation = new Map<
+    string,
+    (typeof lastMessages)[number]
+  >();
+  for (const m of lastMessages) {
+    lastMessageByConversation.set(m.conversationId, m);
   }
 
-  return rows.map((row) => {
-    const convoMessages = messagesByConversation.get(row.id) ?? [];
-    return {
-      ...row,
-      lastMessage: convoMessages[convoMessages.length - 1] ?? null,
-      hasUnread: convoMessages.some((m) => !m.readAt),
-    };
-  });
+  const unreadConversationIds = new Set(
+    unreadRows.map((r) => r.conversationId)
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    lastMessage: lastMessageByConversation.get(row.id) ?? null,
+    hasUnread: unreadConversationIds.has(row.id),
+  }));
 }
 
 export async function getConversationForAdmin(
@@ -265,8 +315,9 @@ export async function getConversationForAdmin(
   return conversation;
 }
 
-// Joins appUsers for senderRole only (not the sender's own name) -- the
-// inbox displays a resident sender as the dwelling's occupant name (already
+// senderRole is stamped on the message itself at send time (see reply()/
+// createConversation() above) -- not the sender's own name; the inbox
+// displays a resident sender as the dwelling's occupant name (already
 // available from the conversation) and an admin sender generically as
 // "Admin", regardless of which admin account sent it.
 export async function listMessagesForConversation(
@@ -280,10 +331,9 @@ export async function listMessagesForConversation(
       createdAt: messages.createdAt,
       readAt: messages.readAt,
       senderUserId: messages.senderUserId,
-      senderRole: appUsers.role,
+      senderRole: messages.senderRole,
     })
     .from(messages)
-    .innerJoin(appUsers, eq(appUsers.id, messages.senderUserId))
     .where(eq(messages.conversationId, conversationId))
     .orderBy(messages.createdAt);
 }
@@ -291,7 +341,8 @@ export async function listMessagesForConversation(
 // Called when an admin opens a conversation -- marks every unread message
 // in it as read. Scoped by organizationId in the same query (not a
 // separate check after an unscoped read) so a foreign conversation is a
-// silent no-op rather than a cross-tenant write.
+// silent no-op rather than a cross-tenant write. Also a no-op in an archived
+// organization: opening the inbox there must not change data (ADR 0009).
 export async function markConversationRead(
   db: Db,
   organizationId: string,
@@ -304,7 +355,18 @@ export async function markConversationRead(
       and(
         eq(messages.conversationId, conversationId),
         eq(messages.organizationId, organizationId),
-        isNull(messages.readAt)
+        isNull(messages.readAt),
+        notExists(
+          db
+            .select({ id: organizations.id })
+            .from(organizations)
+            .where(
+              and(
+                eq(organizations.id, organizationId),
+                isNotNull(organizations.archivedAt)
+              )
+            )
+        )
       )
     );
 }

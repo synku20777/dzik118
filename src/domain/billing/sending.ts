@@ -25,6 +25,7 @@ import {
 import { sha256Hex } from "../../lib/hash";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { ConflictError, NotFoundError, toSafeSkipReason } from "../errors";
+import { assertEmailNotSuppressed } from "../email/suppression";
 import { renderInvoiceHtml } from "./invoice-html";
 import { createInvoiceAccessToken } from "./invoice-tokens";
 import { getInvoice } from "./generation";
@@ -839,6 +840,9 @@ export async function sendInvoice(
       "Invoice email is missing. Add a billing email before sending."
     );
   }
+  if (invoiceByEmail && recipient.billingEmail) {
+    await assertEmailNotSuppressed(db, organizationId, recipient.billingEmail);
+  }
 
   // 4. Atomic command claim loop (see claimSendCommand: the invoice row
   // lock closes the late-claim race where a loser re-checking for an active
@@ -1085,6 +1089,7 @@ export async function resendInvoice(
       "Invoice email is missing. Add a billing email before resending."
     );
   }
+  await assertEmailNotSuppressed(db, organizationId, recipient.billingEmail);
 
   // Resend requires prior EMAIL-channel history specifically -- checked
   // regardless of overall wasAlreadySent, since a PAPER dispatch can set

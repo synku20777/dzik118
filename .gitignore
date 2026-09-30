@@ -31,3 +31,6 @@ __pycache__/
 
 # jetbrains setting folder
 .idea/
+
+# graphify knowledge-graph output (generated, rebuild with /graphify)
+graphify-out/

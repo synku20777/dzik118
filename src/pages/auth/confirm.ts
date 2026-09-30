@@ -8,6 +8,10 @@ import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { appUsers } from "../../db/schema/auth";
+import {
+  hasAdminCapability,
+  loadAuthContext,
+} from "../../domain/authorization/context";
 import { withRequestDb } from "../../lib/db-request";
 import { createSupabaseServerClient } from "../../lib/supabase/server";
 import { escapeHtml } from "../../lib/html-escape";
@@ -131,22 +135,48 @@ export const POST: APIRoute = async ({ request, cookies, redirect, url }) => {
   if (type === "recovery") {
     // Supabase's recovery endpoint is public, so a link can exist for any
     // account (a resident, or an admin disabled since asking). Only an
-    // enabled admin may go on to set a password.
+    // enabled user with admin capability may go on to set a password.
     const userId = data.user?.id;
-    const [row] = userId
-      ? await withRequestDb((db) =>
-          db
-            .select({ role: appUsers.role, disabledAt: appUsers.disabledAt })
+    const eligible = userId
+      ? await withRequestDb(async (db) => {
+          const [row] = await db
+            .select({ disabledAt: appUsers.disabledAt })
             .from(appUsers)
             .where(eq(appUsers.id, userId))
-            .limit(1)
-        )
-      : [];
-    if (row?.role !== "ADMIN" || row.disabledAt) {
+            .limit(1);
+          return (
+            !!row && !row.disabledAt && (await hasAdminCapability(db, userId))
+          );
+        })
+      : false;
+    if (!eligible) {
       await supabase.auth.signOut();
       return applyPendingHeaders(redirect(failure));
     }
     return applyPendingHeaders(redirect("/reset-password"));
+  }
+
+  // Supabase's OTP endpoint is public, so a magic link can exist for any
+  // account. Only an enabled resident may keep the session. Anyone with admin
+  // capability signs in with a password only (spec Section 15.2). A disabled
+  // or unprovisioned user gets no session either.
+  const userId = data.user?.id;
+  const auth = userId
+    ? await withRequestDb((db) =>
+        loadAuthContext(db, userId, data.user?.email ?? "")
+      )
+    : null;
+  if (!auth || auth.organizationIds.length > 0) {
+    await supabase.auth.signOut();
+    return applyPendingHeaders(
+      redirect(auth ? "/login?error=6" : "/login?error=2")
+    );
+  }
+  if (auth.dwellingIds.length === 0) {
+    await supabase.auth.signOut();
+    return applyPendingHeaders(
+      redirect(auth.closedDwellingCount ? "/closed" : "/login?error=2")
+    );
   }
 
   return applyPendingHeaders(redirect("/portal"));

@@ -2,6 +2,7 @@
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
 import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
 import {
   ForbiddenError,
   requireOrganizationAccess,
@@ -29,7 +30,7 @@ const setupSteps = [
   {
     title: "Complete organization details",
     description:
-      "Add the legal name, address, contact details, bank name, and IBAN used on invoices.",
+      "Add the legal name, address, contact details, bank name, IBAN, registration number, and VAT number used on invoices.",
     ready: "Ready when the invoice issuer and payment details are complete.",
     action: "Open settings",
     href: `${base}/settings/organization`,
@@ -39,7 +40,7 @@ const setupSteps = [
   {
     title: "Add dwellings",
     description:
-      "Create dwellings one at a time, or import them from a CSV file. Check each number, type, occupant, area, and resident count.",
+      "Click Create dwelling to add one dwelling, or import a CSV file for many. Check each number, type, occupant, area, and resident count. A new dwelling joins every currently open billing period.",
     ready: "Ready when every billable unit appears in the dwelling list.",
     action: "Open dwellings",
     href: `${base}/dwellings`,
@@ -49,7 +50,7 @@ const setupSteps = [
   {
     title: "Assign residents and meters",
     description:
-      "Open each dwelling. Assign resident access. Add billing contact details. Register its meters.",
+      "Open each dwelling. Assign resident access. Add billing contact details. Register its meters. You can edit a meter later, but you cannot change its unit of measurement after a reading exists.",
     ready:
       "Ready when residents can access their dwelling and all meters are listed.",
     action: "Open dwellings",
@@ -64,7 +65,7 @@ const setupSteps = [
       "Add the billing rules that set fixed, area, resident-count, or meter-consumption charges.",
     ready:
       "Ready when every required charge has an enabled rule for the billing date.",
-    action: "Open billing rules",
+    action: "Open tariffs & rules",
     href: `${base}/settings/rules`,
     image: "/guide/rules.jpg",
     imageAlt: "Tariffs and rules list with rule details.",
@@ -75,7 +76,7 @@ const monthlySteps = [
   {
     title: "Create the billing period",
     description:
-      "Set the billing window, reading deadline, invoice issue date, and due date. A new period creates a case for each active dwelling.",
+      "Set the billing window, reading deadline, invoice issue date, and due date. A new period creates a case for each active dwelling. Residents can submit readings through the deadline date in the organization time zone. Administrators can enter readings later.",
     ready: "Ready when the new OPEN period appears in the period list.",
     action: "Open periods",
     href: `${base}/periods`,
@@ -96,7 +97,7 @@ const monthlySteps = [
   {
     title: "Generate and review invoices",
     description:
-      "Generate eligible invoices in the workbench. Review the calculation lines, recipient details, dates, and totals.",
+      "Generate eligible invoices in the workbench. Review the calculation lines, recipient details, dates, and totals. You can waive the late fee or add a manual adjustment only before you prepare a DRAFT invoice.",
     ready:
       "Ready when correct invoices are in DRAFT and you have fixed all validation blockers.",
     action: "Open periods",
@@ -107,7 +108,7 @@ const monthlySteps = [
   {
     title: "Prepare and send invoices",
     description:
-      "Prepare approved drafts. Send the prepared invoices. Delivery moves each case to SENT and locks the invoice.",
+      "Prepare approved drafts. Send the prepared invoices. Delivery moves each case to SENT and locks the invoice. With automatic sending on, the app sends the invoices that you prepared by the end of the send day. It tries again on the next days if a send fails.",
     ready:
       "Ready when sent invoices show SENT, or show a clear delivery error to fix.",
     action: "Open periods",
@@ -116,7 +117,7 @@ const monthlySteps = [
   {
     title: "Reconcile incoming payments",
     description:
-      "Import a bank statement. Check the preview. Confirm the import. Review proposed or unmatched transactions.",
+      "Import a bank statement. Check the preview. Confirm the import. Review proposed or unmatched payments. Use the search box and date fields to find a payment in the selected view. You can also record a payment by hand, reverse a wrong payment, or match an unmatched payment.",
     ready:
       "Ready when you have confirmed valid matches and the matching invoices show PAID.",
     action: "Open payments",
@@ -139,11 +140,11 @@ const monthlySteps = [
 const faqs = [
   [
     "What do the invoice statuses mean?",
-    "MISSING DATA means a required input is missing. READY means all required readings are in. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.",
+    "MISSING DATA means a required input is missing. READY means all required inputs are in. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.",
   ],
   [
     "Why can I not generate an invoice?",
-    "The system blocks generation when required readings are missing or the period is locked. Open the affected dwelling in the workbench to see what is missing.",
+    "The system blocks generation when required inputs are missing or the period is locked. Open the affected dwelling in the workbench to see what is missing.",
   ],
   [
     "Why can I not prepare an invoice?",
@@ -151,7 +152,7 @@ const faqs = [
   ],
   [
     "Why can I not send an invoice?",
-    "You can send only PREPARED invoices that have a billing email. If delivery fails, fix the cause, then retry or resend.",
+    "You can send email to a PREPARED invoice. You can also send it to a SENT, PAID, or OVERDUE invoice that first used paper delivery. The invoice needs a billing email. If delivery fails, fix the cause, then retry or resend.",
   ],
   [
     "Can I edit a sent invoice?",
@@ -159,34 +160,85 @@ const faqs = [
   ],
   [
     "What should I do with an unmatched payment?",
-    "Review its amount, currency, payer, and reference. Leave it unmatched until you find the correct invoice. Do not confirm a match you are not sure about.",
+    "Review its amount, currency, payer, and reference. When you find the correct invoice, choose it in the Unmatched tab and click Match to invoice. The payment applies right away. Do not match a payment if you are not sure.",
   ],
   [
     "When should I lock a period?",
     "Lock a period after its normal reading and invoice work is complete. A locked period stays available for history, but blocks reading edits and invoice regeneration.",
   ],
+  [
+    "Why do some actions ask me to confirm?",
+    "The Send, Resend, Revoke access link, and Record paper dispatch actions require confirmation. The Archive, Remove, Disable, Override status, Confirm payment, Reverse payment, Match to invoice, and Record payment actions also require confirmation. Confirmation helps prevent changes that are difficult to undo.",
+  ],
+  [
+    "What happens when an invoice email bounces?",
+    "The email provider tells the app about a permanent bounce or a complaint. The app adds the address to the suppressed list and sends no more invoices to it. Open Settings, then Suppressed email addresses. Fix the billing email, or remove the address from the list.",
+  ],
+  [
+    "Why does a sign-in link not work for me as an administrator?",
+    "Administrators sign in with a password. Use the Admin sign in form. A sign-in link works for residents only. Click Forgot password? if you do not know your password.",
+  ],
+  [
+    "How do I record a payment that is not in a bank statement?",
+    "Click Record a payment on the Payments page. Choose the invoice. Enter the amount, date, payer, bank reference, and a reason. The payment applies right away. The app blocks a second entry with the same reference, amount, and date. You can record bank transfers only.",
+  ],
+  [
+    "How do I undo a payment that I matched to the wrong invoice?",
+    "Open the Confirmed tab on the Payments page. Click Reverse next to the payment and enter a reason. The original payment stays in the history. The invoice becomes unpaid again. The payment returns to the Unmatched tab. There you can match it to the correct invoice. You cannot reverse a payment if a later invoice already used its credit.",
+  ],
+  [
+    "How do I waive a late fee or adjust a draft invoice?",
+    "Open the DRAFT invoice. Use the Adjust this draft panel. Enter a reason for each change. You cannot adjust an invoice after you prepare it.",
+  ],
+  [
+    "How do I fix a wrong invoice status?",
+    "Open the invoice. Use the Override status panel. Choose the correct status and enter a reason. The system records the change in the audit log. The list always offers DRAFT, PREPARED, and OVERDUE. It offers SENT only if the invoice was sent, and PAID only if the invoice is paid.",
+  ],
+  [
+    "How do I disable a resident's access?",
+    "Open the dwelling. Click Disable next to the resident. The resident cannot access the system until you click Enable. You cannot disable an administrator or a resident who has access to another organization.",
+  ],
+  [
+    "What does a resident see on an invoice?",
+    "The resident sees the invoice, the amount that they paid, and the amount that they still owe.",
+  ],
+  [
+    "What can a resident change in the portal?",
+    "A resident can change the display name on the Profile page. The email address cannot change. To use a new address, add the resident again with the new address. A resident can also click Download my data on the Profile page. The Payment history page shows each payment and each reversal. It does not show the payer name, the bank account, the reference, or the reason for a reversal.",
+  ],
+  [
+    "How do I download the data that the app holds about a resident?",
+    "Open the dwelling page. Find the resident and click Export data. The app downloads one JSON file. The file has the data of this person in your organization: the dwelling details, sent invoices, payments, account entries, meter readings, messages, and the actions of the person in the app. It does not have bank account numbers, the email addresses of other people, or the data of dwellings that the person cannot use. The app writes an audit event for each download.",
+  ],
+  [
+    "How do I archive an organization?",
+    "Open Settings, then Organization. In the Archive organization box, enter a reason and click Archive organization. Confirm the message. The organization becomes read-only. You can read every page, but you cannot change anything. Residents cannot sign in. The links in old invoice emails stop working. The scheduled jobs stop. The app does not delete any data.",
+  ],
+  [
+    "How do I restore an archived organization?",
+    "Open Settings, then Organization. Click Restore organization. The organization works as before. Residents can sign in again. The links in old invoice emails work again.",
+  ],
+  [
+    "How do I identify who changed something?",
+    "Open the audit log. Filter by action, entity type, actor, or date. Click Export CSV to download the rows that match. The file holds up to 5,000 rows.",
+  ],
+  [
+    "What if I forget my password?",
+    "Click Forgot password? on the sign-in page. Enter your email address. Follow the link in the email to set a new password.",
+  ],
 ] as const;
 
+// tone comes from invoiceStatusBadge() below, same mapping StatusBadge uses
+// everywhere else in the app -- not repeated here, so the two can never
+// drift apart.
 const statuses = [
-  [
-    "MISSING_DATA",
-    "Required input is missing. Generation is blocked.",
-    "danger",
-  ],
-  [
-    "READY",
-    "All required readings are in. You can now generate the invoice.",
-    "warning",
-  ],
-  ["DRAFT", "You can still review and regenerate the invoice.", "neutral"],
-  ["PREPARED", "The invoice is approved and ready to send.", "info"],
-  ["SENT", "Delivery succeeded.", "info"],
-  ["PAID", "The invoice is fully paid.", "success"],
-  [
-    "OVERDUE",
-    "The due date passed and the invoice is still unpaid.",
-    "warning",
-  ],
+  ["MISSING_DATA", "Required input is missing. Generation is blocked."],
+  ["READY", "All required inputs are in. You can now generate the invoice."],
+  ["DRAFT", "You can still review and regenerate the invoice."],
+  ["PREPARED", "The invoice is approved and ready to send."],
+  ["SENT", "Delivery succeeded."],
+  ["PAID", "The invoice is fully paid."],
+  ["OVERDUE", "The due date passed and the invoice is still unpaid."],
 ] as const;
 ---
 
@@ -324,12 +376,10 @@ const statuses = [
         </div>
         <dl class="status-guide">
           {
-            statuses.map(([status, description, tone]) => (
+            statuses.map(([status, description]) => (
               <div>
                 <dt>
-                  <span class="status-badge" data-tone={tone}>
-                    <span aria-hidden="true">●</span> {status.replace("_", " ")}
-                  </span>
+                  <StatusBadge status={status} />
                 </dt>
                 <dd>{t(description)}</dd>
               </div>

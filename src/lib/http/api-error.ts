@@ -4,6 +4,7 @@
 // FORBIDDEN/NOT_FOUND-shaped response, never a distinguishable message.
 import { ForbiddenError } from "../../domain/authorization/guards";
 import { NotFoundError } from "../../domain/organizations/organizations";
+import { RateLimitedError } from "../../domain/errors";
 
 function jsonError(status: number, code: string, message: string) {
   const requestId = `req_${crypto.randomUUID()}`;
@@ -14,6 +15,9 @@ function jsonError(status: number, code: string, message: string) {
 }
 
 export function toApiErrorResponse(err: unknown): Response {
+  if (err instanceof RateLimitedError) {
+    return jsonError(429, "TOO_MANY_REQUESTS", err.message);
+  }
   if (err instanceof ForbiddenError || err instanceof NotFoundError) {
     return jsonError(
       403,

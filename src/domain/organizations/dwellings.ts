@@ -2,7 +2,7 @@
 // (spec Section 10, DWL-001/002/003). Callers must call
 // requireOrganizationAccess() before calling any of these -- they take an
 // already-authorized organizationId, per spec Section 14.
-import { and, asc, eq, ilike, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
 import { appUsers } from "../../db/schema/auth";
 import {
@@ -10,6 +10,12 @@ import {
   dwellingTypeEnum,
   dwellings,
 } from "../../db/schema/dwellings";
+import {
+  invoiceAccessTokens,
+  invoiceDeliveries,
+  invoices,
+} from "../../db/schema/invoices";
+import { organizationMemberships } from "../../db/schema/organizations";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import {
   findOrCreateSupabaseUser,
@@ -17,6 +23,7 @@ import {
 } from "../../lib/supabase/admin";
 import { isUniqueViolation } from "../../lib/db-errors";
 import { ConflictError, NotFoundError, ValidationError } from "./organizations";
+import { syncCasesForDwelling } from "../periods/periods";
 import {
   claimMutationReceipt,
   completeMutationReceipt,
@@ -103,6 +110,11 @@ export async function createDwelling(
         .insert(dwellings)
         .values({ organizationId, ...input })
         .returning();
+      // A dwelling created after a period already exists must still show up
+      // in that period's workbench -- give it a case in every currently
+      // OPEN period, same as if createPeriod had seen it (issue: new
+      // dwellings were invisible to any period created before them).
+      await syncCasesForDwelling(tx, organizationId, dwelling.id);
       await recordAuditEvent(tx, {
         organizationId,
         actorUserId,
@@ -359,10 +371,12 @@ export async function listDwellingResidents(db: Db, dwellingId: string) {
     .where(eq(dwellingAccess.dwellingId, dwellingId));
 }
 
-// DWL-003: provisions a Supabase identity + app_users(RESIDENT) row for
-// `email` if one doesn't exist, then grants dwelling access. Rejects if the
-// email belongs to an existing ADMIN (no role-transition path in v1, same
-// reasoning as addAdminMembership).
+// DWL-003: provisions a Supabase identity + app_users row for `email` if one
+// doesn't exist (role recorded as whichever capability was granted first --
+// no longer read for authorization, see domain/authorization/context.ts),
+// then grants dwelling access. A person who already has admin membership
+// can also become a resident this way -- admin and resident capability are
+// independent, not exclusive.
 export async function assignResident(
   db: Db,
   organizationId: string,
@@ -397,7 +411,12 @@ export async function assignResident(
     };
   }
 
-  const supabaseUser = await findOrCreateSupabaseUser(supabaseAdmin, email);
+  // Lowercase once: sign-in and reset look the address up in lowercase.
+  const normalizedEmail = email.trim().toLowerCase();
+  const supabaseUser = await findOrCreateSupabaseUser(
+    supabaseAdmin,
+    normalizedEmail
+  );
 
   return db.transaction(async (tx) => {
     const identity = {
@@ -440,19 +459,17 @@ export async function assignResident(
     // concurrently.
     await tx
       .insert(appUsers)
-      .values({ id: supabaseUser.id, role: "RESIDENT", emailSnapshot: email })
+      .values({
+        id: supabaseUser.id,
+        role: "RESIDENT",
+        emailSnapshot: normalizedEmail,
+      })
       .onConflictDoNothing();
     const [appUser] = await tx
       .select()
       .from(appUsers)
       .where(eq(appUsers.id, supabaseUser.id))
       .limit(1);
-
-    if (appUser!.role !== "RESIDENT") {
-      throw new ConflictError(
-        `${email} is already an admin and cannot also be a resident`
-      );
-    }
 
     const [access] = await tx
       .insert(dwellingAccess)
@@ -475,8 +492,8 @@ export async function assignResident(
 
     return {
       userId: supabaseUser.id,
-      email: appUser.emailSnapshot,
-      displayName: appUser.displayName,
+      email: appUser!.emailSnapshot,
+      displayName: appUser!.displayName,
     };
   });
 }
@@ -493,14 +510,18 @@ export async function removeResidentAccess(
 ) {
   await getDwelling(db, organizationId, dwellingId);
   await db.transaction(async (tx) => {
-    await tx
+    const deleted = await tx
       .delete(dwellingAccess)
       .where(
         and(
           eq(dwellingAccess.dwellingId, dwellingId),
           eq(dwellingAccess.userId, userId)
         )
-      );
+      )
+      .returning({ userId: dwellingAccess.userId });
+    // A repeated removal changes nothing: no false audit row, and no link
+    // closing that could hit a link sent after the first removal.
+    if (deleted.length === 0) return;
     await recordAuditEvent(tx, {
       organizationId,
       actorUserId,
@@ -509,5 +530,140 @@ export async function removeResidentAccess(
       entityId: dwellingId,
       beforeData: { userId },
     });
+
+    // Invoice links were emailed to addresses the dwelling used at the time.
+    // If an invoice of this dwelling went by email to the person who leaves,
+    // close that invoice's links. Links for invoices sent to someone else
+    // stay valid (a co-resident keeps access). An admin can resend an invoice
+    // to get a new link.
+    const [removed] = await tx
+      .select({ email: appUsers.emailSnapshot })
+      .from(appUsers)
+      .where(eq(appUsers.id, userId))
+      .limit(1);
+    if (!removed) return;
+    const sentToRemoved = tx
+      .select({ invoiceId: invoiceDeliveries.invoiceId })
+      .from(invoiceDeliveries)
+      .innerJoin(invoices, eq(invoices.id, invoiceDeliveries.invoiceId))
+      .where(
+        and(
+          eq(invoiceDeliveries.organizationId, organizationId),
+          eq(invoices.dwellingId, dwellingId),
+          eq(invoiceDeliveries.method, "EMAIL"),
+          sql`lower(btrim(${invoiceDeliveries.destinationEmail})) = ${removed.email.trim().toLowerCase()}`
+        )
+      );
+    const revoked = await tx
+      .update(invoiceAccessTokens)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(
+          eq(invoiceAccessTokens.organizationId, organizationId),
+          inArray(invoiceAccessTokens.invoiceId, sentToRemoved),
+          isNull(invoiceAccessTokens.revokedAt)
+        )
+      )
+      .returning({ id: invoiceAccessTokens.id });
+    if (revoked.length > 0) {
+      await recordAuditEvent(tx, {
+        organizationId,
+        actorUserId,
+        action: "INVOICE_ACCESS_TOKENS_REVOKED_ON_REMOVAL",
+        entityType: "dwelling",
+        entityId: dwellingId,
+        afterData: { userId, revokedTokens: revoked.length },
+      });
+    }
+  });
+}
+
+export async function setResidentDisabled(
+  db: Db,
+  organizationId: string,
+  userId: string,
+  disabled: boolean,
+  actorUserId: string
+) {
+  return db.transaction(async (tx) => {
+    if (userId === actorUserId) {
+      throw new ConflictError("You cannot disable your own account");
+    }
+
+    // Lock the person's row first. A concurrent grant of dwelling access or
+    // admin membership takes a key-share lock on this row through its foreign
+    // key, so it waits here and the checks below see its result.
+    const [currentUser] = await tx
+      .select()
+      .from(appUsers)
+      .where(eq(appUsers.id, userId))
+      .for("update")
+      .limit(1);
+    if (!currentUser) {
+      throw new NotFoundError("Resident not found");
+    }
+    const accessRows = await tx
+      .select({
+        dwellingId: dwellingAccess.dwellingId,
+        organizationId: dwellings.organizationId,
+      })
+      .from(dwellingAccess)
+      .innerJoin(dwellings, eq(dwellings.id, dwellingAccess.dwellingId))
+      .where(eq(dwellingAccess.userId, userId));
+
+    const belongsToOrg = accessRows.some(
+      (row) => row.organizationId === organizationId
+    );
+    if (!belongsToOrg) {
+      throw new NotFoundError("Resident not found");
+    }
+
+    const belongsToOtherOrg = accessRows.some(
+      (row) => row.organizationId !== organizationId
+    );
+    if (belongsToOtherOrg) {
+      throw new ConflictError(
+        "This person also has access in another organization, so you cannot disable the account"
+      );
+    }
+
+    const [adminMembership] = await tx
+      .select({ userId: organizationMemberships.userId })
+      .from(organizationMemberships)
+      .where(eq(organizationMemberships.userId, userId))
+      .limit(1);
+
+    if (adminMembership) {
+      throw new ConflictError(
+        "Administrators cannot be disabled here. Remove the administrator on the Users page"
+      );
+    }
+
+    const isCurrentlyDisabled = currentUser.disabledAt !== null;
+    if (disabled === isCurrentlyDisabled) {
+      return currentUser;
+    }
+
+    const now = new Date();
+    const [updatedUser] = await tx
+      .update(appUsers)
+      .set({
+        disabledAt: disabled ? now : null,
+        updatedAt: now,
+      })
+      .where(eq(appUsers.id, userId))
+      .returning();
+
+    await recordAuditEvent(tx, {
+      organizationId,
+      actorUserId,
+      action: disabled ? "RESIDENT_DISABLED" : "RESIDENT_ENABLED",
+      entityType: "app_user",
+      entityId: userId,
+      beforeData: { disabledAt: currentUser.disabledAt },
+      afterData: { disabledAt: updatedUser.disabledAt },
+    });
+
+    return updatedUser;
   });
 }

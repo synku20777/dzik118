@@ -12,8 +12,7 @@ const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 const id = Astro.params.dwellingId ?? Astro.url.searchParams.get("dwellingId");
 const auth = Astro.locals.auth;
-const dwellingId =
-  auth?.role === "RESIDENT" && id && auth.dwellingIds.includes(id) ? id : null;
+const dwellingId = id && auth?.dwellingIds.includes(id) ? id : null;
 const base = "/portal/dwellings/" + dwellingId;
 ---
 
@@ -40,14 +39,20 @@ const base = "/portal/dwellings/" + dwellingId;
     </script>
     <title>{title}</title>
   </head>
-  <body>
+  <body data-working-label={t("Working…")}>
     <a class="skip-link" href="#main-content">{t("Skip to content")}</a>
     <header class="resident-header">
       <div>
         <a class="brand" href="/portal"><BrandMark />{t("Property Billing")}</a
         ><div class="flex items-center gap-3">
           <ThemeToggle />
-          <LanguageSwitch /><a href="/portal/profile" class="text-sm text-muted"
+          <LanguageSwitch />{
+            (auth?.organizationIds.length ?? 0) > 0 && (
+              <a href="/admin" class="text-sm text-muted hover:underline">
+                {t("Switch to admin view")}
+              </a>
+            )
+          }<a href="/portal/profile" class="text-sm text-muted"
             >{t("Profile")}</a
           >
         </div>
@@ -82,6 +87,12 @@ const base = "/portal/dwellings/" + dwellingId;
     </main>
     <script>
       import "../lib/ui/forms";
+      import { onPageLoad } from "../lib/ui/page-lifecycle";
+      import { labelStackTables } from "../lib/ui/stack-tables";
+
+      onPageLoad(() => {
+        labelStackTables();
+      });
     </script>
   </body>
 </html>

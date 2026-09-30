@@ -74,17 +74,18 @@ try {
       </p>
     </div>
 
-    <div class="table-wrap">
+    <div class="table-wrap stack-table">
       <table class="w-full text-left text-sm">
+        <caption class="sr-only">{t("Imported payments")}</caption>
         <thead class="border-b border-border bg-surface-hover text-muted">
           <tr>
-            <th class="px-4 py-2">{t("Row")}</th>
-            <th class="px-4 py-2">{t("Booking date")}</th>
-            <th class="px-4 py-2 text-right">{t("Amount")}</th>
-            <th class="px-4 py-2">{t("Currency")}</th>
-            <th class="px-4 py-2">{t("Payer")}</th>
-            <th class="px-4 py-2">{t("Reference")}</th>
-            <th class="px-4 py-2">{t("Match status")}</th>
+            <th scope="col" class="px-4 py-2">{t("Row")}</th>
+            <th scope="col" class="px-4 py-2">{t("Booking date")}</th>
+            <th scope="col" class="px-4 py-2 text-right">{t("Amount")}</th>
+            <th scope="col" class="px-4 py-2">{t("Currency")}</th>
+            <th scope="col" class="px-4 py-2">{t("Payer")}</th>
+            <th scope="col" class="px-4 py-2">{t("Reference")}</th>
+            <th scope="col" class="px-4 py-2">{t("Match status")}</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border">

@@ -70,6 +70,26 @@ export PRODUCTION_DATABASE_URL="<production-supabase-postgres-connection-string>
 
 > **Warning:** `npm run db:seed` is demo/local-dev-only fixture data (two fake organizations, fake residents) and must never be run against a production database.
 
+### Before you migrate: take a backup
+
+A migration changes the production schema and has no "down" step. Make a backup first.
+
+1. Check that Supabase backups are on. Daily backups need a paid plan. Point-in-time recovery is a separate add-on.
+2. Also take a manual dump before every release that has a new migration:
+
+   ```bash
+   pg_dump "$PRODUCTION_DATABASE_URL" --format=custom --file="backup-$(date +%F).dump"
+   ```
+
+3. Keep the dump until the release runs without problems.
+
+### If a release goes wrong
+
+- **The migration fails.** `npm run deploy` stops before `wrangler deploy`. The old version keeps running. Fix the cause and run the deploy again. Drizzle applies all waiting migrations in one transaction, so a failed file leaves no partial change.
+- **The deploy fails after the migration.** The old code now runs on the new schema. Most migrations only add tables, columns, and constraints, so the old code usually keeps working. Read the new migration files to check. Fix the cause and run the deploy again.
+- **The new version has a bug.** Run `npx wrangler rollback` and pick the previous version. This changes the code only. It does not undo a migration. Check that the old code works with the new schema first.
+- **Data is wrong or lost.** Restore from the backup. Stop the app first. A restore replaces the database, so every change after the backup is lost.
+
 ### Migration 0009/0010/0011 safety check
 
 Run this check before deploying any release that includes migrations `0009_delivery_safety_indexes`, `0010_delivery_safety_convergence`, or `0011_resend_retryable_command_id`. Migration `0009` has existed in three different forms across this project's git history with genuinely different effects (see the comment at the top of `drizzle/migrations/0010_delivery_safety_convergence.sql`), and this repository's own deploy path (`npm run deploy` -> `db:migrate:production`) runs outside CI, so there is no automated record of what has actually been applied to production. Connect directly to the production database (read-only is enough) and run:
@@ -79,7 +99,7 @@ Run this check before deploying any release that includes migrations `0009_deliv
 --    tracking table stores a content HASH and an applied timestamp, NOT
 --    the migration's filename/tag -- it cannot tell you "0009" by name.
 --    Row count tells you how far the chain has progressed (this repo has
---    12 migration files, 0000 through 0011, in `drizzle/migrations/`); to
+--    18 migration files, 0000 through 0017, in `drizzle/migrations/`); to
 --    identify a SPECIFIC historical form of 0009, rely on the SCHEMA
 --    evidence in query 2/3 below, which is unambiguous.
 SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at;
@@ -166,6 +186,20 @@ wrangler secret put INTERNAL_CRON_SECRET
 ```
 
 - `INTERNAL_CRON_SECRET` has no default value anywhere in the code on purpose -- it alone gates an org-wide, financially-consequential automated action (invoice generation and sending). If it isn't set, requests to `POST /api/v1/internal/scheduled-jobs` (including the real Cron Trigger's own call) fail closed rather than silently accepting an insecure default.
+- `ALERT_EMAIL` (optional): The app emails this address when a scheduled job
+  fails. See [monitoring.md](monitoring.md).
+- `AUDIT_HASH_SECRET` (optional): The key for the IP hash in the audit log. Use
+  a long random value. Without it the audit log keeps the request ID but no IP
+  hash. The app never stores a plain IP.
+- `SES_EVENTS_SECRET` and `SES_SNS_TOPIC_ARN` (optional, set both or neither):
+  They turn on bounce and complaint handling. See [monitoring.md](monitoring.md).
+
+`npm run deploy:check-secrets` compares this list with the Worker. The deploy
+workflow runs it before the migration. A missing secret does not raise an error
+in the app: the app uses a development default. For example, a missing
+`INVOICE_TOKEN_SECRET` means a public token key, and missing AWS keys mean mail
+goes to a local SMTP port that does not exist. The check stops the deploy
+instead.
 
 ### Build-time values (`access: "public"`) -- do NOT use `wrangler secret put`
 
@@ -230,12 +264,16 @@ npm run deploy
 
 `npm run deploy` is wired to build, migrate using `PRODUCTION_DATABASE_URL`, then deploy. The build step runs the postbuild script that wires the Cloudflare Cron `scheduled` handler automatically.
 
+The GitHub deploy workflow also runs `npm run deploy:check-secrets` before `npm run deploy`. Run it yourself before a manual deploy. Take the backup from section 3 first.
+
 ## 9. Post-deploy verification checklist
 
 - [ ] The site loads over HTTPS.
 - [ ] `/login` renders.
 - [ ] An admin created in step 7 can sign in and reach `/admin`.
 - [ ] A resident magic link (once one is provisioned via the admin UI) arrives and its link points at the production `APP_BASE_URL` (not Supabase's own default).
+- [ ] `GET /api/health` returns 200 with `{"status":"ok"}`, and the uptime monitor from [monitoring.md](monitoring.md) is green.
+- [ ] A response carries an `X-Request-Id` header. After an admin action, the audit log shows the same ID.
 - [ ] The Cloudflare dashboard's Cron Triggers page shows the "15 2 * * *" trigger for this Worker.
 - [ ] A Storage upload/download round-trip works (e.g. by sending one real invoice and confirming its PDF downloads).
 - [ ] Verify via `wrangler hyperdrive get <id>` that the production Hyperdrive config shows caching disabled. Perform this explicit manual check every time a Hyperdrive config is created or modified (not just on first deploy).

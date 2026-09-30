@@ -19,10 +19,18 @@ export type InvoiceLocale = "lv" | "en" | "ru";
 export const INVOICE_LOCALES: readonly InvoiceLocale[] = ["lv", "en", "ru"];
 export const CANONICAL_INVOICE_LOCALE: InvoiceLocale = "lv";
 
-// Bumped only when the *set* of system-generated label strings changes --
-// see the file header comment. invoice-template-schema.ts imports this to
-// stamp every newly generated invoice's snapshot.
-export const CURRENT_LABEL_SET_VERSION = 2;
+// Bumped when the *set* of system-generated label strings changes, or when
+// how an invoice prints its figures changes -- see the file header comment.
+// invoice-template-schema.ts imports this to stamp every newly generated
+// invoice's snapshot.
+//   2: adds the issuer registration and VAT number lines.
+//   3: prints quantities without trailing zeros (1, not 1.0000) and unit
+//      prices with at least 2 decimals. The wording is the same as set 2.
+export const CURRENT_LABEL_SET_VERSION = 3;
+
+// The first label set that prints trimmed quantities. An invoice generated
+// earlier keeps its old look, so its preview matches the PDF it already has.
+export const TRIMMED_NUMBERS_FROM_LABEL_SET = 3;
 
 type InvoiceLabelKeyV1 =
   | "invoice"
@@ -175,6 +183,8 @@ const LABEL_SETS: Record<
 > = {
   1: INVOICE_LABELS_V1,
   2: INVOICE_LABELS_V2,
+  // Set 3 has the same wording as set 2 (see CURRENT_LABEL_SET_VERSION).
+  3: INVOICE_LABELS_V2,
 };
 
 // `labelSetVersion` comes from a frozen invoice snapshot -- an unrecognized

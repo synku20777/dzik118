@@ -73,5 +73,5 @@ We introduced a **dwelling-scoped financial account** with an append-only ledger
 
 - **No arbitrary allocation waterfalls**: A bank transaction is proposed against a single candidate invoice matching its reference. Manual splitting of one transaction across multiple distinct invoices is not automated.
 - **No compounding interest**: The late-fee engine uses simple daily interest with grace days and a percentage cap; statutory tiered interest tables or court interest formulas are not implemented.
-- **No direct payment reversals**: Unwinding a confirmed bank payment is not supported as an in-place action; corrections require posting compensating manual adjustment entries.
+- **Payment reversal is a compensating entry**: A confirmed payment is never edited. [ADR 0006](0006-payment-corrections-manual-entry-and-alerts.md) adds a reversal that posts a cancelling ledger entry and a payment_reversals row.
 - **No general-ledger ERP integration**: The ledger is domain-specific to the property billing application and does not export double-entry general ledger journals to external ERP systems.

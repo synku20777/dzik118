@@ -275,6 +275,13 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
             <p class="billing-field-hint">
               {t("Used only when automatic sending is enabled.")}
             </p>
+            <p class="billing-field-hint">
+              {
+                t(
+                  "Invoices prepared by the end of this day are sent on this day. The app tries a failed send again on the next days."
+                )
+              }
+            </p>
             <FieldError name="autoSendDay" error={updateResult?.error} />
           </div>
 

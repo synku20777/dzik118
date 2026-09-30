@@ -493,21 +493,22 @@ function filterHref(status?: CaseStatus) {
 
       <div class="table-wrap case-table-wrap stack-table">
         <table class="case-table">
+          <caption class="sr-only">{t("Billing cases")}</caption>
           <thead>
             <tr>
-              <th class="select-column">
+              <th scope="col" class="select-column">
                 <input
                   type="checkbox"
                   id="select-all"
                   aria-label={t("Select all eligible invoices")}
                 />
               </th>
-              <th>{t("Dwelling")}</th>
-              <th>{t("Billing inputs")}</th>
-              <th>{t("Status")}</th>
-              <th class="numeric-column">{t("Invoice")}</th>
-              <th>{t("Next action")}</th>
-              <th aria-label={t("More actions")}></th>
+              <th scope="col">{t("Dwelling")}</th>
+              <th scope="col">{t("Billing inputs")}</th>
+              <th scope="col">{t("Status")}</th>
+              <th scope="col" class="numeric-column">{t("Invoice")}</th>
+              <th scope="col">{t("Next action")}</th>
+              <th scope="col" aria-label={t("More actions")}></th>
             </tr>
           </thead>
           <tbody>

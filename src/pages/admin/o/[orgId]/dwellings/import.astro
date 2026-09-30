@@ -11,8 +11,9 @@ const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import {
   ForbiddenError,
-  requireOrganizationAccess,
+  requireActiveOrganization,
 } from "../../../../../domain/authorization/guards";
+import { ConflictError } from "../../../../../domain/errors";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import {
   ImportHeaderError,
@@ -30,9 +31,12 @@ const MAX_CSV_BYTES = 2_000_000;
 
 const organizationId = Astro.params.orgId!;
 try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
+  requireActiveOrganization(Astro.locals.auth, organizationId);
 } catch (err) {
   if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  // An archived organization is read-only (ADR 0009); the list page shows why.
+  if (err instanceof ConflictError)
+    return Astro.redirect(`/admin/o/${organizationId}/dwellings`);
   throw err;
 }
 
@@ -81,13 +85,14 @@ if (Astro.request.method === "POST") {
         validateDwellingsCsv(db, organizationId, csvText, mode)
       );
       rows = preview.rows;
+      headerError = preview.headerError;
       step = "preview";
     }
   } else {
     const file = formData.get("file");
     if (file instanceof File) {
       if (file.size > MAX_CSV_BYTES) {
-        headerError = `File is too large (max ${MAX_CSV_BYTES / 1_000_000}MB).`;
+        headerError = "The CSV file is too large (up to 2 MB).";
         step = "preview";
       } else {
         csvText = await file.text();
@@ -164,7 +169,7 @@ if (Astro.request.method === "POST") {
     {
       step === "preview" && headerError && (
         <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
-          {headerError}
+          {t(headerError)}
         </p>
       )
     }
@@ -172,14 +177,23 @@ if (Astro.request.method === "POST") {
     {
       step === "preview" && !headerError && (
         <div class="space-y-4">
-          <div class="table-wrap">
+          <div class="table-wrap stack-table">
             <table class="w-full text-left text-body-sm">
+              <caption class="sr-only">{t("Dwellings to import")}</caption>
               <thead class="border-b border-border bg-surface-hover text-muted">
                 <tr>
-                  <th class="px-4 py-2">{t("Row")}</th>
-                  <th class="px-4 py-2">{t("Number")}</th>
-                  <th class="px-4 py-2">{t("Status")}</th>
-                  <th class="px-4 py-2">{t("Errors")}</th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Row")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Number")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Status")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Errors")}
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-border">
@@ -214,7 +228,7 @@ if (Astro.request.method === "POST") {
           </p>
           {confirmError && (
             <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
-              {confirmError}
+              {t(confirmError)}
             </p>
           )}
           <form method="POST">

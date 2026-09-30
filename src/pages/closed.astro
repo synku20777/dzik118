@@ -1,0 +1,29 @@
+---
+// ADR 0009 - shown to a resident whose organization is archived.
+import AuthLayout from "../layouts/AuthLayout.astro";
+import { translate, uiLocale } from "../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+---
+
+<AuthLayout
+  title={t("This organization is closed") + " - " + t("Property Billing")}
+>
+  <div
+    class="w-full max-w-md rounded-panel border border-border bg-surface p-8 text-center"
+  >
+    <h1 class="text-xl font-bold text-foreground">
+      {t("This organization is closed")}
+    </h1>
+    <p class="mt-2 text-sm text-muted">
+      {
+        t(
+          "Your property manager has closed this account. You cannot see invoices or send messages here. Contact your property manager for help."
+        )
+      }
+    </p>
+    <a href="/login" class="btn-primary mt-6 inline-flex"
+      >{t("Back to sign in")}</a
+    >
+  </div>
+</AuthLayout>

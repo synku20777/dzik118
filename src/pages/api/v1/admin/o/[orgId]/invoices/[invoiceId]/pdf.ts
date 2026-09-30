@@ -16,6 +16,7 @@ import {
 import { toApiErrorResponse } from "../../../../../../../../lib/http/api-error";
 import { withRequestDb } from "../../../../../../../../lib/db-request";
 import { getSupabaseAdmin } from "../../../../../../../../actions/_supabase_admin";
+import { limitOrThrow } from "../../../../../../../../lib/http/rate-limit";
 
 const CANONICAL_PDF_ELIGIBLE_STATUSES = ["PREPARED", "SENT", "PAID", "OVERDUE"];
 
@@ -28,6 +29,7 @@ export const GET: APIRoute = async ({ params, locals, url }) => {
 
   try {
     requireOrganizationAccess(locals.auth, organizationId);
+    await limitOrThrow("pdf", locals.auth!.userId);
   } catch (err) {
     return toApiErrorResponse(err);
   }

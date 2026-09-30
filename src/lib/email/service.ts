@@ -33,6 +33,11 @@ export interface EmailDeliveryResult {
 
 export interface EmailService {
   sendInvoice(input: SendInvoiceEmailInput): Promise<EmailDeliveryResult>;
+  sendAlert?(input: {
+    to: string;
+    subject: string;
+    text: string;
+  }): Promise<EmailDeliveryResult>;
 }
 
 // Shared by every EmailService implementation so the two send paths

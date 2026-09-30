@@ -8,6 +8,7 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "astro:env/server";
 import { appUsers } from "../../../../db/schema/auth";
+import { hasAdminCapability } from "../../../../domain/authorization/context";
 import { withRequestDb } from "../../../../lib/db-request";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -45,15 +46,18 @@ async function sendResetLink(email: string, clientIp: string) {
   });
   if (!ipLimit.success || !emailLimit.success) return;
 
-  const [user] = await withRequestDb((db) =>
-    db
-      .select({ role: appUsers.role, disabledAt: appUsers.disabledAt })
+  const eligible = await withRequestDb(async (db) => {
+    const [user] = await db
+      .select({ id: appUsers.id, disabledAt: appUsers.disabledAt })
       .from(appUsers)
       .where(eq(appUsers.emailSnapshot, email))
-      .limit(1)
-  );
-  // Residents have no password; only enabled admins get a link.
-  if (user?.role === "ADMIN" && !user.disabledAt) {
+      .limit(1);
+    return (
+      !!user && !user.disabledAt && (await hasAdminCapability(db, user.id))
+    );
+  });
+  // Only an enabled user with admin capability gets a reset link.
+  if (eligible) {
     await createClient(
       SUPABASE_URL,
       SUPABASE_PUBLISHABLE_KEY

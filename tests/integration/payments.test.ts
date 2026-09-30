@@ -14,6 +14,7 @@ import { createPeriod } from "../../src/domain/periods/periods";
 import { createRule } from "../../src/domain/billing/rules";
 import {
   generateInvoice,
+  getInvoiceForResident,
   prepareInvoice,
 } from "../../src/domain/billing/generation";
 import { bankTransactions, paymentMatches } from "../../src/db/schema/payments";
@@ -760,6 +761,58 @@ describe("payment reconciliation (PACKAGE F1+F2: partial payments and overpaymen
     ).toBeLessThanOrEqual(0);
     expect(compareExact(sumAllocations, invoice.amountDue)).toBeLessThanOrEqual(
       0
+    );
+
+    await cleanupOrg(org.id);
+  });
+
+  it("PACKAGE F1: computes live remaining balance for resident after partial payment confirmation", async () => {
+    const { org, dwelling, invoice } = await setupOrgWithInvoice(
+      "IT-J Org Partial Resident Balance",
+      11
+    );
+    const partialAmount = "20.00";
+    expect(compareExact(partialAmount, invoice.amountDue)).toBeLessThan(0);
+
+    // Transition invoice/case to SENT so getInvoiceForResident allows resident access
+    await db.$client.query(
+      "update billing_cases set status = 'SENT' where id = (select billing_case_id from invoices where id = $1)",
+      [invoice.id]
+    );
+    await db.$client.query(
+      "update invoices set sent_at = now() where id = $1",
+      [invoice.id]
+    );
+
+    const csv = [
+      "booking_date,amount,currency,reference",
+      `2026-11-15,${partialAmount},${invoice.currency},Payment for ${invoice.invoiceNumber}`,
+    ].join("\n");
+    const imported = await importBankCsv(
+      db,
+      org.id,
+      "partial-resident.csv",
+      csv,
+      seedAdminId
+    );
+    expect(imported.imported).toBe(1);
+    expect(imported.proposed).toBe(1);
+
+    const matches = await listPaymentMatches(db, org.id, "PROPOSED");
+    const match = matches.find((m) => m.invoiceId === invoice.id);
+    expect(match).toBeDefined();
+
+    const confirmed = await confirmMatch(db, org.id, match!.id, seedAdminId);
+    expect(confirmed.status).toBe("CONFIRMED");
+
+    const residentInvoice = await getInvoiceForResident(
+      db,
+      invoice.id,
+      dwelling.id
+    );
+    expect(residentInvoice.paidAmount).toBe(partialAmount);
+    expect(residentInvoice.remainingAmount).toBe(
+      subtractExact(invoice.amountDue, partialAmount)
     );
 
     await cleanupOrg(org.id);

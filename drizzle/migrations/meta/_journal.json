@@ -99,6 +99,34 @@
       "when": 1790200000000,
       "tag": "0013_billing_rule_assignments_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790693166251,
+      "tag": "0014_add_message_sender_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790760056824,
+      "tag": "0015_payment_reversals",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790776780819,
+      "tag": "0016_bank_amount_checks_and_email_case",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790780016275,
+      "tag": "0017_suppressed_emails",
+      "breakpoints": true
     }
   ]
 }

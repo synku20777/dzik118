@@ -74,99 +74,137 @@ function dotStuff(body: string): string {
 }
 
 export function createSmtpEmailService(config: SmtpConfig): EmailService {
+  async function sendRawMessage(
+    to: string,
+    buildBody: (safeFrom: string, safeTo: string) => string
+  ): Promise<EmailDeliveryResult> {
+    const socket = connect(config.port, config.host);
+    socket.on("error", () => {}); // Prevent unhandled error event if socket errors outside an active listener
+    const safeFrom = sanitizeHeader(config.fromAddress).replace(/[<>]/g, "");
+    const safeTo = sanitizeHeader(to).replace(/[<>]/g, "");
+
+    try {
+      // Pre-DATA phase: connecting, greeting, EHLO, MAIL FROM, RCPT TO, DATA command.
+      // If anything fails here, nothing potentially deliverable has been transmitted -> DEFINITIVE.
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const onConnect = () => {
+            cleanup();
+            resolve();
+          };
+          const onError = (err: Error) => {
+            cleanup();
+            reject(err);
+          };
+          const onClose = () => {
+            cleanup();
+            reject(new Error("SMTP connection closed before connect"));
+          };
+          function cleanup() {
+            socket.off("connect", onConnect);
+            socket.off("error", onError);
+            socket.off("close", onClose);
+          }
+          socket.once("connect", onConnect);
+          socket.once("error", onError);
+          socket.once("close", onClose);
+        });
+        const greeting = await readResponse(socket); // 220 greeting
+        if (!/^2\d\d[ -]/m.test(greeting)) {
+          return {
+            success: false,
+            provider: "smtp",
+            errorCode: "SMTP_REJECTED",
+            failureClassification: "DEFINITIVE",
+          };
+        }
+        const ehloResp = await sendLine(socket, "EHLO localhost");
+        if (!/^2\d\d[ -]/m.test(ehloResp)) {
+          return {
+            success: false,
+            provider: "smtp",
+            errorCode: "SMTP_REJECTED",
+            failureClassification: "DEFINITIVE",
+          };
+        }
+        const mailResp = await sendLine(socket, `MAIL FROM:<${safeFrom}>`);
+        if (!/^2\d\d[ -]/m.test(mailResp)) {
+          return {
+            success: false,
+            provider: "smtp",
+            errorCode: "SMTP_REJECTED",
+            failureClassification: "DEFINITIVE",
+          };
+        }
+        const rcptResp = await sendLine(socket, `RCPT TO:<${safeTo}>`);
+        if (!/^2\d\d[ -]/m.test(rcptResp)) {
+          return {
+            success: false,
+            provider: "smtp",
+            errorCode: "SMTP_REJECTED",
+            failureClassification: "DEFINITIVE",
+          };
+        }
+        const dataResp = await sendLine(socket, "DATA");
+        if (!/^3\d\d[ -]/m.test(dataResp)) {
+          return {
+            success: false,
+            provider: "smtp",
+            errorCode: "SMTP_REJECTED",
+            failureClassification: "DEFINITIVE",
+          };
+        }
+      } catch {
+        return {
+          success: false,
+          provider: "smtp",
+          errorCode: "SMTP_CONNECTION_FAILED",
+          failureClassification: "DEFINITIVE",
+        };
+      }
+
+      // DATA phase: message payload is transmitted. Any error during write or waiting
+      // for the final reply is AMBIGUOUS because the server may have accepted the message.
+      const body = buildBody(safeFrom, safeTo);
+
+      let finalResponse: string;
+      try {
+        finalResponse = await sendLine(socket, `${dotStuff(body)}\r\n.`);
+      } catch {
+        return {
+          success: false,
+          provider: "smtp",
+          errorCode: "SMTP_RESPONSE_UNCERTAIN",
+          failureClassification: "AMBIGUOUS",
+        };
+      }
+
+      try {
+        await sendLine(socket, "QUIT");
+      } catch {
+        // Best effort QUIT shutdown; do not overwrite finalResponse status
+      }
+
+      return /^250[ -]/m.test(finalResponse)
+        ? { success: true, provider: "smtp" }
+        : {
+            success: false,
+            provider: "smtp",
+            errorCode: "SMTP_REJECTED",
+            failureClassification: "DEFINITIVE",
+          };
+    } finally {
+      socket.destroy();
+    }
+  }
+
   return {
     async sendInvoice(
       input: SendInvoiceEmailInput
     ): Promise<EmailDeliveryResult> {
-      const socket = connect(config.port, config.host);
-      socket.on("error", () => {}); // Prevent unhandled error event if socket errors outside an active listener
-      const safeFrom = sanitizeHeader(config.fromAddress).replace(/[<>]/g, "");
-      const safeTo = sanitizeHeader(input.to).replace(/[<>]/g, "");
-
-      try {
-        // Pre-DATA phase: connecting, greeting, EHLO, MAIL FROM, RCPT TO, DATA command.
-        // If anything fails here, nothing potentially deliverable has been transmitted -> DEFINITIVE.
-        try {
-          await new Promise<void>((resolve, reject) => {
-            const onConnect = () => {
-              cleanup();
-              resolve();
-            };
-            const onError = (err: Error) => {
-              cleanup();
-              reject(err);
-            };
-            const onClose = () => {
-              cleanup();
-              reject(new Error("SMTP connection closed before connect"));
-            };
-            function cleanup() {
-              socket.off("connect", onConnect);
-              socket.off("error", onError);
-              socket.off("close", onClose);
-            }
-            socket.once("connect", onConnect);
-            socket.once("error", onError);
-            socket.once("close", onClose);
-          });
-          const greeting = await readResponse(socket); // 220 greeting
-          if (!/^2\d\d[ -]/m.test(greeting)) {
-            return {
-              success: false,
-              provider: "smtp",
-              errorCode: "SMTP_REJECTED",
-              failureClassification: "DEFINITIVE",
-            };
-          }
-          const ehloResp = await sendLine(socket, "EHLO localhost");
-          if (!/^2\d\d[ -]/m.test(ehloResp)) {
-            return {
-              success: false,
-              provider: "smtp",
-              errorCode: "SMTP_REJECTED",
-              failureClassification: "DEFINITIVE",
-            };
-          }
-          const mailResp = await sendLine(socket, `MAIL FROM:<${safeFrom}>`);
-          if (!/^2\d\d[ -]/m.test(mailResp)) {
-            return {
-              success: false,
-              provider: "smtp",
-              errorCode: "SMTP_REJECTED",
-              failureClassification: "DEFINITIVE",
-            };
-          }
-          const rcptResp = await sendLine(socket, `RCPT TO:<${safeTo}>`);
-          if (!/^2\d\d[ -]/m.test(rcptResp)) {
-            return {
-              success: false,
-              provider: "smtp",
-              errorCode: "SMTP_REJECTED",
-              failureClassification: "DEFINITIVE",
-            };
-          }
-          const dataResp = await sendLine(socket, "DATA");
-          if (!/^3\d\d[ -]/m.test(dataResp)) {
-            return {
-              success: false,
-              provider: "smtp",
-              errorCode: "SMTP_REJECTED",
-              failureClassification: "DEFINITIVE",
-            };
-          }
-        } catch {
-          return {
-            success: false,
-            provider: "smtp",
-            errorCode: "SMTP_CONNECTION_FAILED",
-            failureClassification: "DEFINITIVE",
-          };
-        }
-
-        // DATA phase: message payload is transmitted. Any error during write or waiting
-        // for the final reply is AMBIGUOUS because the server may have accepted the message.
+      return sendRawMessage(input.to, (safeFrom, safeTo) => {
         const boundary = `part-${crypto.randomUUID()}`;
-        const body = [
+        return [
           `From: ${safeFrom}`,
           `To: ${safeTo}`,
           `Subject: ${invoiceEmailSubject(input)}`,
@@ -185,36 +223,25 @@ export function createSmtpEmailService(config: SmtpConfig): EmailService {
           "",
           `--${boundary}--`,
         ].join("\r\n");
+      });
+    },
 
-        let finalResponse: string;
-        try {
-          finalResponse = await sendLine(socket, `${dotStuff(body)}\r\n.`);
-        } catch {
-          return {
-            success: false,
-            provider: "smtp",
-            errorCode: "SMTP_RESPONSE_UNCERTAIN",
-            failureClassification: "AMBIGUOUS",
-          };
-        }
-
-        try {
-          await sendLine(socket, "QUIT");
-        } catch {
-          // Best effort QUIT shutdown; do not overwrite finalResponse status
-        }
-
-        return /^250[ -]/m.test(finalResponse)
-          ? { success: true, provider: "smtp" }
-          : {
-              success: false,
-              provider: "smtp",
-              errorCode: "SMTP_REJECTED",
-              failureClassification: "DEFINITIVE",
-            };
-      } finally {
-        socket.destroy();
-      }
+    async sendAlert(input: {
+      to: string;
+      subject: string;
+      text: string;
+    }): Promise<EmailDeliveryResult> {
+      return sendRawMessage(input.to, (safeFrom, safeTo) => {
+        return [
+          `From: ${safeFrom}`,
+          `To: ${safeTo}`,
+          `Subject: ${sanitizeHeader(input.subject)}`,
+          "MIME-Version: 1.0",
+          "Content-Type: text/plain; charset=UTF-8",
+          "",
+          input.text,
+        ].join("\r\n");
+      });
     },
   };
 }

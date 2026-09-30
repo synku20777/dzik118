@@ -20,6 +20,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "deploy": "npm run build && npm run db:migrate:production && wrangler deploy",
+    "deploy:check-secrets": "node scripts/check-worker-secrets.mjs",
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:production": "node scripts/migrate-production.mjs",
     "db:seed": "vite-node scripts/seed.ts",
@@ -27,6 +28,7 @@
     "demo:auth": "vite-node scripts/setup-demo-auth.ts",
     "demo:reset": "vite-node scripts/demo-reset.ts",
     "storage:setup": "vite-node scripts/setup-storage.ts",
+    "backfill:dwelling-cases": "vite-node scripts/backfill-dwelling-cases.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test"
   },

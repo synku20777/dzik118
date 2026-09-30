@@ -49,7 +49,10 @@ import {
   type InvoiceTemplateConfigV2,
   type SpacingValue,
 } from "../../domain/billing/invoice-template-schema";
-import type { InvoiceLocale } from "../../domain/billing/invoice-i18n";
+import {
+  CURRENT_LABEL_SET_VERSION,
+  type InvoiceLocale,
+} from "../../domain/billing/invoice-i18n";
 
 // A field whose Latvian value is canonical/required and whose EN/RU values
 // are optional translated copies -- one small interface lets a single
@@ -162,6 +165,8 @@ onPageLoad(() => {
         footerText: state.footerText || null,
         paymentInstructions: state.paymentInstructions || null,
         defaultNote: state.defaultNote || null,
+        // The preview shows what a NEW invoice will look like.
+        labelSetVersion: CURRENT_LABEL_SET_VERSION,
         config: state.config,
       },
     };

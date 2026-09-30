@@ -54,9 +54,13 @@ const deliveryResult = Astro.getActionResult(
 );
 const assignResult = Astro.getActionResult(actions.dwellings.assignResident);
 const removeResult = Astro.getActionResult(actions.dwellings.removeResident);
+const residentDisabledResult = Astro.getActionResult(
+  actions.dwellings.setResidentDisabled
+);
 const meterResult =
   Astro.getActionResult(actions.meters.create) ??
   Astro.getActionResult(actions.meters.archive);
+const meterUpdateResult = Astro.getActionResult(actions.meters.update);
 const adjustmentResult = Astro.getActionResult(
   actions.accounts.createAdjustment
 );
@@ -674,19 +678,26 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
           {
             accountActivity.length > 0 ? (
               <div
-                class="table-wrap mt-4"
+                class="table-wrap stack-table mt-4"
                 role="region"
                 aria-label={t("Account activity")}
                 tabindex="0"
               >
                 <table class="w-full text-body-sm">
+                  <caption class="sr-only">{t("Account activity")}</caption>
                   <thead>
                     <tr>
-                      <th>{t("Date")}</th>
-                      <th>{t("Description")}</th>
-                      <th class="text-right">{t("Debit")}</th>
-                      <th class="text-right">{t("Credit")}</th>
-                      <th class="text-right">{t("Balance")}</th>
+                      <th scope="col">{t("Date")}</th>
+                      <th scope="col">{t("Description")}</th>
+                      <th scope="col" class="text-right">
+                        {t("Debit")}
+                      </th>
+                      <th scope="col" class="text-right">
+                        {t("Credit")}
+                      </th>
+                      <th scope="col" class="text-right">
+                        {t("Balance")}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1026,6 +1037,16 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
               </div>
             </details>
           </div>
+          {
+            residentDisabledResult?.error && (
+              <p class="notice notice-danger" role="alert">
+                {friendlyActionErrorMessage(
+                  residentDisabledResult.error,
+                  locale
+                )}
+              </p>
+            )
+          }
           <div
             id="residents-list-region"
             data-empty-title={t("No residents assigned.")}
@@ -1040,7 +1061,48 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                     <div class="sidebar-item-body">
                       <strong>{r.displayName ?? r.email}</strong>
                       <p>{r.email}</p>
+                      {r.disabledAt && (
+                        <p class="text-sm text-muted">
+                          {t("Account disabled")}
+                        </p>
+                      )}
                     </div>
+                    <a
+                      href={`/api/v1/admin/o/${organizationId}/residents/${r.userId}/export`}
+                      class="sidebar-item-remove"
+                      download
+                    >
+                      {t("Export data")}
+                    </a>
+                    <form
+                      method="POST"
+                      action={actions.dwellings.setResidentDisabled}
+                    >
+                      <input
+                        type="hidden"
+                        name="organizationId"
+                        value={organizationId}
+                      />
+                      <input type="hidden" name="userId" value={r.userId} />
+                      <input
+                        type="hidden"
+                        name="disabled"
+                        value={r.disabledAt ? "false" : "true"}
+                      />
+                      <button
+                        type="submit"
+                        class="sidebar-item-remove"
+                        data-confirm={
+                          r.disabledAt
+                            ? undefined
+                            : t(
+                                "Disable this account? The person cannot sign in until you enable it again."
+                              )
+                        }
+                      >
+                        {r.disabledAt ? t("Enable") : t("Disable")}
+                      </button>
+                    </form>
                     <form
                       method="POST"
                       action={actions.dwellings.removeResident}
@@ -1210,6 +1272,13 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
               aria-pressed="false">{t("Archived")}</button
             >
           </div>
+          {
+            meterUpdateResult?.error && (
+              <p class="notice notice-danger" role="alert">
+                {friendlyActionErrorMessage(meterUpdateResult.error, locale)}
+              </p>
+            )
+          }
           <div
             id="meters-list-region"
             data-empty-active={t("No active meters for this dwelling.")}
@@ -1219,7 +1288,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
               {
                 meterList.map((m) => (
                   <li
-                    class="meter-row"
+                    class="meter-row flex-wrap"
                     data-meter-id={m.id}
                     data-archived={m.archivedAt ? "true" : "false"}
                     hidden={!!m.archivedAt}
@@ -1242,25 +1311,111 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                       </p>
                     </div>
                     {!m.archivedAt && (
-                      <form
-                        method="POST"
-                        action={actions.meters.archive}
-                        data-meter-archive-form
-                      >
-                        <input
-                          type="hidden"
-                          name="organizationId"
-                          value={organizationId}
-                        />
-                        <input type="hidden" name="meterId" value={m.id} />
-                        <button
-                          type="submit"
-                          class="sidebar-item-remove"
-                          data-confirm={`${t("Archive")} ${m.label ?? entityLabel(m.type, locale)}?`}
+                      <>
+                        <form
+                          method="POST"
+                          action={actions.meters.archive}
+                          data-meter-archive-form
                         >
-                          {t("Archive")}
-                        </button>
-                      </form>
+                          <input
+                            type="hidden"
+                            name="organizationId"
+                            value={organizationId}
+                          />
+                          <input type="hidden" name="meterId" value={m.id} />
+                          <button
+                            type="submit"
+                            class="sidebar-item-remove"
+                            data-confirm={`${t("Archive")} ${m.label ?? entityLabel(m.type, locale)}?`}
+                          >
+                            {t("Archive")}
+                          </button>
+                        </form>
+                        <div class="w-full mt-2">
+                          <details class="meter-edit">
+                            <summary>{t("Edit")}</summary>
+                            <form
+                              method="POST"
+                              action={actions.meters.update}
+                              class="mt-2 grid grid-cols-2 gap-2"
+                            >
+                              <input
+                                type="hidden"
+                                name="organizationId"
+                                value={organizationId}
+                              />
+                              <input
+                                type="hidden"
+                                name="meterId"
+                                value={m.id}
+                              />
+                              <div>
+                                <label
+                                  class="block text-label text-foreground"
+                                  for={`meter-serial-${m.id}`}
+                                >
+                                  {t("Serial number")}
+                                </label>
+                                <input
+                                  id={`meter-serial-${m.id}`}
+                                  name="serialNumber"
+                                  value={m.serialNumber ?? ""}
+                                  class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                                />
+                              </div>
+                              <div>
+                                <label
+                                  class="block text-label text-foreground"
+                                  for={`meter-label-${m.id}`}
+                                >
+                                  {t("Label")}
+                                </label>
+                                <input
+                                  id={`meter-label-${m.id}`}
+                                  name="label"
+                                  value={m.label ?? ""}
+                                  class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                                />
+                              </div>
+                              <div>
+                                <label
+                                  class="block text-label text-foreground"
+                                  for={`meter-unit-${m.id}`}
+                                >
+                                  {t("Unit")}
+                                </label>
+                                <input
+                                  id={`meter-unit-${m.id}`}
+                                  name="unit"
+                                  required
+                                  value={m.unit}
+                                  class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                                />
+                              </div>
+                              <div>
+                                <label
+                                  class="block text-label text-foreground"
+                                  for={`meter-installed-${m.id}`}
+                                >
+                                  {t("Installed on")}
+                                </label>
+                                <input
+                                  type="date"
+                                  id={`meter-installed-${m.id}`}
+                                  name="installedAt"
+                                  value={m.installedAt ?? ""}
+                                  class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                                />
+                              </div>
+                              <div class="col-span-2">
+                                <button type="submit" class="btn-primary">
+                                  {t("Save changes")}
+                                </button>
+                              </div>
+                            </form>
+                          </details>
+                        </div>
+                      </>
                     )}
                   </li>
                 ))
@@ -1281,14 +1436,23 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
       </p>
       {
         caseHistory.length > 0 ? (
-          <div class="table-wrap mt-4">
+          <div class="table-wrap stack-table mt-4">
             <table class="w-full text-left text-body-sm">
+              <caption class="sr-only">{t("Period history")}</caption>
               <thead class="border-b border-border bg-surface-hover text-muted">
                 <tr>
-                  <th class="px-4 py-2">{t("Period")}</th>
-                  <th class="px-4 py-2">{t("Status")}</th>
-                  <th class="px-4 py-2">{t("Invoice")}</th>
-                  <th class="px-4 py-2 text-right">{t("Amount due")}</th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Period")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Status")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Invoice")}
+                  </th>
+                  <th scope="col" class="px-4 py-2 text-right">
+                    {t("Amount due")}
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-border">
@@ -1309,7 +1473,12 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                           {c.invoiceNumber}
                         </a>
                       ) : (
-                        "—"
+                        <a
+                          href={`${base}/periods/${c.periodId}`}
+                          class="text-primary hover:underline"
+                        >
+                          {t("Open workbench")}
+                        </a>
                       )}
                     </td>
                     <td class="px-4 py-2 text-right">
@@ -1339,13 +1508,20 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
       </p>
       {
         auditEntries.length > 0 ? (
-          <div class="table-wrap mt-4">
+          <div class="table-wrap stack-table mt-4">
             <table class="w-full text-left text-body-sm">
+              <caption class="sr-only">{t("Audit history")}</caption>
               <thead class="border-b border-border bg-surface-hover text-muted">
                 <tr>
-                  <th class="px-4 py-2">{t("Time")}</th>
-                  <th class="px-4 py-2">{t("Actor")}</th>
-                  <th class="px-4 py-2">{t("Action")}</th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Time")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Actor")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Action")}
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-border">
@@ -1959,8 +2135,8 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
       });
     }
 
-    // ---- Meters: submit once, patch the list from the returned meter, no
-    // full-page reload (previously a plain <form method="POST"> with no JS
+    // ---- Meters: submit once, show an optimistic row, then reload the page
+    // markup from the server (previously a plain <form method="POST"> with no JS
     // at all -- there was never a duplicate listener here; the fix is a
     // single submit-event binding plus a pending-state guard, see
     // src/lib/ui/mutate-form.ts's header comment). ----
@@ -2111,26 +2287,6 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
 
       li.appendChild(icon);
       li.appendChild(body);
-      let archiveForm: HTMLFormElement | undefined;
-      if (!pending) {
-        archiveForm = document.createElement("form");
-        archiveForm.method = "POST";
-        archiveForm.dataset.meterArchiveForm = "";
-        const orgId =
-          meterForm?.querySelector<HTMLInputElement>(
-            'input[name="organizationId"]'
-          )?.value ?? "";
-        archiveForm.insertAdjacentHTML(
-          "beforeend",
-          `<input type="hidden" name="organizationId" value="${orgId}" />
-         <input type="hidden" name="meterId" value="${meter.id}" />
-         <button type="submit" class="sidebar-item-remove">${
-           meterForm?.dataset.archiveLabel ?? "Archive"
-         }</button>`
-        );
-        bindMeterArchiveForm(archiveForm, li);
-        li.appendChild(archiveForm);
-      }
       if (meterForm) {
         copyAstroScope(
           meterForm,
@@ -2139,10 +2295,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
           body,
           strong,
           unitLine,
-          ...(pendingLine ? [pendingLine] : []),
-          ...(archiveForm
-            ? [archiveForm, ...Array.from(archiveForm.children)]
-            : [])
+          ...(pendingLine ? [pendingLine] : [])
         );
       }
       return li;
@@ -2227,17 +2380,15 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
           optimisticRow?.remove();
           reconcileMeterList();
         },
-        onSuccess: (meter, _form, optimisticRow) => {
-          if (!optimisticRow?.isConnected) {
-            if (`${location.pathname}${location.search}` === initializedPath) {
-              void navigate(initializedPath, { history: "replace" });
-            }
-            return;
+        onSuccess: (_meter, _form, optimisticRow) => {
+          if (optimisticRow?.isConnected) {
+            meterForm.reset();
+            if (meterDetails) meterDetails.open = false;
           }
-          optimisticRow.replaceWith(buildMeterRow(meter as CreatedMeter));
-          reconcileMeterList();
-          meterForm.reset();
-          if (meterDetails) meterDetails.open = false;
+          // Reload from the server so the new row has its Edit form.
+          if (`${location.pathname}${location.search}` === initializedPath) {
+            void navigate(initializedPath, { history: "replace" });
+          }
         },
       });
     }
@@ -2375,31 +2526,6 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
 
       li.appendChild(avatar);
       li.appendChild(body);
-      let removeForm: HTMLFormElement | undefined;
-      if (!pending) {
-        removeForm = document.createElement("form");
-        removeForm.method = "POST";
-        removeForm.dataset.residentRemoveForm = "";
-        const orgId =
-          residentForm?.querySelector<HTMLInputElement>(
-            'input[name="organizationId"]'
-          )?.value ?? "";
-        const dwellingIdValue =
-          residentForm?.querySelector<HTMLInputElement>(
-            'input[name="dwellingId"]'
-          )?.value ?? "";
-        removeForm.insertAdjacentHTML(
-          "beforeend",
-          `<input type="hidden" name="organizationId" value="${orgId}" />
-         <input type="hidden" name="dwellingId" value="${dwellingIdValue}" />
-         <input type="hidden" name="userId" value="${resident.userId}" />
-         <button type="submit" class="sidebar-item-remove">${
-           residentForm?.dataset.removeLabel ?? "Remove"
-         }</button>`
-        );
-        bindResidentRemoveForm(removeForm, li);
-        li.appendChild(removeForm);
-      }
       if (residentForm) {
         copyAstroScope(
           residentForm,
@@ -2408,10 +2534,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
           body,
           strong,
           emailLine,
-          ...(pendingLine ? [pendingLine] : []),
-          ...(removeForm
-            ? [removeForm, ...Array.from(removeForm.children)]
-            : [])
+          ...(pendingLine ? [pendingLine] : [])
         );
       }
       return li;
@@ -2473,31 +2596,15 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
           optimisticRow?.remove();
           reconcileResidentList();
         },
-        onSuccess: (resident, _form, optimisticRow) => {
-          if (!optimisticRow?.isConnected) {
-            if (`${location.pathname}${location.search}` === initializedPath) {
-              void navigate(initializedPath, { history: "replace" });
-            }
-            return;
+        onSuccess: (_resident, _form, optimisticRow) => {
+          if (optimisticRow?.isConnected) {
+            residentForm.reset();
+            if (residentDetails) residentDetails.open = false;
           }
-          const { userId, email, displayName } = resident as AssignedResident;
-          residentForm.reset();
-          if (residentDetails) residentDetails.open = false;
-          const alreadyPresent = residentsList?.querySelector(
-            `[data-user-id="${userId}"]`
-          );
-          if (alreadyPresent) {
-            optimisticRow?.remove();
-            reconcileResidentList();
-            return;
+          // Reload from the server so the row has its Disable and Remove forms.
+          if (`${location.pathname}${location.search}` === initializedPath) {
+            void navigate(initializedPath, { history: "replace" });
           }
-          const authoritativeRow = buildResidentRow({
-            userId,
-            email,
-            displayName,
-          });
-          optimisticRow.replaceWith(authoritativeRow);
-          reconcileResidentList();
         },
       });
     }

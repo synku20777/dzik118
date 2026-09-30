@@ -15,6 +15,7 @@ import {
 import { toApiErrorResponse } from "../../../../../../lib/http/api-error";
 import { withRequestDb } from "../../../../../../lib/db-request";
 import { getSupabaseAdmin } from "../../../../../../actions/_supabase_admin";
+import { limitOrThrow } from "../../../../../../lib/http/rate-limit";
 
 export const GET: APIRoute = async ({ params, locals, url }) => {
   const invoiceId = params.invoiceId;
@@ -25,6 +26,7 @@ export const GET: APIRoute = async ({ params, locals, url }) => {
 
   try {
     requireDwellingAccess(locals.auth, dwellingId);
+    await limitOrThrow("pdf", locals.auth!.userId);
   } catch (err) {
     return toApiErrorResponse(err);
   }

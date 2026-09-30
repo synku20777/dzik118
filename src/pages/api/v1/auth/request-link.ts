@@ -11,12 +11,14 @@ import {
   SUPABASE_URL,
 } from "astro:env/server";
 import { appUsers } from "../../../../db/schema/auth";
+import { hasAdminCapability } from "../../../../domain/authorization/context";
+import { describeError } from "../../../../domain/errors";
 import { withRequestDb } from "../../../../lib/db-request";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const NEUTRAL_REDIRECT = "/login?sent=1";
 
-export const POST: APIRoute = async ({ request, redirect }) => {
+export const POST: APIRoute = async ({ request, redirect, locals }) => {
   // Every branch below, including any unexpected error, falls through to
   // the same neutral redirect: known vs unknown email, admin vs resident,
   // rate-limited vs not, and any Supabase/DB error must all be
@@ -32,42 +34,54 @@ export const POST: APIRoute = async ({ request, redirect }) => {
       const ipLimit = env.AUTH_IP_RATE_LIMITER
         ? await env.AUTH_IP_RATE_LIMITER.limit({ key: clientIp })
         : { success: true };
-      const emailLimit = await env.AUTH_RATE_LIMITER.limit({ key: email });
+      const emailLimit = env.AUTH_RATE_LIMITER
+        ? await env.AUTH_RATE_LIMITER.limit({ key: email })
+        : { success: true };
       if (ipLimit.success && emailLimit.success) {
-        await withRequestDb(async (db) => {
-          const [existing] = await db
-            .select({ role: appUsers.role })
-            .from(appUsers)
-            .where(eq(appUsers.emailSnapshot, email))
-            .limit(1);
-
-          // Admins sign in with a password (spec Section 15.2), never a
-          // magic link -- sending one would let them skip that boundary
-          // entirely while ADMIN_REQUIRE_AAL2 is off (spec AUTH-002/Section 15).
-          if (!existing || existing.role === "RESIDENT") {
-            const supabase = createClient(
-              SUPABASE_URL,
-              SUPABASE_PUBLISHABLE_KEY
-            );
-            await supabase.auth.signInWithOtp({
-              email,
-              options: {
-                // Does not auto-create a resident (spec Section 15.1); the
-                // resident must already have a dwelling_access row from an
-                // admin-driven assignment.
-                shouldCreateUser: false,
-                // Explicit redirect allow-list of one: never derived from
-                // request input (spec Section 15.1's "redirect URL allow-list").
-                emailRedirectTo: `${APP_BASE_URL}/auth/confirm`,
-              },
-            });
-          }
-        });
+        locals.cfContext.waitUntil(
+          sendMagicLink(email).catch((err) => {
+            console.error(describeError(err));
+          })
+        );
       }
     }
-  } catch {
-    // Swallowed deliberately -- see neutral-response note above.
+  } catch (err) {
+    console.error(describeError(err));
   }
 
   return redirect(NEUTRAL_REDIRECT, 303);
 };
+
+async function sendMagicLink(email: string) {
+  await withRequestDb(async (db) => {
+    const [existing] = await db
+      .select({ id: appUsers.id, disabledAt: appUsers.disabledAt })
+      .from(appUsers)
+      .where(eq(appUsers.emailSnapshot, email))
+      .limit(1);
+
+    // Anyone with admin capability signs in with a password (spec
+    // Section 15.2), never a magic link -- sending one would let them
+    // skip that boundary entirely while ADMIN_REQUIRE_AAL2 is off
+    // (spec AUTH-002/Section 15). Applies even to someone who is also
+    // a resident: password is the only door for admin capability.
+    if (
+      !existing?.disabledAt &&
+      (!existing || !(await hasAdminCapability(db, existing.id)))
+    ) {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+      await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          // Does not auto-create a resident (spec Section 15.1); the
+          // resident must already have a dwelling_access row from an
+          // admin-driven assignment.
+          shouldCreateUser: false,
+          // Explicit redirect allow-list of one: never derived from
+          // request input (spec Section 15.1's "redirect URL allow-list").
+          emailRedirectTo: `${APP_BASE_URL}/auth/confirm`,
+        },
+      });
+    }
+  });
+}

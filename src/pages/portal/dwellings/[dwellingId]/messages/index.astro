@@ -1,6 +1,11 @@
 ---
 import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
-import { translate, uiLocale, formatDate } from "../../../../../lib/ui/i18n";
+import {
+  translate,
+  uiLocale,
+  formatDate,
+  friendlyActionErrorMessage,
+} from "../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 import ResidentLayout from "../../../../../layouts/ResidentLayout.astro";
@@ -47,7 +52,9 @@ const conversations = await withRequestDb((db) =>
 );
 ---
 
-<ResidentLayout title={`Messages - Dwelling ${dwelling.number}`}>
+<ResidentLayout
+  title={`${t("Messages")} - ${t("Dwelling")} ${dwelling.number}`}
+>
   <div class="mx-auto max-w-2xl p-6">
     <div class="space-y-6">
       <a
@@ -62,15 +69,21 @@ const conversations = await withRequestDb((db) =>
 
       {
         createResult?.error && (
-          <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
-            {createResult.error.message}
+          <p
+            class="rounded-control bg-danger-surface p-3 text-sm text-destructive"
+            role="alert"
+          >
+            {friendlyActionErrorMessage(createResult.error, locale)}
           </p>
         )
       }
       {
         replyResult?.error && (
-          <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
-            {replyResult.error.message}
+          <p
+            class="rounded-control bg-danger-surface p-3 text-sm text-destructive"
+            role="alert"
+          >
+            {friendlyActionErrorMessage(replyResult.error, locale)}
           </p>
         )
       }
@@ -97,7 +110,7 @@ const conversations = await withRequestDb((db) =>
               name="subject"
               type="text"
               required
-              placeholder="What's this about?"
+              placeholder={t("What's this about?")}
               class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
             />
           </div>
@@ -156,6 +169,7 @@ const conversations = await withRequestDb((db) =>
                     name="conversationId"
                     value={conversation.id}
                   />
+                  <input type="hidden" name="sentAs" value="RESIDENT" />
                   <textarea
                     aria-label={t("Reply")}
                     name="body"

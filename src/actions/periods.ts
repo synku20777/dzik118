@@ -1,7 +1,7 @@
 // Phase E (Periods/meters/readings) - Billing period actions (spec Section 10).
 import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
-import { requireOrganizationAccess } from "../domain/authorization/guards";
+import { requireActiveOrganization } from "../domain/authorization/guards";
 import { createPeriod, lockPeriod } from "../domain/periods/periods";
 import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
@@ -21,7 +21,7 @@ export const periods = {
       invoiceDueDate: z.iso.date(),
     }),
     handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         createPeriod(db, organizationId, input, locals.auth!.userId)
       );
@@ -36,7 +36,7 @@ export const periods = {
       periodId: z.uuid(),
     }),
     handler: safeHandler(async ({ organizationId, periodId }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         lockPeriod(db, organizationId, periodId, locals.auth!.userId)
       );

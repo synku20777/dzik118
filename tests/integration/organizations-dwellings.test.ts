@@ -3,9 +3,11 @@
 // reachable via DATABASE_URL, and a real Supabase project (SUPABASE_URL/
 // SUPABASE_SECRET_KEY) for the resident/admin provisioning tests.
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Db } from "../../src/db/client";
+import { appUsers } from "../../src/db/schema/auth";
+import { auditLogs } from "../../src/db/schema/audit";
 import { organizationMemberships } from "../../src/db/schema/organizations";
 import { mutationReceipts } from "../../src/db/schema/mutation-receipts";
 import {
@@ -25,6 +27,7 @@ import {
   getDwelling,
   listDwellingResidents,
   listDwellings,
+  setResidentDisabled,
   updateDwelling,
   updateInvoiceDeliveryPreferences,
 } from "../../src/domain/organizations/dwellings";
@@ -38,6 +41,13 @@ import {
   importDwellingsCsv,
   validateDwellingsCsv,
 } from "../../src/domain/organizations/csv-import";
+import { createPeriod } from "../../src/domain/periods/periods";
+import { listCasesForPeriod } from "../../src/domain/periods/cases";
+import { loadAuthContext } from "../../src/domain/authorization/context";
+import {
+  requireDwellingAccess,
+  requireOrganizationAccess,
+} from "../../src/domain/authorization/guards";
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
@@ -137,6 +147,50 @@ describe("organizations", () => {
     ]);
     await cleanupOrg(org.id);
   }, 20_000);
+
+  it("one person can hold both admin membership and resident dwelling access at the same time", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT Org Dual Role", addressLine1: "Addr" },
+      seedAdminId
+    );
+    const dwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "DUAL-1" },
+      seedAdminId
+    );
+    const email = `it-dual-${randomUUID()}@example.com`;
+
+    const admin = await addAdminMembership(
+      db,
+      org.id,
+      email,
+      seedAdminId,
+      supabaseAdmin
+    );
+    const resident = await assignResident(
+      db,
+      org.id,
+      dwelling.id,
+      email,
+      seedAdminId,
+      supabaseAdmin
+    );
+    expect(resident.userId).toBe(admin.userId);
+
+    const auth = await loadAuthContext(db, admin.userId, email);
+    expect(auth?.organizationIds).toContain(org.id);
+    expect(auth?.dwellingIds).toContain(dwelling.id);
+    expect(() => requireOrganizationAccess(auth, org.id)).not.toThrow();
+    expect(() => requireDwellingAccess(auth, dwelling.id)).not.toThrow();
+
+    await removeAdminMembership(db, org.id, admin.userId, seedAdminId);
+    await cleanupOrg(org.id);
+    await db.$client.query("delete from app_users where id = $1", [
+      admin.userId,
+    ]);
+  });
 });
 
 describe("dwellings (spec DWL-001/002/003)", () => {
@@ -488,6 +542,83 @@ describe("dwellings (spec DWL-001/002/003)", () => {
     ]);
     await cleanupOrg(org.id);
   }, 30_000);
+
+  it("enables and disables resident account with audit logging and auth context checks", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT Dwl Org Disable", addressLine1: "Addr" },
+      seedAdminId
+    );
+    const dwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "DIS-1" },
+      seedAdminId
+    );
+
+    const email = `it-resident-dis-${randomUUID()}@example.com`;
+    const key = randomUUID();
+    const resident = await assignResident(
+      db,
+      org.id,
+      dwelling.id,
+      email,
+      seedAdminId,
+      supabaseAdmin,
+      key
+    );
+
+    await setResidentDisabled(db, org.id, resident.userId, true, seedAdminId);
+
+    const [disabledUser] = await db
+      .select()
+      .from(appUsers)
+      .where(eq(appUsers.id, resident.userId));
+    expect(disabledUser.disabledAt).not.toBeNull();
+
+    const disabledContext = await loadAuthContext(db, resident.userId, email);
+    expect(disabledContext).toBeNull();
+
+    await setResidentDisabled(db, org.id, resident.userId, false, seedAdminId);
+
+    const [enabledUser] = await db
+      .select()
+      .from(appUsers)
+      .where(eq(appUsers.id, resident.userId));
+    expect(enabledUser.disabledAt).toBeNull();
+
+    const enabledContext = await loadAuthContext(db, resident.userId, email);
+    expect(enabledContext).not.toBeNull();
+    expect(enabledContext?.userId).toBe(resident.userId);
+
+    await expect(
+      setResidentDisabled(db, org.id, seedAdminId, true, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    await expect(
+      setResidentDisabled(db, org.id, randomUUID(), true, seedAdminId)
+    ).rejects.toBeInstanceOf(NotFoundError);
+
+    const [auditRow] = await db
+      .select()
+      .from(auditLogs)
+      .where(
+        and(
+          eq(auditLogs.organizationId, org.id),
+          eq(auditLogs.action, "RESIDENT_DISABLED")
+        )
+      );
+    expect(auditRow).toBeDefined();
+    expect(auditRow.entityId).toBe(resident.userId);
+
+    await db.$client.query("delete from dwelling_access where user_id = $1", [
+      resident.userId,
+    ]);
+    await db.$client.query("delete from app_users where id = $1", [
+      resident.userId,
+    ]);
+    await cleanupOrg(org.id);
+  }, 20_000);
 });
 
 describe("DWL-004: CSV import", () => {
@@ -552,6 +683,46 @@ describe("DWL-004: CSV import", () => {
     expect(result.updated).toBe(1);
     const [dwelling] = await listDwellings(db, org.id);
     expect(dwelling.occupantName).toBe("New Name");
+
+    await cleanupOrg(org.id);
+  });
+
+  it("a dwelling created via CSV import gets a billing case in an already-open period, same as the single-create path", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT Csv Org 3", addressLine1: "Addr" },
+      seedAdminId
+    );
+    const period = await createPeriod(
+      db,
+      org.id,
+      {
+        year: 2026,
+        month: 6,
+        startsOn: "2026-06-01",
+        endsOn: "2026-06-30",
+        invoiceIssueDate: "2026-07-01",
+        invoiceDueDate: "2026-07-15",
+      },
+      seedAdminId
+    );
+
+    const csv = [
+      "number,type,display_name,occupant_name,billing_name,billing_email,billing_address,area_m2,resident_count,cold_water_meter_serial,hot_water_meter_serial",
+      "CSV-NEW-1,APARTMENT,,,,,,40,1,,",
+    ].join("\n");
+    const result = await importDwellingsCsv(
+      db,
+      org.id,
+      csv,
+      "create",
+      seedAdminId
+    );
+    expect(result.created).toBe(1);
+
+    const [dwelling] = await listDwellings(db, org.id);
+    const cases = await listCasesForPeriod(db, org.id, period.id);
+    expect(cases.some((c) => c.dwellingId === dwelling.id)).toBe(true);
 
     await cleanupOrg(org.id);
   });

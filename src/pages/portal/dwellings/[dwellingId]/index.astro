@@ -5,8 +5,11 @@ import {
   ForbiddenError,
   requireDwellingAccess,
 } from "../../../../domain/authorization/guards";
+import { meterTypeEnum } from "../../../../db/schema/dwellings";
 import { getDwellingForResident } from "../../../../domain/organizations/dwellings";
+import { getOrganization } from "../../../../domain/organizations/organizations";
 import { getCurrentOpenPeriod } from "../../../../domain/periods/periods";
+import { orgLocalDateString } from "../../../../lib/org-time";
 import {
   listConsumptionHistoryForDwelling,
   listMetersWithReadingForPeriod,
@@ -49,51 +52,75 @@ try {
   return Astro.redirect("/portal/dwellings");
 }
 
-const { period, meters, currentInvoice, groupedHistory, recentInvoices } =
-  await withRequestDb(async (db) => {
-    const period = await getCurrentOpenPeriod(db, dwelling.organizationId);
-    const meters = period
-      ? await listMetersWithReadingForPeriod(
-          db,
-          dwelling.organizationId,
-          dwellingId,
-          period.id
-        )
-      : [];
-    const currentInvoice = period
-      ? await getInvoiceForDwellingPeriod(db, dwellingId, period.id)
-      : null;
-    const groupedHistory = await listConsumptionHistoryForDwelling(
-      db,
-      dwellingId
-    );
-    const allInvoices = await listInvoicesForDwelling(db, dwellingId);
-    return {
-      period,
-      meters,
-      currentInvoice,
-      groupedHistory,
-      recentInvoices: [...allInvoices].reverse().slice(0, 3),
-    };
-  });
+const {
+  period,
+  meters,
+  currentInvoice,
+  groupedHistory,
+  recentInvoices,
+  timezone,
+} = await withRequestDb(async (db) => {
+  const { timezone } = await getOrganization(db, dwelling.organizationId);
+  const period = await getCurrentOpenPeriod(db, dwelling.organizationId);
+  const meters = period
+    ? await listMetersWithReadingForPeriod(
+        db,
+        dwelling.organizationId,
+        dwellingId,
+        period.id
+      )
+    : [];
+  const currentInvoice = period
+    ? await getInvoiceForDwellingPeriod(db, dwellingId, period.id)
+    : null;
+  const groupedHistory = await listConsumptionHistoryForDwelling(
+    db,
+    dwellingId
+  );
+  const allInvoices = await listInvoicesForDwelling(db, dwellingId);
+  return {
+    period,
+    meters,
+    currentInvoice,
+    groupedHistory,
+    recentInvoices: [...allInvoices].reverse().slice(0, 3),
+    timezone,
+  };
+});
 
 const submitResult = Astro.getActionResult(actions.readings.residentSubmit);
+// Same rule as the server (readings.ts): the deadline date is inclusive and
+// ends at midnight in the organization timezone.
 const deadlinePassed = period?.readingDeadline
-  ? Date.now() > new Date(period.readingDeadline + "T23:59:59.999Z").getTime()
+  ? orgLocalDateString(new Date(), timezone) > period.readingDeadline
   : false;
 const activeMeters = meters.filter((m) => !m.archivedAt);
+// One column per meter type and unit that has any reading. The rows arrive
+// sorted by type, so the columns keep the same order in every period.
+const historyColumns = groupedHistory
+  .flatMap((row) => row.readings)
+  .filter(
+    (r, i, all) =>
+      all.findIndex((x) => x.meterType === r.meterType && x.unit === r.unit) ===
+      i
+  )
+  .sort(
+    (a, b) =>
+      meterTypeEnum.enumValues.indexOf(a.meterType) -
+        meterTypeEnum.enumValues.indexOf(b.meterType) ||
+      a.unit.localeCompare(b.unit)
+  );
 const base = "/portal/dwellings/" + dwellingId;
 ---
 
 <ResidentLayout title={t("Dwelling") + " " + dwelling.number}>
   <div class="space-y-7">
     {
-      Astro.locals.auth?.role === "RESIDENT" &&
-        Astro.locals.auth.dwellingIds.length > 1 && (
-          <a class="text-sm text-primary" href="/portal/dwellings">
-            ← {t("Your dwellings")}
-          </a>
-        )
+      (Astro.locals.auth?.dwellingIds.length ?? 0) > 1 && (
+        <a class="text-sm text-primary" href="/portal/dwellings">
+          ← {t("Your dwellings")}
+        </a>
+      )
     }
     <PageHeader
       accent
@@ -314,15 +341,22 @@ const base = "/portal/dwellings/" + dwellingId;
         groupedHistory.length === 0 ? (
           <p class="text-sm text-muted">{t("No consumption history yet.")}</p>
         ) : (
-          <div class="table-wrap">
+          <div class="table-wrap stack-table">
             <table class="w-full text-sm">
+              <caption class="sr-only">{t("Consumption history")}</caption>
               <>
                 <thead>
                   <tr>
                     <>
-                      <th class="text-left">{t("Period")}</th>
-                      <th class="text-right">{t("Cold water")}</th>
-                      <th class="text-right">{t("Hot water")}</th>
+                      <th scope="col" class="text-left">
+                        {t("Period")}
+                      </th>
+                      {historyColumns.map((column) => (
+                        <th scope="col" class="text-right">
+                          {entityLabel(column.meterType, locale)} ({column.unit}
+                          )
+                        </th>
+                      ))}
                     </>
                   </tr>
                 </thead>
@@ -330,16 +364,20 @@ const base = "/portal/dwellings/" + dwellingId;
                   {groupedHistory.map((row) => (
                     <tr>
                       <td>{formatPeriod(row.year, row.month, locale)}</td>
-                      <td class="text-right">
-                        {row.coldWaterConsumption === null
-                          ? "—"
-                          : formatNumber(row.coldWaterConsumption, locale)}
-                      </td>
-                      <td class="text-right">
-                        {row.hotWaterConsumption === null
-                          ? "—"
-                          : formatNumber(row.hotWaterConsumption, locale)}
-                      </td>
+                      {historyColumns.map((column) => {
+                        const reading = row.readings.find(
+                          (r) =>
+                            r.meterType === column.meterType &&
+                            r.unit === column.unit
+                        );
+                        return (
+                          <td class="text-right">
+                            {reading
+                              ? formatNumber(reading.consumption, locale)
+                              : "—"}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
@@ -349,6 +387,9 @@ const base = "/portal/dwellings/" + dwellingId;
         )
       }
     </section>
+    <a class="btn-secondary w-full justify-between" href={base + "/payments"}
+      >{t("Payment history")} <span aria-hidden="true">→</span></a
+    >
     <a class="btn-secondary w-full justify-between" href={base + "/messages"}
       >{t("Contact administrator")} <span aria-hidden="true">→</span></a
     >

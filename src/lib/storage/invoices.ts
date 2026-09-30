@@ -59,6 +59,8 @@ function pdfBytesResponse(
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="${safeFilename}.pdf"; filename*=UTF-8''${safeFilename}.pdf`,
+      // An invoice holds personal data. No shared cache may keep a copy.
+      "Cache-Control": "private, no-store",
       ...extraHeaders,
     },
   });

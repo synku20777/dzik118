@@ -3,7 +3,7 @@
 // (read-only preview) and import (re-validates from raw text, then
 // writes) -- "never write immediately on file selection".
 import Papa from "papaparse";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import {
   bankImports,
@@ -142,6 +142,8 @@ export async function validateBankCsv(
       errors.push("amount is required");
     } else if (!AMOUNT_PATTERN.test(amount)) {
       errors.push("amount must be a plain number with at most 2 decimals");
+    } else if (Number(amount) <= 0) {
+      errors.push("amount must be greater than 0 (only incoming payments)");
     }
     if (!currency) {
       errors.push("currency is required");
@@ -342,7 +344,10 @@ export async function listTransactionsForImport(
     .from(bankTransactions)
     .leftJoin(
       paymentMatches,
-      eq(paymentMatches.bankTransactionId, bankTransactions.id)
+      and(
+        eq(paymentMatches.bankTransactionId, bankTransactions.id),
+        ne(paymentMatches.status, "REVERSED")
+      )
     )
     .where(
       and(

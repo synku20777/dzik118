@@ -6,6 +6,7 @@
 import { and, eq, gt, isNull, or } from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
 import { invoiceAccessTokens } from "../../db/schema/invoices";
+import { organizations } from "../../db/schema/organizations";
 import { hmacSha256Hex } from "../../lib/hash";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { NotFoundError } from "../errors";
@@ -72,9 +73,16 @@ export async function resolveInvoiceAccessToken(
       invoiceId: invoiceAccessTokens.invoiceId,
     })
     .from(invoiceAccessTokens)
+    .innerJoin(
+      organizations,
+      eq(organizations.id, invoiceAccessTokens.organizationId)
+    )
     .where(
       and(
         eq(invoiceAccessTokens.tokenHash, tokenHash),
+        // ADR 0009: links of an archived organization stop working, and work
+        // again after a restore.
+        isNull(organizations.archivedAt),
         isNull(invoiceAccessTokens.revokedAt),
         or(
           isNull(invoiceAccessTokens.expiresAt),

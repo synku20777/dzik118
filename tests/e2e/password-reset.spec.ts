@@ -121,6 +121,10 @@ test("admin can reset a forgotten password", async ({ page }) => {
     await expect(page.locator("[role=alert]")).toContainText("at least 8");
     await submit("abcdefgh", "abcdefgX");
     await expect(page.locator("[role=alert]")).toContainText("do not match");
+    await submit(oldPassword, oldPassword);
+    await expect(page.locator("[role=alert]")).toContainText(
+      "can't be the same as your old one"
+    );
 
     await submit(newPassword, newPassword);
     await expect(page).toHaveURL(/\/login\?reset=1/);

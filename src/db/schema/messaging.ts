@@ -7,7 +7,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { appUsers } from "./auth";
+import { appUsers, userRoleEnum } from "./auth";
 import { dwellings } from "./dwellings";
 import { organizations } from "./organizations";
 
@@ -59,6 +59,12 @@ export const messages = pgTable(
     senderUserId: uuid("sender_user_id")
       .notNull()
       .references(() => appUsers.id),
+    // Which capability the sender acted through when sending THIS message
+    // -- stamped explicitly at insert time by the caller, never derived
+    // from the sender's current app_users.role (a person can hold both
+    // capabilities, and which one they used can differ message to message;
+    // see domain/messaging/conversations.ts).
+    senderRole: userRoleEnum("sender_role").notNull(),
     body: text("body").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

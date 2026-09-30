@@ -23,7 +23,7 @@ const dwellings = await withRequestDb((db) =>
 );
 ---
 
-<ResidentLayout title="Your Dwellings - Property Billing">
+<ResidentLayout title={`${t("Your dwellings")} - ${t("Property Billing")}`}>
   <div class="mx-auto max-w-2xl p-6">
     <div class="space-y-8">
       <section>

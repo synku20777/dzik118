@@ -12,7 +12,10 @@ import { getOrganization } from "../../../../../domain/organizations/organizatio
 import {
   listAuditLogs,
   listDistinctAuditActions,
+  listDistinctAuditActors,
+  listDistinctAuditEntityTypes,
 } from "../../../../../domain/audit/audit-log";
+import { parseDateInput } from "../../../../../lib/date-input";
 import { withRequestDb } from "../../../../../lib/db-request";
 
 const organizationId = Astro.params.orgId!;
@@ -25,24 +28,73 @@ try {
 
 const actionFilter = Astro.url.searchParams.get("action") || undefined;
 const entityTypeFilter = Astro.url.searchParams.get("entityType") || undefined;
+const rawActor = Astro.url.searchParams.get("actor") || undefined;
+const actorFilter =
+  rawActor &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    rawActor
+  )
+    ? rawActor
+    : undefined;
+const fromFilter = parseDateInput(Astro.url.searchParams.get("from"));
+const toFilter = parseDateInput(Astro.url.searchParams.get("to"));
+
 const rawPage = Number(Astro.url.searchParams.get("page") ?? "1");
 // Number.isFinite rejects Infinity/NaN from a malformed ?page= value before
 // it can reach the SQL offset below.
 const page = Number.isFinite(rawPage) ? Math.max(1, Math.floor(rawPage)) : 1;
 const pageSize = 50;
 
-const { organization, logs, availableActions } = await withRequestDb(
-  async (db) => ({
-    organization: await getOrganization(db, organizationId),
+const {
+  organization,
+  logs,
+  availableActions,
+  availableEntityTypes,
+  availableActors,
+} = await withRequestDb(async (db) => {
+  const organization = await getOrganization(db, organizationId);
+  return {
+    organization,
     logs: await listAuditLogs(db, organizationId, {
       action: actionFilter,
       entityType: entityTypeFilter,
+      actorUserId: actorFilter,
+      fromDate: fromFilter,
+      toDate: toFilter,
+      timezone: organization.timezone,
       limit: pageSize,
       offset: (page - 1) * pageSize,
     }),
     availableActions: await listDistinctAuditActions(db, organizationId),
-  })
-);
+    availableEntityTypes: await listDistinctAuditEntityTypes(
+      db,
+      organizationId
+    ),
+    availableActors: await listDistinctAuditActors(db, organizationId),
+  };
+});
+
+const filterParams = () => {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries({
+    action: actionFilter,
+    entityType: entityTypeFilter,
+    actor: actorFilter,
+    from: fromFilter,
+    to: toFilter,
+  })) {
+    if (v) q.set(k, v);
+  }
+  return q;
+};
+
+const pageHref = (p: number) => {
+  const q = filterParams();
+  q.set("page", String(p));
+  return `?${q}`;
+};
+
+const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParams()}`;
 ---
 
 <AdminLayout
@@ -78,28 +130,82 @@ const { organization, logs, availableActions } = await withRequestDb(
           class="block text-sm font-medium text-foreground"
           for="entityType">{t("Entity type")}</label
         >
-        <input
+        <select
           id="entityType"
           name="entityType"
-          value={entityTypeFilter ?? ""}
-          placeholder="invoice, conversation, ..."
+          class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
+        >
+          <option value="" selected={!entityTypeFilter}
+            >{t("All entity types")}</option
+          >
+          {
+            availableEntityTypes.map((type) => (
+              <option value={type} selected={type === entityTypeFilter}>
+                {type}
+              </option>
+            ))
+          }
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground" for="actor"
+          >{t("Actor")}</label
+        >
+        <select
+          id="actor"
+          name="actor"
+          class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
+        >
+          <option value="" selected={!actorFilter}>{t("All actors")}</option>
+          {
+            availableActors.map((actor) => (
+              <option value={actor.id} selected={actor.id === actorFilter}>
+                {actor.label}
+              </option>
+            ))
+          }
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground" for="from"
+          >{t("From date")}</label
+        >
+        <input
+          type="date"
+          id="from"
+          name="from"
+          value={fromFilter ?? ""}
+          class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-foreground" for="to"
+          >{t("To date")}</label
+        >
+        <input
+          type="date"
+          id="to"
+          name="to"
+          value={toFilter ?? ""}
           class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
         />
       </div>
       <button type="submit" class="btn-primary">
         {t("Filter")}
       </button>
+      <a class="btn-secondary" href={exportHref}>{t("Export CSV")}</a>
     </form>
 
-    <div class="table-wrap">
+    <div class="table-wrap stack-table">
       <table class="w-full text-left text-sm">
+        <caption class="sr-only">{t("Audit log entries")}</caption>
         <thead class="border-b border-border bg-surface-hover text-muted">
           <tr>
-            <th class="px-4 py-2">{t("Time")}</th>
-            <th class="px-4 py-2">{t("Actor")}</th>
-            <th class="px-4 py-2">{t("Action")}</th>
-            <th class="px-4 py-2">{t("Entity")}</th>
-            <th class="px-4 py-2">{t("Details")}</th>
+            <th scope="col" class="px-4 py-2">{t("Time")}</th>
+            <th scope="col" class="px-4 py-2">{t("Actor")}</th>
+            <th scope="col" class="px-4 py-2">{t("Action")}</th>
+            <th scope="col" class="px-4 py-2">{t("Entity")}</th>
+            <th scope="col" class="px-4 py-2">{t("Details")}</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border">
@@ -112,7 +218,18 @@ const { organization, logs, availableActions } = await withRequestDb(
                 <td class="px-4 py-2">
                   {log.actorDisplayName ?? log.actorEmail ?? "—"}
                 </td>
-                <td class="px-4 py-2">{log.action}</td>
+                <td class="px-4 py-2">
+                  {log.action}
+                  {log.requestId && (
+                    <div
+                      class="text-xs text-muted"
+                      title={t("Request ID")}
+                      aria-label={`${t("Request ID")}: ${log.requestId}`}
+                    >
+                      {log.requestId}
+                    </div>
+                  )}
+                </td>
                 <td class="px-4 py-2">
                   {log.entityType}
                   {log.entityId ? ` (${log.entityId})` : ""}
@@ -153,14 +270,14 @@ const { organization, logs, availableActions } = await withRequestDb(
 
     <div class="flex justify-between text-sm text-muted">
       <a
-        href={`?action=${encodeURIComponent(actionFilter ?? "")}&entityType=${encodeURIComponent(entityTypeFilter ?? "")}&page=${Math.max(1, page - 1)}`}
+        href={pageHref(Math.max(1, page - 1))}
         class:list={{ "pointer-events-none opacity-40": page <= 1 }}
       >
         ← {t("Previous")}
       </a>
       <span>{t("Page")} {page}</span>
       <a
-        href={`?action=${encodeURIComponent(actionFilter ?? "")}&entityType=${encodeURIComponent(entityTypeFilter ?? "")}&page=${page + 1}`}
+        href={pageHref(page + 1)}
         class:list={{
           "pointer-events-none opacity-40": logs.length < pageSize,
         }}

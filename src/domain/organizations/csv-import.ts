@@ -10,6 +10,7 @@ import { z } from "astro/zod";
 import type { Db } from "../../db/client";
 import { dwellingTypeEnum, dwellings, meters } from "../../db/schema/dwellings";
 import { recordAuditEvent } from "../../lib/logging/audit";
+import { syncCasesForDwelling } from "../periods/periods";
 
 const DWELLING_TYPES = new Set<string>(dwellingTypeEnum.enumValues);
 
@@ -52,6 +53,9 @@ const REQUIRED_HEADERS = [
   "hot_water_meter_serial",
 ];
 
+const MAX_CSV_BYTES = 2_000_000;
+const MAX_CSV_ROWS = 5_000;
+
 function cell(row: Record<string, unknown>, key: string): string {
   const value = row[key];
   return typeof value === "string" ? value.trim() : "";
@@ -66,6 +70,13 @@ export async function validateDwellingsCsv(
   csvText: string,
   mode: DwellingImportMode
 ): Promise<{ rows: DwellingImportRow[]; headerError: string | null }> {
+  if (new TextEncoder().encode(csvText).length > MAX_CSV_BYTES) {
+    return {
+      rows: [],
+      headerError: "The CSV file is too large (up to 2 MB).",
+    };
+  }
+
   const parsed = Papa.parse<Record<string, unknown>>(csvText, {
     header: true,
     skipEmptyLines: true,
@@ -84,6 +95,12 @@ export async function validateDwellingsCsv(
     return {
       rows: [],
       headerError: `Could not parse the file (row ${(first.row ?? 0) + 1}: ${first.message}). Check the file is a valid CSV and try again.`,
+    };
+  }
+  if (parsed.data.length > MAX_CSV_ROWS) {
+    return {
+      rows: [],
+      headerError: "The CSV file has too many rows (up to 5,000).",
     };
   }
 
@@ -239,6 +256,9 @@ export async function importDwellingsCsv(
           .returning();
         dwellingId = dwelling.id;
         created++;
+        // Same as a single dwelling created through the form -- give it a
+        // case in every currently OPEN period.
+        await syncCasesForDwelling(tx, organizationId, dwelling.id);
         await recordAuditEvent(tx, {
           organizationId,
           actorUserId,

@@ -1,0 +1,33 @@
+I have completed the discovery pass across all 7 screenshots and written the comprehensive research report to [`.ux-shots5/agy-report.md`](file:///C:/Users/nesto/orca/projects/dzik118/.ux-shots5/agy-report.md).
+
+### Summary of Key Findings
+
+1. **Destructive & Operational Dead Ends:**
+   - **Admin Management (`05-settings-users.png`)**: Existing admins are rendered as plain static text with zero controls to edit, remove, deactivate, or assign roles.
+   - **Dwelling Detail (`06-dwelling-detail.png`)**: Period history flags `⚠ Missing data` with no interactive affordance to view or input the missing data; utility meters have only an `Archive` button with no way to submit or view meter readings.
+   - **Payments Reconciled Ledger (`07-payments.png`)**: Confirmed payments have zero row actions (no unmatch, no detail view, no invoice/dwelling links).
+   - **Organizations List (`03-organizations-list.png`)**: Main navigation sidebar vanishes completely, trapping the user; the organization card has no select/edit affordance.
+
+2. **Critical Absent Capabilities:**
+   - **No Manual Payment Entry (`07-payments.png`)**: Only bank CSV imports exist—no way to record cash payments or manual transfers.
+   - **No Meter Reading Entry/History (`06-dwelling-detail.png`)**: Core consumption-based billing calculations cannot be performed.
+   - **No Date Range / Search Filtering (`02-audit.png`, `07-payments.png`)**: Audit log and payments tables cannot be searched or filtered by time window.
+   - **No Statutory Company/Tax Fields (`01-settings-billing.png`, `04-invoice-template-editor.png`)**: Missing legal registration number, VAT number, and IBAN details required for valid Latvian/EU invoices.
+
+3. **Data & Technical Artifact Leakage:**
+   - Leaking raw database UUIDs in primary columns (e.g. `Payer: Dwelling ebdd7e5f-...` in payments, and `dwelling (...)` in audit logs).
+   - Test automation fixtures visible in UI: `Dwelling 00-E2E-1790005821669`, `Nav Persisted 1790005826353`, `Zero price repro test`, and `Navigate-away meter 1790005829565`.
+   - Raw backend enum codes in UI (`INVOICE_ACCESS_TOKEN_REVOKED`, `DWELLING_ACCESS_ADDED`).
+   - Sticky `"✓ All changes saved"` ghost toast floating across multiple screens, physically obscuring buttons (such as `+ Add resident`).
+
+---
+
+### Top 5 Missing Capabilities (Ordered by Operational Impact)
+
+1. **Manual Payment & Cash Entry** (`Payments`): Inability to record non-CSV payments (cash, manual bank transfers, write-offs) blocks basic property management accounting.
+2. **Admin User Deletion, Deactivation & RBAC** (`Admin Users`): Inability to remove or revoke access from administrators creates a severe security risk.
+3. **Meter Reading Entry & History on Dwellings** (`Dwelling Detail`): With only an `Archive` button and no way to enter utility readings, consumption billing is non-functional.
+4. **Payment Correction & Un-matching / Rollback** (`Payments`): Confirmed payment matches cannot be corrected or rolled back, risking financial ledger integrity.
+5. **Date Range & Identifier Filtering on Audit Log & Financial Tables** (`Audit Log` & `Payments`): Inability to filter by date or search by human-readable identifiers blocks compliance audits and daily operations.
+
+The full details with severity ratings `[High]`, `[Med]`, and `[Low]` are documented in [`.ux-shots5/agy-report.md`](file:///C:/Users/nesto/orca/projects/dzik118/.ux-shots5/agy-report.md).

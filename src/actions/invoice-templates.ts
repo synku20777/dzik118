@@ -3,7 +3,7 @@
 // it to billing-rule CRUD and invoice generation/status actions.
 import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
-import { requireOrganizationAccess } from "../domain/authorization/guards";
+import { requireActiveOrganization } from "../domain/authorization/guards";
 import { updateInvoiceTemplate } from "../domain/billing/invoice-templates";
 import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
@@ -42,7 +42,7 @@ export const invoiceTemplates = {
         },
         { locals }
       ) => {
-        requireOrganizationAccess(locals.auth, organizationId);
+        requireActiveOrganization(locals.auth, organizationId);
         let parsedConfig: unknown;
         try {
           parsedConfig = JSON.parse(config);

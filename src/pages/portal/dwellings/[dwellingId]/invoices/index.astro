@@ -42,7 +42,9 @@ const invoiceList = [...rawInvoices].sort((a, b) =>
 );
 ---
 
-<ResidentLayout title={`Invoices - Dwelling ${dwelling.number}`}>
+<ResidentLayout
+  title={`${t("Invoices")} - ${t("Dwelling")} ${dwelling.number}`}
+>
   <div class="mx-auto max-w-2xl p-6">
     <div class="space-y-6">
       <a
@@ -53,7 +55,8 @@ const invoiceList = [...rawInvoices].sort((a, b) =>
       </a>
 
       <h1 class="text-xl font-bold text-foreground">
-        Invoices for dwelling {dwelling.number}
+        {t("Invoices")}: {t("Dwelling")}
+        {dwelling.number}
       </h1>
 
       {

@@ -15,8 +15,10 @@
 // canonical PDF. This file has no server-only runtime dependency (only
 // `import type` from the schema modules, erased at build time), which is
 // exactly what makes it safe to also bundle into the client-side editor.
+import { trimDecimal } from "../../lib/decimal-trim";
 import { escapeHtml } from "../../lib/html-escape";
 import {
+  TRIMMED_NUMBERS_FROM_LABEL_SET,
   pickLocalizedText,
   translateInvoiceLabel,
   type InvoiceLocale,
@@ -180,6 +182,10 @@ export function renderInvoiceHtml(
   const recipient = invoice.recipientSnapshot as RecipientSnapshot;
   const payment = invoice.paymentSnapshot as PaymentSnapshot;
   const template = normalizeInvoiceTemplateSnapshot(invoice.templateSnapshot);
+  // Pinned per invoice at generation, like the label wording: an invoice
+  // generated before label set 3 keeps printing its figures as stored.
+  const trimNumbers =
+    template.labelSetVersion >= TRIMMED_NUMBERS_FROM_LABEL_SET;
   const label = (key: Parameters<typeof translateInvoiceLabel>[1]) =>
     translateInvoiceLabel(locale, key, template.labelSetVersion);
   // Labels for these exist from label set 2 on; older invoices never show them.
@@ -249,8 +255,8 @@ export function renderInvoiceHtml(
       return `
         <tr${trStyle}>
           <td${cellStyle}>${escapeHtml(localizedLineDescription(line, locale))}</td>
-          <td class="num"${cellStyle}>${escapeHtml(line.quantity)} ${escapeHtml(line.unit)}</td>
-          <td class="num"${cellStyle}>${escapeHtml(line.unitPrice ?? "—")}</td>
+          <td class="num"${cellStyle}>${escapeHtml(trimNumbers ? trimDecimal(line.quantity) : line.quantity)} ${escapeHtml(line.unit)}</td>
+          <td class="num"${cellStyle}>${escapeHtml(line.unitPrice ? (trimNumbers ? trimDecimal(line.unitPrice, 2) : line.unitPrice) : "—")}</td>
           <td class="num"${cellStyle}>${escapeHtml(line.netAmount)}</td>
           <td class="num"${cellStyle}>${escapeHtml(line.vatAmount)}</td>
           <td class="num"${cellStyle}>${escapeHtml(line.grossAmount)}</td>

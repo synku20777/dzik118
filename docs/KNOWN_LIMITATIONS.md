@@ -2,6 +2,10 @@
 
 This document lists items across the project that are incomplete, deferred, or intentional design trade-offs, as opposed to bugs. Future contributors and operators should use this reference to understand existing system boundaries, local development quirks, and operational gotchas.
 
+Work that is not built yet, as opposed to deliberate limits, is in [KNOWN_GAPS.md](KNOWN_GAPS.md).
+
+Access rules that differ from the first spec are in decision notes. Admin and resident capability are independent, and one person can hold both. See [ADR 0007](decisions/0007-admin-and-resident-capabilities.md).
+
 ## Local development quirks
 
 ### Browser Rendering binding hangs local wrangler dev

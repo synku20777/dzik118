@@ -13,8 +13,12 @@ import { accounts } from "./accounts";
 import { workbench } from "./workbench";
 import { invoiceTemplates } from "./invoice-templates";
 import { mutations } from "./mutations";
+import { emailSuppression } from "./email";
+import { profile } from "./profile";
 
 export const server = {
+  profile,
+  emailSuppression,
   organizations,
   dwellings,
   periods,

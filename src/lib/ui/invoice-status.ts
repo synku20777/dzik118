@@ -23,6 +23,7 @@ const statuses: Record<string, [string, string, IconName]> = {
   PROPOSED: ["Proposed", "info", "clock"],
   CONFIRMED: ["Confirmed", "success", "check"],
   REJECTED: ["Rejected", "neutral", "x"],
+  REVERSED: ["Reversed", "neutral", "x"],
   UNMATCHED: ["Unmatched", "warning", "alert-triangle"],
   FAILED: ["Failed", "danger", "alert-triangle"],
 };

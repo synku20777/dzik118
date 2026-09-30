@@ -10,6 +10,7 @@ import { and, eq, isNull, lt } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import { organizations } from "../../db/schema/organizations";
 import { billingCases } from "../../db/schema/billing";
+import { suppressedEmails } from "../../db/schema/email";
 import { invoices } from "../../db/schema/invoices";
 import {
   bulkGenerateInvoices,
@@ -19,6 +20,7 @@ import {
 import { bulkSendInvoices, type SendInvoiceDeps } from "../billing/sending";
 import { getCurrentOpenPeriod } from "../periods/periods";
 import { orgLocalDateString } from "../../lib/org-time";
+import { latestSendDay, selectAutoSendBatch } from "./send-window";
 
 // billing-overdue-scan. No audit event: spec Section 31's list has no
 // dedicated OVERDUE action (BILLING_STATUS_OVERRIDDEN is for manual admin
@@ -112,10 +114,21 @@ export async function autoSendForOrganization(
   db: Db,
   organizationId: string,
   deps: SendInvoiceDeps,
-  actorUserId: string | null
-): Promise<{ sent: number }> {
+  actorUserId: string | null,
+  // Given by runScheduledJobs. Without it every prepared invoice is due.
+  window?: { timezone: string; sendDayDate: string }
+): Promise<{
+  sent: number;
+  failed: number;
+  suppressed: number;
+  waiting: number;
+}> {
   const preparedInvoices = await db
-    .select({ id: invoices.id })
+    .select({
+      id: invoices.id,
+      preparedAt: invoices.preparedAt,
+      recipient: invoices.recipientSnapshot,
+    })
     .from(invoices)
     .innerJoin(billingCases, eq(billingCases.id, invoices.billingCaseId))
     .where(
@@ -124,16 +137,57 @@ export async function autoSendForOrganization(
         eq(billingCases.status, "PREPARED")
       )
     );
-  if (preparedInvoices.length === 0) return { sent: 0 };
+  if (preparedInvoices.length === 0) {
+    return { sent: 0, failed: 0, suppressed: 0, waiting: 0 };
+  }
 
-  const { sent } = await bulkSendInvoices(
+  const suppressed = new Set(
+    (
+      await db
+        .select({ email: suppressedEmails.email })
+        .from(suppressedEmails)
+        .where(eq(suppressedEmails.organizationId, organizationId))
+    ).map((row) => row.email)
+  );
+  const selection = selectAutoSendBatch(
+    preparedInvoices.map((row) => {
+      const recipient = row.recipient as {
+        billingEmail?: string | null;
+        invoiceByEmail?: boolean;
+      };
+      return {
+        id: row.id,
+        preparedAt: row.preparedAt,
+        billingEmail: recipient.billingEmail ?? null,
+        invoiceByEmail: recipient.invoiceByEmail ?? true,
+      };
+    }),
+    {
+      // No window: everything prepared is due (the old one-day behavior).
+      timezone: window?.timezone ?? "UTC",
+      sendDayDate: window?.sendDayDate ?? "9999-12-31",
+      suppressed,
+    }
+  );
+  const counts = {
+    suppressed: selection.suppressed,
+    waiting: selection.waiting,
+  };
+  if (selection.batch.length === 0) return { sent: 0, failed: 0, ...counts };
+
+  const { sent, skipped } = await bulkSendInvoices(
     db,
     organizationId,
-    preparedInvoices.map((row) => row.id),
+    selection.batch,
     deps,
     actorUserId
   );
-  return { sent: sent.length };
+  // A skipped invoice is one that did not go out. Already sent is not a failure.
+  return {
+    sent: sent.length,
+    failed: skipped.filter((s) => s.reason !== "Already sent").length,
+    ...counts,
+  };
 }
 
 export interface OrganizationJobResult {
@@ -142,6 +196,12 @@ export interface OrganizationJobResult {
   generated: number;
   prepared: number;
   sent: number;
+  // Invoices that auto send tried and could not deliver.
+  failedSends: number;
+  // Not an error. Prepared invoices skipped because the address is suppressed,
+  // and invoices left for the next run by the batch limit.
+  suppressedSends?: number;
+  waitingSends?: number;
   error?: string;
 }
 
@@ -181,14 +241,27 @@ export async function runScheduledJobs(
       generated: 0,
       prepared: 0,
       sent: 0,
+      failedSends: 0,
+    };
+    // An organization archived after the list above was read must not get a
+    // new invoice or an email (ADR 0009). An email cannot be taken back, so
+    // this asks the database again before each step that changes something.
+    const stillActive = async () => {
+      const [row] = await db
+        .select({ archivedAt: organizations.archivedAt })
+        .from(organizations)
+        .where(eq(organizations.id, org.id))
+        .limit(1);
+      return !!row && !row.archivedAt;
     };
     try {
       const todayLocal = orgLocalDateString(now, org.timezone);
+      if (!(await stillActive())) continue;
       result.overdue = (
         await scanOverdueInvoices(db, org.id, todayLocal)
       ).overdue;
 
-      if (org.autoGenerateEnabled) {
+      if (org.autoGenerateEnabled && (await stillActive())) {
         const { generated, prepared } = await autoGenerateForOrganization(
           db,
           org.id,
@@ -198,12 +271,27 @@ export async function runScheduledJobs(
         result.prepared = prepared;
       }
 
-      if (org.autoSendEnabled && org.autoSendDay !== null) {
-        const dayOfMonth = Number(todayLocal.split("-")[2]);
-        if (dayOfMonth === org.autoSendDay) {
-          result.sent = (
-            await autoSendForOrganization(db, org.id, deps, actorUserId)
-          ).sent;
+      if (
+        org.autoSendEnabled &&
+        org.autoSendDay !== null &&
+        (await stillActive())
+      ) {
+        // On the send day and for a few days after it, also across a month
+        // end. A failed or partial run is tried again the next day. See
+        // send-window.ts for which invoices are due.
+        const sendDayDate = latestSendDay(todayLocal, org.autoSendDay);
+        if (sendDayDate) {
+          const sendResult = await autoSendForOrganization(
+            db,
+            org.id,
+            deps,
+            actorUserId,
+            { timezone: org.timezone, sendDayDate }
+          );
+          result.sent = sendResult.sent;
+          result.failedSends = sendResult.failed;
+          result.suppressedSends = sendResult.suppressed;
+          result.waitingSends = sendResult.waiting;
         }
       }
     } catch (err) {

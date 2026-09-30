@@ -4,6 +4,7 @@ import { z } from "astro/zod";
 import {
   ForbiddenError,
   requireDwellingAccess,
+  requireActiveOrganization,
   requireOrganizationAccess,
 } from "../domain/authorization/guards";
 import { getDwelling } from "../domain/organizations/dwellings";
@@ -17,6 +18,7 @@ import {
 } from "../domain/messaging/conversations";
 import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
+import { limitOrThrow } from "../lib/http/rate-limit";
 
 export const messages = {
   createConversation: defineAction({
@@ -28,8 +30,16 @@ export const messages = {
     }),
     handler: safeHandler(async ({ dwellingId, subject, body }, { locals }) => {
       requireDwellingAccess(locals.auth, dwellingId);
+      await limitOrThrow("message", locals.auth!.userId);
       return withDb((db) =>
-        createConversation(db, dwellingId, subject, body, locals.auth!.userId)
+        createConversation(
+          db,
+          dwellingId,
+          subject,
+          body,
+          locals.auth!.userId,
+          "RESIDENT"
+        )
       );
     }),
   }),
@@ -49,7 +59,8 @@ export const messages = {
     }),
     handler: safeHandler(
       async ({ organizationId, dwellingId, subject, body }, { locals }) => {
-        requireOrganizationAccess(locals.auth, organizationId);
+        requireActiveOrganization(locals.auth, organizationId);
+        await limitOrThrow("message", locals.auth!.userId);
         return withDb(async (db) => {
           await getDwelling(db, organizationId, dwellingId);
           return createConversation(
@@ -57,7 +68,8 @@ export const messages = {
             dwellingId,
             subject,
             body,
-            locals.auth!.userId
+            locals.auth!.userId,
+            "ADMIN"
           );
         });
       }
@@ -73,11 +85,18 @@ export const messages = {
     input: z.object({
       conversationId: z.uuid(),
       body: z.string().min(1).max(4000),
+      // Which screen the reply came from (ADR 0007). The domain checks it.
+      sentAs: z.enum(["ADMIN", "RESIDENT"]).optional(),
     }),
-    handler: safeHandler(async ({ conversationId, body }, { locals }) => {
-      if (!locals.auth) throw new ForbiddenError();
-      return withDb((db) => reply(db, conversationId, body, locals.auth!));
-    }),
+    handler: safeHandler(
+      async ({ conversationId, body, sentAs }, { locals }) => {
+        if (!locals.auth) throw new ForbiddenError();
+        await limitOrThrow("message", locals.auth.userId);
+        return withDb((db) =>
+          reply(db, conversationId, body, locals.auth!, sentAs)
+        );
+      }
+    ),
   }),
 
   // JSON action (no `accept: "form"`), polled from the client while an
@@ -123,7 +142,7 @@ export const messages = {
     }),
     handler: safeHandler(
       async ({ organizationId, conversationId }, { locals }) => {
-        requireOrganizationAccess(locals.auth, organizationId);
+        requireActiveOrganization(locals.auth, organizationId);
         return withDb((db) =>
           resolveConversation(
             db,

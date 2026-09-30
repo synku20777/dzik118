@@ -9,7 +9,7 @@ import {
 } from "../../db/schema/billing";
 import { dwellings, meters } from "../../db/schema/dwellings";
 import { invoices } from "../../db/schema/invoices";
-import { paymentAllocations } from "../../db/schema/accounts";
+import { paymentAllocations, paymentReversals } from "../../db/schema/accounts";
 import { organizations } from "../../db/schema/organizations";
 import { maxExact, subtractExact, sumExact } from "../../lib/decimal2";
 import { getPeriod } from "./periods";
@@ -94,6 +94,13 @@ export async function getDashboardSummary(
     })
     .from(paymentAllocations)
     .where(eq(paymentAllocations.organizationId, organizationId));
+  const reversals = await db
+    .select({
+      invoiceId: paymentReversals.invoiceId,
+      amount: paymentReversals.reversedAllocationAmount,
+    })
+    .from(paymentReversals)
+    .where(eq(paymentReversals.organizationId, organizationId));
   const allocatedByInvoice = new Map<string, string>();
   for (const allocation of allocations) {
     allocatedByInvoice.set(
@@ -102,6 +109,18 @@ export async function getDashboardSummary(
         allocatedByInvoice.get(allocation.invoiceId) ?? "0.00",
         allocation.amount,
       ])
+    );
+  }
+  for (const reversal of reversals) {
+    allocatedByInvoice.set(
+      reversal.invoiceId,
+      maxExact(
+        subtractExact(
+          allocatedByInvoice.get(reversal.invoiceId) ?? "0.00",
+          reversal.amount
+        ),
+        "0.00"
+      )
     );
   }
   const currentCharges = sumExact(periodInvoices.map((i) => i.currentCharges));

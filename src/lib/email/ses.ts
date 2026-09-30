@@ -10,6 +10,7 @@ import {
   invoiceEmailHtml,
   invoiceEmailSubject,
   invoiceEmailText,
+  sanitizeHeader,
   type EmailDeliveryResult,
   type EmailService,
   type SendInvoiceEmailInput,
@@ -31,11 +32,46 @@ export function createSesEmailService(config: SesConfig): EmailService {
   });
   const endpoint = `https://email.${config.region}.amazonaws.com/v2/email/outbound-emails`;
 
+  async function sendPayload(payload: unknown): Promise<EmailDeliveryResult> {
+    try {
+      const response = await client.fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        // Spec Section 23: "sensitive provider errors not exposed to
+        // resident" -- the raw response body (which can include account
+        // details) is captured for the audit/delivery log, never
+        // returned to the caller beyond this short classification.
+        return {
+          success: false,
+          provider: "ses",
+          errorCode: `SES_HTTP_${response.status}`,
+          failureClassification: "DEFINITIVE",
+        };
+      }
+      const data = (await response.json()) as { MessageId?: string };
+      return {
+        success: true,
+        provider: "ses",
+        providerMessageId: data.MessageId,
+      };
+    } catch {
+      return {
+        success: false,
+        provider: "ses",
+        errorCode: "SES_REQUEST_FAILED",
+        failureClassification: "AMBIGUOUS",
+      };
+    }
+  }
+
   return {
     async sendInvoice(
       input: SendInvoiceEmailInput
     ): Promise<EmailDeliveryResult> {
-      const body = JSON.stringify({
+      return sendPayload({
         FromEmailAddress: config.fromAddress,
         Destination: { ToAddresses: [input.to] },
         Content: {
@@ -48,39 +84,25 @@ export function createSesEmailService(config: SesConfig): EmailService {
           },
         },
       });
+    },
 
-      try {
-        const response = await client.fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body,
-        });
-        if (!response.ok) {
-          // Spec Section 23: "sensitive provider errors not exposed to
-          // resident" -- the raw response body (which can include account
-          // details) is captured for the audit/delivery log, never
-          // returned to the caller beyond this short classification.
-          return {
-            success: false,
-            provider: "ses",
-            errorCode: `SES_HTTP_${response.status}`,
-            failureClassification: "DEFINITIVE",
-          };
-        }
-        const data = (await response.json()) as { MessageId?: string };
-        return {
-          success: true,
-          provider: "ses",
-          providerMessageId: data.MessageId,
-        };
-      } catch {
-        return {
-          success: false,
-          provider: "ses",
-          errorCode: "SES_REQUEST_FAILED",
-          failureClassification: "AMBIGUOUS",
-        };
-      }
+    async sendAlert(input: {
+      to: string;
+      subject: string;
+      text: string;
+    }): Promise<EmailDeliveryResult> {
+      return sendPayload({
+        FromEmailAddress: config.fromAddress,
+        Destination: { ToAddresses: [input.to] },
+        Content: {
+          Simple: {
+            Subject: { Data: sanitizeHeader(input.subject), Charset: "UTF-8" },
+            Body: {
+              Text: { Data: input.text, Charset: "UTF-8" },
+            },
+          },
+        },
+      });
     },
   };
 }

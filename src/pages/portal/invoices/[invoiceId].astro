@@ -1,6 +1,6 @@
 ---
 import StatusBadge from "../../../components/ui/StatusBadge.astro";
-import { translate, uiLocale } from "../../../lib/ui/i18n";
+import { formatMoney, translate, uiLocale } from "../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 import ResidentLayout from "../../../layouts/ResidentLayout.astro";
@@ -32,10 +32,15 @@ try {
 let invoice: Awaited<ReturnType<typeof getInvoiceForResident>>["invoice"];
 let lines: Awaited<ReturnType<typeof getInvoiceForResident>>["lines"];
 let caseStatus: Awaited<ReturnType<typeof getInvoiceForResident>>["caseStatus"];
+let paidAmount: Awaited<ReturnType<typeof getInvoiceForResident>>["paidAmount"];
+let remainingAmount: Awaited<
+  ReturnType<typeof getInvoiceForResident>
+>["remainingAmount"];
 try {
-  ({ invoice, lines, caseStatus } = await withRequestDb((db) =>
-    getInvoiceForResident(db, invoiceId, dwellingId)
-  ));
+  ({ invoice, lines, caseStatus, paidAmount, remainingAmount } =
+    await withRequestDb((db) =>
+      getInvoiceForResident(db, invoiceId, dwellingId)
+    ));
 } catch {
   return Astro.redirect(`/portal/dwellings/${dwellingId}/invoices`);
 }
@@ -83,6 +88,25 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
           )
         }
       </div>
+
+      <section class="panel p-4" aria-labelledby="invoice-balance">
+        <h2 id="invoice-balance" class="section-title">{t("Balance")}</h2>
+        <dl class="mt-2 grid grid-cols-2 gap-2 text-sm">
+          <dt class="text-muted">{t("Invoice total due")}</dt><dd>
+            {formatMoney(invoice.amountDue, invoice.currency, locale)}
+          </dd>
+          <dt class="text-muted">{t("Paid so far")}</dt><dd>
+            {formatMoney(paidAmount, invoice.currency, locale)}
+          </dd>
+          <dt class="text-muted">
+            <strong>{t("Amount still due")}</strong>
+          </dt><dd>
+            <strong
+              >{formatMoney(remainingAmount, invoice.currency, locale)}</strong
+            >
+          </dd>
+        </dl>
+      </section>
 
       <div class="invoice-doc-locale-bar">
         <p class="text-sm text-muted">

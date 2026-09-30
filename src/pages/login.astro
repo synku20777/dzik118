@@ -30,6 +30,9 @@ const rateLimitedError = errorCode === "4";
 // unreachable), not a credential problem -- shown separately so it doesn't
 // send the admin chasing a password that was never actually wrong.
 const unexpectedError = errorCode === "5";
+// Set by auth/confirm.ts: a magic link was opened by someone with admin
+// capability. Admins sign in with a password only.
+const adminLinkError = errorCode === "6";
 ---
 
 <AuthLayout title={t("Sign in") + " - " + t("Property Billing")}>
@@ -43,6 +46,18 @@ const unexpectedError = errorCode === "5";
         <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
           {t(
             "We couldn't find an account for that sign-in. If you believe this is a mistake, contact your administrator."
+          )}
+        </p>
+      )
+    }
+    {
+      adminLinkError && (
+        <p
+          class="rounded-control bg-danger-surface p-3 text-sm text-destructive"
+          role="alert"
+        >
+          {t(
+            "Administrators sign in with a password. Use the Admin sign in form on this page."
           )}
         </p>
       )

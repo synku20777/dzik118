@@ -1,0 +1,109 @@
+---
+import {
+  translate,
+  uiLocale,
+  formatMoney,
+  formatDate,
+} from "../../../../lib/ui/i18n";
+import StatusBadge from "../../../../components/ui/StatusBadge.astro";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+import ResidentLayout from "../../../../layouts/ResidentLayout.astro";
+import {
+  ForbiddenError,
+  requireDwellingAccess,
+} from "../../../../domain/authorization/guards";
+import { getDwellingForResident } from "../../../../domain/organizations/dwellings";
+import { listPaymentsForResident } from "../../../../domain/payments/resident-history";
+import { withRequestDb } from "../../../../lib/db-request";
+
+const dwellingId = Astro.params.dwellingId!;
+try {
+  requireDwellingAccess(Astro.locals.auth, dwellingId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+let dwelling: Awaited<ReturnType<typeof getDwellingForResident>>;
+try {
+  dwelling = await withRequestDb((db) =>
+    getDwellingForResident(db, dwellingId)
+  );
+} catch {
+  return Astro.redirect("/portal/dwellings");
+}
+
+const payments = await withRequestDb((db) =>
+  listPaymentsForResident(db, dwellingId)
+);
+---
+
+<ResidentLayout
+  title={`${t("Payment history")} - ${t("Dwelling")} ${dwelling.number}`}
+>
+  <div class="mx-auto max-w-2xl p-6">
+    <div class="space-y-6">
+      <a
+        href={`/portal/dwellings/${dwellingId}`}
+        class="text-sm text-muted hover:underline"
+      >
+        ← {t("Dashboard")}
+      </a>
+
+      <h1 class="text-xl font-bold text-foreground">
+        {t("Payment history")}: {t("Dwelling")}
+        {dwelling.number}
+      </h1>
+
+      {
+        payments.length === 0 ? (
+          <p class="text-sm text-muted">{t("No payments yet.")}</p>
+        ) : (
+          <div class="table-wrap stack-table">
+            <table class="w-full text-sm">
+              <caption class="sr-only">{t("Payment history")}</caption>
+              <thead>
+                <tr>
+                  <th scope="col" class="text-left">
+                    {t("Date")}
+                  </th>
+                  <th scope="col" class="text-left">
+                    {t("Invoice")}
+                  </th>
+                  <th scope="col" class="text-left">
+                    {t("Status")}
+                  </th>
+                  <th scope="col" class="text-right">
+                    {t("Amount")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                {payments.map((payment) => (
+                  <tr>
+                    <td>{formatDate(payment.date, locale)}</td>
+                    <td>
+                      <a
+                        class="text-primary hover:underline"
+                        href={`/portal/invoices/${payment.invoiceId}?dwellingId=${dwellingId}`}
+                      >
+                        {payment.invoiceNumber}
+                      </a>
+                    </td>
+                    <td>
+                      <StatusBadge status={payment.status} />
+                    </td>
+                    <td class="text-right">
+                      {formatMoney(payment.amount, payment.currency, locale)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+    </div>
+  </div>
+</ResidentLayout>

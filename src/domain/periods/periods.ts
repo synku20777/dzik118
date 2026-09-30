@@ -115,6 +115,53 @@ export async function createPeriod(
   }
 }
 
+// Called right after a dwelling is created (by createDwelling, the CSV
+// import's CREATE branch, and the one-off backfill script) so it gets a
+// case in every period that's still open -- matching what createPeriod
+// would have snapshotted had the dwelling existed then. LOCKED periods are
+// deliberately left alone: they're a frozen record of what existed when
+// they closed. onConflictDoNothing makes this safe to call more than once
+// for the same dwelling (e.g. a backfill sweep re-run).
+export async function syncCasesForDwelling(
+  tx: DbOrTx,
+  organizationId: string,
+  dwellingId: string
+): Promise<number> {
+  const openPeriods = await tx
+    .select()
+    .from(billingPeriods)
+    .where(
+      and(
+        eq(billingPeriods.organizationId, organizationId),
+        eq(billingPeriods.status, "OPEN")
+      )
+    );
+
+  let createdCount = 0;
+  for (const period of openPeriods) {
+    const missingData = await computeMissingData(
+      tx,
+      organizationId,
+      dwellingId,
+      period.id,
+      period
+    );
+    const inserted = await tx
+      .insert(billingCases)
+      .values({
+        organizationId,
+        periodId: period.id,
+        dwellingId,
+        missingData,
+        status: deriveReadinessStatus(missingData),
+      })
+      .onConflictDoNothing()
+      .returning({ id: billingCases.id });
+    createdCount += inserted.length;
+  }
+  return createdCount;
+}
+
 export async function getPeriod(
   db: DbOrTx,
   organizationId: string,

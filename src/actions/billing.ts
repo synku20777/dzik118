@@ -7,7 +7,7 @@ import {
   billingRuleScopeEnum,
 } from "../db/schema/billing";
 import { meterTypeEnum } from "../db/schema/dwellings";
-import { requireOrganizationAccess } from "../domain/authorization/guards";
+import { requireActiveOrganization } from "../domain/authorization/guards";
 import { archiveRule, createRule, updateRule } from "../domain/billing/rules";
 import { decimalInput } from "../lib/decimal-input";
 import {
@@ -70,12 +70,12 @@ export const billing = {
       effectiveFrom: z.iso.date(),
       effectiveUntil: z.iso.date().optional(),
       applicationScope: z.enum(billingRuleScopeEnum.enumValues).optional(),
-      dwellingIds: z.array(z.uuid()).optional(),
+      dwellingIds: z.array(z.uuid()).max(200).optional(),
       sortOrder: z.coerce.number().int().optional(),
       enabled: z.coerce.boolean().optional(),
     }),
     handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         createRule(db, organizationId, input, locals.auth!.userId)
       );
@@ -114,13 +114,13 @@ export const billing = {
       effectiveFrom: z.iso.date().optional(),
       effectiveUntil: z.iso.date().nullable(),
       applicationScope: z.enum(billingRuleScopeEnum.enumValues).optional(),
-      dwellingIds: z.array(z.uuid()).optional(),
+      dwellingIds: z.array(z.uuid()).max(200).optional(),
       sortOrder: z.coerce.number().int().optional(),
       enabled: z.coerce.boolean().optional(),
     }),
     handler: safeHandler(
       async ({ organizationId, ruleId, ...input }, { locals }) => {
-        requireOrganizationAccess(locals.auth, organizationId);
+        requireActiveOrganization(locals.auth, organizationId);
         return withDb((db) =>
           updateRule(db, organizationId, ruleId, input, locals.auth!.userId)
         );
@@ -135,7 +135,7 @@ export const billing = {
       ruleId: z.uuid(),
     }),
     handler: safeHandler(async ({ organizationId, ruleId }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         archiveRule(db, organizationId, ruleId, locals.auth!.userId)
       );
@@ -152,7 +152,7 @@ export const billing = {
     }),
     handler: safeHandler(
       async ({ organizationId, periodId, dwellingId }, { locals }) => {
-        requireOrganizationAccess(locals.auth, organizationId);
+        requireActiveOrganization(locals.auth, organizationId);
         return withDb((db) =>
           generateInvoice(
             db,
@@ -174,7 +174,7 @@ export const billing = {
       periodId: z.uuid(),
     }),
     handler: safeHandler(async ({ organizationId, periodId }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         bulkGenerateInvoices(db, organizationId, periodId, locals.auth!.userId)
       );
@@ -189,7 +189,7 @@ export const billing = {
       invoiceId: z.uuid(),
     }),
     handler: safeHandler(async ({ organizationId, invoiceId }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         prepareInvoice(db, organizationId, invoiceId, locals.auth!.userId)
       );
@@ -201,10 +201,10 @@ export const billing = {
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
-      invoiceIds: z.array(z.uuid()).min(1),
+      invoiceIds: z.array(z.uuid()).min(1).max(200),
     }),
     handler: safeHandler(async ({ organizationId, invoiceIds }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         bulkPrepareInvoices(db, organizationId, invoiceIds, locals.auth!.userId)
       );
@@ -222,7 +222,7 @@ export const billing = {
     }),
     handler: safeHandler(
       async ({ organizationId, caseId, status, reason }, { locals }) => {
-        requireOrganizationAccess(locals.auth, organizationId);
+        requireActiveOrganization(locals.auth, organizationId);
         return withDb((db) =>
           overrideCaseStatus(
             db,

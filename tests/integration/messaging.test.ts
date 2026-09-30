@@ -25,6 +25,7 @@ import {
   listConversationsForOrganization,
   listConversationsWithMessagesForDwelling,
   listMessagesForConversation,
+  markConversationRead,
   reply,
   resolveConversation,
 } from "../../src/domain/messaging/conversations";
@@ -60,19 +61,32 @@ function deleteAppUser(id: string) {
 
 function residentAuth(userId: string, dwellingId: string): AuthContext {
   return {
-    role: "RESIDENT",
     userId,
     email: "resident@example.com",
+    organizationIds: [],
     dwellingIds: [dwellingId],
   };
 }
 
 function adminAuth(userId: string, organizationId: string): AuthContext {
   return {
-    role: "ADMIN",
     userId,
     email: "admin@example.com",
     organizationIds: [organizationId],
+    dwellingIds: [],
+  };
+}
+
+function dualAuth(
+  userId: string,
+  organizationId: string,
+  dwellingId: string
+): AuthContext {
+  return {
+    userId,
+    email: "dual@example.com",
+    organizationIds: [organizationId],
+    dwellingIds: [dwellingId],
   };
 }
 
@@ -96,7 +110,8 @@ describe("conversations", () => {
       dwelling.id,
       "Leaky faucet",
       "The kitchen faucet is leaking.",
-      residentId
+      residentId,
+      "RESIDENT"
     );
     expect(conversation.status).toBe("NEW");
     expect(conversation.organizationId).toBe(org.id);
@@ -128,7 +143,8 @@ describe("conversations", () => {
       dwelling.id,
       "Question",
       "Hello?",
-      residentId
+      residentId,
+      "RESIDENT"
     );
 
     const adminReply = await reply(
@@ -181,7 +197,8 @@ describe("conversations", () => {
       dwellingA.id,
       "Subject",
       "Body",
-      residentId
+      residentId,
+      "RESIDENT"
     );
 
     await expect(
@@ -222,7 +239,8 @@ describe("conversations", () => {
       dwelling.id,
       "Subject",
       "Body",
-      residentId
+      residentId,
+      "RESIDENT"
     );
 
     await expect(
@@ -262,7 +280,8 @@ describe("conversations", () => {
       dwelling.id,
       "Subject",
       "Body",
-      residentId
+      residentId,
+      "RESIDENT"
     );
 
     await expect(
@@ -328,9 +347,17 @@ describe("conversations", () => {
       dwellingA.id,
       "A",
       "Body A",
-      residentId
+      residentId,
+      "RESIDENT"
     );
-    await createConversation(db, dwellingB.id, "B", "Body B", residentId);
+    await createConversation(
+      db,
+      dwellingB.id,
+      "B",
+      "Body B",
+      residentId,
+      "RESIDENT"
+    );
     await resolveConversation(db, org.id, convoA.id, seedAdminId);
 
     const all = await listConversationsForOrganization(db, org.id);
@@ -348,6 +375,67 @@ describe("conversations", () => {
     });
     expect(forB).toHaveLength(1);
     expect(forB[0].dwellingNumber).toBe("2");
+
+    await cleanupOrg(org.id);
+    await deleteAppUser(residentId);
+  });
+
+  it("listConversationsForOrganization returns the newest lastMessage and unread state for each conversation in updatedAt desc order", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT-K Org Aggregates", addressLine1: "Addr 1" },
+      seedAdminId
+    );
+    const dwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "1" },
+      seedAdminId
+    );
+    const residentId = await seedResident("it-k-resident-agg@example.com");
+
+    const convo1 = await createConversation(
+      db,
+      dwelling.id,
+      "First",
+      "Message 1.1",
+      residentId,
+      "RESIDENT"
+    );
+    await reply(db, convo1.id, "Message 1.2", adminAuth(seedAdminId, org.id));
+    await reply(
+      db,
+      convo1.id,
+      "Message 1.3",
+      residentAuth(residentId, dwelling.id)
+    );
+
+    const convo2 = await createConversation(
+      db,
+      dwelling.id,
+      "Second",
+      "Message 2.1",
+      residentId,
+      "RESIDENT"
+    );
+    await reply(db, convo2.id, "Message 2.2", adminAuth(seedAdminId, org.id));
+
+    await markConversationRead(db, org.id, convo1.id);
+
+    const list = await listConversationsForOrganization(db, org.id);
+    expect(list).toHaveLength(2);
+
+    expect(list[0].id).toBe(convo2.id);
+    expect(list[0].lastMessage?.body).toBe("Message 2.2");
+    expect(list[0].hasUnread).toBe(true);
+
+    expect(list[1].id).toBe(convo1.id);
+    expect(list[1].lastMessage?.body).toBe("Message 1.3");
+    expect(list[1].hasUnread).toBe(false);
+
+    expect(new Date(list[0].updatedAt).getTime()).toBeGreaterThanOrEqual(
+      new Date(list[1].updatedAt).getTime()
+    );
 
     await cleanupOrg(org.id);
     await deleteAppUser(residentId);
@@ -371,14 +459,16 @@ describe("conversations", () => {
       dwelling.id,
       "First",
       "Body 1",
-      residentId
+      residentId,
+      "RESIDENT"
     );
     const convo2 = await createConversation(
       db,
       dwelling.id,
       "Second",
       "Body 2",
-      residentId
+      residentId,
+      "RESIDENT"
     );
     await reply(db, convo1.id, "Reply", adminAuth(seedAdminId, org.id));
 
@@ -394,6 +484,115 @@ describe("conversations", () => {
 
     await cleanupOrg(org.id);
     await deleteAppUser(residentId);
+  });
+
+  it("a dual-role user's reply is attributed to whichever capability the conversation matched", async () => {
+    const orgA = await createOrganization(
+      db,
+      { name: "IT-K Org Dual A", addressLine1: "Addr 1" },
+      seedAdminId
+    );
+    const orgB = await createOrganization(
+      db,
+      { name: "IT-K Org Dual B", addressLine1: "Addr 1" },
+      seedAdminId
+    );
+    const dwellingA = await createDwelling(
+      db,
+      orgA.id,
+      { number: "1" },
+      seedAdminId
+    );
+    const dwellingB = await createDwelling(
+      db,
+      orgB.id,
+      { number: "1" },
+      seedAdminId
+    );
+    const residentA = await seedResident("it-k-resident-dual-a@example.com");
+    const dualUserId = await seedResident("it-k-dual-user@example.com");
+    const auth = dualAuth(dualUserId, orgB.id, dwellingA.id);
+
+    // A conversation reachable via the dual user's DWELLING capability.
+    const convoViaDwelling = await createConversation(
+      db,
+      dwellingA.id,
+      "Via dwelling",
+      "Hi",
+      residentA,
+      "RESIDENT"
+    );
+    await reply(db, convoViaDwelling.id, "Replying as resident", auth);
+
+    // A conversation reachable via the dual user's ORG capability.
+    const convoViaOrg = await createConversation(
+      db,
+      dwellingB.id,
+      "Via org",
+      "Hi",
+      seedAdminId,
+      "ADMIN"
+    );
+    await reply(db, convoViaOrg.id, "Replying as admin", auth);
+
+    const dwellingMsgs = await listMessagesForConversation(
+      db,
+      convoViaDwelling.id
+    );
+    expect(dwellingMsgs.at(-1)?.senderRole).toBe("RESIDENT");
+
+    const orgMsgs = await listMessagesForConversation(db, convoViaOrg.id);
+    expect(orgMsgs.at(-1)?.senderRole).toBe("ADMIN");
+
+    await cleanupOrg(orgA.id);
+    await cleanupOrg(orgB.id);
+    await deleteAppUser(residentA);
+    await deleteAppUser(dualUserId);
+  });
+
+  it("a person who is admin AND resident of the same dwelling replies as the screen they used", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT-K Org Dual Same", addressLine1: "Addr 1" },
+      seedAdminId
+    );
+    const dwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "1" },
+      seedAdminId
+    );
+    const dualUserId = await seedResident("it-k-dual-same@example.com");
+    const both = dualAuth(dualUserId, org.id, dwelling.id);
+    const onlyResident = residentAuth(dualUserId, dwelling.id);
+
+    const convo = await createConversation(
+      db,
+      dwelling.id,
+      "Both roles",
+      "Hi",
+      dualUserId,
+      "RESIDENT"
+    );
+    const senderOf = async () =>
+      (await listMessagesForConversation(db, convo.id)).at(-1)?.senderRole;
+
+    await reply(db, convo.id, "from the portal", both, "RESIDENT");
+    expect(await senderOf()).toBe("RESIDENT");
+
+    await reply(db, convo.id, "from the inbox", both, "ADMIN");
+    expect(await senderOf()).toBe("ADMIN");
+
+    // No screen given: the old default, admin when the person can be one.
+    await reply(db, convo.id, "no hint", both);
+    expect(await senderOf()).toBe("ADMIN");
+
+    // A forged value cannot grant a role the person does not hold.
+    await reply(db, convo.id, "forged", onlyResident, "ADMIN");
+    expect(await senderOf()).toBe("RESIDENT");
+
+    await cleanupOrg(org.id);
+    await deleteAppUser(dualUserId);
   });
 });
 

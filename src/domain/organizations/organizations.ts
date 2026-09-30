@@ -79,6 +79,70 @@ export async function listOrganizations(db: Db, organizationIds: string[]) {
     .where(inArray(organizations.id, organizationIds));
 }
 
+// ADR 0009: an archived organization is read-only for admins and closed for
+// residents. Both calls are idempotent: a second call changes nothing and
+// writes no second audit row.
+async function setOrganizationArchived(
+  db: Db,
+  organizationId: string,
+  archive: boolean,
+  reason: string | null,
+  actorUserId: string
+) {
+  return db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, organizationId))
+      .for("update")
+      .limit(1);
+    if (!before) throw new NotFoundError("Organization not found");
+    if (!!before.archivedAt === archive) return before;
+
+    const [after] = await tx
+      .update(organizations)
+      .set({ archivedAt: archive ? new Date() : null, updatedAt: new Date() })
+      .where(eq(organizations.id, organizationId))
+      .returning();
+    await recordAuditEvent(tx, {
+      organizationId,
+      actorUserId,
+      action: archive ? "ORGANIZATION_ARCHIVED" : "ORGANIZATION_RESTORED",
+      entityType: "organization",
+      entityId: organizationId,
+      afterData: { reason },
+    });
+    return after;
+  });
+}
+
+export async function archiveOrganization(
+  db: Db,
+  organizationId: string,
+  reason: string,
+  actorUserId: string
+) {
+  const trimmed = reason.trim();
+  if (!trimmed || trimmed.length > 500) {
+    throw new ValidationError("A reason of 1 to 500 characters is required");
+  }
+  return setOrganizationArchived(
+    db,
+    organizationId,
+    true,
+    trimmed,
+    actorUserId
+  );
+}
+
+export async function restoreOrganization(
+  db: Db,
+  organizationId: string,
+  actorUserId: string
+) {
+  return setOrganizationArchived(db, organizationId, false, null, actorUserId);
+}
+
 export interface UpdateOrganizationInput {
   name?: string;
   addressLine1?: string;
@@ -174,11 +238,12 @@ export async function listAdminMembers(db: Db, organizationId: string) {
     .where(eq(organizationMemberships.organizationId, organizationId));
 }
 
-// Provisions a Supabase identity + app_users(ADMIN) row for `email` if one
-// doesn't already exist, then grants organization membership. Rejects if
-// the email belongs to an existing RESIDENT: v1 has no role-transition path
-// (spec Section 2.2 excludes a third/blended role, and promoting a resident
-// to admin isn't described anywhere in the spec).
+// Provisions a Supabase identity + app_users row for `email` if one doesn't
+// already exist (role recorded as whichever capability was granted first --
+// no longer read for authorization, see domain/authorization/context.ts),
+// then grants organization membership. A person who already has resident
+// access (dwelling_access) can also become an admin this way -- admin and
+// resident capability are independent, not exclusive.
 export async function addAdminMembership(
   db: Db,
   organizationId: string,
@@ -186,7 +251,12 @@ export async function addAdminMembership(
   actorUserId: string,
   supabaseAdmin: SupabaseAdmin
 ) {
-  const supabaseUser = await findOrCreateSupabaseUser(supabaseAdmin, email);
+  // Lowercase once: sign-in and reset look the address up in lowercase.
+  const normalizedEmail = email.trim().toLowerCase();
+  const supabaseUser = await findOrCreateSupabaseUser(
+    supabaseAdmin,
+    normalizedEmail
+  );
 
   return db.transaction(async (tx) => {
     // insert-then-reselect (not select-then-insert): two concurrent calls
@@ -197,20 +267,12 @@ export async function addAdminMembership(
     // commit, so the reselect below always sees the row that won.
     await tx
       .insert(appUsers)
-      .values({ id: supabaseUser.id, role: "ADMIN", emailSnapshot: email })
+      .values({
+        id: supabaseUser.id,
+        role: "ADMIN",
+        emailSnapshot: normalizedEmail,
+      })
       .onConflictDoNothing();
-    const [appUser] = await tx
-      .select()
-      .from(appUsers)
-      .where(eq(appUsers.id, supabaseUser.id))
-      .limit(1);
-
-    if (appUser!.role !== "ADMIN") {
-      throw new ConflictError(
-        `${email} is already a resident and cannot also be an admin`
-      );
-    }
-
     const [membership] = await tx
       .insert(organizationMemberships)
       .values({ organizationId, userId: supabaseUser.id })

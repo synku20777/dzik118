@@ -31,6 +31,15 @@ export const POST: APIRoute = async ({ request, cookies, redirect, url }) => {
       return redirect("/login?error=1", 303);
     }
 
+    if (env.AUTH_RATE_LIMITER) {
+      const { success } = await env.AUTH_RATE_LIMITER.limit({
+        key: "login:" + email.toLowerCase(),
+      });
+      if (!success) {
+        return redirect("/login?error=4", 303);
+      }
+    }
+
     const { supabase, applyPendingHeaders } = createSupabaseServerClient(
       request,
       cookies

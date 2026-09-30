@@ -59,6 +59,10 @@ export async function cleanupOrganization(
       [organizationId]
     );
     await db.$client.query(
+      "delete from payment_reversals where organization_id = $1",
+      [organizationId]
+    );
+    await db.$client.query(
       "delete from payment_allocations where organization_id = $1",
       [organizationId]
     );
@@ -70,6 +74,7 @@ export async function cleanupOrganization(
     await db.$client.query("set session_replication_role = default");
   }
   const statements = [
+    "delete from suppressed_emails where organization_id = $1",
     "delete from late_fee_policies where organization_id = $1",
     "delete from payment_matches where organization_id = $1",
     "delete from bank_transactions where organization_id = $1",

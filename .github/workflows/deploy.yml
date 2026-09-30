@@ -59,6 +59,11 @@ jobs:
       - name: Generate Astro types
         run: npx astro sync
 
+      # A missing Worker secret does not fail a deploy: the app would quietly
+      # use a development default. Stop here instead, before the migration.
+      - name: Check Worker secrets
+        run: npm run deploy:check-secrets
+
       # build + db:migrate:production + wrangler deploy
       - name: Deploy
         run: npm run deploy

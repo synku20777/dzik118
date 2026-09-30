@@ -126,6 +126,18 @@ const filtered = allConversations
     );
   });
 
+const pageSize = 30;
+const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+const rawPage = Number(Astro.url.searchParams.get("page") ?? "1");
+const page = Math.min(
+  totalPages,
+  Number.isFinite(rawPage) ? Math.max(1, Math.floor(rawPage)) : 1
+);
+const pagedConversations = filtered.slice(
+  (page - 1) * pageSize,
+  page * pageSize
+);
+
 const allCount = allConversations.length;
 const openCount = allConversations.filter(
   (c) => c.status !== "RESOLVED"
@@ -136,7 +148,7 @@ const resolvedCount = allConversations.filter(
 
 const selectedId =
   requestedConversationId ??
-  (showNewForm ? undefined : filtered[0]?.id) ??
+  (showNewForm ? undefined : pagedConversations[0]?.id) ??
   undefined;
 
 let selectedConversation: Awaited<
@@ -326,44 +338,81 @@ const conversationStatusMap = Object.fromEntries(
     </nav>
 
     <div class="messages-split">
-      <div class="messages-list-pane">
+      <div class="space-y-3">
+        <div class="messages-list-pane">
+          {
+            pagedConversations.map((c) => (
+              <a
+                href={filterHref({
+                  conversationId: c.id,
+                  new: undefined,
+                  page: page > 1 ? String(page) : undefined,
+                })}
+                class="messages-list-item"
+                aria-current={c.id === selectedId ? "true" : undefined}
+              >
+                <div class="messages-list-item-head">
+                  <span class="messages-list-item-title">
+                    {c.hasUnread && (
+                      <span class="unread-dot" aria-hidden="true" />
+                    )}
+                    <Icon name="building" class="messages-house-icon" />
+                    {t("Dwelling")} {c.dwellingNumber}
+                  </span>
+                  <StatusBadge status={c.status} />
+                </div>
+                <p class="messages-list-item-subject">{c.subject}</p>
+                {c.occupantName && (
+                  <p class="messages-list-item-occupant">{c.occupantName}</p>
+                )}
+                <div class="messages-list-item-foot">
+                  <span class="messages-list-item-preview">
+                    {c.lastMessage?.body}
+                  </span>
+                  <span class="messages-list-item-date">
+                    {formatDate(c.updatedAt, locale, organization.timezone)}
+                  </span>
+                </div>
+              </a>
+            ))
+          }
+          {
+            filtered.length === 0 && (
+              <p class="messages-empty">
+                {t("No conversations match this filter.")}
+              </p>
+            )
+          }
+        </div>
         {
-          filtered.map((c) => (
-            <a
-              href={filterHref({ conversationId: c.id, new: undefined })}
-              class="messages-list-item"
-              aria-current={c.id === selectedId ? "true" : undefined}
-            >
-              <div class="messages-list-item-head">
-                <span class="messages-list-item-title">
-                  {c.hasUnread && (
-                    <span class="unread-dot" aria-hidden="true" />
-                  )}
-                  <Icon name="building" class="messages-house-icon" />
-                  {t("Dwelling")} {c.dwellingNumber}
-                </span>
-                <StatusBadge status={c.status} />
-              </div>
-              <p class="messages-list-item-subject">{c.subject}</p>
-              {c.occupantName && (
-                <p class="messages-list-item-occupant">{c.occupantName}</p>
-              )}
-              <div class="messages-list-item-foot">
-                <span class="messages-list-item-preview">
-                  {c.lastMessage?.body}
-                </span>
-                <span class="messages-list-item-date">
-                  {formatDate(c.updatedAt, locale, organization.timezone)}
-                </span>
-              </div>
-            </a>
-          ))
-        }
-        {
-          filtered.length === 0 && (
-            <p class="messages-empty">
-              {t("No conversations match this filter.")}
-            </p>
+          totalPages > 1 && (
+            <div class="flex justify-between text-sm text-muted">
+              <a
+                href={filterHref({
+                  page: String(Math.max(1, page - 1)),
+                  conversationId: undefined,
+                  new: undefined,
+                })}
+                class:list={{ "pointer-events-none opacity-40": page <= 1 }}
+              >
+                ← {t("Previous")}
+              </a>
+              <span>
+                {t("Page")} {page} {t("of")} {totalPages}
+              </span>
+              <a
+                href={filterHref({
+                  page: String(page + 1),
+                  conversationId: undefined,
+                  new: undefined,
+                })}
+                class:list={{
+                  "pointer-events-none opacity-40": page >= totalPages,
+                }}
+              >
+                {t("Next")} →
+              </a>
+            </div>
           )
         }
       </div>
@@ -553,6 +602,7 @@ const conversationStatusMap = Object.fromEntries(
                     name="conversationId"
                     value={selectedConversation.id}
                   />
+                  <input type="hidden" name="sentAs" value="ADMIN" />
                 </form>
                 <textarea
                   name="body"

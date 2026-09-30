@@ -13,6 +13,7 @@ import {
   requireOrganizationAccess,
 } from "../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { friendlyActionErrorMessage } from "../../../../../lib/ui/i18n";
 import { withRequestDb } from "../../../../../lib/db-request";
 
 const organizationId = Astro.params.orgId!;
@@ -24,6 +25,9 @@ try {
 }
 
 const updateResult = Astro.getActionResult(actions.organizations.update);
+const archiveResult =
+  Astro.getActionResult(actions.organizations.archive) ??
+  Astro.getActionResult(actions.organizations.restore);
 const organization = await withRequestDb((db) =>
   getOrganization(db, organizationId)
 );
@@ -39,6 +43,7 @@ const cityLine = [organization.city, organization.postalCode]
   title={`Organization settings - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  archived={!!organization.archivedAt}
 >
   <div class="org-settings-page">
     <a href={settingsHref} class="back-link">
@@ -62,7 +67,7 @@ const cityLine = [organization.city, organization.postalCode]
     {
       updateResult?.error && (
         <p class="notice notice-danger" role="alert">
-          {updateResult.error.message}
+          {friendlyActionErrorMessage(updateResult.error, locale)}
         </p>
       )
     }
@@ -298,6 +303,79 @@ const cityLine = [organization.city, organization.postalCode]
               <dd>{organization.phone ?? "—"}</dd>
             </div>
           </dl>
+        </div>
+
+        <div class="org-summary-card">
+          <h2>{t("Archive organization")}</h2>
+          {
+            archiveResult?.error && (
+              <p class="notice notice-danger mt-3" role="alert">
+                {friendlyActionErrorMessage(archiveResult.error, locale)}
+              </p>
+            )
+          }
+          {
+            organization.archivedAt ? (
+              <>
+                <p class="mt-2 text-sm text-muted">
+                  {t(
+                    "This organization is archived. Restore it to make changes and to let residents sign in again."
+                  )}
+                </p>
+                <form
+                  method="POST"
+                  action={actions.organizations.restore}
+                  class="mt-4"
+                >
+                  <input
+                    type="hidden"
+                    name="organizationId"
+                    value={organizationId}
+                  />
+                  <button type="submit" class="btn-primary">
+                    {t("Restore organization")}
+                  </button>
+                </form>
+              </>
+            ) : (
+              <>
+                <p class="mt-2 text-sm text-muted">
+                  {t(
+                    "Archiving makes this organization read-only. Residents cannot sign in and their invoice links stop working. You can restore it later."
+                  )}
+                </p>
+                <form
+                  method="POST"
+                  action={actions.organizations.archive}
+                  class="mt-4 grid gap-3"
+                >
+                  <input
+                    type="hidden"
+                    name="organizationId"
+                    value={organizationId}
+                  />
+                  <div class="org-field">
+                    <label for="archive-reason">{t("Reason")}</label>
+                    <input
+                      id="archive-reason"
+                      name="reason"
+                      maxlength="500"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    class="btn-danger"
+                    data-confirm={t(
+                      "Archive this organization? Residents cannot sign in until you restore it."
+                    )}
+                  >
+                    {t("Archive organization")}
+                  </button>
+                </form>
+              </>
+            )
+          }
         </div>
 
         <div class="org-tip-card">

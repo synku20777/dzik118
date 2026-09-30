@@ -4,7 +4,7 @@ import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
 import { env } from "cloudflare:workers";
 import { APP_BASE_URL, INVOICE_TOKEN_SECRET } from "astro:env/server";
-import { requireOrganizationAccess } from "../domain/authorization/guards";
+import { requireActiveOrganization } from "../domain/authorization/guards";
 import {
   bulkSendInvoices,
   recordPaperDispatch,
@@ -36,7 +36,7 @@ export const invoices = {
       invoiceId: z.uuid(),
     }),
     handler: safeHandler(async ({ organizationId, invoiceId }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         sendInvoice(
           db,
@@ -61,7 +61,7 @@ export const invoices = {
     }),
     handler: safeHandler(
       async ({ organizationId, invoiceId, commandId }, { locals }) => {
-        requireOrganizationAccess(locals.auth, organizationId);
+        requireActiveOrganization(locals.auth, organizationId);
         return withDb((db) =>
           resendInvoice(
             db,
@@ -83,7 +83,7 @@ export const invoices = {
       invoiceId: z.uuid(),
     }),
     handler: safeHandler(async ({ organizationId, invoiceId }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         recordPaperDispatch(db, organizationId, invoiceId, locals.auth!.userId)
       );
@@ -95,10 +95,10 @@ export const invoices = {
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
-      invoiceIds: z.array(z.uuid()).min(1),
+      invoiceIds: z.array(z.uuid()).min(1).max(200),
     }),
     handler: safeHandler(async ({ organizationId, invoiceIds }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         bulkSendInvoices(
           db,
@@ -118,7 +118,7 @@ export const invoices = {
       invoiceId: z.uuid(),
     }),
     handler: safeHandler(async ({ organizationId, invoiceId }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         revokeInvoiceAccessTokens(
           db,

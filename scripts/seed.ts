@@ -868,12 +868,14 @@ async function main() {
       organizationId: orgA.id,
       conversationId: convA.id,
       senderUserId: RESIDENT_IDS[0],
+      senderRole: "RESIDENT",
       body: "Hi, could you clarify the water consumption line on my latest invoice?",
     },
     {
       organizationId: orgA.id,
       conversationId: convA.id,
       senderUserId: ADMIN_A_ID,
+      senderRole: "ADMIN",
       body: "Sure -- that reflects your meter reading for this billing period.",
     },
   ]);
@@ -892,6 +894,7 @@ async function main() {
     organizationId: orgB.id,
     conversationId: convB.id,
     senderUserId: ADMIN_B_ID,
+    senderRole: "ADMIN",
     body: "Welcome to the resident portal.",
   });
 

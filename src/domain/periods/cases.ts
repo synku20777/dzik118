@@ -1,7 +1,7 @@
 // Phase E (Periods/meters/readings) - billing_case read model for the
 // admin period workbench (spec Section 27, route
 // /admin/o/[orgId]/periods/[periodId]).
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import {
   billingCaseStatusEnum,
@@ -235,8 +235,13 @@ export async function listManualRuleInputsForPeriod(
 export interface ConsumptionHistoryEntry {
   year: number;
   month: number;
-  coldWaterConsumption: string | null;
-  hotWaterConsumption: string | null;
+  // One item per meter type and unit. Several meters of one type add up. Two
+  // units of one type stay apart, because they cannot be added.
+  readings: {
+    meterType: (typeof meters.$inferSelect)["type"];
+    unit: string;
+    consumption: string;
+  }[];
 }
 
 // Phase I (Resident UX) - consumption history for the resident dwelling
@@ -255,32 +260,32 @@ export async function listConsumptionHistoryForDwelling(
       year: billingPeriods.year,
       month: billingPeriods.month,
       meterType: meters.type,
-      consumption: meterReadings.consumption,
+      unit: meters.unit,
+      consumption: sql<string>`sum(${meterReadings.consumption})`,
     })
     .from(meterReadings)
     .innerJoin(meters, eq(meters.id, meterReadings.meterId))
     .innerJoin(billingPeriods, eq(billingPeriods.id, meterReadings.periodId))
     .where(eq(meters.dwellingId, dwellingId))
-    .orderBy(desc(billingPeriods.year), desc(billingPeriods.month));
+    .groupBy(
+      billingPeriods.year,
+      billingPeriods.month,
+      meters.type,
+      meters.unit
+    )
+    .orderBy(
+      desc(billingPeriods.year),
+      desc(billingPeriods.month),
+      meters.type,
+      meters.unit
+    );
 
   const byPeriod = new Map<string, ConsumptionHistoryEntry>();
-  for (const row of rows) {
-    const key = `${row.year}-${row.month}`;
-    let entry = byPeriod.get(key);
-    if (!entry) {
-      entry = {
-        year: row.year,
-        month: row.month,
-        coldWaterConsumption: null,
-        hotWaterConsumption: null,
-      };
-      byPeriod.set(key, entry);
-    }
-    if (row.meterType === "COLD_WATER") {
-      entry.coldWaterConsumption = row.consumption;
-    } else if (row.meterType === "HOT_WATER") {
-      entry.hotWaterConsumption = row.consumption;
-    }
+  for (const { year, month, ...reading } of rows) {
+    const key = `${year}-${month}`;
+    const entry = byPeriod.get(key) ?? { year, month, readings: [] };
+    entry.readings.push(reading);
+    byPeriod.set(key, entry);
   }
   return Array.from(byPeriod.values()).slice(0, periodLimit);
 }

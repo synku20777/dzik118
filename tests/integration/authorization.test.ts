@@ -108,10 +108,12 @@ describe("loadAuthContext", () => {
   it("returns an admin context scoped to their own organization memberships only", async () => {
     const auth = await loadAuthContext(db, adminId, "it-admin@example.com");
     expect(auth).toEqual({
-      role: "ADMIN",
       userId: adminId,
       email: "it-admin@example.com",
       organizationIds: [orgAId],
+      archivedOrganizationIds: [],
+      dwellingIds: [],
+      closedDwellingCount: 0,
     });
   });
 
@@ -122,10 +124,12 @@ describe("loadAuthContext", () => {
       "it-resident@example.com"
     );
     expect(auth).toEqual({
-      role: "RESIDENT",
       userId: residentId,
       email: "it-resident@example.com",
+      organizationIds: [],
+      archivedOrganizationIds: [],
       dwellingIds: [dwellingAId],
+      closedDwellingCount: 0,
     });
   });
 

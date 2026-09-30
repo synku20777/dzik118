@@ -579,7 +579,22 @@ export async function getInvoiceForResident(
   ) {
     throw new NotFoundError("Invoice not found");
   }
-  return result;
+  const paidAmount = await getInvoiceAllocatedAmount(
+    db,
+    invoice.organizationId,
+    invoice.id
+  );
+  // Older paid invoices have no allocation rows: trust paidAt, as
+  // getInvoiceForDwellingPeriod does.
+  const legacyPaid = !!invoice.paidAt && paidAmount === "0.00";
+  const remainingAmount = legacyPaid
+    ? "0.00"
+    : maxExact("0.00", subtractExact(invoice.amountDue, paidAmount));
+  return {
+    ...result,
+    paidAmount: legacyPaid ? invoice.amountDue : paidAmount,
+    remainingAmount,
+  };
 }
 
 // caseStatus is included (not just sentAt/paidAt) because those two columns
@@ -891,8 +906,36 @@ export async function overrideCaseStatus(
           eq(billingCases.organizationId, organizationId)
         )
       )
+      .for("update")
       .limit(1);
     if (!before) throw new NotFoundError("Billing case not found");
+
+    const [invoice] = await tx
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.billingCaseId, caseId),
+          eq(invoices.organizationId, organizationId)
+        )
+      )
+      .limit(1);
+
+    if (newStatus === "SENT" && (!invoice || !invoice.sentAt)) {
+      throw new ConflictError(
+        "A case can be set to Sent only when its invoice was sent"
+      );
+    }
+    if (newStatus === "PAID" && (!invoice || !invoice.paidAt)) {
+      throw new ConflictError(
+        "A case can be set to Paid only when its invoice is paid"
+      );
+    }
+    if ((newStatus === "MISSING_DATA" || newStatus === "READY") && invoice) {
+      throw new ConflictError(
+        "A case that already has an invoice cannot go back to Missing data or Ready"
+      );
+    }
 
     const [after] = await tx
       .update(billingCases)

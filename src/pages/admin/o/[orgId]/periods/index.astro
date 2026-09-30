@@ -37,6 +37,21 @@ const { organization, periods } = await withRequestDb(async (db) => ({
   organization: await getOrganization(db, organizationId),
   periods: await listPeriods(db, organizationId),
 }));
+
+const pageSize = 24;
+const totalPages = Math.max(1, Math.ceil(periods.length / pageSize));
+const rawPage = Number(Astro.url.searchParams.get("page") ?? "1");
+const page = Math.min(
+  totalPages,
+  Number.isFinite(rawPage) ? Math.max(1, Math.floor(rawPage)) : 1
+);
+const pagedPeriods = periods.slice((page - 1) * pageSize, page * pageSize);
+
+const pageHref = (p: number) => {
+  const q = new URLSearchParams();
+  q.set("page", String(p));
+  return `?${q}`;
+};
 ---
 
 <AdminLayout
@@ -80,19 +95,21 @@ const { organization, periods } = await withRequestDb(async (db) => ({
 
     <div class="table-wrap stack-table">
       <table class="w-full text-left text-sm">
+        <caption class="sr-only">{t("Billing periods")}</caption>
         <thead class="border-b border-border bg-surface-hover text-muted">
           <tr>
-            <th class="px-4 py-2">{t("Period")}</th>
-            <th class="px-4 py-2">{t("Dates")}</th>
-            <th class="px-4 py-2">{t("Reading deadline")}</th>
-            <th class="px-4 py-2">{t("Issue date")}</th><th class="px-4 py-2"
-              >{t("Due date")}</th
-            ><th class="px-4 py-2">{t("Status")}</th>
+            <th scope="col" class="px-4 py-2">{t("Period")}</th>
+            <th scope="col" class="px-4 py-2">{t("Dates")}</th>
+            <th scope="col" class="px-4 py-2">{t("Reading deadline")}</th>
+            <th scope="col" class="px-4 py-2">{t("Issue date")}</th><th
+              scope="col"
+              class="px-4 py-2">{t("Due date")}</th
+            ><th scope="col" class="px-4 py-2">{t("Status")}</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border">
           {
-            periods.map((p) => (
+            pagedPeriods.map((p) => (
               <tr class="row-link">
                 <td class="px-4 py-2 font-medium">
                   <a
@@ -135,6 +152,30 @@ const { organization, periods } = await withRequestDb(async (db) => ({
         </tbody>
       </table>
     </div>
+
+    {
+      totalPages > 1 && (
+        <div class="flex justify-between text-sm text-muted">
+          <a
+            href={pageHref(Math.max(1, page - 1))}
+            class:list={{ "pointer-events-none opacity-40": page <= 1 }}
+          >
+            ← {t("Previous")}
+          </a>
+          <span>
+            {t("Page")} {page} {t("of")} {totalPages}
+          </span>
+          <a
+            href={pageHref(page + 1)}
+            class:list={{
+              "pointer-events-none opacity-40": page >= totalPages,
+            }}
+          >
+            {t("Next")} →
+          </a>
+        </div>
+      )
+    }
 
     <details
       id="create-period"

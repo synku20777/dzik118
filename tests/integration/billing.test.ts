@@ -35,6 +35,7 @@ import {
   bulkGenerateInvoices,
   generateInvoice,
   getInvoice,
+  overrideCaseStatus,
   prepareInvoice,
 } from "../../src/domain/billing/generation";
 import { updateInvoiceTemplate } from "../../src/domain/billing/invoice-templates";
@@ -872,8 +873,6 @@ describe("invoice generation", () => {
       "update invoices set sent_at = now() where id = $1",
       [invoice.id]
     );
-    const { overrideCaseStatus } =
-      await import("../../src/domain/billing/generation");
     await overrideCaseStatus(
       db,
       org.id,
@@ -886,6 +885,104 @@ describe("invoice generation", () => {
     await expect(
       generateInvoice(db, org.id, period.id, dwelling.id, seedAdminId)
     ).rejects.toBeInstanceOf(ConflictError);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("Section 19: manual case status override guards against impossible invoice states", async () => {
+    const { org, dwelling, period } = await setupOrgAndPeriod(
+      "IT-F Org 13b",
+      6
+    );
+    await createRule(
+      db,
+      org.id,
+      {
+        name: "Fee",
+        code: "fee",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "10.00",
+        effectiveFrom: "2025-01-01",
+      },
+      seedAdminId
+    );
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+
+    await expect(
+      overrideCaseStatus(
+        db,
+        org.id,
+        invoice.billingCaseId,
+        "SENT",
+        "attempt sent without sent invoice",
+        seedAdminId
+      )
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    await expect(
+      overrideCaseStatus(
+        db,
+        org.id,
+        invoice.billingCaseId,
+        "PAID",
+        "attempt paid without paid invoice",
+        seedAdminId
+      )
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    await expect(
+      overrideCaseStatus(
+        db,
+        org.id,
+        invoice.billingCaseId,
+        "READY",
+        "attempt ready with existing invoice",
+        seedAdminId
+      )
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    const updated = await overrideCaseStatus(
+      db,
+      org.id,
+      invoice.billingCaseId,
+      "PREPARED",
+      "valid prepared override",
+      seedAdminId
+    );
+    expect(updated.status).toBe("PREPARED");
+    expect(updated.manualStatusOverride).toBe(true);
+
+    await expect(
+      overrideCaseStatus(
+        db,
+        org.id,
+        invoice.billingCaseId,
+        "MISSING_DATA",
+        "attempt missing data with existing invoice",
+        seedAdminId
+      )
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    await db.$client.query(
+      "update invoices set sent_at = now() where id = $1",
+      [invoice.id]
+    );
+    const sent = await overrideCaseStatus(
+      db,
+      org.id,
+      invoice.billingCaseId,
+      "SENT",
+      "invoice was sent",
+      seedAdminId
+    );
+    expect(sent.status).toBe("SENT");
 
     await cleanupOrg(org.id);
   });

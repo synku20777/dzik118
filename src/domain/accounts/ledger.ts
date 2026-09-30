@@ -4,10 +4,11 @@ import {
   accountEntries,
   lateFeePolicies,
   paymentAllocations,
+  paymentReversals,
 } from "../../db/schema/accounts";
 import { dwellings } from "../../db/schema/dwellings";
 import { invoices } from "../../db/schema/invoices";
-import { subtractExact, sumExact } from "../../lib/decimal2";
+import { maxExact, subtractExact, sumExact } from "../../lib/decimal2";
 import { NotFoundError } from "../errors";
 
 export async function getDwellingAccountBalance(
@@ -77,7 +78,7 @@ export async function getInvoiceAllocatedAmount(
   organizationId: string,
   invoiceId: string
 ): Promise<string> {
-  const rows = await db
+  const allocationRows = await db
     .select({ allocatedAmount: paymentAllocations.allocatedAmount })
     .from(paymentAllocations)
     .where(
@@ -86,7 +87,24 @@ export async function getInvoiceAllocatedAmount(
         eq(paymentAllocations.invoiceId, invoiceId)
       )
     );
-  return sumExact(rows.map((row) => row.allocatedAmount));
+  const reversalRows = await db
+    .select({
+      reversedAllocationAmount: paymentReversals.reversedAllocationAmount,
+    })
+    .from(paymentReversals)
+    .where(
+      and(
+        eq(paymentReversals.organizationId, organizationId),
+        eq(paymentReversals.invoiceId, invoiceId)
+      )
+    );
+  const totalAllocated = sumExact(
+    allocationRows.map((row) => row.allocatedAmount)
+  );
+  const totalReversed = sumExact(
+    reversalRows.map((row) => row.reversedAllocationAmount)
+  );
+  return maxExact(subtractExact(totalAllocated, totalReversed), "0.00");
 }
 
 export async function getEffectiveLateFeePolicy(

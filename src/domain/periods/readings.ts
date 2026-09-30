@@ -10,6 +10,8 @@ import {
   meterReadings,
 } from "../../db/schema/billing";
 import { meters } from "../../db/schema/dwellings";
+import { organizations } from "../../db/schema/organizations";
+import { orgLocalDateString } from "../../lib/org-time";
 import {
   DECIMAL3_PATTERN,
   compareDecimal3,
@@ -131,16 +133,15 @@ async function recordReading(
       throw new ConflictError("This billing period is locked");
     }
     if (source === "RESIDENT" && period.readingDeadline) {
-      // Inclusive of the whole deadline date, not just up to UTC midnight
-      // at its start -- a plain `new Date(dateString)` parses to 00:00 UTC,
-      // which would cut off nearly the entire day. Still UTC-based, not the
-      // organization's configured timezone (no timezone-aware date infra
-      // exists in this codebase yet); a few hours of edge-of-day slack
-      // remains depending on the org's actual timezone.
-      const deadlineEndOfDay = new Date(
-        `${period.readingDeadline}T23:59:59.999Z`
-      );
-      if (new Date() > deadlineEndOfDay) {
+      // The deadline date is inclusive and ends at midnight in the
+      // organization's timezone (spec Section 32).
+      const [org] = await tx
+        .select({ timezone: organizations.timezone })
+        .from(organizations)
+        .where(eq(organizations.id, organizationId))
+        .limit(1);
+      const today = orgLocalDateString(new Date(), org.timezone);
+      if (today > period.readingDeadline) {
         throw new ConflictError(
           "The reading deadline for this period has passed"
         );

@@ -31,14 +31,29 @@ export const POST: APIRoute = async ({
     request,
     cookies
   );
-  if (locals.auth?.role !== "ADMIN" || !(await hasFreshOtpSession(supabase))) {
+  if (
+    !locals.auth ||
+    locals.auth.organizationIds.length === 0 ||
+    !(await hasFreshOtpSession(supabase))
+  ) {
     return redirect("/forgot-password?error=1", 303);
   }
   try {
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
-      // e.g. Supabase's own rules, or "same as old password".
-      return applyPendingHeaders(redirect("/reset-password?error=failed", 303));
+      // Supabase attaches a real error code -- surface the specific,
+      // known-safe reason instead of a generic message. Anything not in
+      // this list falls back to "failed" rather than showing raw error text.
+      const key =
+        error.code === "same_password"
+          ? "same"
+          : error.code === "weak_password"
+            ? "weak"
+            : error.code === "over_request_rate_limit" ||
+                error.code === "over_email_send_rate_limit"
+              ? "rate_limited"
+              : "failed";
+      return applyPendingHeaders(redirect(`/reset-password?error=${key}`, 303));
     }
     // Ends every session of this admin (this one included): they sign in
     // again with the new password.

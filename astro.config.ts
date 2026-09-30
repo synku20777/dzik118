@@ -60,6 +60,32 @@ export default defineConfig({
         access: "secret",
         default: "invoices@example.com",
       }),
+      ALERT_EMAIL: envField.string({
+        context: "server",
+        access: "secret",
+        optional: true,
+      }),
+      // Bounce and complaint handling (ADR 0008). The SES events endpoint
+      // needs both values. It refuses every request when either is missing.
+      // The secret goes in the SNS subscription URL as `?key=`. The topic ARN
+      // is the only topic the endpoint accepts.
+      SES_EVENTS_SECRET: envField.string({
+        context: "server",
+        access: "secret",
+        optional: true,
+      }),
+      SES_SNS_TOPIC_ARN: envField.string({
+        context: "server",
+        access: "secret",
+        optional: true,
+      }),
+      // Key for the IP hash stored in audit_logs.ip_hash. Optional: without
+      // it the hash is left empty, and a plain IP is never stored.
+      AUDIT_HASH_SECRET: envField.string({
+        context: "server",
+        access: "secret",
+        optional: true,
+      }),
       // Pepper for invoice access token hashes (spec Section 6/24): stored
       // hash is HMAC-SHA256(this secret, rawToken), not plain SHA-256, so a
       // leaked database alone can't be used to precompute/verify guesses

@@ -773,6 +773,13 @@ describe("runScheduledJobs", () => {
     expect(orgBResultEarly.generated).toBe(0);
     expect(orgBResultEarly.sent).toBe(0);
 
+    // prepared_at uses the real clock, but the runs below use a fake date.
+    // Put the preparation on the fake 10 June, before the send day.
+    await db.$client.query(
+      "update invoices set prepared_at = $1 where organization_id = $2",
+      ["2026-06-10T10:00:00Z", orgA.id]
+    );
+
     const onTheDay = await runScheduledJobs(
       db,
       stubDeps(),
@@ -792,6 +799,45 @@ describe("runScheduledJobs", () => {
 
     await cleanupOrg(orgA.id);
     await cleanupOrg(orgB.id);
+  });
+
+  it("catches up after the send day, but not for an invoice prepared after it", async () => {
+    const { org } = await setupBillableOrg("IT-L Org SchedCatchUp", 6);
+    await updateOrganization(
+      db,
+      org.id,
+      { autoGenerateEnabled: true, autoSendEnabled: true, autoSendDay: 15 },
+      seedAdminId
+    );
+    // Generate and prepare on the fake 10 June (before the send day).
+    await runScheduledJobs(db, stubDeps(), new Date("2026-06-10T10:00:00Z"));
+
+    // Prepared after the send day: waits for next month.
+    await db.$client.query(
+      "update invoices set prepared_at = $1 where organization_id = $2",
+      ["2026-06-16T10:00:00Z", org.id]
+    );
+    const tooLate = await runScheduledJobs(
+      db,
+      stubDeps(),
+      new Date("2026-06-17T10:00:00Z")
+    );
+    expect(tooLate.find((r) => r.organizationId === org.id)!.sent).toBe(0);
+
+    // Prepared before the send day, the send day run did not happen (for
+    // example the cron was down): the next daily run sends it.
+    await db.$client.query(
+      "update invoices set prepared_at = $1 where organization_id = $2",
+      ["2026-06-10T10:00:00Z", org.id]
+    );
+    const catchUp = await runScheduledJobs(
+      db,
+      stubDeps(),
+      new Date("2026-06-17T10:00:00Z")
+    );
+    expect(catchUp.find((r) => r.organizationId === org.id)!.sent).toBe(1);
+
+    await cleanupOrg(org.id);
   });
 
   it("Package 4 (2b end-to-end): runScheduledJobs gracefully skips UNKNOWN attempt invoice without throwing or recalling provider", async () => {

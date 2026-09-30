@@ -4,7 +4,7 @@ import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
 import {
   requireDwellingAccess,
-  requireOrganizationAccess,
+  requireActiveOrganization,
 } from "../domain/authorization/guards";
 import { submitManualRuleInput } from "../domain/periods/manual-rule-inputs";
 import {
@@ -15,6 +15,7 @@ import { DECIMAL3_PATTERN } from "../lib/decimal3";
 import { decimalInput } from "../lib/decimal-input";
 import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
+import { limitOrThrow } from "../lib/http/rate-limit";
 
 // Kept as a string end to end (spec Section 17: no JS binary floating
 // point for persisted calculations), validated the same way the domain
@@ -48,7 +49,7 @@ export const readings = {
         { organizationId, periodId, meterId, currentValue, note, force },
         { locals }
       ) => {
-        requireOrganizationAccess(locals.auth, organizationId);
+        requireActiveOrganization(locals.auth, organizationId);
         return withDb((db) =>
           submitAdminReading(
             db,
@@ -76,6 +77,7 @@ export const readings = {
     handler: safeHandler(
       async ({ dwellingId, periodId, meterId, currentValue }, { locals }) => {
         requireDwellingAccess(locals.auth, dwellingId);
+        await limitOrThrow("reading", locals.auth!.userId);
         return withDb((db) =>
           submitResidentReading(
             db,
@@ -107,7 +109,7 @@ export const readings = {
         { organizationId, periodId, dwellingId, billingRuleId, value, note },
         { locals }
       ) => {
-        requireOrganizationAccess(locals.auth, organizationId);
+        requireActiveOrganization(locals.auth, organizationId);
         return withDb((db) =>
           submitManualRuleInput(
             db,

@@ -5,13 +5,16 @@
 import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
 import {
+  requireActiveOrganization,
   requireAdminRole,
   requireOrganizationAccess,
 } from "../domain/authorization/guards";
 import {
   addAdminMembership,
+  archiveOrganization,
   createOrganization,
   removeAdminMembership,
+  restoreOrganization,
   updateOrganization,
 } from "../domain/organizations/organizations";
 import { safeHandler } from "./_errors";
@@ -71,7 +74,7 @@ export const organizations = {
       autoSendDay: z.number().int().min(1).max(28).nullable().optional(),
     }),
     handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         updateOrganization(db, organizationId, input, locals.auth!.userId)
       );
@@ -85,7 +88,7 @@ export const organizations = {
       email: z.email(),
     }),
     handler: safeHandler(async ({ organizationId, email }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         addAdminMembership(
           db,
@@ -98,6 +101,33 @@ export const organizations = {
     }),
   }),
 
+  // ADR 0009. Restore keeps requireOrganizationAccess: it must work on an
+  // archived organization.
+  archive: defineAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      reason: z.string().trim().min(1).max(500),
+    }),
+    handler: safeHandler(async ({ organizationId, reason }, { locals }) => {
+      requireOrganizationAccess(locals.auth, organizationId);
+      await withDb((db) =>
+        archiveOrganization(db, organizationId, reason, locals.auth!.userId)
+      );
+    }),
+  }),
+
+  restore: defineAction({
+    accept: "form",
+    input: z.object({ organizationId: z.uuid() }),
+    handler: safeHandler(async ({ organizationId }, { locals }) => {
+      requireOrganizationAccess(locals.auth, organizationId);
+      await withDb((db) =>
+        restoreOrganization(db, organizationId, locals.auth!.userId)
+      );
+    }),
+  }),
+
   removeAdminMember: defineAction({
     accept: "form",
     input: z.object({
@@ -105,7 +135,7 @@ export const organizations = {
       userId: z.uuid(),
     }),
     handler: safeHandler(async ({ organizationId, userId }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+      requireActiveOrganization(locals.auth, organizationId);
       await withDb((db) =>
         removeAdminMembership(db, organizationId, userId, locals.auth!.userId)
       );

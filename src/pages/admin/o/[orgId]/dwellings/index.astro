@@ -185,19 +185,20 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
 
     <div class="table-wrap stack-table">
       <table class="w-full text-left text-body-sm">
+        <caption class="sr-only">{t("Dwellings")}</caption>
         <thead class="border-b border-border bg-surface-hover text-muted">
           <tr>
-            <th class="px-4 py-2">
+            <th scope="col" class="px-4 py-2">
               {t("Number")}
               <span aria-hidden="true">↑</span>
             </th>
-            <th class="px-4 py-2">{t("Type")}</th>
-            <th class="px-4 py-2">{t("Occupant")}</th>
-            <th class="px-4 py-2">{t("Address")}</th>
-            <th class="px-4 py-2 text-right">{t("Area (m²)")}</th>
-            <th class="px-4 py-2 text-right">{t("Residents")}</th>
-            <th class="px-4 py-2">{t("Status")}</th>
-            <th class="px-4 py-2 text-right">{t("Actions")}</th>
+            <th scope="col" class="px-4 py-2">{t("Type")}</th>
+            <th scope="col" class="px-4 py-2">{t("Occupant")}</th>
+            <th scope="col" class="px-4 py-2">{t("Address")}</th>
+            <th scope="col" class="px-4 py-2 text-right">{t("Area (m²)")}</th>
+            <th scope="col" class="px-4 py-2 text-right">{t("Residents")}</th>
+            <th scope="col" class="px-4 py-2">{t("Status")}</th>
+            <th scope="col" class="px-4 py-2 text-right">{t("Actions")}</th>
           </tr>
         </thead>
         <tbody
@@ -313,7 +314,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
       <summary>{t("Add dwelling")}</summary><p class="text-sm text-muted">
         {
           t(
-            "New dwellings are included in future periods. Archive historically billed dwellings to preserve their invoices."
+            "New dwellings are included in every currently open billing period. Archive historically billed dwellings to preserve their invoices."
           )
         }
       </p>

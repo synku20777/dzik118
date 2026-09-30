@@ -1,7 +1,9 @@
 // Phase B (Database) - Bank CSV imports, transactions, and payment matches
 // (spec Section 13.16-13.18), including explicit non-exact allocation review.
+import { sql } from "drizzle-orm";
 import {
   char,
+  check,
   date,
   index,
   integer,
@@ -22,6 +24,7 @@ export const paymentMatchStatusEnum = pgEnum("payment_match_status", [
   "PROPOSED",
   "CONFIRMED",
   "REJECTED",
+  "REVERSED",
 ]);
 
 export const paymentMatchTypeEnum = pgEnum("payment_match_type", [
@@ -85,6 +88,8 @@ export const bankTransactions = pgTable(
   (table) => [
     index("bank_transactions_organization_id_idx").on(table.organizationId),
     index("bank_transactions_bank_import_id_idx").on(table.bankImportId),
+    // Only incoming money is stored. A debit row would post a negative credit.
+    check("bank_transactions_amount_positive_check", sql`${table.amount} > 0`),
   ]
 );
 
@@ -126,5 +131,9 @@ export const paymentMatches = pgTable(
     ),
     index("payment_matches_organization_id_idx").on(table.organizationId),
     index("payment_matches_invoice_id_idx").on(table.invoiceId),
+    check(
+      "payment_matches_allocation_nonnegative_check",
+      sql`${table.proposedAllocationAmount} >= 0`
+    ),
   ]
 );

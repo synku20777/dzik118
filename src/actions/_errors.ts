@@ -9,7 +9,9 @@ import { ForbiddenError } from "../domain/authorization/guards";
 import {
   ConflictError,
   NotFoundError,
+  RateLimitedError,
   ValidationError,
+  describeError,
 } from "../domain/errors";
 
 export function toActionError(err: unknown): ActionError {
@@ -26,7 +28,10 @@ export function toActionError(err: unknown): ActionError {
   if (err instanceof ValidationError) {
     return new ActionError({ code: "BAD_REQUEST", message: err.message });
   }
-  console.error(err);
+  if (err instanceof RateLimitedError) {
+    return new ActionError({ code: "TOO_MANY_REQUESTS", message: err.message });
+  }
+  console.error(describeError(err));
   return new ActionError({
     code: "INTERNAL_SERVER_ERROR",
     message: "Something went wrong. Please try again.",

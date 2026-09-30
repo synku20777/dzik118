@@ -224,7 +224,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     </a>
 
     <PageHeader
-      title={t("Tariffs and rules")}
+      title={t("Tariffs & rules")}
       description={t(
         "Manage utility rates, billing formulas, and effective periods."
       )}
@@ -335,18 +335,19 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
 
     <div class="table-wrap stack-table">
       <table class="w-full text-left text-sm">
+        <caption class="sr-only">{t("Billing rules")}</caption>
         <thead class="border-b border-border bg-surface-hover text-muted">
           <tr>
-            <th class="px-4 py-2">{t("Name")}</th>
-            <th class="px-4 py-2">{t("Code")}</th>
-            <th class="px-4 py-2">{t("Type")}</th>
-            <th class="px-4 py-2">{t("Unit")}</th>
-            <th class="px-4 py-2 text-right">{t("Unit price")}</th>
-            <th class="px-4 py-2">{t("VAT")}</th>
-            <th class="px-4 py-2">{t("Effective period")}</th>
-            <th class="px-4 py-2">{t("Applies to")}</th>
-            <th class="px-4 py-2">{t("Status")}</th>
-            <th class="px-4 py-2 text-right">{t("Actions")}</th>
+            <th scope="col" class="px-4 py-2">{t("Name")}</th>
+            <th scope="col" class="px-4 py-2">{t("Code")}</th>
+            <th scope="col" class="px-4 py-2">{t("Type")}</th>
+            <th scope="col" class="px-4 py-2">{t("Unit")}</th>
+            <th scope="col" class="px-4 py-2 text-right">{t("Unit price")}</th>
+            <th scope="col" class="px-4 py-2">{t("VAT")}</th>
+            <th scope="col" class="px-4 py-2">{t("Effective period")}</th>
+            <th scope="col" class="px-4 py-2">{t("Applies to")}</th>
+            <th scope="col" class="px-4 py-2">{t("Status")}</th>
+            <th scope="col" class="px-4 py-2 text-right">{t("Actions")}</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border">

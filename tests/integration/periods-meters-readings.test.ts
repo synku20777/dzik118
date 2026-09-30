@@ -1,8 +1,10 @@
 // Phase E (Periods/meters/readings) - domain-layer integration tests
 // (spec PER-001/002, MTR-001/002/003). Requires a real Postgres reachable
 // via DATABASE_URL.
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { and, eq } from "drizzle-orm";
 import { createDb, type Db } from "../../src/db/client";
+import { auditLogs } from "../../src/db/schema/audit";
 import {
   cleanupOrganization,
   createIntegrationDb,
@@ -16,6 +18,7 @@ import {
   archiveMeter,
   createMeter,
   listMeters,
+  updateMeter,
 } from "../../src/domain/organizations/meters";
 import {
   ConflictError,
@@ -481,6 +484,196 @@ describe("meters and readings", () => {
     await cleanupOrg(org.id);
   });
 
+  it("MTR-001/E: updating a meter edits fields, writes audit log, prevents archived edits, preserves type", async () => {
+    const { org, dwelling } = await setupOrgWithDwellingAndMeter("IT-E Org 8");
+    const meter = await createMeter(
+      db,
+      org.id,
+      dwelling.id,
+      {
+        type: "COLD_WATER",
+        unit: "m3",
+        serialNumber: "SN-ORIG",
+        label: "Orig Label",
+        installedAt: "2026-01-01",
+      },
+      seedAdminId
+    );
+
+    const updated = await updateMeter(
+      db,
+      org.id,
+      meter.id,
+      {
+        serialNumber: "SN-UPDATED",
+        label: "Updated Label",
+        unit: "liters",
+        installedAt: null,
+      },
+      seedAdminId
+    );
+
+    expect(updated.serialNumber).toBe("SN-UPDATED");
+    expect(updated.label).toBe("Updated Label");
+    expect(updated.unit).toBe("liters");
+    expect(updated.installedAt).toBeNull();
+    expect(updated.type).toBe("COLD_WATER");
+
+    const meters = await listMeters(db, org.id, dwelling.id);
+    const reRead = meters.find((m) => m.id === meter.id);
+    expect(reRead).toBeDefined();
+    expect(reRead?.serialNumber).toBe("SN-UPDATED");
+    expect(reRead?.label).toBe("Updated Label");
+    expect(reRead?.unit).toBe("liters");
+    expect(reRead?.installedAt).toBeNull();
+    expect(reRead?.type).toBe("COLD_WATER");
+
+    const auditRows = await db
+      .select()
+      .from(auditLogs)
+      .where(
+        and(
+          eq(auditLogs.organizationId, org.id),
+          eq(auditLogs.action, "METER_UPDATED"),
+          eq(auditLogs.entityId, meter.id)
+        )
+      );
+    expect(auditRows.length).toBeGreaterThan(0);
+    expect(auditRows[0].entityType).toBe("meter");
+    expect(auditRows[0].actorUserId).toBe(seedAdminId);
+
+    const separateMeter = await createMeter(
+      db,
+      org.id,
+      dwelling.id,
+      { type: "HOT_WATER", unit: "m3" },
+      seedAdminId
+    );
+    await archiveMeter(db, org.id, separateMeter.id, seedAdminId);
+
+    await expect(
+      updateMeter(
+        db,
+        org.id,
+        separateMeter.id,
+        { label: "Should Reject" },
+        seedAdminId
+      )
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    // The unit is locked once a reading exists; other fields stay editable.
+    const period = await createPeriod(
+      db,
+      org.id,
+      {
+        year: 2026,
+        month: 9,
+        startsOn: "2026-09-01",
+        endsOn: "2026-09-30",
+        invoiceIssueDate: "2026-10-01",
+        invoiceDueDate: "2026-10-15",
+      },
+      seedAdminId
+    );
+    await submitAdminReading(
+      db,
+      org.id,
+      period.id,
+      meter.id,
+      "1.000",
+      seedAdminId
+    );
+    await expect(
+      updateMeter(db, org.id, meter.id, { unit: "gallons" }, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+    const relabeled = await updateMeter(
+      db,
+      org.id,
+      meter.id,
+      { label: "Still editable", unit: "liters" },
+      seedAdminId
+    );
+    expect(relabeled.label).toBe("Still editable");
+
+    // Another organization cannot edit this meter.
+    await expect(
+      updateMeter(
+        db,
+        crypto.randomUUID(),
+        meter.id,
+        { label: "Nope" },
+        seedAdminId
+      )
+    ).rejects.toBeInstanceOf(NotFoundError);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("reading deadline ends at midnight in the organization's timezone", async () => {
+    const { org, meter } = await setupOrgWithDwellingAndMeter("IT-E Org 10");
+    await db.$client.query(
+      "update organizations set timezone = 'Pacific/Kiritimati' where id = $1",
+      [org.id]
+    );
+    const open = await createPeriod(
+      db,
+      org.id,
+      {
+        year: 2099,
+        month: 1,
+        startsOn: "2099-01-01",
+        endsOn: "2099-01-31",
+        readingDeadline: "2099-01-16",
+        invoiceIssueDate: "2099-02-01",
+        invoiceDueDate: "2099-02-15",
+      },
+      seedAdminId
+    );
+    const closed = await createPeriod(
+      db,
+      org.id,
+      {
+        year: 2099,
+        month: 2,
+        startsOn: "2099-02-01",
+        endsOn: "2099-02-28",
+        readingDeadline: "2099-01-15",
+        invoiceIssueDate: "2099-03-01",
+        invoiceDueDate: "2099-03-15",
+      },
+      seedAdminId
+    );
+    const [openCase] = await listCasesForPeriod(db, org.id, open.id);
+    // 12:00 UTC on Jan 15 is already Jan 16 in Kiritimati (UTC+14): the UTC
+    // date would still be inside the "2099-01-15" deadline, the local date is not.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2099-01-15T12:00:00Z"));
+    try {
+      const ok = await submitResidentReading(
+        db,
+        openCase.dwellingId,
+        open.id,
+        meter.id,
+        "1.000",
+        seedAdminId
+      );
+      expect(ok.currentValue).toBe("1.000");
+      await expect(
+        submitResidentReading(
+          db,
+          openCase.dwellingId,
+          closed.id,
+          meter.id,
+          "2.000",
+          seedAdminId
+        )
+      ).rejects.toBeInstanceOf(ConflictError);
+    } finally {
+      vi.useRealTimers();
+    }
+    await cleanupOrg(org.id);
+  });
+
   it("concurrent first-time submissions for the same meter/period both succeed (no raw unique-violation)", async () => {
     const { org, meter } = await setupOrgWithDwellingAndMeter("IT-E Org 9");
     const period = await createPeriod(
@@ -529,7 +722,7 @@ describe("meters and readings", () => {
     await cleanupOrg(org.id);
   });
 
-  it("rejects a reading for a dwelling with no billing case in this period (dwelling created after the period)", async () => {
+  it("a dwelling created after the period already exists still gets a billing case in it (OPEN period), so its readings work", async () => {
     const { org } = await setupOrgWithDwellingAndMeter("IT-E Org 10");
     const period = await createPeriod(
       db,
@@ -544,8 +737,8 @@ describe("meters and readings", () => {
       },
       seedAdminId
     );
-    // Created after the period, so createPeriod never snapshotted it into
-    // a billing_case.
+    // Created after the period -- createPeriod's own snapshot never saw it,
+    // but createDwelling now backfills a case into every OPEN period itself.
     const lateDwelling = await createDwelling(
       db,
       org.id,
@@ -559,16 +752,56 @@ describe("meters and readings", () => {
       { type: "COLD_WATER", unit: "m3" },
       seedAdminId
     );
-    await expect(
-      submitAdminReading(
-        db,
-        org.id,
-        period.id,
-        lateMeter.id,
-        "1.000",
-        seedAdminId
-      )
-    ).rejects.toBeInstanceOf(NotFoundError);
+
+    const cases = await listCasesForPeriod(db, org.id, period.id);
+    const lateCase = cases.find((c) => c.dwellingId === lateDwelling.id);
+    expect(lateCase).toBeDefined();
+    expect(lateCase?.status).toBe("MISSING_DATA");
+
+    await submitAdminReading(
+      db,
+      org.id,
+      period.id,
+      lateMeter.id,
+      "1.000",
+      seedAdminId
+    );
+    const [updated] = await listCasesForPeriod(db, org.id, period.id).then(
+      (rows) => rows.filter((c) => c.dwellingId === lateDwelling.id)
+    );
+    expect(updated.status).toBe("READY");
+
+    await cleanupOrg(org.id);
+  });
+
+  it("a dwelling created after a period is LOCKED does not get a case in it", async () => {
+    const { org } = await setupOrgWithDwellingAndMeter(
+      "IT-E Org Locked Create"
+    );
+    const period = await createPeriod(
+      db,
+      org.id,
+      {
+        year: 2026,
+        month: 12,
+        startsOn: "2026-12-01",
+        endsOn: "2026-12-31",
+        invoiceIssueDate: "2027-01-01",
+        invoiceDueDate: "2027-01-15",
+      },
+      seedAdminId
+    );
+    await lockPeriod(db, org.id, period.id, seedAdminId);
+
+    const lateDwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "after-lock" },
+      seedAdminId
+    );
+
+    const cases = await listCasesForPeriod(db, org.id, period.id);
+    expect(cases.some((c) => c.dwellingId === lateDwelling.id)).toBe(false);
 
     await cleanupOrg(org.id);
   });

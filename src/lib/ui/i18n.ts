@@ -3,6 +3,33 @@ import type { AstroCookies } from "astro";
 export type Locale = "en" | "lv" | "ru";
 
 // A presentation preference only; never changes organization or invoice data.
+// First supported language in an Accept-Language header, by quality then
+// order. Used once per browser (middleware sets the cookie), so a Latvian or
+// Russian browser lands on its own language. Anything else gets English.
+export function localeFromAcceptLanguage(header: string | null): Locale {
+  if (!header) return "en";
+  const ranked = header
+    .split(",")
+    .map((part, index) => {
+      const [tag, ...params] = part.trim().split(";");
+      const q = params.find((p) => p.trim().startsWith("q="));
+      const quality = q ? Number(q.trim().slice(2)) : 1;
+      return {
+        language: tag.trim().toLowerCase().split("-")[0],
+        quality: Number.isFinite(quality) ? quality : 0,
+        index,
+      };
+    })
+    .filter((entry) => entry.quality > 0)
+    .sort((a, b) => b.quality - a.quality || a.index - b.index);
+  for (const { language } of ranked) {
+    if (language === "lv" || language === "ru" || language === "en") {
+      return language;
+    }
+  }
+  return "en";
+}
+
 export function uiLocale(cookies: AstroCookies, url: URL): Locale {
   const requested = url.searchParams.get("lang");
   if (requested === "en" || requested === "lv" || requested === "ru") {
@@ -325,6 +352,8 @@ const lv: Record<string, string> = {
   Portal: "Portāls",
   "Sign out": "Izrakstīties",
   "Switch organization": "Mainīt organizāciju",
+  "Switch to resident view": "Pārslēgties uz iedzīvotāja skatu",
+  "Switch to admin view": "Pārslēgties uz administratora skatu",
   Navigation: "Navigācija",
   "Skip to content": "Pāriet uz saturu",
   Menu: "Izvēlne",
@@ -506,8 +535,8 @@ const lv: Record<string, string> = {
   Archive: "Arhivēt",
   "Manage dwelling details, occupants and resident access.":
     "Pārvaldiet īpašumu datus, iemītniekus un piekļuvi.",
-  "New dwellings are included in future periods. Archive historically billed dwellings to preserve their invoices.":
-    "Jauni īpašumi tiks iekļauti nākamajos periodos. Arhivējiet iepriekš rēķinātos īpašumus, saglabājot to rēķinus.",
+  "New dwellings are included in every currently open billing period. Archive historically billed dwellings to preserve their invoices.":
+    "Jauni īpašumi tiks iekļauti visos pašlaik atvērtajos norēķinu periodos. Arhivējiet iepriekš rēķinātos īpašumus, saglabājot to rēķinus.",
   "No dwellings match this filter.": "Filtram neatbilst neviens īpašums.",
   Previous: "Iepriekšējā",
   Next: "Nākamā",
@@ -745,8 +774,14 @@ const lv: Record<string, string> = {
     "Parolei jābūt vismaz 8 rakstzīmes garai.",
   "The password is too long.": "Parole ir pārāk gara.",
   "The two passwords do not match.": "Abas paroles nesakrīt.",
-  "The password could not be changed. Try a different password.":
-    "Paroli neizdevās nomainīt. Mēģiniet citu paroli.",
+  "Your new password can't be the same as your old one.":
+    "Jaunā parole nedrīkst sakrist ar veco.",
+  "This password is too weak. Choose a longer or less predictable one.":
+    "Šī parole ir pārāk vienkārša. Izvēlieties garāku vai mazāk paredzamu paroli.",
+  "Too many attempts. Wait a few minutes and try again.":
+    "Pārāk daudz mēģinājumu. Uzgaidiet dažas minūtes un mēģiniet vēlreiz.",
+  "Something went wrong changing your password. Try again.":
+    "Neizdevās nomainīt paroli. Mēģiniet vēlreiz.",
   "Choose a new password": "Iestatiet jaunu paroli",
   "Use at least 8 characters.": "Izmantojiet vismaz 8 rakstzīmes.",
   "New password": "Jaunā parole",
@@ -758,6 +793,340 @@ const lv: Record<string, string> = {
   "Click below to choose a new password.":
     "Lai iestatītu jaunu paroli, nospiediet «Turpināt».",
   Continue: "Turpināt",
+  "Adjust this draft": "Pielāgot šo melnrakstu",
+  "You can change these amounts until you prepare the invoice.":
+    "Šīs summas var mainīt, līdz rēķins ir sagatavots.",
+  "Calculated late fee": "Aprēķinātā nokavējuma maksa",
+  "Applied late fee": "Piemērotā nokavējuma maksa",
+  "New late fee amount": "Jaunā nokavējuma maksas summa",
+  "Update late fee": "Atjaunināt nokavējuma maksu",
+  "Bank processing delay": "Bankas apstrādes kavēšanās",
+  "Billing dispute": "Strīds par rēķinu",
+  "Meter issue": "Problēma ar skaitītāju",
+  "Agreement with resident": "Vienošanās ar iedzīvotāju",
+  "Administrative waiver": "Administratīva atbrīvošana",
+  "Note (required when the reason is Other)":
+    "Piezīme (obligāta, ja iemesls ir Cits)",
+  "Adjustment amount": "Korekcijas summa",
+  "A negative amount lowers the amount due.":
+    "Negatīva summa samazina apmaksājamo summu.",
+  "Save adjustment": "Saglabāt korekciju",
+  "Late fee updated.": "Nokavējuma maksa atjaunināta.",
+  "Adjustment saved.": "Korekcija saglabāta.",
+  "Override status": "Aizstāt statusu",
+  "Use this only to correct a status that is wrong. The change is recorded with your reason.":
+    "Izmantojiet šo tikai, lai labotu nepareizu statusu. Izmaiņa tiek reģistrēta ar jūsu norādīto iemeslu.",
+  "Change the status of this invoice? This change is recorded in the audit log.":
+    "Vai mainīt šī rēķina statusu? Šī izmaiņa tiek reģistrēta audita žurnālā.",
+  "New status": "Jaunais statuss",
+  "Choose a status": "Izvēlieties statusu",
+  "Status changed.": "Statuss mainīts.",
+  "Installed on": "Uzstādīšanas datums",
+  "Invoice total due": "Rēķina kopsumma apmaksai",
+  "Paid so far": "Apmaksāts līdz šim",
+  "Amount still due": "Atlikusī summa apmaksai",
+  "All entity types": "Visi objektu veidi",
+  "All actors": "Visi lietotāji",
+  "From date": "Datums no",
+  "To date": "Datums līdz",
+  Enable: "Iespējot",
+  Disable: "Atspējot",
+  "Account disabled": "Konts atspējots",
+  "Disable this account? The person cannot sign in until you enable it again.":
+    "Vai atspējot šo kontu? Persona nevarēs pieteikties, kamēr to atkal neiespējosiet.",
+  "Invoice, reference or payer": "Rēķins, maksājuma mērķis vai maksātājs",
+  "No payments match these filters.": "Filtriem neatbilst neviens maksājums.",
+  of: "no",
+  "How do I waive a late fee or adjust a draft invoice?":
+    "Kā atcelt nokavējuma maksu vai pielāgot rēķina melnrakstu?",
+  "Open the DRAFT invoice. Use the Adjust this draft panel. Enter a reason for each change. You cannot adjust an invoice after you prepare it.":
+    "Atveriet rēķinu ar statusu “Melnraksts”. Izmantojiet paneli “Pielāgot šo melnrakstu”. Katrai izmaiņai norādiet iemeslu. Pēc rēķina sagatavošanas to vairs nevar pielāgot.",
+  "How do I fix a wrong invoice status?": "Kā labot nepareizu rēķina statusu?",
+  "Open the invoice. Use the Override status panel. Choose the correct status and enter a reason. The system records the change in the audit log. The list always offers DRAFT, PREPARED, and OVERDUE. It offers SENT only if the invoice was sent, and PAID only if the invoice is paid.":
+    "Atveriet rēķinu. Izmantojiet paneli “Aizstāt statusu”. Izvēlieties pareizo statusu un ievadiet iemeslu. Sistēma reģistrē izmaiņu audita žurnālā. Sarakstā vienmēr tiek piedāvāts “Melnraksts”, “Sagatavots” un “Kavēts”. “Nosūtīts” tiek piedāvāts tikai tad, ja rēķins tika nosūtīts, un “Apmaksāts” tikai tad, ja rēķins ir apmaksāts.",
+  "How do I disable a resident's access?": "Kā atspējot iedzīvotāja piekļuvi?",
+  "Open the dwelling. Click Disable next to the resident. The resident cannot access the system until you click Enable. You cannot disable an administrator or a resident who has access to another organization.":
+    "Atveriet īpašumu. Nospiediet “Atspējot” blakus iedzīvotājam. Iedzīvotājs nevarēs piekļūt sistēmai, līdz nospiedīsiet “Iespējot”. Administratoru vai iedzīvotāju, kuram ir piekļuve citai organizācijai, atspējot nevar.",
+  "What does a resident see on an invoice?": "Ko iedzīvotājs redz rēķinā?",
+  "The resident sees the invoice, the amount that they paid, and the amount that they still owe.":
+    "Iedzīvotājs redz rēķinu, samaksāto summu un summu, kas vēl jāmaksā.",
+  "How do I identify who changed something?": "Kā noskaidrot, kas ko mainījis?",
+  "Open the audit log. Filter by action, entity type, actor, or date. Click Export CSV to download the rows that match. The file holds up to 5,000 rows.":
+    "Atveriet audita žurnālu. Filtrējiet pēc darbības, objekta veida, lietotāja vai datuma. Nospiediet “Eksportēt CSV”, lai lejupielādētu atbilstošās rindas. Failā ir ne vairāk kā 5000 rindu.",
+  Reversed: "Atcelts",
+  Reverse: "Atcelt",
+  "Reason for reversal": "Atcelšanas iemesls",
+  "Reverse payment": "Atcelt maksājumu",
+  "Reverse this payment? The original payment stays in the history and a cancelling entry is added. The invoice becomes unpaid again.":
+    "Vai atcelt šo maksājumu? Sākotnējais maksājums paliek vēsturē, un tiek pievienots atceļošs ieraksts. Rēķins atkal kļūst neapmaksāts.",
+  "Choose an invoice": "Izvēlieties rēķinu",
+  "Match to invoice": "Piesaistīt rēķinam",
+  "Match this payment to the chosen invoice? The payment is applied right away.":
+    "Vai piesaistīt šo maksājumu izvēlētajam rēķinam? Maksājums tiek piemērots uzreiz.",
+  "Record a payment": "Reģistrēt maksājumu",
+  "Record payment": "Reģistrēt maksājumu",
+  "Use this for a bank transfer that is not in an imported statement. The payment is applied right away.":
+    "Izmantojiet šo bankas pārskaitījumam, kas nav iekļauts importētajā izrakstā. Maksājums tiek piemērots uzreiz.",
+  "Bank reference": "Bankas maksājuma mērķis",
+  "Record this payment? It is applied to the invoice right away.":
+    "Vai reģistrēt šo maksājumu? Tas uzreiz tiek piemērots rēķinam.",
+  "Payment reversed.": "Maksājums atcelts.",
+  "Payment matched.": "Maksājums piesaistīts.",
+  "Payment recorded.": "Maksājums reģistrēts.",
+  "How do I record a payment that is not in a bank statement?":
+    "Kā ievadīt maksājumu, kura nav bankas izrakstā?",
+  "Click Record a payment on the Payments page. Choose the invoice. Enter the amount, date, payer, bank reference, and a reason. The payment applies right away. The app blocks a second entry with the same reference, amount, and date. You can record bank transfers only.":
+    "Maksājumu lapā nospiediet “Reģistrēt maksājumu”. Izvēlieties rēķinu. Ievadiet summu, datumu, maksātāju, bankas atsauci un iemeslu. Maksājums tiek piemērots uzreiz. Lietotne bloķē otru ierakstu ar to pašu atsauci, summu un datumu. Var ievadīt tikai bankas pārskaitījumus.",
+  "How do I undo a payment that I matched to the wrong invoice?":
+    "Kā atcelt maksājumu, ko piesaistīju nepareizam rēķinam?",
+  "Open the Confirmed tab on the Payments page. Click Reverse next to the payment and enter a reason. The original payment stays in the history. The invoice becomes unpaid again. The payment returns to the Unmatched tab. There you can match it to the correct invoice. You cannot reverse a payment if a later invoice already used its credit.":
+    "Maksājumu lapā atveriet cilni “Apstiprināts”. Blakus maksājumam nospiediet “Atcelt” un ievadiet iemeslu. Sākotnējais maksājums paliek vēsturē. Rēķins atkal kļūst neapmaksāts. Maksājums atgriežas cilnē “Nesaskaņots”. Tur to var piesaistīt pareizajam rēķinam. Maksājumu nevar atcelt, ja vēlāks rēķins jau izmantojis tā kredītu.",
+  "The CSV file is too large (up to 2 MB).":
+    "CSV fails ir pārāk liels (līdz 2 MB).",
+  "The CSV file has too many rows (up to 5,000).":
+    "CSV failā ir pārāk daudz rindu (līdz 5 000).",
+  "Too many requests. Try again in a minute.":
+    "Pārāk daudz pieprasījumu. Mēģiniet vēlreiz pēc minūtes.",
+  "An explanation is required when reason is Other":
+    "Ja iemesls ir “Cits”, nepieciešams paskaidrojums",
+  "Late fee cannot be negative": "Nokavējuma maksa nevar būt negatīva",
+  "Invoice not found": "Rēķins nav atrasts",
+  "A prepared or sent invoice cannot have its financial statement changed":
+    "Sagatavotam vai nosūtītam rēķinam nevar mainīt finanšu pārskatu",
+  "Applied late fee cannot exceed the calculated amount":
+    "Piemērotā nokavējuma maksa nevar pārsniegt aprēķināto summu",
+  "A reason is required": "Nepieciešams norādīt iemeslu",
+  "Adjustment amount must be positive": "Korekcijas summai jābūt pozitīvai",
+  "Charges and late fees cannot be negative":
+    "Maksas un nokavējuma maksa nevar būt negatīvas",
+  "Account entry was not created": "Konta ieraksts netika izveidots",
+  "Dwelling not found": "Īpašums nav atrasts",
+  "A late-fee policy already exists for this effective date":
+    "Šim spēkā stāšanās datumam jau pastāv nokavējuma maksas politika",
+  "Organization not found": "Organizācija nav atrasta",
+  "Billing period not found": "Norēķinu periods nav atrasts",
+  "This billing period is locked": "Šis norēķinu periods ir slēgts",
+  "No billing case exists for this dwelling in this period":
+    "Šim īpašumam šajā periodā nav norēķinu ieraksta",
+  "This dwelling has missing data for this period and cannot be invoiced yet":
+    "Šim īpašumam trūkst datu šajā periodā, un tam vēl nevar izrakstīt rēķinu",
+  "No billing rules apply to this dwelling for this period":
+    "Šim īpašumam šajā periodā nav piemērojams neviens norēķinu noteikums",
+  "This invoice has already been sent and can no longer be regenerated; issue a correction document instead":
+    "Šis rēķins jau ir nosūtīts, un to vairs nevar pārrēķināt; tā vietā izrakstiet korekcijas dokumentu",
+  "This invoice has already moved past DRAFT and can no longer be regenerated":
+    "Šis rēķins jau ir pārsniedzis statusu “Melnraksts”, un to vairs nevar pārrēķināt",
+  "Only a DRAFT invoice can be prepared":
+    "Sagatavot var tikai rēķinu statusā “Melnraksts”",
+  "Issuer details are incomplete; update organization settings before preparing":
+    "Izrakstītāja dati nav pilnīgi; pirms sagatavošanas atjauniniet organizācijas iestatījumus",
+  "This dwelling is missing a billing/occupant name or a billing address":
+    "Šim īpašumam trūkst norēķinu/iemītnieka vārda vai norēķinu adreses",
+  "Organization payment details are incomplete (both bank name and IBAN are required)":
+    "Organizācijas maksājuma dati nav pilnīgi (nepieciešams gan bankas nosaukums, gan IBAN)",
+  "A reason is required for a manual status override":
+    "Manuālai statusa aizstāšanai nepieciešams norādīt iemeslu",
+  "Billing case not found": "Norēķinu ieraksts nav atrasts",
+  "A case can be set to Sent only when its invoice was sent":
+    "Ieraksta statusu var iestatīt uz “Nosūtīts” tikai tad, ja tā rēķins tika nosūtīts",
+  "A case can be set to Paid only when its invoice is paid":
+    "Ieraksta statusu var iestatīt uz “Apmaksāts” tikai tad, ja tā rēķins ir apmaksāts",
+  "A case that already has an invoice cannot go back to Missing data or Ready":
+    "Ieraksts, kuram jau ir rēķins, nevar atgriezties statusā “Trūkst datu” vai “Gatavs”",
+  "Invalid or expired invoice link": "Nederīga vai beigusies rēķina saite",
+  "A meter consumption rule requires a meter type":
+    "Skaitītāja patēriņa noteikumam nepieciešams skaitītāja veids",
+  "This rule requires a unit price (it would otherwise always bill 0)":
+    "Šim noteikumam nepieciešama vienības cena (citādi tas vienmēr aprēķinātu 0)",
+  "A rule that applies to all dwellings cannot also have specific dwelling assignments":
+    "Noteikumam, kas attiecas uz visiem īpašumiem, nevar vienlaikus piešķirt konkrētus īpašumus",
+  "A one-to-one rule must be assigned to exactly one dwelling":
+    "Noteikumam “viens pret vienu” jābūt piesaistītam tieši vienam īpašumam",
+  "A selected-dwellings rule must be assigned to at least one dwelling":
+    "Izvēlēto īpašumu noteikumam jābūt piesaistītam vismaz vienam īpašumam",
+  "One or more selected dwellings do not belong to this organization":
+    "Viens vai vairāki izvēlētie īpašumi nepieder šai organizācijai",
+  "Billing rule not found": "Norēķinu noteikums nav atrasts",
+  "Invoice send attempt not found": "Rēķina nosūtīšanas mēģinājums nav atrasts",
+  "This dwelling has no electronic delivery method enabled; use Record paper dispatch instead.":
+    "Šim īpašumam nav ieslēgts neviens elektroniskās piegādes veids; tā vietā izmantojiet “Reģistrēt papīra nosūtīšanu”.",
+  "Invoice email is missing. Add a billing email before resending.":
+    "Trūkst rēķina e-pasta adreses. Pievienojiet to pirms atkārtotas nosūtīšanas.",
+  "This invoice has not been sent by email yet; use Send instead.":
+    "Šis rēķins vēl nav nosūtīts pa e-pastu; tā vietā izmantojiet “Nosūtīt”.",
+  "A delivery attempt is currently in progress for this invoice; wait for it to finish before resending.":
+    "Šim rēķinam pašlaik notiek piegādes mēģinājums; pagaidiet, līdz tas beidzas, pirms sūtāt atkārtoti.",
+  "Paper delivery is not enabled for this dwelling":
+    "Šim īpašumam nav iespējota papīra piegāde",
+  "SEPA QR codes are EUR-only": "SEPA QR kodi ir paredzēti tikai EUR",
+  "A BIC is required to generate a SEPA QR code":
+    "Lai ģenerētu SEPA QR kodu, nepieciešams BIC",
+  "Invalid BIC": "Nederīgs BIC",
+  "Invalid IBAN": "Nederīgs IBAN",
+  "Amount is out of the SEPA QR's representable range":
+    "Summa ir ārpus SEPA QR koda pieļaujamā diapazona",
+  "A beneficiary name is required": "Nepieciešams norādīt saņēmēja nosaukumu",
+  "Beneficiary name exceeds the SEPA QR's 70-character limit":
+    "Saņēmēja nosaukums pārsniedz SEPA QR koda 70 rakstzīmju ierobežojumu",
+  "Remittance information exceeds the SEPA QR's 140-character limit":
+    "Maksājuma informācija pārsniedz SEPA QR koda 140 rakstzīmju ierobežojumu",
+  "SEPA QR payload exceeds the 331-byte limit":
+    "SEPA QR koda dati pārsniedz 331 baita ierobežojumu",
+  "Conversation not found": "Saruna nav atrasta",
+  "This request key was already used":
+    "Šī pieprasījuma atslēga jau tika izmantota",
+  "Select at least one invoice delivery method (email or paper)":
+    "Izvēlieties vismaz vienu rēķina piegādes veidu (e-pastu vai papīru)",
+  "The original item is no longer present":
+    "Sākotnējais vienums vairs nepastāv",
+  "The original access grant is no longer present":
+    "Sākotnējās piekļuves tiesības vairs nepastāv",
+  "You cannot disable your own account": "Jūs nevarat atspējot savu kontu",
+  "Resident not found": "Iedzīvotājs nav atrasts",
+  "This person also has access in another organization, so you cannot disable the account":
+    "Šai personai ir piekļuve arī citā organizācijā, tāpēc jūs nevarat atspējot kontu",
+  "Administrators cannot be disabled here. Remove the administrator on the Users page":
+    "Administratorus šeit nevar atspējot. Noņemiet administratoru lapā “Lietotāji un piekļuve”",
+  "The original meter is no longer present":
+    "Sākotnējais skaitītājs vairs nepastāv",
+  "Meter not found": "Skaitītājs nav atrasts",
+  "An archived meter cannot be edited": "Arhivētu skaitītāju nevar rediģēt",
+  "The unit cannot change after readings exist. Archive this meter and add a new one.":
+    "Mērvienību nevar mainīt, ja skaitītājam jau ir rādījumi. Arhivējiet šo skaitītāju un pievienojiet jaunu.",
+  "Auto-send day is required when auto-send is enabled":
+    "Ja ir ieslēgta automātiskā nosūtīšana, ir jānorāda automātiskās nosūtīšanas diena",
+  "Cannot remove the last admin of an organization":
+    "Nevar noņemt organizācijas pēdējo administratoru",
+  "This file has already been imported for this organization.":
+    "Šis fails šai organizācijai jau ir importēts.",
+  "Bank import not found": "Bankas imports nav atrasts",
+  "Bank transaction not found": "Bankas darījums nav atrasts",
+  "This payment is already matched": "Šis maksājums jau ir piesaistīts",
+  "This payment was reversed from this invoice. Choose a different invoice":
+    "Šis maksājums tika atcelts no šī rēķina. Izvēlieties citu rēķinu",
+  "This invoice cannot receive a payment": "Šis rēķins nevar saņemt maksājumu",
+  "This invoice is already fully allocated":
+    "Šis rēķins jau ir pilnībā piesaistīts",
+  "Amount must be greater than 0": "Summai jābūt lielākai par 0",
+  "Enter a valid booking date (YYYY-MM-DD)":
+    "Ievadiet derīgu grāmatošanas datumu (YYYY-MM-DD)",
+  "Reference must be between 1 and 140 characters":
+    "Atsaucei jābūt no 1 līdz 140 rakstzīmēm",
+  "Payer name must be up to 140 characters":
+    "Maksātāja vārdam jābūt līdz 140 rakstzīmēm",
+  "A reason is required (up to 500 characters)":
+    "Nepieciešams norādīt iemeslu (līdz 500 rakstzīmēm)",
+  "Booking date cannot be in the future":
+    "Grāmatošanas datums nevar būt nākotnē",
+  "A payment with this reference, amount, and date already exists":
+    "Maksājums ar šādu atsauci, summu un datumu jau pastāv",
+  "Payment match not found": "Maksājuma piesaiste nav atrasta",
+  "This match was rejected and cannot be confirmed":
+    "Šī piesaiste tika noraidīta, un to nevar apstiprināt",
+  "This payment is already applied to another invoice":
+    "Šis maksājums jau ir piemērots citam rēķinam",
+  "This invoice is already paid": "Šis rēķins jau ir apmaksāts",
+  "This match has already been confirmed and cannot be rejected":
+    "Šī piesaiste jau ir apstiprināta, un to nevar noraidīt",
+  "Only a confirmed payment can be reversed":
+    "Atcelt var tikai apstiprinātu maksājumu",
+  "The credit from this payment was already used on a later invoice. Fix the balance with an adjustment":
+    "Šī maksājuma kredīts jau tika izmantots vēlākā rēķinā. Izlabojiet atlikumu ar korekciju",
+  "Value must be a non-negative number with at most 4 decimal places":
+    "Vērtībai jābūt nenegatīvam skaitlim ar ne vairāk kā 4 zīmēm aiz komata",
+  "Current value must be a non-negative number with at most 3 decimal places":
+    "Pašreizējai vērtībai jābūt nenegatīvam skaitlim ar ne vairāk kā 3 zīmēm aiz komata",
+  "The reading deadline for this period has passed":
+    "Šī perioda rādījumu iesniegšanas termiņš ir pagājis",
+  "Cannot record a reading for an archived meter":
+    "Nevar reģistrēt rādījumu arhivētam skaitītājam",
+  "Cannot edit this reading: a later billing period already recorded a reading for this meter":
+    "Šo rādījumu nevar rediģēt: vēlākā norēķinu periodā šim skaitītājam jau ir reģistrēts rādījums",
+  "What's this about?": "Par ko ir runa?",
+  "The previous delivery attempt's outcome could not be confirmed. Verify whether the invoice was actually delivered, then use Resend if it needs to go out again.":
+    "Iepriekšējā piegādes mēģinājuma rezultātu nevarēja apstiprināt. Pārbaudiet, vai rēķins tika piegādāts, un, ja tas jānosūta vēlreiz, izmantojiet “Nosūtīt atkārtoti”.",
+  "Invoices prepared by the end of this day are sent on this day. The app tries a failed send again on the next days.":
+    "Rēķini, kas sagatavoti līdz šīs dienas beigām, tiek nosūtīti šajā dienā. Neizdevušos sūtīšanu lietotne mēģina atkārtot nākamajās dienās.",
+  "This email address bounced or reported a complaint. Change the billing email or remove it from the suppressed list":
+    "Uz šo e-pasta adresi vēstules neizdodas nogādāt, vai par to ir saņemta sūdzība. Nomainiet norēķinu e-pastu vai noņemiet adresi no bloķēto saraksta",
+  "Suppressed address not found": "Bloķētā adrese nav atrasta",
+  "Suppressed email addresses": "Bloķētās e-pasta adreses",
+  "Addresses that bounced or reported a complaint.":
+    "Adreses, uz kurām vēstules neizdevās nogādāt vai par kurām saņemta sūdzība.",
+  "Invoices are not sent to these addresses. The email provider reported a permanent bounce or a complaint. Remove an address after you fix the problem.":
+    "Uz šīm adresēm rēķini netiek sūtīti. E-pasta pakalpojuma sniedzējs ziņoja par pastāvīgu piegādes kļūdu vai sūdzību. Noņemiet adresi pēc tam, kad esat novērsis problēmu.",
+  "Address removed.": "Adrese noņemta.",
+  "No suppressed email addresses.": "Nav bloķētu e-pasta adrešu.",
+  "Email address": "E-pasta adrese",
+  Added: "Pievienots",
+  Bounce: "Piegādes kļūda",
+  Complaint: "Sūdzība",
+  "Remove this address from the suppressed list? Invoices can be sent to it again.":
+    "Noņemt šo adresi no bloķēto saraksta? Uz to atkal varēs sūtīt rēķinus.",
+  "Remove from list": "Noņemt no saraksta",
+  "Only an incoming payment can be applied to an invoice":
+    "Rēķinam var piemērot tikai ienākošu maksājumu",
+  "Administrators sign in with a password. Use the Admin sign in form on this page.":
+    "Administratori piesakās ar paroli. Izmantojiet šajā lapā administratora pieteikšanās veidlapu.",
+  "Request ID": "Pieprasījuma ID",
+  "Audit log entries": "Audita žurnāla ieraksti",
+  "Billing rules": "Norēķinu noteikumi",
+  "Dwellings to import": "Importējamie īpašumi",
+  "Imported payments": "Importētie maksājumi",
+  "Payment matches": "Maksājumu atbilstības",
+  "Payments to import": "Importējamie maksājumi",
+  "Unmatched payments": "Nesaskaņotie maksājumi",
+  "What happens when an invoice email bounces?":
+    "Kas notiek, ja rēķina e-pasts netiek piegādāts?",
+  "The email provider tells the app about a permanent bounce or a complaint. The app adds the address to the suppressed list and sends no more invoices to it. Open Settings, then Suppressed email addresses. Fix the billing email, or remove the address from the list.":
+    "E-pasta pakalpojuma sniedzējs paziņo lietotnei par pastāvīgu piegādes kļūdu vai sūdzību. Lietotne pievieno adresi bloķēto sarakstam un vairs nesūta uz to rēķinus. Atveriet “Iestatījumi”, pēc tam “Bloķētās e-pasta adreses”. Izlabojiet norēķinu e-pastu vai noņemiet adresi no saraksta.",
+  "Why does a sign-in link not work for me as an administrator?":
+    "Kāpēc pieteikšanās saite man nedarbojas kā administratoram?",
+  "Administrators sign in with a password. Use the Admin sign in form. A sign-in link works for residents only. Click Forgot password? if you do not know your password.":
+    "Administratori piesakās ar paroli. Izmantojiet “Administratora pieteikšanās” veidlapu. Pieteikšanās saite darbojas tikai iedzīvotājiem. Ja nezināt paroli, nospiediet “Aizmirsāt paroli?”.",
+  "This organization is archived. Restore it in Settings to make changes.":
+    "Šī organizācija ir arhivēta. Lai veiktu izmaiņas, atjaunojiet to iestatījumos.",
+  "A reason of 1 to 500 characters is required":
+    "Nepieciešams iemesls no 1 līdz 500 rakstzīmēm",
+  "This organization is closed": "Šī organizācija ir slēgta",
+  "Your property manager has closed this account. You cannot see invoices or send messages here. Contact your property manager for help.":
+    "Jūsu īpašuma pārvaldnieks ir slēdzis šo kontu. Šeit nevar skatīt rēķinus vai sūtīt ziņas. Vērsieties pēc palīdzības pie sava īpašuma pārvaldnieka.",
+  "This organization is archived. You can read it but not change it. Residents cannot sign in. Restore it in Settings > Organization.":
+    "Šī organizācija ir arhivēta. To var lasīt, bet nevar mainīt. Iedzīvotāji nevar pieteikties. Atjaunojiet to sadaļā Iestatījumi > Organizācija.",
+  "Archive organization": "Arhivēt organizāciju",
+  "Restore organization": "Atjaunot organizāciju",
+  "This organization is archived. Restore it to make changes and to let residents sign in again.":
+    "Šī organizācija ir arhivēta. Atjaunojiet to, lai veiktu izmaiņas un ļautu iedzīvotājiem atkal pieteikties.",
+  "Archiving makes this organization read-only. Residents cannot sign in and their invoice links stop working. You can restore it later.":
+    "Arhivēšana padara šo organizāciju tikai lasāmu. Iedzīvotāji nevar pieteikties, un viņu rēķinu saites pārstāj darboties. Vēlāk to var atjaunot.",
+  "Archive this organization? Residents cannot sign in until you restore it.":
+    "Arhivēt šo organizāciju? Iedzīvotāji nevarēs pieteikties, kamēr to neatjaunosiet.",
+  "What can a resident change in the portal?":
+    "Ko iedzīvotājs var mainīt portālā?",
+  "A resident can change the display name on the Profile page. The email address cannot change. To use a new address, add the resident again with the new address. A resident can also click Download my data on the Profile page. The Payment history page shows each payment and each reversal. It does not show the payer name, the bank account, the reference, or the reason for a reversal.":
+    "Iedzīvotājs var mainīt attēlojamo vārdu lapā “Profils”. E-pasta adresi mainīt nevar. Lai lietotu jaunu adresi, pievienojiet iedzīvotāju vēlreiz ar jauno adresi. Iedzīvotājs lapā “Profils” var arī nospiest “Lejupielādēt manus datus”. Lapa “Maksājumu vēsture” rāda katru maksājumu un katru atcelšanu. Tā nerāda maksātāja vārdu, bankas kontu, atsauci vai atcelšanas iemeslu.",
+  "How do I download the data that the app holds about a resident?":
+    "Kā lejupielādēt datus, ko lietotne glabā par iedzīvotāju?",
+  "Open the dwelling page. Find the resident and click Export data. The app downloads one JSON file. The file has the data of this person in your organization: the dwelling details, sent invoices, payments, account entries, meter readings, messages, and the actions of the person in the app. It does not have bank account numbers, the email addresses of other people, or the data of dwellings that the person cannot use. The app writes an audit event for each download.":
+    "Atveriet īpašuma lapu. Atrodiet iedzīvotāju un nospiediet “Eksportēt datus”. Lietotne lejupielādē vienu JSON failu. Failā ir šīs personas dati jūsu organizācijā: īpašuma dati, nosūtītie rēķini, maksājumi, konta ieraksti, skaitītāju rādījumi, ziņas un personas darbības lietotnē. Failā nav bankas kontu numuru, citu personu e-pasta adrešu un to īpašumu datu, kuriem persona nevar piekļūt. Lietotne katrai lejupielādei ieraksta audita notikumu.",
+  "How do I archive an organization?": "Kā arhivēt organizāciju?",
+  "Open Settings, then Organization. In the Archive organization box, enter a reason and click Archive organization. Confirm the message. The organization becomes read-only. You can read every page, but you cannot change anything. Residents cannot sign in. The links in old invoice emails stop working. The scheduled jobs stop. The app does not delete any data.":
+    "Atveriet “Iestatījumi”, pēc tam “Organizācija”. Lodziņā “Arhivēt organizāciju” ievadiet iemeslu un nospiediet “Arhivēt organizāciju”. Apstipriniet ziņojumu. Organizācija kļūst tikai lasāma. Varat skatīt visas lapas, bet neko nevarat mainīt. Iedzīvotāji nevar pieteikties. Saites vecajos rēķinu e-pastos pārstāj darboties. Ieplānotie darbi apstājas. Lietotne neizdzēš nekādus datus.",
+  "How do I restore an archived organization?":
+    "Kā atjaunot arhivētu organizāciju?",
+  "Open Settings, then Organization. Click Restore organization. The organization works as before. Residents can sign in again. The links in old invoice emails work again.":
+    "Atveriet “Iestatījumi”, pēc tam “Organizācija”. Nospiediet “Atjaunot organizāciju”. Organizācija darbojas kā iepriekš. Iedzīvotāji atkal var pieteikties. Saites vecajos rēķinu e-pastos atkal darbojas.",
+  "Person not found": "Persona nav atrasta",
+  "Payment history": "Maksājumu vēsture",
+  "No payments yet.": "Maksājumu vēl nav.",
+  "Display name": "Attēlojamais vārds",
+  "Enter a name of 1 to 100 characters.":
+    "Ievadiet vārdu no 1 līdz 100 rakstzīmēm.",
+  "Export data": "Eksportēt datus",
+  "Your data": "Jūsu dati",
+  "Download a copy of the data this service holds about you, as a JSON file.":
+    "Lejupielādējiet savu datu kopiju, ko šis pakalpojums glabā par jums, kā JSON failu.",
+  "Download my data": "Lejupielādēt manus datus",
   "All changes saved": "Visas izmaiņas saglabātas",
   "Send this invoice to the resident by email now? Sent invoices cannot be edited.":
     "Vai nosūtīt šo rēķinu iedzīvotājam pa e-pastu tagad? Nosūtītos rēķinus nevar rediģēt.",
@@ -972,18 +1341,26 @@ const lv: Record<string, string> = {
   ongoing: "līdz šim",
 
   // Added: translation coverage pass 2 (guide setup/monthly steps, faqs, statuses; dashboard ternaries)
-  "Add the legal name, address, contact details, bank name, and IBAN used on invoices.":
-    "Pievienojiet juridisko nosaukumu, adresi, kontaktinformāciju, bankas nosaukumu un IBAN, ko izmanto rēķinos.",
+  "Add the legal name, address, contact details, bank name, IBAN, registration number, and VAT number used on invoices.":
+    "Pievienojiet juridisko nosaukumu, adresi, kontaktinformāciju, bankas nosaukumu, IBAN, reģistrācijas numuru un PVN numuru, ko izmanto rēķinos.",
   "Ready when the invoice issuer and payment details are complete.":
     "Gatavs, kad rēķina izdevēja un maksājuma dati ir pilnīgi.",
-  "Create dwellings one at a time, or import them from a CSV file. Check each number, type, occupant, area, and resident count.":
-    "Izveidojiet mājokļus pa vienam vai importējiet tos no CSV faila. Pārbaudiet katru numuru, tipu, īpašnieku, platību un iedzīvotāju skaitu.",
+  "Click Create dwelling to add one dwelling, or import a CSV file for many. Check each number, type, occupant, area, and resident count. A new dwelling joins every currently open billing period.":
+    "Spiediet Izveidot mājokli, lai pievienotu vienu mājokli, vai importējiet CSV failu vairākiem. Pārbaudiet katru numuru, tipu, īpašnieku, platību un iedzīvotāju skaitu. Jauns mājoklis tiek iekļauts katrā pašlaik atvērtajā norēķinu periodā.",
+  "Open tariffs & rules": "Atvērt tarifus un noteikumus",
+  "Why do some actions ask me to confirm?":
+    "Kāpēc dažas darbības prasa apstiprinājumu?",
+  "The Send, Resend, Revoke access link, and Record paper dispatch actions require confirmation. The Archive, Remove, Disable, Override status, Confirm payment, Reverse payment, Match to invoice, and Record payment actions also require confirmation. Confirmation helps prevent changes that are difficult to undo.":
+    "Rēķina nosūtīšanai un atkārtotai nosūtīšanai, piekļuves saites atsaukšanai un papīra nosūtīšanas reģistrēšanai ir nepieciešams apstiprinājums. Apstiprinājums ir nepieciešams arī arhivēšanai, noņemšanai, atspējošanai, statusa aizstāšanai, maksājuma apstiprināšanai, maksājuma atcelšanai, piesaistīšanai rēķinam un maksājuma reģistrēšanai. Tas palīdz nepieļaut grūti atsaucamas izmaiņas.",
+  "What if I forget my password?": "Ko darīt, ja aizmirstu paroli?",
+  "Click Forgot password? on the sign-in page. Enter your email address. Follow the link in the email to set a new password.":
+    "Pieteikšanās lapā spiediet Aizmirsu paroli. Ievadiet savu e-pasta adresi. Sekojiet e-pastā saņemtajai saitei, lai iestatītu jaunu paroli.",
   "Ready when every billable unit appears in the dwelling list.":
     "Gatavs, kad visas rēķināmās vienības ir redzamas mājokļu sarakstā.",
   "Dwelling list with filters and dwelling details.":
     "Mājokļu saraksts ar filtriem un mājokļu datiem.",
-  "Open each dwelling. Assign resident access. Add billing contact details. Register its meters.":
-    "Atveriet katru mājokli. Piešķiriet iedzīvotāja piekļuvi. Pievienojiet rēķinu kontaktinformāciju. Reģistrējiet tā skaitītājus.",
+  "Open each dwelling. Assign resident access. Add billing contact details. Register its meters. You can edit a meter later, but you cannot change its unit of measurement after a reading exists.":
+    "Atveriet katru īpašumu. Piešķiriet iedzīvotājam piekļuvi. Pievienojiet norēķinu kontaktinformāciju. Reģistrējiet īpašuma skaitītājus. Skaitītāju var rediģēt arī vēlāk, bet pēc pirmā rādījuma ievadīšanas tā mērvienību mainīt nevar.",
   "Ready when residents can access their dwelling and all meters are listed.":
     "Gatavs, kad iedzīvotāji var piekļūt savam mājoklim un visi skaitītāji ir uzskaitīti.",
   "Dwelling detail page with resident access and meter registration.":
@@ -993,26 +1370,26 @@ const lv: Record<string, string> = {
     "Pievienojiet rēķinu noteikumus, kas nosaka fiksētas, platības, iedzīvotāju skaita vai skaitītāju patēriņa maksas.",
   "Tariffs and rules list with rule details.":
     "Tarifu un noteikumu saraksts ar noteikumu datiem.",
-  "Set the billing window, reading deadline, invoice issue date, and due date. A new period creates a case for each active dwelling.":
-    "Iestatiet rēķinu periodu, rādījumu iesniegšanas termiņu, rēķina izdošanas datumu un apmaksas termiņu. Jauns periods izveido lietu katram aktīvajam mājoklim.",
+  "Set the billing window, reading deadline, invoice issue date, and due date. A new period creates a case for each active dwelling. Residents can submit readings through the deadline date in the organization time zone. Administrators can enter readings later.":
+    "Iestatiet norēķinu periodu, rādījumu iesniegšanas termiņu, rēķina izdošanas datumu un apmaksas termiņu. Jauns periods izveido lietu katram aktīvajam īpašumam. Iedzīvotāji var iesniegt rādījumus līdz termiņa dienas beigām pēc organizācijas laika. Administratori var ievadīt rādījumus arī vēlāk.",
   "Ready when the new OPEN period appears in the period list.":
     "Gatavs, kad jaunais ATVĒRTAIS periods parādās periodu sarakstā.",
   "Billing period list and period actions.":
     "Rēķinu periodu saraksts un periodu darbības.",
   "Use the dashboard attention list or the monthly workbench to find missing readings. Residents can also submit readings when allowed.":
     "Izmantojiet informācijas paneļa uzmanības sarakstu vai ikmēneša darbvirsmu, lai atrastu trūkstošos rādījumus. Iedzīvotāji var arī iesniegt rādījumus, ja tas ir atļauts.",
-  "Generate eligible invoices in the workbench. Review the calculation lines, recipient details, dates, and totals.":
-    "Ģenerējiet atbilstošos rēķinus darbvietā. Pārskatiet aprēķina rindas, saņēmēja datus, datumus un kopsummas.",
+  "Generate eligible invoices in the workbench. Review the calculation lines, recipient details, dates, and totals. You can waive the late fee or add a manual adjustment only before you prepare a DRAFT invoice.":
+    "Ģenerējiet atbilstošos rēķinus darbvietā. Pārskatiet aprēķina rindas, saņēmēja datus, datumus un kopsummas. Nokavējuma maksu var atcelt vai pievienot manuālu korekciju tikai pirms rēķina ar statusu “Melnraksts” sagatavošanas.",
   "Ready when correct invoices are in DRAFT and you have fixed all validation blockers.":
     "Gatavs, kad pareizie rēķini ir statusā MELNRAKSTS un visi validācijas šķēršļi ir novērsti.",
   "Monthly workbench with the billing workflow and case list.":
     "Ikmēneša darbvirsma ar rēķinu darbplūsmu un lietu sarakstu.",
-  "Prepare approved drafts. Send the prepared invoices. Delivery moves each case to SENT and locks the invoice.":
-    "Sagatavojiet apstiprinātos melnrakstus. Nosūtiet sagatavotos rēķinus. Piegāde pārvieto katru lietu uz statusu NOSŪTĪTS un bloķē rēķinu.",
+  "Prepare approved drafts. Send the prepared invoices. Delivery moves each case to SENT and locks the invoice. With automatic sending on, the app sends the invoices that you prepared by the end of the send day. It tries again on the next days if a send fails.":
+    "Sagatavojiet apstiprinātos melnrakstus. Nosūtiet sagatavotos rēķinus. Piegāde pārvieto katru lietu uz statusu NOSŪTĪTS un bloķē rēķinu. Ja automātiskā sūtīšana ir ieslēgta, lietotne nosūta rēķinus, kurus esat sagatavojis līdz sūtīšanas dienas beigām. Ja sūtīšana neizdodas, tā mēģina vēlreiz nākamajās dienās.",
   "Ready when sent invoices show SENT, or show a clear delivery error to fix.":
     "Gatavs, kad nosūtītie rēķini rāda statusu NOSŪTĪTS vai skaidru piegādes kļūdu, kas jālabo.",
-  "Import a bank statement. Check the preview. Confirm the import. Review proposed or unmatched transactions.":
-    "Importējiet bankas izrakstu. Pārbaudiet priekšskatījumu. Apstipriniet importu. Pārskatiet piedāvātos vai nesaskaņotos darījumus.",
+  "Import a bank statement. Check the preview. Confirm the import. Review proposed or unmatched payments. Use the search box and date fields to find a payment in the selected view. You can also record a payment by hand, reverse a wrong payment, or match an unmatched payment.":
+    "Importējiet bankas izrakstu. Pārbaudiet priekšskatījumu. Apstipriniet importu. Pārskatiet piedāvātos vai nesaskaņotos maksājumus. Izmantojiet meklēšanas lauku un datumu laukus, lai izvēlētajā skatā atrastu maksājumu. Varat arī ievadīt maksājumu manuāli, atcelt kļūdainu maksājumu vai piesaistīt nesaskaņotu maksājumu rēķinam.",
   "Ready when you have confirmed valid matches and the matching invoices show PAID.":
     "Gatavs, kad esat apstiprinājis derīgas atbilstības un attiecīgie rēķini rāda statusu APMAKSĀTS.",
   "Review resident messages, overdue invoices, unmatched payments, and delivery failures. Resolve each conversation once its issue is fixed.":
@@ -1021,27 +1398,27 @@ const lv: Record<string, string> = {
     "Gatavs, kad katram uzmanības vienumam ir atbildīgā persona vai tas ir atrisināts.",
   "Messages inbox with a resident conversation open.":
     "Ziņu iesūtne ar atvērtu sarunu ar iedzīvotāju.",
-  "MISSING DATA means a required input is missing. READY means all required readings are in. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.":
-    "MISSING DATA nozīmē, ka trūkst nepieciešamās informācijas. READY nozīmē, ka visi nepieciešamie rādījumi ir ievadīti. DRAFT nozīmē, ka joprojām varat to pārskatīt un no jauna ģenerēt. PREPARED nozīmē, ka rēķins ir apstiprināts un gatavs nosūtīšanai. SENT nozīmē, ka piegāde bija sekmīga. OVERDUE nozīmē, ka apmaksas termiņš ir pagājis un rēķins nav apmaksāts. PAID nozīmē, ka rēķins ir pilnībā apmaksāts.",
+  "MISSING DATA means a required input is missing. READY means all required inputs are in. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.":
+    "MISSING DATA nozīmē, ka trūkst nepieciešamās informācijas. READY nozīmē, ka visi nepieciešamie dati ir ievadīti. DRAFT nozīmē, ka joprojām varat to pārskatīt un no jauna ģenerēt. PREPARED nozīmē, ka rēķins ir apstiprināts un gatavs nosūtīšanai. SENT nozīmē, ka piegāde bija sekmīga. OVERDUE nozīmē, ka apmaksas termiņš ir pagājis un rēķins nav apmaksāts. PAID nozīmē, ka rēķins ir pilnībā apmaksāts.",
   "Why can I not generate an invoice?": "Kāpēc nevaru ģenerēt rēķinu?",
-  "The system blocks generation when required readings are missing or the period is locked. Open the affected dwelling in the workbench to see what is missing.":
-    "Sistēma bloķē ģenerēšanu, ja trūkst nepieciešamo rādījumu vai periods ir bloķēts. Atveriet attiecīgo mājokli darbvietā, lai redzētu, kas trūkst.",
+  "The system blocks generation when required inputs are missing or the period is locked. Open the affected dwelling in the workbench to see what is missing.":
+    "Sistēma bloķē ģenerēšanu, ja trūkst nepieciešamo datu vai periods ir bloķēts. Atveriet attiecīgo mājokli darbvietā, lai redzētu, kas trūkst.",
   "Why can I not prepare an invoice?": "Kāpēc nevaru sagatavot rēķinu?",
   "The invoice must be a DRAFT with complete issuer, recipient, and payment details. Fix the related settings. Regenerate the draft to update its snapshot.":
     "Rēķinam jābūt statusā MELNRAKSTS ar pilnīgiem izdevēja, saņēmēja un maksājuma datiem. Labojiet attiecīgos iestatījumus. Ģenerējiet melnrakstu no jauna, lai atjauninātu tā momentuzņēmumu.",
   "Why can I not send an invoice?": "Kāpēc nevaru nosūtīt rēķinu?",
-  "You can send only PREPARED invoices that have a billing email. If delivery fails, fix the cause, then retry or resend.":
-    "Varat nosūtīt tikai rēķinus statusā PREPARED, kuriem ir rēķinu e-pasts. Ja piegāde neizdodas, novērsiet cēloni un pēc tam mēģiniet vēlreiz vai nosūtiet atkārtoti.",
+  "You can send email to a PREPARED invoice. You can also send it to a SENT, PAID, or OVERDUE invoice that first used paper delivery. The invoice needs a billing email. If delivery fails, fix the cause, then retry or resend.":
+    "Varat nosūtīt e-pastu rēķinam statusā PREPARED. Varat to nosūtīt arī rēķinam statusā SENT, PAID vai OVERDUE, kas vispirms nosūtīts pa pastu. Rēķinam nepieciešams e-pasts. Ja piegāde neizdodas, novērsiet cēloni un pēc tam mēģiniet vēlreiz vai nosūtiet atkārtoti.",
   "No. A sent invoice is a permanent financial record and cannot change. Changes to dwellings, tariffs, or settings apply only to future invoices.":
     "Nē. Nosūtīts rēķins ir pastāvīgs finanšu dokuments, un to nevar mainīt. Izmaiņas mājokļos, tarifos vai iestatījumos attiecas tikai uz turpmākajiem rēķiniem.",
-  "Review its amount, currency, payer, and reference. Leave it unmatched until you find the correct invoice. Do not confirm a match you are not sure about.":
-    "Pārskatiet tā summu, valūtu, maksātāju un atsauci. Atstājiet to nesaskaņotu, līdz atrodat pareizo rēķinu. Neapstipriniet atbilstību, par kuru neesat pārliecināts.",
+  "Review its amount, currency, payer, and reference. When you find the correct invoice, choose it in the Unmatched tab and click Match to invoice. The payment applies right away. Do not match a payment if you are not sure.":
+    "Pārskatiet summu, valūtu, maksātāju un atsauci. Kad atrodat pareizo rēķinu, izvēlieties to cilnē “Nesaskaņots” un nospiediet “Piesaistīt rēķinam”. Maksājums tiek piemērots uzreiz. Nepiesaistiet maksājumu, ja neesat pārliecināts.",
   "Lock a period after its normal reading and invoice work is complete. A locked period stays available for history, but blocks reading edits and invoice regeneration.":
     "Bloķējiet periodu pēc tam, kad parastais rādījumu un rēķinu darbs ir pabeigts. Bloķēts periods paliek pieejams vēsturei, bet neļauj labot rādījumus un no jauna ģenerēt rēķinus.",
   "Required input is missing. Generation is blocked.":
     "Trūkst nepieciešamās informācijas. Ģenerēšana ir bloķēta.",
-  "All required readings are in. You can now generate the invoice.":
-    "Visi nepieciešamie rādījumi ir ievadīti. Tagad varat ģenerēt rēķinu.",
+  "All required inputs are in. You can now generate the invoice.":
+    "Visi nepieciešamie dati ir ievadīti. Tagad varat ģenerēt rēķinu.",
   "You can still review and regenerate the invoice.":
     "Joprojām varat pārskatīt un no jauna ģenerēt rēķinu.",
   "Delivery succeeded.": "Piegāde bija sekmīga.",
@@ -1506,6 +1883,8 @@ const ru: Record<string, string> = {
   Portal: "Портал",
   "Sign out": "Выйти",
   "Switch organization": "Сменить организацию",
+  "Switch to resident view": "Переключиться на вид жильца",
+  "Switch to admin view": "Переключиться на вид администратора",
   Navigation: "Навигация",
   "Skip to content": "Перейти к содержимому",
   Menu: "Меню",
@@ -1687,8 +2066,8 @@ const ru: Record<string, string> = {
   Archive: "Архивировать",
   "Manage dwelling details, occupants and resident access.":
     "Управляйте данными помещений, жильцами и доступом.",
-  "New dwellings are included in future periods. Archive historically billed dwellings to preserve their invoices.":
-    "Новые помещения войдут в будущие периоды. Архивируйте помещения с прошлыми счетами, чтобы сохранить эти счета.",
+  "New dwellings are included in every currently open billing period. Archive historically billed dwellings to preserve their invoices.":
+    "Новые помещения будут включены во все текущие открытые периоды. Архивируйте помещения с прошлыми счетами, чтобы сохранить эти счета.",
   "No dwellings match this filter.":
     "Нет помещений, подходящих под этот фильтр.",
   Previous: "Предыдущая",
@@ -1929,8 +2308,14 @@ const ru: Record<string, string> = {
     "Пароль должен содержать не менее 8 символов.",
   "The password is too long.": "Пароль слишком длинный.",
   "The two passwords do not match.": "Пароли не совпадают.",
-  "The password could not be changed. Try a different password.":
-    "Не удалось изменить пароль. Попробуйте другой пароль.",
+  "Your new password can't be the same as your old one.":
+    "Новый пароль не должен совпадать со старым.",
+  "This password is too weak. Choose a longer or less predictable one.":
+    "Этот пароль слишком простой. Выберите более длинный и менее предсказуемый пароль.",
+  "Too many attempts. Wait a few minutes and try again.":
+    "Слишком много попыток. Подождите несколько минут и попробуйте снова.",
+  "Something went wrong changing your password. Try again.":
+    "Не удалось изменить пароль. Попробуйте снова.",
   "Choose a new password": "Выберите новый пароль",
   "Use at least 8 characters.": "Используйте не менее 8 символов.",
   "New password": "Новый пароль",
@@ -1942,6 +2327,347 @@ const ru: Record<string, string> = {
   "Click below to choose a new password.":
     "Нажмите ниже, чтобы выбрать новый пароль.",
   Continue: "Продолжить",
+  "Adjust this draft": "Изменить этот черновик",
+  "You can change these amounts until you prepare the invoice.":
+    "Эти суммы можно менять, пока счёт не подготовлен.",
+  "Calculated late fee": "Рассчитанная плата за просрочку",
+  "Applied late fee": "Применённая плата за просрочку",
+  "New late fee amount": "Новая сумма платы за просрочку",
+  "Update late fee": "Обновить плату за просрочку",
+  "Bank processing delay": "Задержка банковской обработки",
+  "Billing dispute": "Спор по счёту",
+  "Meter issue": "Проблема со счётчиком",
+  "Agreement with resident": "Договорённость с жильцом",
+  "Administrative waiver": "Административное списание",
+  "Note (required when the reason is Other)":
+    "Примечание (обязательно, если причина — Другое)",
+  "Adjustment amount": "Сумма корректировки",
+  "A negative amount lowers the amount due.":
+    "Отрицательная сумма уменьшает сумму к оплате.",
+  "Save adjustment": "Сохранить корректировку",
+  "Late fee updated.": "Плата за просрочку обновлена.",
+  "Adjustment saved.": "Корректировка сохранена.",
+  "Override status": "Переопределить статус",
+  "Use this only to correct a status that is wrong. The change is recorded with your reason.":
+    "Используйте это только для исправления неверного статуса. Изменение записывается с указанием вашей причины.",
+  "Change the status of this invoice? This change is recorded in the audit log.":
+    "Изменить статус этого счёта? Это изменение записывается в журнал аудита.",
+  "New status": "Новый статус",
+  "Choose a status": "Выберите статус",
+  "Status changed.": "Статус изменён.",
+  "Installed on": "Дата установки",
+  "Invoice total due": "Итого к оплате по счёту",
+  "Paid so far": "Оплачено на данный момент",
+  "Amount still due": "Осталось оплатить",
+  "All entity types": "Все типы объектов",
+  "All actors": "Все пользователи",
+  "From date": "Дата с",
+  "To date": "Дата по",
+  Enable: "Включить",
+  Disable: "Отключить",
+  "Account disabled": "Аккаунт отключён",
+  "Disable this account? The person cannot sign in until you enable it again.":
+    "Отключить этот аккаунт? Пользователь не сможет войти, пока вы не включите его снова.",
+  "Invoice, reference or payer": "Счёт, назначение платежа или плательщик",
+  "No payments match these filters.":
+    "Нет платежей, подходящих под эти фильтры.",
+  of: "из",
+  "How do I waive a late fee or adjust a draft invoice?":
+    "Как отменить плату за просрочку или изменить черновик счёта?",
+  "Open the DRAFT invoice. Use the Adjust this draft panel. Enter a reason for each change. You cannot adjust an invoice after you prepare it.":
+    "Откройте счёт со статусом «Черновик». Используйте панель «Изменить этот черновик». Укажите причину каждого изменения. После подготовки счёт изменить нельзя.",
+  "How do I fix a wrong invoice status?":
+    "Как исправить неверный статус счёта?",
+  "Open the invoice. Use the Override status panel. Choose the correct status and enter a reason. The system records the change in the audit log. The list always offers DRAFT, PREPARED, and OVERDUE. It offers SENT only if the invoice was sent, and PAID only if the invoice is paid.":
+    "Откройте счёт. Используйте панель «Переопределить статус». Выберите правильный статус и введите причину. Система записывает изменение в журнал аудита. В списке всегда предлагаются «Черновик», «Подготовлен» и «Просрочен». «Отправлен» предлагается, только если счёт был отправлен, а «Оплачен» — только если счёт оплачен.",
+  "How do I disable a resident's access?": "Как отключить доступ жильца?",
+  "Open the dwelling. Click Disable next to the resident. The resident cannot access the system until you click Enable. You cannot disable an administrator or a resident who has access to another organization.":
+    "Откройте помещение. Нажмите «Отключить» рядом с жильцом. Жилец не сможет пользоваться системой, пока вы не нажмёте «Включить». Нельзя отключить администратора или жильца, у которого есть доступ к другой организации.",
+  "What does a resident see on an invoice?": "Что жилец видит в счёте?",
+  "The resident sees the invoice, the amount that they paid, and the amount that they still owe.":
+    "Жилец видит счёт, уплаченную сумму и сумму, которую ещё нужно оплатить.",
+  "How do I identify who changed something?": "Как узнать, кто что изменил?",
+  "Open the audit log. Filter by action, entity type, actor, or date. Click Export CSV to download the rows that match. The file holds up to 5,000 rows.":
+    "Откройте журнал аудита. Фильтруйте по действию, типу объекта, пользователю или дате. Нажмите «Экспорт CSV», чтобы скачать подходящие строки. В файле не более 5000 строк.",
+  Reversed: "Отменён",
+  Reverse: "Отменить",
+  "Reason for reversal": "Причина отмены",
+  "Reverse payment": "Отменить платёж",
+  "Reverse this payment? The original payment stays in the history and a cancelling entry is added. The invoice becomes unpaid again.":
+    "Отменить этот платёж? Исходный платёж останется в истории, и будет добавлена сторнирующая запись. Счёт снова станет неоплаченным.",
+  "Choose an invoice": "Выберите счёт",
+  "Match to invoice": "Привязать к счёту",
+  "Match this payment to the chosen invoice? The payment is applied right away.":
+    "Привязать этот платёж к выбранному счёту? Платёж применяется сразу.",
+  "Record a payment": "Зарегистрировать платёж",
+  "Record payment": "Зарегистрировать платёж",
+  "Use this for a bank transfer that is not in an imported statement. The payment is applied right away.":
+    "Используйте это для банковского перевода, которого нет в импортированной выписке. Платёж применяется сразу.",
+  "Bank reference": "Банковское назначение платежа",
+  "Record this payment? It is applied to the invoice right away.":
+    "Зарегистрировать этот платёж? Он сразу применяется к счёту.",
+  "Payment reversed.": "Платёж отменён.",
+  "Payment matched.": "Платёж привязан.",
+  "Payment recorded.": "Платёж зарегистрирован.",
+  "How do I record a payment that is not in a bank statement?":
+    "Как внести платёж, которого нет в банковской выписке?",
+  "Click Record a payment on the Payments page. Choose the invoice. Enter the amount, date, payer, bank reference, and a reason. The payment applies right away. The app blocks a second entry with the same reference, amount, and date. You can record bank transfers only.":
+    "На странице «Платежи» нажмите «Зарегистрировать платёж». Выберите счёт. Введите сумму, дату, плательщика, банковское назначение платежа и причину. Платёж применяется сразу. Приложение блокирует повторную запись с тем же назначением, суммой и датой. Можно вносить только банковские переводы.",
+  "How do I undo a payment that I matched to the wrong invoice?":
+    "Как отменить платёж, который я сопоставил с неверным счётом?",
+  "Open the Confirmed tab on the Payments page. Click Reverse next to the payment and enter a reason. The original payment stays in the history. The invoice becomes unpaid again. The payment returns to the Unmatched tab. There you can match it to the correct invoice. You cannot reverse a payment if a later invoice already used its credit.":
+    "На странице «Платежи» откройте вкладку «Подтверждён». Нажмите «Отменить» рядом с платежом и введите причину. Исходный платёж остаётся в истории. Счёт снова становится неоплаченным. Платёж возвращается на вкладку «Не сопоставлен». Там его можно сопоставить с нужным счётом. Нельзя отменить платёж, если более поздний счёт уже использовал его кредит.",
+  "The CSV file is too large (up to 2 MB).":
+    "Файл CSV слишком большой (до 2 МБ).",
+  "The CSV file has too many rows (up to 5,000).":
+    "В файле CSV слишком много строк (до 5 000).",
+  "Too many requests. Try again in a minute.":
+    "Слишком много запросов. Попробуйте снова через минуту.",
+  "An explanation is required when reason is Other":
+    "Если причина — «Другое», требуется пояснение",
+  "Late fee cannot be negative":
+    "Плата за просрочку не может быть отрицательной",
+  "Invoice not found": "Счёт не найден",
+  "A prepared or sent invoice cannot have its financial statement changed":
+    "У подготовленного или отправленного счёта нельзя изменить финансовый отчёт",
+  "Applied late fee cannot exceed the calculated amount":
+    "Применённая плата за просрочку не может превышать рассчитанную сумму",
+  "A reason is required": "Необходимо указать причину",
+  "Adjustment amount must be positive":
+    "Сумма корректировки должна быть положительной",
+  "Charges and late fees cannot be negative":
+    "Начисления и плата за просрочку не могут быть отрицательными",
+  "Account entry was not created": "Запись по счёту не была создана",
+  "Dwelling not found": "Помещение не найдено",
+  "A late-fee policy already exists for this effective date":
+    "Для этой даты вступления в силу политика платы за просрочку уже существует",
+  "Organization not found": "Организация не найдена",
+  "Billing period not found": "Расчётный период не найден",
+  "This billing period is locked": "Этот расчётный период закрыт",
+  "No billing case exists for this dwelling in this period":
+    "Для этого помещения в этом периоде нет расчётной записи",
+  "This dwelling has missing data for this period and cannot be invoiced yet":
+    "У этого помещения отсутствуют данные за этот период, и для него пока нельзя выставить счёт",
+  "No billing rules apply to this dwelling for this period":
+    "К этому помещению в этом периоде не применяется ни одно правило расчёта",
+  "This invoice has already been sent and can no longer be regenerated; issue a correction document instead":
+    "Этот счёт уже отправлен, и его больше нельзя пересчитать; оформите вместо этого корректирующий документ",
+  "This invoice has already moved past DRAFT and can no longer be regenerated":
+    "Этот счёт уже прошёл статус «Черновик», и его больше нельзя пересчитать",
+  "Only a DRAFT invoice can be prepared":
+    "Подготовить можно только счёт в статусе «Черновик»",
+  "Issuer details are incomplete; update organization settings before preparing":
+    "Реквизиты организации заполнены не полностью; обновите настройки организации перед подготовкой",
+  "This dwelling is missing a billing/occupant name or a billing address":
+    "У этого помещения отсутствует имя для счетов/жильца или адрес для счетов",
+  "Organization payment details are incomplete (both bank name and IBAN are required)":
+    "Платёжные данные организации не заполнены (требуются и наименование банка, и IBAN)",
+  "A reason is required for a manual status override":
+    "Для ручного переопределения статуса необходимо указать причину",
+  "Billing case not found": "Расчётная запись не найдена",
+  "A case can be set to Sent only when its invoice was sent":
+    "Запись можно перевести в статус «Отправлен» только тогда, когда её счёт был отправлен",
+  "A case can be set to Paid only when its invoice is paid":
+    "Запись можно перевести в статус «Оплачен» только тогда, когда её счёт оплачен",
+  "A case that already has an invoice cannot go back to Missing data or Ready":
+    "Запись, у которой уже есть счёт, нельзя вернуть в статус «Нет данных» или «Готов»",
+  "Invalid or expired invoice link":
+    "Недействительная или истекшая ссылка на счёт",
+  "A meter consumption rule requires a meter type":
+    "Для правила по расходу по счётчику требуется тип счётчика",
+  "This rule requires a unit price (it would otherwise always bill 0)":
+    "Для этого правила требуется цена за единицу (иначе по нему всегда будет начисляться 0)",
+  "A rule that applies to all dwellings cannot also have specific dwelling assignments":
+    "Правило, применяемое ко всем помещениям, не может одновременно иметь привязку к конкретным помещениям",
+  "A one-to-one rule must be assigned to exactly one dwelling":
+    "Правило «один к одному» должно быть назначено ровно одному помещению",
+  "A selected-dwellings rule must be assigned to at least one dwelling":
+    "Правило для выбранных помещений должно быть назначено как минимум одному помещению",
+  "One or more selected dwellings do not belong to this organization":
+    "Одно или несколько выбранных помещений не принадлежат этой организации",
+  "Billing rule not found": "Правило расчёта не найдено",
+  "Invoice send attempt not found": "Попытка отправки счёта не найдена",
+  "This dwelling has no electronic delivery method enabled; use Record paper dispatch instead.":
+    "Для этого помещения не включён ни один электронный способ доставки; используйте вместо этого «Зафиксировать отправку на бумаге».",
+  "Invoice email is missing. Add a billing email before resending.":
+    "Не указана эл. почта для счетов. Добавьте её перед повторной отправкой.",
+  "This invoice has not been sent by email yet; use Send instead.":
+    "Этот счёт ещё не был отправлен по эл. почте; используйте вместо этого «Отправить».",
+  "A delivery attempt is currently in progress for this invoice; wait for it to finish before resending.":
+    "Для этого счёта сейчас выполняется попытка доставки; дождитесь её завершения перед повторной отправкой.",
+  "Paper delivery is not enabled for this dwelling":
+    "Для этого помещения доставка на бумаге не включена",
+  "SEPA QR codes are EUR-only": "SEPA QR-коды поддерживают только EUR",
+  "A BIC is required to generate a SEPA QR code":
+    "Для создания SEPA QR-кода требуется BIC",
+  "Invalid BIC": "Недействительный BIC",
+  "Invalid IBAN": "Недействительный IBAN",
+  "Amount is out of the SEPA QR's representable range":
+    "Сумма выходит за пределы допустимого диапазона SEPA QR",
+  "A beneficiary name is required":
+    "Необходимо указать наименование получателя",
+  "Beneficiary name exceeds the SEPA QR's 70-character limit":
+    "Наименование получателя превышает лимит SEPA QR в 70 символов",
+  "Remittance information exceeds the SEPA QR's 140-character limit":
+    "Информация о платеже превышает лимит SEPA QR в 140 символов",
+  "SEPA QR payload exceeds the 331-byte limit":
+    "Размер данных SEPA QR превышает лимит в 331 байт",
+  "Conversation not found": "Переписка не найдена",
+  "This request key was already used": "Этот ключ запроса уже был использован",
+  "Select at least one invoice delivery method (email or paper)":
+    "Выберите хотя бы один способ доставки счёта (по эл. почте или на бумаге)",
+  "The original item is no longer present":
+    "Исходный элемент больше не существует",
+  "The original access grant is no longer present":
+    "Исходное предоставление доступа больше не существует",
+  "You cannot disable your own account":
+    "Вы не можете отключить свой собственный аккаунт",
+  "Resident not found": "Жилец не найден",
+  "This person also has access in another organization, so you cannot disable the account":
+    "Этот человек также имеет доступ в другой организации, поэтому вы не можете отключить аккаунт",
+  "Administrators cannot be disabled here. Remove the administrator on the Users page":
+    "Администраторов нельзя отключить здесь. Удалите администратора на странице «Пользователи и доступ»",
+  "The original meter is no longer present":
+    "Исходный счётчик больше не существует",
+  "Meter not found": "Счётчик не найден",
+  "An archived meter cannot be edited": "Архивный счётчик нельзя редактировать",
+  "The unit cannot change after readings exist. Archive this meter and add a new one.":
+    "Единицу измерения нельзя изменить, если уже есть показания. Архивируйте этот счётчик и добавьте новый.",
+  "Auto-send day is required when auto-send is enabled":
+    "День автоотправки обязателен, когда включена автоотправка",
+  "Cannot remove the last admin of an organization":
+    "Нельзя удалить последнего администратора организации",
+  "This file has already been imported for this organization.":
+    "Этот файл уже был импортирован для этой организации.",
+  "Bank import not found": "Банковский импорт не найден",
+  "Bank transaction not found": "Банковская операция не найдена",
+  "This payment is already matched": "Этот платёж уже привязан",
+  "This payment was reversed from this invoice. Choose a different invoice":
+    "Этот платёж был отменён для этого счёта. Выберите другой счёт",
+  "This invoice cannot receive a payment":
+    "Этот счёт не может принимать платежи",
+  "This invoice is already fully allocated":
+    "Этот счёт уже полностью распределён",
+  "Amount must be greater than 0": "Сумма должна быть больше 0",
+  "Enter a valid booking date (YYYY-MM-DD)":
+    "Введите корректную дату проводки (YYYY-MM-DD)",
+  "Reference must be between 1 and 140 characters":
+    "Назначение платежа должно содержать от 1 до 140 символов",
+  "Payer name must be up to 140 characters":
+    "Имя плательщика должно содержать до 140 символов",
+  "A reason is required (up to 500 characters)":
+    "Необходимо указать причину (до 500 символов)",
+  "Booking date cannot be in the future":
+    "Дата проводки не может быть в будущем",
+  "A payment with this reference, amount, and date already exists":
+    "Платёж с таким назначением, суммой и датой уже существует",
+  "Payment match not found": "Сопоставление платежа не найдено",
+  "This match was rejected and cannot be confirmed":
+    "Это сопоставление было отклонено и не может быть подтверждено",
+  "This payment is already applied to another invoice":
+    "Этот платёж уже применён к другому счёту",
+  "This invoice is already paid": "Этот счёт уже оплачен",
+  "This match has already been confirmed and cannot be rejected":
+    "Это сопоставление уже подтверждено и не может быть отклонено",
+  "Only a confirmed payment can be reversed":
+    "Отменить можно только подтверждённый платёж",
+  "The credit from this payment was already used on a later invoice. Fix the balance with an adjustment":
+    "Кредит от этого платежа уже был использован в более позднем счёте. Исправьте баланс с помощью корректировки",
+  "Value must be a non-negative number with at most 4 decimal places":
+    "Значение должно быть неотрицательным числом не более чем с 4 знаками после запятой",
+  "Current value must be a non-negative number with at most 3 decimal places":
+    "Текущее значение должно быть неотрицательным числом не более чем с 3 знаками после запятой",
+  "The reading deadline for this period has passed":
+    "Срок подачи показаний для этого периода истёк",
+  "Cannot record a reading for an archived meter":
+    "Нельзя внести показание для архивного счётчика",
+  "Cannot edit this reading: a later billing period already recorded a reading for this meter":
+    "Нельзя отредактировать это показание: в более позднем расчётном периоде уже внесено показание для этого счётчика",
+  "What's this about?": "О чём ваше сообщение?",
+  "The previous delivery attempt's outcome could not be confirmed. Verify whether the invoice was actually delivered, then use Resend if it needs to go out again.":
+    "Результат предыдущей попытки доставки не удалось подтвердить. Проверьте, был ли счёт доставлен, и, если его нужно отправить снова, используйте «Отправить повторно».",
+  "Invoices prepared by the end of this day are sent on this day. The app tries a failed send again on the next days.":
+    "Счета, подготовленные до конца этого дня, отправляются в этот день. Неудачную отправку приложение повторяет в следующие дни.",
+  "This email address bounced or reported a complaint. Change the billing email or remove it from the suppressed list":
+    "На этот адрес эл. почты не удаётся доставить письма, или на него поступила жалоба. Измените эл. почту для счетов или удалите адрес из списка заблокированных",
+  "Suppressed address not found": "Заблокированный адрес не найден",
+  "Suppressed email addresses": "Заблокированные адреса эл. почты",
+  "Addresses that bounced or reported a complaint.":
+    "Адреса, на которые не удалось доставить письма или на которые поступила жалоба.",
+  "Invoices are not sent to these addresses. The email provider reported a permanent bounce or a complaint. Remove an address after you fix the problem.":
+    "На эти адреса счета не отправляются. Почтовый сервис сообщил о постоянной ошибке доставки или о жалобе. Удалите адрес после устранения проблемы.",
+  "Address removed.": "Адрес удалён.",
+  "No suppressed email addresses.": "Нет заблокированных адресов эл. почты.",
+  "Email address": "Адрес эл. почты",
+  Added: "Добавлено",
+  Bounce: "Ошибка доставки",
+  Complaint: "Жалоба",
+  "Remove this address from the suppressed list? Invoices can be sent to it again.":
+    "Удалить этот адрес из списка заблокированных? На него снова можно будет отправлять счета.",
+  "Remove from list": "Удалить из списка",
+  "Only an incoming payment can be applied to an invoice":
+    "К счёту можно применить только входящий платёж",
+  "Administrators sign in with a password. Use the Admin sign in form on this page.":
+    "Администраторы входят с паролем. Используйте форму входа для администраторов на этой странице.",
+  "Request ID": "ID запроса",
+  "Audit log entries": "Записи журнала аудита",
+  "Billing rules": "Правила расчётов",
+  "Dwellings to import": "Помещения для импорта",
+  "Imported payments": "Импортированные платежи",
+  "Payment matches": "Сопоставления платежей",
+  "Payments to import": "Платежи для импорта",
+  "Unmatched payments": "Несопоставленные платежи",
+  "What happens when an invoice email bounces?":
+    "Что происходит, если письмо со счётом не доставлено?",
+  "The email provider tells the app about a permanent bounce or a complaint. The app adds the address to the suppressed list and sends no more invoices to it. Open Settings, then Suppressed email addresses. Fix the billing email, or remove the address from the list.":
+    "Почтовый сервис сообщает приложению о постоянной ошибке доставки или о жалобе. Приложение добавляет адрес в список заблокированных и больше не отправляет на него счета. Откройте «Настройки», затем «Заблокированные адреса эл. почты». Исправьте эл. почту для счетов или удалите адрес из списка.",
+  "Why does a sign-in link not work for me as an administrator?":
+    "Почему ссылка для входа не работает для меня как для администратора?",
+  "Administrators sign in with a password. Use the Admin sign in form. A sign-in link works for residents only. Click Forgot password? if you do not know your password.":
+    "Администраторы входят с паролем. Используйте форму «Вход для администраторов». Ссылка для входа работает только для жильцов. Если вы не знаете пароль, нажмите «Забыли пароль?».",
+  "This organization is archived. Restore it in Settings to make changes.":
+    "Эта организация в архиве. Чтобы вносить изменения, восстановите её в настройках.",
+  "A reason of 1 to 500 characters is required":
+    "Нужна причина длиной от 1 до 500 символов",
+  "This organization is closed": "Эта организация закрыта",
+  "Your property manager has closed this account. You cannot see invoices or send messages here. Contact your property manager for help.":
+    "Ваш управляющий закрыл этот аккаунт. Здесь нельзя просматривать счета или отправлять сообщения. Обратитесь за помощью к своему управляющему.",
+  "This organization is archived. You can read it but not change it. Residents cannot sign in. Restore it in Settings > Organization.":
+    "Эта организация в архиве. Её можно читать, но нельзя менять. Жильцы не могут войти. Восстановите её в разделе «Настройки» > «Организация».",
+  "Archive organization": "Архивировать организацию",
+  "Restore organization": "Восстановить организацию",
+  "This organization is archived. Restore it to make changes and to let residents sign in again.":
+    "Эта организация в архиве. Восстановите её, чтобы вносить изменения и снова разрешить жильцам входить.",
+  "Archiving makes this organization read-only. Residents cannot sign in and their invoice links stop working. You can restore it later.":
+    "Архивирование делает эту организацию доступной только для чтения. Жильцы не могут войти, а ссылки на их счета перестают работать. Позже её можно восстановить.",
+  "Archive this organization? Residents cannot sign in until you restore it.":
+    "Архивировать эту организацию? Жильцы не смогут войти, пока вы её не восстановите.",
+  "What can a resident change in the portal?":
+    "Что жилец может изменить на портале?",
+  "A resident can change the display name on the Profile page. The email address cannot change. To use a new address, add the resident again with the new address. A resident can also click Download my data on the Profile page. The Payment history page shows each payment and each reversal. It does not show the payer name, the bank account, the reference, or the reason for a reversal.":
+    "Жилец может изменить отображаемое имя на странице «Профиль». Адрес электронной почты изменить нельзя. Чтобы использовать новый адрес, добавьте жильца заново с новым адресом. Жилец также может нажать «Скачать мои данные» на странице «Профиль». Страница «История платежей» показывает каждый платёж и каждую отмену. Она не показывает имя плательщика, банковский счёт, назначение платежа и причину отмены.",
+  "How do I download the data that the app holds about a resident?":
+    "Как скачать данные, которые приложение хранит о жильце?",
+  "Open the dwelling page. Find the resident and click Export data. The app downloads one JSON file. The file has the data of this person in your organization: the dwelling details, sent invoices, payments, account entries, meter readings, messages, and the actions of the person in the app. It does not have bank account numbers, the email addresses of other people, or the data of dwellings that the person cannot use. The app writes an audit event for each download.":
+    "Откройте страницу помещения. Найдите жильца и нажмите «Экспортировать данные». Приложение скачивает один файл JSON. В файле есть данные этого человека в вашей организации: сведения о помещении, отправленные счета, платежи, записи по счёту, показания счётчиков, сообщения и действия человека в приложении. В файле нет номеров банковских счетов, адресов электронной почты других людей и данных помещений, к которым у человека нет доступа. Приложение записывает событие аудита для каждого скачивания.",
+  "How do I archive an organization?": "Как архивировать организацию?",
+  "Open Settings, then Organization. In the Archive organization box, enter a reason and click Archive organization. Confirm the message. The organization becomes read-only. You can read every page, but you cannot change anything. Residents cannot sign in. The links in old invoice emails stop working. The scheduled jobs stop. The app does not delete any data.":
+    "Откройте «Настройки», затем «Организация». В блоке «Архивировать организацию» введите причину и нажмите «Архивировать организацию». Подтвердите сообщение. Организация становится доступной только для чтения. Вы можете просматривать каждую страницу, но ничего не можете изменить. Жильцы не могут войти. Ссылки в старых письмах со счетами перестают работать. Запланированные задания останавливаются. Приложение не удаляет никаких данных.",
+  "How do I restore an archived organization?":
+    "Как восстановить архивированную организацию?",
+  "Open Settings, then Organization. Click Restore organization. The organization works as before. Residents can sign in again. The links in old invoice emails work again.":
+    "Откройте «Настройки», затем «Организация». Нажмите «Восстановить организацию». Организация работает как раньше. Жильцы снова могут войти. Ссылки в старых письмах со счетами снова работают.",
+  "Person not found": "Человек не найден",
+  "Payment history": "История платежей",
+  "No payments yet.": "Платежей пока нет.",
+  "Display name": "Отображаемое имя",
+  "Enter a name of 1 to 100 characters.":
+    "Введите имя длиной от 1 до 100 символов.",
+  "Export data": "Экспортировать данные",
+  "Your data": "Ваши данные",
+  "Download a copy of the data this service holds about you, as a JSON file.":
+    "Скачайте копию данных о вас, которые хранит этот сервис, в виде файла JSON.",
+  "Download my data": "Скачать мои данные",
   "All changes saved": "Все изменения сохранены",
   "Send this invoice to the resident by email now? Sent invoices cannot be edited.":
     "Отправить этот счёт жильцу по e-mail сейчас? Отправленные счета нельзя редактировать.",
@@ -2155,18 +2881,26 @@ const ru: Record<string, string> = {
   ongoing: "по настоящее время",
 
   // Added: translation coverage pass 2 (guide setup/monthly steps, faqs, statuses; dashboard ternaries)
-  "Add the legal name, address, contact details, bank name, and IBAN used on invoices.":
-    "Укажите юридическое название, адрес, контактные данные, название банка и IBAN, используемые в счетах.",
+  "Add the legal name, address, contact details, bank name, IBAN, registration number, and VAT number used on invoices.":
+    "Укажите юридическое название, адрес, контактные данные, название банка, IBAN, регистрационный номер и номер плательщика НДС, используемые в счетах.",
   "Ready when the invoice issuer and payment details are complete.":
     "Готово, когда данные выставителя счета и реквизиты для оплаты заполнены.",
-  "Create dwellings one at a time, or import them from a CSV file. Check each number, type, occupant, area, and resident count.":
-    "Создавайте жилые объекты по одному или импортируйте их из файла CSV. Проверьте номер, тип, владельца, площадь и число жильцов каждого объекта.",
+  "Click Create dwelling to add one dwelling, or import a CSV file for many. Check each number, type, occupant, area, and resident count. A new dwelling joins every currently open billing period.":
+    "Нажмите Создать помещение, чтобы добавить один объект, или импортируйте файл CSV для нескольких. Проверьте номер, тип, владельца, площадь и число жильцов каждого объекта. Новый объект включается в каждый текущий открытый период начислений.",
+  "Open tariffs & rules": "Открыть тарифы и правила",
+  "Why do some actions ask me to confirm?":
+    "Почему некоторые действия требуют подтверждения?",
+  "The Send, Resend, Revoke access link, and Record paper dispatch actions require confirmation. The Archive, Remove, Disable, Override status, Confirm payment, Reverse payment, Match to invoice, and Record payment actions also require confirmation. Confirmation helps prevent changes that are difficult to undo.":
+    "Отправка и повторная отправка счёта, отзыв ссылки доступа и регистрация отправки на бумаге требуют подтверждения. Архивирование, удаление, отключение, переопределение статуса, подтверждение платежа, отмена платежа, сопоставление платежа со счётом и запись платежа также требуют подтверждения. Это помогает избежать изменений, которые трудно отменить.",
+  "What if I forget my password?": "Что делать, если вы забыли пароль?",
+  "Click Forgot password? on the sign-in page. Enter your email address. Follow the link in the email to set a new password.":
+    "На странице входа нажмите Забыли пароль. Введите свой адрес электронной почты. Перейдите по ссылке из письма, чтобы задать новый пароль.",
   "Ready when every billable unit appears in the dwelling list.":
     "Готово, когда все объекты для выставления счетов отображаются в списке жилых объектов.",
   "Dwelling list with filters and dwelling details.":
     "Список жилых объектов с фильтрами и подробными данными.",
-  "Open each dwelling. Assign resident access. Add billing contact details. Register its meters.":
-    "Откройте каждый жилой объект. Назначьте доступ жильцу. Добавьте контактные данные для счетов. Зарегистрируйте его счетчики.",
+  "Open each dwelling. Assign resident access. Add billing contact details. Register its meters. You can edit a meter later, but you cannot change its unit of measurement after a reading exists.":
+    "Откройте каждое помещение. Предоставьте жильцу доступ. Добавьте контактные данные для выставления счетов. Зарегистрируйте счётчики помещения. Позже счётчик можно изменить, но после внесения первого показания изменить единицу измерения нельзя.",
   "Ready when residents can access their dwelling and all meters are listed.":
     "Готово, когда жильцы могут получить доступ к своему жилому объекту и все счетчики внесены в список.",
   "Dwelling detail page with resident access and meter registration.":
@@ -2176,26 +2910,26 @@ const ru: Record<string, string> = {
     "Добавьте правила начисления, которые задают фиксированную плату, плату за площадь, за число жильцов или за показания счетчиков.",
   "Tariffs and rules list with rule details.":
     "Список тарифов и правил с подробными данными.",
-  "Set the billing window, reading deadline, invoice issue date, and due date. A new period creates a case for each active dwelling.":
-    "Задайте период выставления счетов, срок подачи показаний, дату выставления счета и срок оплаты. Новый период создает дело для каждого активного жилого объекта.",
+  "Set the billing window, reading deadline, invoice issue date, and due date. A new period creates a case for each active dwelling. Residents can submit readings through the deadline date in the organization time zone. Administrators can enter readings later.":
+    "Задайте расчётный период, срок подачи показаний, дату выставления счёта и срок оплаты. Новый период создаёт дело для каждого активного помещения. Жильцы могут подавать показания до конца установленной даты по часовому поясу организации. Администраторы могут вносить показания и позже.",
   "Ready when the new OPEN period appears in the period list.":
     "Готово, когда новый ОТКРЫТЫЙ период появляется в списке периодов.",
   "Billing period list and period actions.":
     "Список периодов выставления счетов и действия с периодами.",
   "Use the dashboard attention list or the monthly workbench to find missing readings. Residents can also submit readings when allowed.":
     "Используйте список требующих внимания дел на панели управления или ежемесячную рабочую область, чтобы найти недостающие показания. Жильцы также могут подавать показания, если это разрешено.",
-  "Generate eligible invoices in the workbench. Review the calculation lines, recipient details, dates, and totals.":
-    "Формируйте подходящие счета в рабочей области. Проверьте строки расчета, данные получателя, даты и итоговые суммы.",
+  "Generate eligible invoices in the workbench. Review the calculation lines, recipient details, dates, and totals. You can waive the late fee or add a manual adjustment only before you prepare a DRAFT invoice.":
+    "Формируйте подходящие счета в рабочей области. Проверьте строки расчета, данные получателя, даты и итоговые суммы. Плату за просрочку можно отменить или добавить ручную корректировку только до подготовки счёта со статусом «Черновик».",
   "Ready when correct invoices are in DRAFT and you have fixed all validation blockers.":
     "Готово, когда верные счета имеют статус ЧЕРНОВИК и все ошибки проверки устранены.",
   "Monthly workbench with the billing workflow and case list.":
     "Ежемесячная рабочая область с рабочим процессом выставления счетов и списком дел.",
-  "Prepare approved drafts. Send the prepared invoices. Delivery moves each case to SENT and locks the invoice.":
-    "Подготовьте одобренные черновики. Отправьте подготовленные счета. Доставка переводит каждое дело в статус ОТПРАВЛЕНО и блокирует счет.",
+  "Prepare approved drafts. Send the prepared invoices. Delivery moves each case to SENT and locks the invoice. With automatic sending on, the app sends the invoices that you prepared by the end of the send day. It tries again on the next days if a send fails.":
+    "Подготовьте одобренные черновики. Отправьте подготовленные счета. Доставка переводит каждое дело в статус ОТПРАВЛЕНО и блокирует счет. Если автоматическая отправка включена, приложение отправляет счета, которые вы подготовили до конца дня отправки. Если отправка не удалась, оно повторяет попытку в следующие дни.",
   "Ready when sent invoices show SENT, or show a clear delivery error to fix.":
     "Готово, когда отправленные счета показывают статус ОТПРАВЛЕНО или четкую ошибку доставки, которую нужно исправить.",
-  "Import a bank statement. Check the preview. Confirm the import. Review proposed or unmatched transactions.":
-    "Импортируйте банковскую выписку. Проверьте предварительный просмотр. Подтвердите импорт. Просмотрите предложенные или несопоставленные транзакции.",
+  "Import a bank statement. Check the preview. Confirm the import. Review proposed or unmatched payments. Use the search box and date fields to find a payment in the selected view. You can also record a payment by hand, reverse a wrong payment, or match an unmatched payment.":
+    "Импортируйте банковскую выписку. Проверьте предварительный просмотр. Подтвердите импорт. Просмотрите предложенные или несопоставленные платежи. Используйте поле поиска и поля дат, чтобы найти платёж в выбранном разделе. Вы также можете внести платёж вручную, отменить ошибочный платёж или сопоставить несопоставленный платёж со счётом.",
   "Ready when you have confirmed valid matches and the matching invoices show PAID.":
     "Готово, когда вы подтвердили верные совпадения и соответствующие счета показывают статус ОПЛАЧЕНО.",
   "Review resident messages, overdue invoices, unmatched payments, and delivery failures. Resolve each conversation once its issue is fixed.":
@@ -2204,27 +2938,27 @@ const ru: Record<string, string> = {
     "Готово, когда у каждого требующего внимания пункта есть ответственный или он решен.",
   "Messages inbox with a resident conversation open.":
     "Папка входящих сообщений с открытым разговором с жильцом.",
-  "MISSING DATA means a required input is missing. READY means all required readings are in. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.":
-    "MISSING DATA означает, что отсутствуют обязательные данные. READY означает, что все необходимые показания внесены. DRAFT означает, что счет еще можно проверить и сформировать заново. PREPARED означает, что счет одобрен и готов к отправке. SENT означает, что доставка прошла успешно. OVERDUE означает, что срок оплаты истек, а счет не оплачен. PAID означает, что счет оплачен полностью.",
+  "MISSING DATA means a required input is missing. READY means all required inputs are in. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.":
+    "MISSING DATA означает, что отсутствуют обязательные данные. READY означает, что все обязательные данные внесены. DRAFT означает, что счет еще можно проверить и сформировать заново. PREPARED означает, что счет одобрен и готов к отправке. SENT означает, что доставка прошла успешно. OVERDUE означает, что срок оплаты истек, а счет не оплачен. PAID означает, что счет оплачен полностью.",
   "Why can I not generate an invoice?": "Почему я не могу сформировать счет?",
-  "The system blocks generation when required readings are missing or the period is locked. Open the affected dwelling in the workbench to see what is missing.":
-    "Система блокирует формирование, если отсутствуют необходимые показания или период заблокирован. Откройте нужный жилой объект в рабочей области, чтобы увидеть, чего не хватает.",
+  "The system blocks generation when required inputs are missing or the period is locked. Open the affected dwelling in the workbench to see what is missing.":
+    "Система блокирует формирование, если отсутствуют обязательные данные или период заблокирован. Откройте нужный жилой объект в рабочей области, чтобы увидеть, чего не хватает.",
   "Why can I not prepare an invoice?": "Почему я не могу подготовить счет?",
   "The invoice must be a DRAFT with complete issuer, recipient, and payment details. Fix the related settings. Regenerate the draft to update its snapshot.":
     "Счет должен иметь статус ЧЕРНОВИК с полными данными плательщика, получателя и оплаты. Исправьте соответствующие настройки. Сформируйте черновик заново, чтобы обновить его снимок данных.",
   "Why can I not send an invoice?": "Почему я не могу отправить счет?",
-  "You can send only PREPARED invoices that have a billing email. If delivery fails, fix the cause, then retry or resend.":
-    "Вы можете отправлять только счета со статусом PREPARED, у которых указан адрес электронной почты для счетов. Если доставка не удалась, устраните причину, затем повторите попытку или отправьте счет снова.",
+  "You can send email to a PREPARED invoice. You can also send it to a SENT, PAID, or OVERDUE invoice that first used paper delivery. The invoice needs a billing email. If delivery fails, fix the cause, then retry or resend.":
+    "Вы можете отправить счёт по электронной почте со статусом PREPARED. Также можно отправить счёт со статусом SENT, PAID или OVERDUE, если сначала он был отправлен по почте. Для счёта нужен адрес электронной почты. Если доставка не удалась, устраните причину, затем повторите попытку или отправьте счет снова.",
   "No. A sent invoice is a permanent financial record and cannot change. Changes to dwellings, tariffs, or settings apply only to future invoices.":
     "Нет. Отправленный счет является постоянной финансовой записью и не может быть изменен. Изменения жилых объектов, тарифов или настроек применяются только к будущим счетам.",
-  "Review its amount, currency, payer, and reference. Leave it unmatched until you find the correct invoice. Do not confirm a match you are not sure about.":
-    "Проверьте его сумму, валюту, плательщика и назначение платежа. Оставьте его несопоставленным, пока не найдете правильный счет. Не подтверждайте совпадение, в котором вы не уверены.",
+  "Review its amount, currency, payer, and reference. When you find the correct invoice, choose it in the Unmatched tab and click Match to invoice. The payment applies right away. Do not match a payment if you are not sure.":
+    "Проверьте сумму, валюту, плательщика и назначение платежа. Когда найдёте нужный счёт, выберите его на вкладке «Не сопоставлен» и нажмите «Привязать к счёту». Платёж применяется сразу. Не сопоставляйте платёж, если вы не уверены.",
   "Lock a period after its normal reading and invoice work is complete. A locked period stays available for history, but blocks reading edits and invoice regeneration.":
     "Блокируйте период после завершения обычной работы с показаниями и счетами. Заблокированный период остается доступным для истории, но не позволяет изменять показания и заново формировать счета.",
   "Required input is missing. Generation is blocked.":
     "Отсутствуют обязательные данные. Формирование заблокировано.",
-  "All required readings are in. You can now generate the invoice.":
-    "Все необходимые показания внесены. Теперь вы можете сформировать счет.",
+  "All required inputs are in. You can now generate the invoice.":
+    "Все обязательные данные внесены. Теперь вы можете сформировать счет.",
   "You can still review and regenerate the invoice.":
     "Счет еще можно проверить и сформировать заново.",
   "Delivery succeeded.": "Доставка прошла успешно.",

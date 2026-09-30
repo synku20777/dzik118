@@ -7,7 +7,10 @@ import {
   ForbiddenError,
   requireResidentRole,
 } from "../../../domain/authorization/guards";
+import { actions } from "astro:actions";
+import { friendlyActionErrorMessage } from "../../../lib/ui/i18n";
 import { listDwellingsForResident } from "../../../domain/organizations/dwellings";
+import { getOwnDisplayName } from "../../../domain/privacy/profile";
 import { withRequestDb } from "../../../lib/db-request";
 
 const auth = Astro.locals.auth;
@@ -18,12 +21,16 @@ try {
   throw err;
 }
 
-const dwellings = await withRequestDb((db) =>
-  listDwellingsForResident(db, auth.dwellingIds)
+const nameResult = Astro.getActionResult(actions.profile.updateDisplayName);
+const [dwellings, displayName] = await withRequestDb((db) =>
+  Promise.all([
+    listDwellingsForResident(db, auth.dwellingIds),
+    getOwnDisplayName(db, auth.userId),
+  ])
 );
 ---
 
-<ResidentLayout title="Profile - Property Billing">
+<ResidentLayout title={`${t("Profile")} - ${t("Property Billing")}`}>
   <div class="mx-auto max-w-2xl p-6">
     <div class="space-y-6">
       <a href="/portal" class="text-body-sm text-muted hover:underline">
@@ -36,6 +43,40 @@ const dwellings = await withRequestDb((db) =>
         <h2 class="text-h3 text-foreground">{t("Account")}</h2>
         <p class="mt-2 text-body-sm text-foreground">{auth.email}</p>
         <p class="mt-1 text-body-sm text-muted">{t("Resident")}</p>
+        {
+          nameResult?.error && (
+            <p class="notice notice-danger mt-3" role="alert">
+              {friendlyActionErrorMessage(nameResult.error, locale)}
+            </p>
+          )
+        }
+        {
+          nameResult?.data && (
+            <p class="notice mt-3" role="status">
+              {t("Saved successfully.")}
+            </p>
+          )
+        }
+        <form
+          method="POST"
+          action={actions.profile.updateDisplayName}
+          class="mt-4"
+        >
+          <label class="block text-sm font-medium" for="displayName"
+            >{t("Display name")}</label
+          >
+          <div class="mt-2 flex flex-col gap-3 sm:flex-row">
+            <input
+              id="displayName"
+              name="displayName"
+              maxlength="100"
+              required
+              value={nameResult?.data?.displayName ?? displayName ?? ""}
+              class="w-full rounded-control border border-border px-3 py-2 sm:w-72"
+            />
+            <button type="submit" class="btn-primary">{t("Save")}</button>
+          </div>
+        </form>
       </section>
 
       <section class="rounded-panel border border-border bg-surface p-4">
@@ -69,6 +110,23 @@ const dwellings = await withRequestDb((db) =>
             </ul>
           )
         }
+      </section>
+      <section class="rounded-panel border border-border bg-surface p-4">
+        <h2 class="text-h3 text-foreground">{t("Your data")}</h2>
+        <p class="mt-2 text-body-sm text-muted">
+          {
+            t(
+              "Download a copy of the data this service holds about you, as a JSON file."
+            )
+          }
+        </p>
+        <a
+          href="/api/v1/portal/me/export"
+          download
+          class="btn-secondary mt-4 inline-flex"
+        >
+          {t("Download my data")}
+        </a>
       </section>
       <form method="POST" action="/logout">
         <button type="submit" class="btn-secondary">{t("Sign out")}</button>

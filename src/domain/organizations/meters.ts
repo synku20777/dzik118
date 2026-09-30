@@ -3,16 +3,18 @@
 // same convention as organizations.ts/dwellings.ts (spec Section 14).
 import { and, eq } from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
+import { meterReadings } from "../../db/schema/billing";
 import { meterTypeEnum, meters } from "../../db/schema/dwellings";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { recalculateCaseReadinessForOpenPeriods } from "../periods/case-readiness";
-import { getDwelling, NotFoundError } from "./dwellings";
+import { getDwelling } from "./dwellings";
+import { ConflictError, NotFoundError } from "../errors";
 import {
   claimMutationReceipt,
   completeMutationReceipt,
 } from "../mutations/receipts";
 
-export { NotFoundError };
+export { ConflictError, NotFoundError };
 
 export interface CreateMeterInput {
   type: (typeof meterTypeEnum.enumValues)[number];
@@ -130,5 +132,73 @@ export async function archiveMeter(
       meter.dwellingId
     );
     return meter;
+  });
+}
+
+export interface UpdateMeterInput {
+  serialNumber?: string | null;
+  unit?: string;
+  label?: string | null;
+  installedAt?: string | null;
+}
+
+export async function updateMeter(
+  db: Db,
+  organizationId: string,
+  meterId: string,
+  input: UpdateMeterInput,
+  actorUserId: string
+) {
+  return db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(meters)
+      .where(
+        and(eq(meters.id, meterId), eq(meters.organizationId, organizationId))
+      )
+      .for("update");
+    if (!before) throw new NotFoundError("Meter not found");
+    if (before.archivedAt) {
+      throw new ConflictError("An archived meter cannot be edited");
+    }
+
+    if (input.unit !== undefined && input.unit !== before.unit) {
+      const [reading] = await tx
+        .select({ id: meterReadings.id })
+        .from(meterReadings)
+        .where(eq(meterReadings.meterId, meterId))
+        .limit(1);
+      if (reading) {
+        throw new ConflictError(
+          "The unit cannot change after readings exist. Archive this meter and add a new one."
+        );
+      }
+    }
+
+    const patch: Partial<typeof meters.$inferInsert> = {};
+    if (input.serialNumber !== undefined)
+      patch.serialNumber = input.serialNumber;
+    if (input.unit !== undefined) patch.unit = input.unit;
+    if (input.label !== undefined) patch.label = input.label;
+    if (input.installedAt !== undefined) patch.installedAt = input.installedAt;
+
+    const [after] = await tx
+      .update(meters)
+      .set(patch)
+      .where(
+        and(eq(meters.id, meterId), eq(meters.organizationId, organizationId))
+      )
+      .returning();
+
+    await recordAuditEvent(tx, {
+      organizationId,
+      actorUserId,
+      action: "METER_UPDATED",
+      entityType: "meter",
+      entityId: meterId,
+      beforeData: before,
+      afterData: after,
+    });
+    return after;
   });
 }

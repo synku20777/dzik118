@@ -13,7 +13,9 @@ import {
   uiLocale,
   formatDate,
   formatMoney,
+  friendlyActionErrorMessage,
 } from "../../../../../../../lib/ui/i18n";
+import { invoiceStatusBadge } from "../../../../../../../lib/ui/invoice-status";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../../../layouts/AdminLayout.astro";
@@ -44,6 +46,15 @@ try {
 }
 
 const prepareResult = Astro.getActionResult(actions.billing.prepare);
+const adjustLateFeeResult = Astro.getActionResult(
+  actions.accounts.adjustLateFee
+);
+const manualAdjustmentResult = Astro.getActionResult(
+  actions.accounts.setInvoiceManualAdjustment
+);
+const overrideStatusResult = Astro.getActionResult(
+  actions.billing.overrideStatus
+);
 const sendResult = Astro.getActionResult(actions.invoices.send);
 const resendResult = Astro.getActionResult(actions.invoices.resend);
 const revokeResult = Astro.getActionResult(actions.invoices.revokeAccess);
@@ -176,6 +187,13 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
   en: "English",
   ru: "Русский",
 };
+const overrideStatuses: string[] = [
+  "DRAFT",
+  "PREPARED",
+  ...(invoice.sentAt ? ["SENT"] : []),
+  ...(invoice.paidAt ? ["PAID"] : []),
+  "OVERDUE",
+];
 ---
 
 <AdminLayout
@@ -418,6 +436,43 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
     }
 
     {
+      (adjustLateFeeResult?.error || manualAdjustmentResult?.error) && (
+        <p class="notice notice-danger" role="alert">
+          {friendlyActionErrorMessage(
+            adjustLateFeeResult?.error ?? manualAdjustmentResult?.error,
+            locale
+          )}
+        </p>
+      )
+    }
+    {
+      adjustLateFeeResult?.data ? (
+        <p class="notice" role="status">
+          {t("Late fee updated.")}
+        </p>
+      ) : manualAdjustmentResult?.data ? (
+        <p class="notice" role="status">
+          {t("Adjustment saved.")}
+        </p>
+      ) : null
+    }
+
+    {
+      overrideStatusResult?.error && (
+        <p class="notice notice-danger" role="alert">
+          {friendlyActionErrorMessage(overrideStatusResult.error, locale)}
+        </p>
+      )
+    }
+    {
+      overrideStatusResult?.data ? (
+        <p class="notice" role="status">
+          {t("Status changed.")}
+        </p>
+      ) : null
+    }
+
+    {
       caseStatus === "DRAFT" &&
         (recipientIncomplete || organizationIncomplete) && (
           <section
@@ -536,6 +591,162 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
         </section>
       )
     }
+    {
+      caseStatus === "DRAFT" && !invoice.preparedAt && !invoice.sentAt && (
+        <section class="panel p-4" aria-labelledby="draft-adjustments">
+          <h2 id="draft-adjustments" class="section-title">
+            {t("Adjust this draft")}
+          </h2>
+          <p class="text-sm text-muted">
+            {t("You can change these amounts until you prepare the invoice.")}
+          </p>
+          {Number(invoice.lateFeeCalculated) > 0 && (
+            <div class="mt-4">
+              <h3>{t("Late fee")}</h3>
+              <p class="text-sm text-muted">
+                {t("Calculated late fee")}:{" "}
+                {formatMoney(
+                  invoice.lateFeeCalculated,
+                  invoice.currency,
+                  locale
+                )}
+              </p>
+              <p class="text-sm text-muted">
+                {t("Applied late fee")}:{" "}
+                {formatMoney(invoice.lateFeeApplied, invoice.currency, locale)}
+              </p>
+              <form
+                method="POST"
+                action={actions.accounts.adjustLateFee}
+                class="mt-3 grid grid-cols-2 gap-3"
+              >
+                <input
+                  type="hidden"
+                  name="organizationId"
+                  value={organizationId}
+                />
+                <input type="hidden" name="invoiceId" value={invoice.id} />
+                <div>
+                  <label class="block text-label" for="late-fee-amount">
+                    {t("New late fee amount")}
+                  </label>
+                  <input
+                    id="late-fee-amount"
+                    name="newAppliedAmount"
+                    inputmode="decimal"
+                    required
+                    value={invoice.lateFeeApplied}
+                    class="mt-1 w-full"
+                  />
+                </div>
+                <div>
+                  <label class="block text-label" for="late-fee-reason">
+                    {t("Reason")}
+                  </label>
+                  <select
+                    id="late-fee-reason"
+                    name="reason"
+                    required
+                    class="mt-1 w-full"
+                  >
+                    <option value="BANK_PROCESSING_DELAY">
+                      {t("Bank processing delay")}
+                    </option>
+                    <option value="BILLING_DISPUTE">
+                      {t("Billing dispute")}
+                    </option>
+                    <option value="METER_ISSUE">{t("Meter issue")}</option>
+                    <option value="AGREEMENT_WITH_RESIDENT">
+                      {t("Agreement with resident")}
+                    </option>
+                    <option value="ADMIN_WAIVER">
+                      {t("Administrative waiver")}
+                    </option>
+                    <option value="OTHER">{t("Other")}</option>
+                  </select>
+                </div>
+                <div class="col-span-2">
+                  <label class="block text-label" for="late-fee-note">
+                    {t("Note (required when the reason is Other)")}
+                  </label>
+                  <textarea
+                    id="late-fee-note"
+                    name="note"
+                    class="mt-1 w-full"
+                  />
+                </div>
+                <div class="col-span-2">
+                  <button type="submit" class="btn-secondary">
+                    {t("Update late fee")}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+          <div class="mt-4">
+            <h3>{t("Manual adjustment")}</h3>
+            <p class="text-sm text-muted">
+              {t("Manual adjustment")}:{" "}
+              {formatMoney(invoice.manualAdjustment, invoice.currency, locale)}
+            </p>
+            <p class="text-xs text-muted">
+              {t("A negative amount lowers the amount due.")}
+            </p>
+            <form
+              method="POST"
+              action={actions.accounts.setInvoiceManualAdjustment}
+              class="mt-3 grid grid-cols-2 gap-3"
+            >
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <div>
+                <label class="block text-label" for="manual-adjustment-amount">
+                  {t("Adjustment amount")}
+                </label>
+                <input
+                  id="manual-adjustment-amount"
+                  name="amount"
+                  inputmode="decimal"
+                  required
+                  value={invoice.manualAdjustment}
+                  class="mt-1 w-full"
+                />
+              </div>
+              <div>
+                <label class="block text-label" for="manual-adjustment-reason">
+                  {t("Reason")}
+                </label>
+                <input
+                  id="manual-adjustment-reason"
+                  name="reason"
+                  required
+                  class="mt-1 w-full"
+                />
+              </div>
+              <div class="col-span-2">
+                <label class="block text-label" for="manual-adjustment-note">
+                  {t("Note")}
+                </label>
+                <textarea
+                  id="manual-adjustment-note"
+                  name="note"
+                  class="mt-1 w-full"
+                />
+              </div>
+              <div class="col-span-2">
+                <button type="submit" class="btn-secondary">
+                  {t("Save adjustment")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+      )
+    }
     <div class="invoice-doc-locale-bar">
       <p class="text-sm text-muted">
         {
@@ -577,15 +788,26 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
       deliveries.length > 0 && (
         <section>
           <h2 class="section-title mb-3">{t("Delivery history")}</h2>
-          <div class="table-wrap">
+          <div class="table-wrap stack-table">
             <table class="w-full text-left text-sm">
+              <caption class="sr-only">{t("Delivery history")}</caption>
               <thead class="border-b border-border bg-surface-hover text-muted">
                 <tr>
-                  <th class="px-4 py-2">{t("When")}</th>
-                  <th class="px-4 py-2">{t("Method")}</th>
-                  <th class="px-4 py-2">{t("To")}</th>
-                  <th class="px-4 py-2">{t("Status")}</th>
-                  <th class="px-4 py-2">{t("Error")}</th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("When")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Method")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("To")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Status")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Error")}
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-border">
@@ -631,6 +853,73 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
         </section>
       )
     }
+
+    <section class="panel p-4" aria-labelledby="override-status">
+      <h2 id="override-status" class="section-title">
+        {t("Override status")}
+      </h2>
+      <p class="text-sm text-muted">
+        {
+          t(
+            "Use this only to correct a status that is wrong. The change is recorded with your reason."
+          )
+        }
+      </p>
+      <form
+        method="POST"
+        action={actions.billing.overrideStatus}
+        class="mt-3 grid grid-cols-2 gap-3"
+        data-confirm={t(
+          "Change the status of this invoice? This change is recorded in the audit log."
+        )}
+      >
+        <input type="hidden" name="organizationId" value={organizationId} />
+        <input type="hidden" name="caseId" value={invoice.billingCaseId} />
+        <div>
+          <label class="block text-label" for="override-status-select">
+            {t("New status")}
+          </label>
+          <select
+            id="override-status-select"
+            name="status"
+            required
+            class="mt-1 w-full"
+          >
+            <option
+              value=""
+              disabled
+              selected={!overrideStatuses.includes(caseStatus)}
+            >
+              {t("Choose a status")}
+            </option>
+            {
+              overrideStatuses.map((s) => (
+                <option value={s} selected={s === caseStatus}>
+                  {t(invoiceStatusBadge(s).label)}
+                </option>
+              ))
+            }
+          </select>
+        </div>
+        <div>
+          <label class="block text-label" for="override-status-reason">
+            {t("Reason")}
+          </label>
+          <input
+            id="override-status-reason"
+            name="reason"
+            required
+            maxlength="500"
+            class="mt-1 w-full"
+          />
+        </div>
+        <div class="col-span-2">
+          <button type="submit" class="btn-secondary">
+            {t("Override status")}
+          </button>
+        </div>
+      </form>
+    </section>
   </div>
 </AdminLayout>
 
