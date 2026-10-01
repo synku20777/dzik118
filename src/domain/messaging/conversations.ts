@@ -284,6 +284,26 @@ export async function listConversationsForOrganization(
   }));
 }
 
+// Number of conversations that hold a message from a resident that no admin
+// has read yet. Drives the badge on the Messages navigation item. An admin's
+// own unread messages do not count.
+export async function countUnreadConversationsForOrganization(
+  db: Db,
+  organizationId: string
+): Promise<number> {
+  const rows = await db
+    .selectDistinct({ conversationId: messages.conversationId })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.organizationId, organizationId),
+        eq(messages.senderRole, "RESIDENT"),
+        isNull(messages.readAt)
+      )
+    );
+  return rows.length;
+}
+
 export async function getConversationForAdmin(
   db: Db,
   organizationId: string,

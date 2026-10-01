@@ -760,7 +760,10 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                 }
               </p>
             </div>
-            <a href={`${base}/settings/rules`} class="btn-secondary">
+            <a
+              href={`${base}/settings/rules`}
+              class="btn-secondary shrink-0 whitespace-nowrap"
+            >
               {t("View all tariffs")}
             </a>
           </div>
@@ -2633,8 +2636,15 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
   }
   .dwelling-title-row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.5rem 0.75rem;
+  }
+  /* A long dwelling number has no spaces. Let it break on a narrow phone
+     instead of pushing the status badge off the page. */
+  .dwelling-title-row h1 {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
   .more-menu {
     position: relative;
@@ -2739,6 +2749,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
+    flex-wrap: wrap;
   }
   .card-header h2,
   .panel > h2 {
@@ -2791,6 +2802,9 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
   .detail-list dd {
     color: var(--color-foreground);
     white-space: pre-line;
+    /* A long value with no spaces (an email, a long dwelling number) must
+       wrap inside its column instead of widening the page on a phone. */
+    overflow-wrap: anywhere;
   }
   .balance-summary {
     display: grid;
@@ -2933,6 +2947,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    flex-wrap: wrap;
   }
   .sidebar-item-avatar {
     display: grid;
@@ -2982,6 +2997,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     flex: 1 1 auto;
     min-width: 0;
     font-size: 0.875rem;
+    overflow-wrap: anywhere;
   }
   .sidebar-item-body strong {
     display: block;

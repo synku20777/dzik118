@@ -7,7 +7,7 @@ import { translate, uiLocale } from "../lib/ui/i18n";
 interface Props {
   title?: string;
 }
-const { title = "Resident Portal - Property Billing" } = Astro.props;
+const { title = "Resident Portal - Namkopa" } = Astro.props;
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 const id = Astro.params.dwellingId ?? Astro.url.searchParams.get("dwellingId");
@@ -43,8 +43,9 @@ const base = "/portal/dwellings/" + dwellingId;
     <a class="skip-link" href="#main-content">{t("Skip to content")}</a>
     <header class="resident-header">
       <div>
-        <a class="brand" href="/portal"><BrandMark />{t("Property Billing")}</a
-        ><div class="flex items-center gap-3">
+        <a class="brand" href="/portal"><BrandMark />{t("Namkopa")}</a><div
+          class="flex flex-wrap items-center gap-x-3 gap-y-1"
+        >
           <ThemeToggle />
           <LanguageSwitch />{
             (auth?.organizationIds.length ?? 0) > 0 && (

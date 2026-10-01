@@ -1,6 +1,6 @@
 # Testing environment setup
 
-This guide explains how to configure your machine to test Property Billing. It
+This guide explains how to configure your machine to test Namkopa. It
 covers three test tiers (unit, integration, end-to-end), the quality gates,
 manual testing, and edge cases to check by hand.
 

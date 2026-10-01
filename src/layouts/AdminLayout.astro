@@ -8,6 +8,8 @@ import Icon from "../components/ui/Icon.astro";
 import MutationStatus from "../components/ui/MutationStatus.astro";
 import { ClientRouter } from "astro:transitions";
 import { translate, uiLocale } from "../lib/ui/i18n";
+import { countUnreadConversationsForOrganization } from "../domain/messaging/conversations";
+import { withRequestDb } from "../lib/db-request";
 interface Props {
   title?: string;
   organizationId?: string;
@@ -17,7 +19,7 @@ interface Props {
   archived?: boolean;
 }
 const {
-  title = "Admin - Property Billing",
+  title = "Admin - Namkopa",
   organizationId,
   organizationName,
   archived = organizationId
@@ -27,6 +29,12 @@ const {
 } = Astro.props;
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
+// Badge on the Messages navigation item.
+const unreadMessages = organizationId
+  ? await withRequestDb((db) =>
+      countUnreadConversationsForOrganization(db, organizationId)
+    )
+  : 0;
 ---
 
 <!doctype html>
@@ -57,7 +65,7 @@ const t = (text: string) => translate(locale, text);
     <a class="skip-link" href="#main-content">{t("Skip to content")}</a>
     <aside class="admin-sidebar">
       <a class="brand" href="/admin/organizations"
-        ><BrandMark />{t("Property Billing")}</a
+        ><BrandMark />{t("Namkopa")}</a
       >
       <div class="org-context">
         <p class="eyebrow">{t("Administration")}</p><p
@@ -79,10 +87,17 @@ const t = (text: string) => translate(locale, text);
           )
         }
       </div>
-      {organizationId && <AppNavigation organizationId={organizationId} />}
+      {
+        organizationId && (
+          <AppNavigation
+            organizationId={organizationId}
+            unreadMessages={unreadMessages}
+          />
+        )
+      }
       <div class="sidebar-account">
-        <p class="mb-3 truncate text-muted">{Astro.locals.auth?.email}</p><div
-          class="flex items-center justify-between"
+        <p class="mb-2 truncate text-muted">{Astro.locals.auth?.email}</p><div
+          class="flex flex-col items-start gap-2"
         >
           <form method="POST" action="/logout">
             <button type="submit">{t("Sign out")}</button>
@@ -93,7 +108,7 @@ const t = (text: string) => translate(locale, text);
       </div>
     </aside>
     <header class="admin-mobile">
-      <span class="brand"><BrandMark />{t("Property Billing")}</span>
+      <span class="brand"><BrandMark />{t("Namkopa")}</span>
       <button type="button" class="btn-secondary btn-sm" data-open-mobile-nav>
         {t("Menu")} ☰
       </button>
@@ -105,7 +120,7 @@ const t = (text: string) => translate(locale, text);
     >
       <header class="context-drawer-header">
         <span class="brand" id="mobile-nav-drawer-title"
-          ><BrandMark />{t("Property Billing")}</span
+          ><BrandMark />{t("Namkopa")}</span
         >
         <button
           type="button"
@@ -117,7 +132,14 @@ const t = (text: string) => translate(locale, text);
         </button>
       </header>
       <div class="context-drawer-body">
-        {organizationId && <AppNavigation organizationId={organizationId} />}
+        {
+          organizationId && (
+            <AppNavigation
+              organizationId={organizationId}
+              unreadMessages={unreadMessages}
+            />
+          )
+        }
         <div
           class="mt-4 flex flex-wrap items-center gap-5 border-t border-border pt-4 text-sm"
         >

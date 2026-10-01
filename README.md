@@ -1,6 +1,6 @@
-# Property Billing Platform
+# Namkopa
 
-Property Billing is a multi-tenant property billing application. It serves
+Namkopa is a multi-tenant property billing application. It serves
 apartment buildings, housing associations, cooperatives, and small property
 managers. It supports monthly billing cycles, dwelling-level financial accounts
 with an append-only transaction ledger, bank payment reconciliation against

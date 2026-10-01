@@ -185,6 +185,65 @@ Checks:
 - No test used a live invoice link in the browser. An integration test covers the
   link, including the restore.
 
+## Batch 7: typography from the marketing site
+
+The owner asked for the typography of the marketing site in the app. The
+specification is `docs/TYPOGRAPHY.md` in the `namkopa-website` repository.
+[ADR 0010](decisions/0010-typography.md) records the decision and the limits.
+
+| Change | Where |
+| --- | --- |
+| Replace Source Sans 3 with Switzer. Add Overused Grotesk as the fallback (it has Cyrillic). | `global.css`, `src/fonts` |
+| Use Fraunces with the axes SOFT 40 and WONK 0. Weight 700 above 36px, 600 below. | `global.css`, three pages |
+| Add letter-spacing +0.03em to all sans text with one token. | `global.css` |
+| Serve all fonts from the app. Remove Google from the CSP. | `src/fonts`, `middleware.ts` |
+| Fix eight layouts that the wider font broke or made worse. | Portal header, dwelling page, audit page, tables |
+| Update the UI specification. | `docs/product/UI_SPECIFICATION.md` |
+
+Agy did three scopes: an audit of every font, weight, and letter-spacing in the
+pages, the weight changes in three pages, and the layout fixes. A person wrote
+the central CSS and reviewed each diff.
+
+Checks:
+
+- A test measured 216 page views before and after (admin, resident portal, and
+  public pages, in three languages, at desktop, tablet, and phone widths). Page
+  views with a horizontal scroll: 8 before, 0 after. Tables that scroll: 17 and
+  17. Buttons that wrap: 303 and 295.
+- A second test checked the admin pages and the portal at 320px and 360px, in
+  light and dark, in three languages. No page has a horizontal scroll.
+- The acceptance checks of the specification pass. The browser reports Switzer
+  for sans text and Fraunces for display text. The letter-spacing ratio is 0.03
+  at 12px, 13px, and 14px, also in inputs and table cells. Display weights are
+  700 at 40px and 44px, and 600 at 33.6px and below. Latvian macrons are over
+  their own letters at weights 400 to 800. Russian sans text is Overused
+  Grotesk. All font requests go to the app's own domain.
+- Lint, type check, `astro check`, formatting, and 279 unit tests pass.
+
+Three buttons now wrap onto two lines (two on Messages on a phone, one on the
+workbench on a tablet). They stay inside the page.
+
+## Rename: the app is "Namkopa"
+
+The owner renamed the product from "Property Billing" to "Namkopa", the name of
+the marketing site.
+
+- Every page title, the brand in the sidebar and the headers, the sign-in pages,
+  and the subject of the alert email now say "Namkopa".
+- The name is not translated. The Latvian and Russian dictionary entries for the
+  old name are removed, so all three languages show "Namkopa".
+- `README.md` and `docs/TESTING.md` use the new name.
+- Not changed: the package name and the Worker name (`property-billing`). The
+  Worker name is the deployed identifier. A new name there makes a new Worker
+  without the secrets and the domain.
+- Not changed: the product specifications in `docs/product` (they are the
+  record of the first design), the admin guide screenshots in `public/guide`
+  (they show the old name), and sent invoices (they never showed the name).
+
+Checks: lint, type check, `astro check`, formatting, 279 unit tests, and the
+build pass. The sign-in page shows "Namkopa" in the title and the brand in
+English, Latvian, and Russian.
+
 ## Guide update
 
 The guide now describes meter edit, the unit lock, the reading deadline, draft

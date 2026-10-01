@@ -1,5 +1,55 @@
-@import url("https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,550..600&display=swap");
 @import "tailwindcss";
+
+/* Typography (docs/decisions/0010-typography.md). All fonts are self-hosted
+   from src/fonts (licenses sit next to the files): no request goes to a
+   third party, and the CSP needs only font-src 'self'.
+
+   Fraunces (display): all four axes (opsz, SOFT, WONK, wght), latin + latin-ext
+   only. This is fontsource's full.css with one fix: its latin subset also
+   claims the combining marks U+0304/0308/0329, which makes Chrome draw the
+   macron of "ē", "ā", "ī" over the next letter in Latvian. Only latin-ext
+   lists them here. */
+@font-face {
+  font-family: "Fraunces Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../fonts/fraunces-latin-ext-full-normal.woff2")
+    format("woff2-variations");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Fraunces Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../fonts/fraunces-latin-full-normal.woff2")
+    format("woff2-variations");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Sans. Switzer: Swiss grotesque, Latin only. Overused Grotesk: Neue Haas /
+   Helvetica lineage, OFL, Latin + Cyrillic. It is the fallback, so Russian
+   text (and any glyph Switzer lacks) is set in it. */
+@font-face {
+  font-family: "Overused Grotesk";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 900;
+  src: url("../fonts/OverusedGrotesk-VF.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Switzer";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../fonts/Switzer-Variable.woff2") format("woff2");
+}
 
 /* ---------------------------------------------------------------------
    Riga design system (docs/product/UI_SPECIFICATION.md,
@@ -22,6 +72,10 @@
    --------------------------------------------------------------------- */
 :root {
   color-scheme: light dark;
+
+  /* Letter-spacing for all sans text (Switzer and its Overused Grotesk
+     fallback). One value to tune: see the base layer rule below. */
+  --tracking-sans: 0.03em;
 
   --color-surface-hover: light-dark(#eee8de, #1e2b2e);
   --color-primary-hover: light-dark(#35677a, #a9c2cb);
@@ -214,8 +268,10 @@
   --radius-panel: 0.625rem;
   --shadow-panel: none;
   --font-sans:
-    "Source Sans 3", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+    "Switzer", "Overused Grotesk", "Segoe UI", ui-sans-serif, system-ui,
+    sans-serif;
+  --font-display:
+    "Fraunces Variable", "Fraunces", Georgia, "Times New Roman", serif;
 
   /* Section 6.2 elevation tokens. Reserved for menus/toolbars (1), raised
      contextual elements (2), and drawers/modals (overlay) -- ordinary
@@ -232,6 +288,32 @@
     background: var(--color-canvas);
     color: var(--color-foreground);
     font-family: var(--font-sans);
+  }
+  /* Set on every element, not on body: an em value inherits as a fixed length
+     (16px x 0.03 = 0.48px), so each element has to resolve 0.03em against its
+     own font size. Form controls are listed because preflight sets
+     letter-spacing: inherit on them with a higher specificity than `*`.
+     This rule is in the base layer on purpose: any tracking-* utility and any
+     explicit letter-spacing elsewhere (eyebrows, big numerals) still wins. */
+  *,
+  button,
+  input,
+  select,
+  textarea {
+    letter-spacing: var(--tracking-sans);
+  }
+  /* Fraunces (display) and monospace text keep their own spacing. */
+  .brand,
+  .font-mono {
+    letter-spacing: normal;
+  }
+  .font-display {
+    letter-spacing: -0.015em;
+  }
+  .font-display *,
+  .brand *,
+  .font-mono * {
+    letter-spacing: inherit;
   }
   :focus-visible {
     outline: 3px solid var(--color-primary-hover);
@@ -304,9 +386,6 @@
   label {
     line-height: 1.5;
   }
-  h1 {
-    letter-spacing: -0.015em;
-  }
   table {
     font-variant-numeric: tabular-nums;
   }
@@ -366,6 +445,15 @@
     font-family: var(--font-display);
     font-weight: 600;
     font-optical-sizing: auto;
+  }
+  /* Fraunces axes. opsz is left out on purpose: font-optical-sizing: auto sets
+     it from the rendered font size. Weight follows size (600 at 36px or
+     below, 700 above): see the min-width rules on h1.font-display below. */
+  .font-display,
+  .brand {
+    font-variation-settings:
+      "SOFT" 40,
+      "WONK" 0;
   }
 }
 
@@ -561,11 +649,17 @@
   /* Section 4.2's "major period/month heading" example (October 2026,
      Fraunces 40/44, weight 550-600) -- only where .font-display is also
      present, so ordinary page titles (Dwellings, Payments, Settings, ...)
-     keep the plain Source Sans 3 treatment above. */
+     keep the plain Switzer treatment above. */
   .page-header h1.font-display {
     font-size: clamp(1.85rem, 3.2vw, 2.5rem);
     font-weight: 600;
     line-height: 1.15;
+  }
+  /* 3.2vw passes 36px at 1125px (70.3125rem): Fraunces is 700 above 36px. */
+  @media (min-width: 70.3125rem) {
+    .page-header h1.font-display {
+      font-weight: 700;
+    }
   }
   .eyebrow {
     color: var(--color-muted);
@@ -811,6 +905,19 @@
     font-size: 0.875rem;
     color: var(--color-muted);
   }
+  /* Unread counter on the Messages item. Pushed to the end of the row. */
+  .nav-badge {
+    margin-inline-start: auto;
+    min-width: 1.25rem;
+    padding: 0 0.375rem;
+    border-radius: 999px;
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.25rem;
+    text-align: center;
+  }
   .app-nav a:hover {
     background: var(--color-surface-hover);
     color: var(--color-foreground);
@@ -866,6 +973,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
+    flex-wrap: wrap;
   }
   .resident-content {
     max-width: 50rem;
@@ -1034,6 +1142,12 @@
   line-height: 1.15;
   font-weight: 600;
 }
+/* Same 36px cut as .page-header h1.font-display above. */
+@media (min-width: 70.3125rem) {
+  .app-content h1.font-display {
+    font-weight: 700;
+  }
+}
 .app-content th {
   padding: 0.75rem 1rem;
   font-size: 0.75rem;
@@ -1044,6 +1158,14 @@
   /* 1rem vertical padding + ~20px line-height lands in the spec's 52-60px
      row-height band (Section 9) for the common text-sm row content. */
   padding: 1rem 1rem;
+}
+/* Tablet widths: the sans font is wider than the old one, so tables keep
+   their fit with tighter side padding. Phones use the stacked table layout. */
+@media (min-width: 40rem) and (max-width: 70rem) {
+  .app-content th,
+  .app-content td {
+    padding-inline: 0.625rem;
+  }
 }
 .app-content tbody tr:hover {
   background: var(--color-surface-hover);
@@ -1395,6 +1517,12 @@
     padding: 0.375rem 0.875rem !important;
     border: 0 !important;
     text-align: right;
+    /* A long value with no spaces (an action code, an ID, an email) must
+       wrap inside the card instead of widening the page. */
+    overflow-wrap: anywhere;
+  }
+  .stack-table td > * {
+    min-width: 0;
   }
   .stack-table td[data-label]:not([data-label=""])::before {
     content: attr(data-label);

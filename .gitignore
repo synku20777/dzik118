@@ -34,3 +34,6 @@ __pycache__/
 
 # graphify knowledge-graph output (generated, rebuild with /graphify)
 graphify-out/
+
+# Temporary UX review artifacts
+.ux-shots*/

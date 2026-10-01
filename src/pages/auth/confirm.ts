@@ -66,9 +66,9 @@ export const GET: APIRoute = ({ url, redirect, cookies }) => {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${escapeHtml(heading)} - ${escapeHtml(t("Property Billing"))}</title>
+    <title>${escapeHtml(heading)} - ${escapeHtml(t("Namkopa"))}</title>
   </head>
-  <body style="font-family: 'Source Sans 3', 'Segoe UI', sans-serif; display: flex; min-height: 100vh; align-items: center; justify-content: center; margin: 0; background: #F7F4EE; color: #17242B;">
+  <body style="font-family: 'Switzer', 'Overused Grotesk', 'Segoe UI', sans-serif; display: flex; min-height: 100vh; align-items: center; justify-content: center; margin: 0; background: #F7F4EE; color: #17242B;">
     ${languageNav}
     <div style="max-width: 28rem; width: 100%; padding: 2rem; background: #FFFCF7; border: 1px solid #D5CEC2; border-radius: 0.625rem;">
       <h1 style="margin: 0 0 0.5rem; font-family: Georgia, 'Times New Roman', serif; font-weight: 600;">${escapeHtml(heading)}</h1>

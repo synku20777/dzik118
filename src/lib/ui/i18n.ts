@@ -45,7 +45,7 @@ export function uiLocale(cookies: AstroCookies, url: URL): Locale {
 }
 
 const lv: Record<string, string> = {
-  "Current charges": "Pašreizējā perioda izmaksas",
+  "Current charges": "Kārtējā perioda maksa",
   "Previous outstanding": "Iepriekšējais parāds",
   "Previous balance": "Iepriekšējais atlikums",
   "Credit applied": "Piemērotais kredīts",
@@ -55,31 +55,31 @@ const lv: Record<string, string> = {
   "Manual adjustment": "Manuāla korekcija",
   "Current bill": "Pašreizējais rēķins",
   "Account balance": "Konta atlikums",
-  "Account activity": "Konta darbības",
+  "Account activity": "Konta operācijas",
   "Add adjustment": "Pievienot korekciju",
   "Adjustments create an auditable account entry and never edit the balance directly.":
-    "Katra korekcija tiek skaidri ierakstīta kontā — tā nekad nemaina atlikumu tieši.",
+    "Katra korekcija rada auditējamu konta ierakstu un nekad nemaina atlikumu tieši.",
   "Charge adjustment": "Maksas korekcija",
   "Credit adjustment": "Kredīta korekcija",
   Debit: "Debets",
   Credit: "Kredīts",
   Balance: "Atlikums",
   "Preparation checks": "Sagatavošanas pārbaudes",
-  "Recipient details complete": "Saņēmēja dati ir pilnīgi",
+  "Recipient details complete": "Norādīti visi saņēmēja dati",
   "Issuer and payment details complete":
-    "Izrakstītāja un maksājuma dati ir pilnīgi",
-  "Current charges calculated": "Pašreizējā perioda izmaksas aprēķinātas",
+    "Norādīti visi izrakstītāja un maksājuma dati",
+  "Current charges calculated": "Kārtējā perioda maksa aprēķināta",
   "Account balance resolved": "Konta atlikums noteikts",
   "Late-payment rules": "Nokavēto maksājumu noteikumi",
   "Changes apply to future calculations. Sent invoices keep their original financial snapshot.":
     "Izmaiņas attiecas tikai uz nākamajiem aprēķiniem. Nosūtītie rēķini paliek tādi, kādi bija nosūtīšanas brīdī.",
-  "Late fees enabled": "Nokavējuma maksas ir ieslēgtas",
+  "Late fees enabled": "Nokavējuma maksa ir ieslēgta",
   "Daily rate": "Dienas likme",
   "Grace period": "Labvēlības periods",
   "days after the due date": "dienas pēc apmaksas termiņa",
   "Maximum total penalty": "Maksimālā kopējā soda maksa",
   "of eligible principal": "no piemērojamās pamatsummas",
-  "Stop accrual at cap": "Pārtraukt uzkrāšanu pie limita",
+  "Stop accrual at cap": "Pārtraukt uzkrāšanu, sasniedzot limitu",
   "Save late-payment rules": "Saglabāt nokavēto maksājumu noteikumus",
   "Remaining after allocation": "Atlikums pēc piesaistes",
   "Credit created": "Izveidots kredīts",
@@ -105,21 +105,22 @@ const lv: Record<string, string> = {
   "Dwelling directory with filters and dwelling details.":
     "Īpašumu saraksts ar filtriem un īpašumu datiem.",
   "Billing period history and period actions.":
-    "Norēķinu periodu vēsture un periodu darbības.",
+    "Norēķinu periodu vēsture un darbības ar periodiem.",
   "Admin dashboard with billing totals and work requiring attention.":
     "Administratora pārskats ar norēķinu kopsummām un darbiem, kam jāpievērš uzmanība.",
   "Payment reconciliation workspace with transaction states.":
     "Maksājumu saskaņošanas darbvieta ar darījumu statusiem.",
   "Required input is missing; generation is blocked.":
-    "Trūkst obligātu datu; rēķina izveide ir bloķēta.",
+    "Trūkst obligāto datu; rēķina izveide ir bloķēta.",
   "The invoice can still be reviewed and regenerated.":
-    "Rēķinu vēl var pārskatīt un pārrēķināt.",
+    "Rēķinu vēl var pārskatīt un izveidot atkārtoti.",
   "The invoice is approved and ready to send.":
     "Rēķins ir apstiprināts un gatavs nosūtīšanai.",
   "The invoice was delivered successfully.": "Rēķins ir veiksmīgi piegādāts.",
-  "A full payment has been confirmed.": "Pilns maksājums ir apstiprināts.",
+  "A full payment has been confirmed.":
+    "Maksājums pilnā apmērā ir apstiprināts.",
   "The due date passed without a confirmed full payment.":
-    "Apmaksas termiņš ir pagājis bez apstiprināta pilna maksājuma.",
+    "Apmaksas termiņš ir beidzies, bet maksājums pilnā apmērā nav apstiprināts.",
   "Follow these steps in order for your first billing run. After setup, repeat the monthly cycle from period creation onward.":
     "Pirmajā norēķinu reizē veiciet šīs darbības secīgi. Pēc iestatīšanas katru mēnesi atkārtojiet ciklu, sākot ar perioda izveidi.",
   "First-time setup": "Pirmreizējā iestatīšana",
@@ -134,7 +135,7 @@ const lv: Record<string, string> = {
   "Open messages": "Atvērt ziņojumus",
   "Complete organization details": "Aizpildiet organizācijas datus",
   "Add the legal name, address, contact details, bank name and IBAN used on invoices.":
-    "Pievienojiet juridisko nosaukumu, adresi, kontaktinformāciju, bankas nosaukumu un IBAN, kas tiks izmantots rēķinos.",
+    "Pievienojiet juridisko nosaukumu, adresi, kontaktinformāciju, bankas nosaukumu un IBAN, kas tiks izmantoti rēķinos.",
   "Ready when invoice issuer and payment details are complete.":
     "Gatavs, kad aizpildīti rēķina izrakstītāja un maksājuma dati.",
   "Add dwellings": "Pievienojiet īpašumus",
@@ -142,7 +143,7 @@ const lv: Record<string, string> = {
     "Izveidojiet īpašumus atsevišķi vai importējiet tos no CSV. Pārbaudiet numurus, veidus, iemītniekus, platības un iedzīvotāju skaitu.",
   "Ready when every billable unit appears in the dwelling directory.":
     "Gatavs, kad visi norēķinu objekti redzami īpašumu sarakstā.",
-  "Assign residents and meters": "Piešķiriet iedzīvotājus un skaitītājus",
+  "Assign residents and meters": "Piesaistiet iedzīvotājus un skaitītājus",
   "Open each dwelling to assign resident access, add billing contact details and register its meters.":
     "Atveriet katru īpašumu, lai piešķirtu iedzīvotāju piekļuvi, pievienotu norēķinu kontaktinformāciju un reģistrētu skaitītājus.",
   "Ready when residents can access the correct dwelling and required meters are listed.":
@@ -156,7 +157,7 @@ const lv: Record<string, string> = {
   "Set the billing window, reading deadline, invoice issue date and due date. Creating a period creates a case for each active dwelling.":
     "Norādiet norēķinu intervālu, rādījumu termiņu, rēķina datumu un apmaksas termiņu. Izveidojot periodu, katram aktīvajam īpašumam tiek izveidots norēķinu ieraksts.",
   "Ready when the new OPEN period appears in period history.":
-    "Gatavs, kad jaunais ATVĒRTAIS periods redzams periodu vēsturē.",
+    "Gatavs, kad jaunais periods ar statusu ATVĒRTS redzams periodu vēsturē.",
   "Collect missing readings": "Savāciet trūkstošos rādījumus",
   "Use the dashboard attention list or monthly workbench to find missing readings. Residents may submit their own readings while permitted.":
     "Izmantojiet pārskata uzmanības sarakstu vai mēneša darbvietu, lai atrastu trūkstošos rādījumus. Iedzīvotāji var iesniegt savus rādījumus, kamēr tas ir atļauts.",
@@ -171,7 +172,7 @@ const lv: Record<string, string> = {
   "Prepare approved drafts, then send prepared invoices. A successful delivery moves the case to SENT and preserves the financial document.":
     "Sagatavojiet apstiprinātos melnrakstus un nosūtiet sagatavotos rēķinus. Veiksmīga piegāde maina statusu uz NOSŪTĪTS un saglabā finanšu dokumentu.",
   "Ready when intended invoices show SENT or a clear delivery error to resolve.":
-    "Gatavs, kad paredzētie rēķini ir NOSŪTĪTI vai redzama skaidra piegādes kļūda.",
+    "Gatavs, kad paredzētie rēķini ir statusā NOSŪTĪTS vai redzama skaidra piegādes kļūda, kas jānovērš.",
   "Reconcile incoming payments": "Saskaņojiet saņemtos maksājumus",
   "Import a bank statement, inspect the preview, confirm the import and review proposed or unmatched transactions.":
     "Importējiet bankas izrakstu, pārskatiet priekšskatījumu, apstipriniet importu un pārbaudiet ierosinātos vai nesaskaņotos darījumus.",
@@ -179,12 +180,12 @@ const lv: Record<string, string> = {
     "Gatavs, kad pareizās atbilstības ir apstiprinātas un attiecīgie rēķini ir APMAKSĀTI.",
   "Handle questions and exceptions": "Apstrādājiet jautājumus un izņēmumus",
   "Review resident messages, overdue invoices, unmatched payments and delivery failures. Resolve conversations when the issue is closed.":
-    "Pārskatiet iedzīvotāju ziņojumus, kavētos rēķinus, nesaskaņotos maksājumus un piegādes kļūdas. Atrisiniet sarunas, kad jautājums ir slēgts.",
+    "Pārskatiet iedzīvotāju ziņojumus, kavētos rēķinus, nesaskaņotos maksājumus un piegādes kļūdas. Slēdziet sarunas, kad jautājums ir atrisināts.",
   "Ready when attention items have an owner or are resolved.":
-    "Gatavs, kad uzmanības vienumiem ir atbildīgais vai tie ir atrisināti.",
+    "Gatavs, kad katram uzmanību prasošam jautājumam ir noteikts atbildīgais vai tas ir atrisināts.",
   "What do the invoice statuses mean?": "Ko nozīmē rēķinu statusi?",
   "MISSING DATA means a required input is absent. DRAFT can still be regenerated. PREPARED is approved for sending. SENT was delivered successfully. OVERDUE is sent and unpaid after its due date. PAID has a confirmed full payment.":
-    "TRŪKST DATU nozīmē, ka trūkst kādas nepieciešamas informācijas. MELNRAKSTU vēl var pārrēķināt. SAGATAVOTS ir apstiprināts nosūtīšanai. NOSŪTĪTS ir veiksmīgi piegādāts. KAVĒTS ir nosūtīts un nav apmaksāts pēc termiņa. APMAKSĀTS ir pilnībā apmaksāts.",
+    "TRŪKST DATU nozīmē, ka trūkst kādas nepieciešamas informācijas. MELNRAKSTU vēl var pārrēķināt. SAGATAVOTS ir apstiprināts nosūtīšanai. NOSŪTĪTS ir veiksmīgi piegādāts. KAVĒTS ir nosūtīts un nav apmaksāts pēc termiņa. APMAKSĀTS nozīmē, ka ir apstiprināta pilna apmaksa.",
   "Why can’t I generate an invoice?": "Kāpēc nevaru izveidot rēķinu?",
   "Generation is blocked when required readings are missing or the period is locked. Open the affected dwelling from the workbench to see the required input.":
     "Rēķina izveide ir bloķēta, ja trūkst obligātu rādījumu vai periods ir slēgts. Atveriet attiecīgo īpašumu darbvietā, lai skatītu nepieciešamos datus.",
@@ -200,37 +201,38 @@ const lv: Record<string, string> = {
   "What should I do with an unmatched payment?":
     "Ko darīt ar nesaskaņotu maksājumu?",
   "Review its amount, currency, payer and reference. Leave it unmatched until the correct invoice can be identified; do not confirm an uncertain match.":
-    "Pārskatiet summu, valūtu, maksātāju un maksājuma mērķi. Atstājiet darījumu nesaskaņotu, līdz var noteikt pareizo rēķinu; neapstipriniet nepārliecinošu atbilstību.",
+    "Pārskatiet summu, valūtu, maksātāju un maksājuma mērķi. Atstājiet maksājumu nesaskaņotu, līdz var noteikt pareizo rēķinu; neapstipriniet nepārliecinošu atbilstību.",
   "When should I lock a period?": "Kad slēgt periodu?",
   "Lock a period after normal reading and invoice input work is complete. Locked periods remain available for history but block normal reading edits and invoice regeneration.":
-    "Slēdziet periodu pēc rādījumu un rēķinu ievades darbu pabeigšanas. Slēgtie periodi paliek pieejami vēsturē, bet bloķē parastu rādījumu rediģēšanu un rēķinu pārrēķinu.",
-  "Auto-send day of month (1-28)": "Automātiskās nosūtīšanas diena (1–28)",
+    "Slēdziet periodu pēc rādījumu un rēķinu ievades darbu pabeigšanas. Slēgtie periodi paliek pieejami vēsturē, bet neļauj ierastajā kārtībā rediģēt rādījumus un pārrēķināt rēķinus.",
+  "Auto-send day of month (1-28)":
+    "Automātiskās nosūtīšanas mēneša diena (1–28)",
   "Automatically generate invoices each period":
     "Automātiski izveidot rēķinus katrā periodā",
   "Automatically send prepared invoices":
     "Automātiski nosūtīt sagatavotos rēķinus",
   "Only applies when auto-send is enabled above.":
-    "Tiek piemērots tikai tad, ja ieslēgta automātiska nosūtīšana.",
+    "Tiek piemērots tikai tad, ja augstāk ir ieslēgta automātiskā nosūtīšana.",
   "Area (m2)": "Platība (m²)",
   Fixed: "Fiksēts",
   "Manual amount": "Manuāla summa",
   "Manual quantity": "Manuāls daudzums",
   "Meter consumption": "Skaitītāja patēriņš",
   "Meter type (only for meter consumption rules)":
-    "Skaitītāja veids (patēriņa noteikumiem)",
+    "Skaitītāja veids (tikai skaitītāja patēriņa noteikumiem)",
   "Code (unique identifier, e.g. cold_water)":
     "Kods (unikāls identifikators, piem., cold_water)",
   "Unit (e.g. m3, month, person)": "Mērvienība (piem., m3, mēnesis, persona)",
   "Effective until (optional)": "Spēkā līdz (neobligāti)",
   Mode: "Režīms",
   "Create only (default) -- existing numbers become errors":
-    "Tikai izveidot (noklusējums) — esoši numuri rada kļūdas",
+    "Tikai izveidot (noklusējums) — esošie numuri rada kļūdas",
   "Update -- existing numbers are updated":
-    "Atjaunināt — esoši numuri tiek atjaunināti",
+    "Atjaunināt — esošie numuri tiek atjaunināti",
   "Back to dwellings": "Atpakaļ uz īpašumiem",
   "Back to payments": "Atpakaļ uz maksājumiem",
   "Export dwellings (CSV)": "Eksportēt īpašumus (CSV)",
-  "Export meter readings (CSV)": "Eksportēt rādījumus (CSV)",
+  "Export meter readings (CSV)": "Eksportēt skaitītāju rādījumus (CSV)",
   "Import bank statement (CSV)": "Importēt bankas izrakstu (CSV)",
   "Import dwellings (CSV)": "Importēt īpašumus (CSV)",
   "Confirm even if lower than previous":
@@ -247,12 +249,12 @@ const lv: Record<string, string> = {
   Error: "Kļūda",
   Invoiced: "Izrakstīts",
   "Next period →": "Nākamais periods →",
-  "Next →": "Nākamā →",
-  "View conversations for this dwelling →": "Skatīt īpašuma sarunas →",
+  "Next →": "Tālāk →",
+  "View conversations for this dwelling →": "Skatīt sarunas par šo īpašumu →",
   "Resident access is assigned per dwelling, from each dwelling's detail page.":
-    "Piekļuve tiek piešķirta katra īpašuma detalizētajā skatā.",
+    "Iedzīvotāju piekļuve tiek piešķirta katra īpašuma detalizētajā skatā.",
   "You don't belong to any organization yet. Create one below.":
-    "Jūs vēl nepiederat nevienai organizācijai. Izveidojiet to zemāk.",
+    "Jūs vēl neesat nevienā organizācijā. Izveidojiet to zemāk.",
   "You don't have access to any dwellings.":
     "Jums nav piekļuves nevienam īpašumam.",
   "No active meters for this dwelling.": "Šim īpašumam nav aktīvu skaitītāju.",
@@ -261,9 +263,9 @@ const lv: Record<string, string> = {
   "Filter meters": "Filtrēt skaitītājus",
   "No consumption history yet.": "Vēl nav patēriņa vēstures.",
   "Invoice email is missing. Add a billing email before sending.":
-    "Trūkst rēķina e-pasta adreses. Pievienojiet to pirms nosūtīšanas.",
+    "Nav norādīta rēķinu e-pasta adrese. Pievienojiet to pirms nosūtīšanas.",
   "Correct the details and regenerate the draft before preparing it again.":
-    "Labojiet datus un pārrēķiniet melnrakstu pirms atkārtotas sagatavošanas.",
+    "Labojiet datus un no jauna ģenerējiet melnrakstu pirms atkārtotas sagatavošanas.",
   Upload: "Augšupielādēt",
   Preview: "Priekšskatījums",
   "Confirm import": "Apstiprināt importu",
@@ -303,7 +305,7 @@ const lv: Record<string, string> = {
   Timezone: "Laika josla",
   Locale: "Valoda",
   "Invoice number prefix": "Rēķina numura prefikss",
-  "Default due days": "Noklusējuma apmaksas dienu skaits",
+  "Default due days": "Noklusējuma apmaksas termiņš dienās",
   "Tariffs and rules": "Tarifi un noteikumi",
   "Create rule": "Izveidot noteikumu",
   "VAT %": "PVN %",
@@ -346,7 +348,6 @@ const lv: Record<string, string> = {
   Payments: "Maksājumi",
   Messages: "Ziņojumi",
   Settings: "Iestatījumi",
-  "Property Billing": "Īpašumu rēķini",
   Administration: "Administrēšana",
   "Resident portal": "Iedzīvotāja portāls",
   Portal: "Portāls",
@@ -382,7 +383,7 @@ const lv: Record<string, string> = {
   Enabled: "Ieslēgts",
   Disabled: "Izslēgts",
   "Total invoiced": "Rēķinu kopsumma",
-  Outstanding: "Neapmaksāts",
+  Outstanding: "Neapmaksātā summa",
   "Cold water": "Aukstais ūdens",
   "Hot water": "Karstais ūdens",
   Consumption: "Patēriņš",
@@ -399,7 +400,7 @@ const lv: Record<string, string> = {
   "Review invoice": "Pārskatīt rēķinu",
   "Review payments": "Pārskatīt maksājumus",
   "Ready to generate": "Gatavs rēķina izveidei",
-  "Ready to invoice": "Gatavs rēķinam",
+  "Ready to invoice": "Gatavs rēķina izrakstīšanai",
   "Generate the invoice": "Izveidot rēķinu",
   "Ready to send": "Gatavs nosūtīšanai",
   "Readings are required before generating an invoice.":
@@ -429,7 +430,7 @@ const lv: Record<string, string> = {
   "Invoice dates": "Rēķina datumi",
   "Starts on": "Sākums",
   "Ends on": "Beigas",
-  "Invoice issue date": "Rēķina datums",
+  "Invoice issue date": "Rēķina izrakstīšanas datums",
   "Invoice due date": "Rēķina apmaksas termiņš",
   "Monthly workbench": "Mēneša norēķini",
   "Collect readings, generate invoices, then prepare and send.":
@@ -466,7 +467,7 @@ const lv: Record<string, string> = {
   "eligible to send": "var nosūtīt",
   "Prepare eligible": "Sagatavot atbilstošos",
   "Send eligible": "Nosūtīt atbilstošos",
-  "Clear selection": "Notīrīt izvēli",
+  "Clear selection": "Noņemt atlasi",
   "Billing inputs": "Norēķinu dati",
   "Next action": "Nākamā darbība",
   missing: "trūkst",
@@ -487,7 +488,7 @@ const lv: Record<string, string> = {
   "No billing cases match these filters.":
     "Filtriem neatbilst neviens norēķinu ieraksts.",
   "This period is locked. Readings and invoice generation cannot be changed.":
-    "Periods ir slēgts. Rādījumus un rēķinu aprēķinus nevar mainīt.",
+    "Periods ir slēgts. Nevar mainīt rādījumus un izveidot rēķinus.",
   "Select draft invoices to prepare, or prepared invoices to send.":
     "Izvēlieties melnrakstus sagatavošanai vai sagatavotos rēķinus nosūtīšanai.",
   "Select invoice": "Izvēlēties rēķinu",
@@ -534,9 +535,9 @@ const lv: Record<string, string> = {
   "More actions": "Citas darbības",
   Archive: "Arhivēt",
   "Manage dwelling details, occupants and resident access.":
-    "Pārvaldiet īpašumu datus, iemītniekus un piekļuvi.",
+    "Pārvaldiet īpašuma datus, iemītniekus un iedzīvotāju piekļuvi.",
   "New dwellings are included in every currently open billing period. Archive historically billed dwellings to preserve their invoices.":
-    "Jauni īpašumi tiks iekļauti visos pašlaik atvērtajos norēķinu periodos. Arhivējiet iepriekš rēķinātos īpašumus, saglabājot to rēķinus.",
+    "Jauni īpašumi tiks iekļauti visos pašlaik atvērtajos norēķinu periodos. Arhivējiet īpašumus, par kuriem iepriekš izrakstīti rēķini, lai saglabātu to rēķinus.",
   "No dwellings match this filter.": "Filtram neatbilst neviens īpašums.",
   Previous: "Iepriekšējā",
   Next: "Nākamā",
@@ -557,7 +558,7 @@ const lv: Record<string, string> = {
   "Booking date": "Grāmatošanas datums",
   Confirm: "Apstiprināt",
   Reject: "Noraidīt",
-  "No imports yet.": "Vēl nav importu.",
+  "No imports yet.": "Vēl nekas nav importēts.",
   "No transactions in this view.": "Šajā skatā nav darījumu.",
   Currency: "Valūta",
   Issuer: "Izrakstītājs",
@@ -592,7 +593,7 @@ const lv: Record<string, string> = {
   "Current value": "Pašreizējais rādījums",
   "Submit reading": "Iesniegt rādījumu",
   "The reading deadline has passed. Contact your administrator.":
-    "Rādījumu iesniegšanas termiņš ir pagājis. Sazinieties ar administratoru.",
+    "Rādījumu iesniegšanas termiņš ir beidzies. Sazinieties ar administratoru.",
   "No current invoice yet.": "Pašreizējais rēķins vēl nav izveidots.",
   "Consumption history": "Patēriņa vēsture",
   "Contact administrator": "Sazināties ar administratoru",
@@ -614,7 +615,7 @@ const lv: Record<string, string> = {
   "New message": "Jauns ziņojums",
   "Send reply": "Nosūtīt atbildi",
   "Resident conversations and billing questions.":
-    "Iedzīvotāju sarunas un jautājumi par norēķiniem.",
+    "Sarunas ar iedzīvotājiem un jautājumi par norēķiniem.",
   "Configure your organization, billing and access.":
     "Pārvaldiet organizāciju, norēķinus un piekļuvi.",
   Organization: "Organizācija",
@@ -624,23 +625,24 @@ const lv: Record<string, string> = {
   "Users & access": "Lietotāji un piekļuve",
   Data: "Dati",
   "Legal, bank, and contact details.":
-    "Juridiskie, bankas un kontaktinformācijas dati.",
+    "Juridiskā, bankas un kontaktinformācija.",
   "Admin membership and resident access.":
     "Administratoru un iedzīvotāju piekļuve.",
-  "Automation and due-date defaults.": "Automatizācija un noklusējuma termiņi.",
+  "Automation and due-date defaults.":
+    "Automatizācija un noklusējuma apmaksas termiņi.",
   "Billing calculation rules.": "Rēķinu aprēķina noteikumi.",
   "Invoice appearance.": "Rēķina izskats.",
   "Import and export.": "Imports un eksports.",
   "Audit history": "Audita vēsture",
   "Review recorded organization activity.":
-    "Pārskatiet reģistrētās organizācijas darbības.",
+    "Pārskatiet organizācijā reģistrētās darbības.",
   Save: "Saglabāt",
   "Billing name": "Rēķina saņēmējs",
   Email: "E-pasts",
-  "Working…": "Apstrādā…",
+  "Working…": "Notiek apstrāde…",
   "Saved successfully.": "Veiksmīgi saglabāts.",
   "Use a decimal point and up to three decimal places.":
-    "Izmantojiet punktu un ne vairāk kā trīs zīmes aiz komata.",
+    "Izmantojiet punktu un ne vairāk kā trīs zīmes aiz tā.",
   "Toggle theme": "Pārslēgt motīvu",
   "Switch to light theme": "Pārslēgt uz gaišo motīvu",
   "Switch to dark theme": "Pārslēgt uz tumšo motīvu",
@@ -655,7 +657,7 @@ const lv: Record<string, string> = {
   "Archive dwelling": "Arhivēt īpašumu",
   "Archive this dwelling?": "Arhivēt šo īpašumu?",
   "Archiving hides it from new periods and active lists. Past invoices and readings remain intact.":
-    "Arhivēšana to paslēpj no jauniem periodiem un aktīvajiem sarakstiem. Iepriekšējie rēķini un rādījumi paliek neskarti.",
+    "Pēc arhivēšanas īpašums vairs netiks iekļauts jaunos periodos un aktīvo īpašumu sarakstos. Iepriekšējie rēķini un rādījumi paliek neskarti.",
   Area: "Platība",
   "Basic information": "Pamatinformācija",
   "Billing details": "Norēķinu dati",
@@ -666,7 +668,7 @@ const lv: Record<string, string> = {
   "Changes saved": "Izmaiņas saglabātas",
   Close: "Aizvērt",
   "Complete the details below to resolve invoice preparation blockers.":
-    "Aizpildiet zemāk esošos datus, lai novērstu rēķina sagatavošanas šķēršļus.",
+    "Norādiet zemāk minētos datus, lai novērstu rēķina sagatavošanas šķēršļus.",
   "Consumption is calculated automatically.":
     "Patēriņš tiek aprēķināts automātiski.",
   "Conversations with residents will appear here.":
@@ -686,7 +688,7 @@ const lv: Record<string, string> = {
   "Internal notes and metadata.": "Iekšējās piezīmes un metadati.",
   "Invoice delivery": "Rēķinu piegāde",
   "Last updated": "Pēdējoreiz atjaunināts",
-  "Latest messages with this dwelling.": "Jaunākās ziņas ar šo īpašumu.",
+  "Latest messages with this dwelling.": "Jaunākās ziņas par šo īpašumu.",
   "Loading…": "Ielādē…",
   Method: "Metode",
   "No account entries yet": "Vēl nav konta ierakstu",
@@ -697,10 +699,10 @@ const lv: Record<string, string> = {
   "No open period": "Nav atvērta perioda",
   Note: "Piezīme",
   Notes: "Piezīmes",
-  "Open full dwelling": "Atvērt pilnu īpašumu",
+  "Open full dwelling": "Atvērt īpašumu pilnībā",
   "Outstanding balance": "Parāda atlikums",
   Paper: "Papīrs",
-  "Paper delivery": "Papīra piegāde",
+  "Paper delivery": "Piegāde papīra formātā",
   "People who can access their invoices and messages.":
     "Cilvēki, kuri var piekļūt saviem rēķiniem un ziņām.",
   "Previous reading": "Iepriekšējais rādījums",
@@ -726,7 +728,7 @@ const lv: Record<string, string> = {
   "Send sign-in link": "Nosūtīt pieteikšanās saiti",
   "Incorrect email or password.": "Nepareizs e-pasts vai parole.",
   "We couldn't find an account for that sign-in. If you believe this is a mistake, contact your administrator.":
-    "Šai pieteikšanās reizei konts netika atrasts. Ja uzskatāt, ka tā ir kļūda, sazinieties ar savu administratoru.",
+    "Konts ar šādiem pieteikšanās datiem netika atrasts. Ja uzskatāt, ka tā ir kļūda, sazinieties ar savu administratoru.",
   "Too many sign-in attempts. Please wait a minute and try again.":
     "Pārāk daudz pieteikšanās mēģinājumu. Uzgaidiet minūti un mēģiniet vēlreiz.",
   "Enter your email and we'll send you a secure sign-in link.":
@@ -734,13 +736,13 @@ const lv: Record<string, string> = {
   "If that email is registered, a sign-in link is on its way.":
     "Ja šis e-pasts ir reģistrēts, pieteikšanās saite jau ir ceļā.",
   "This sign-in link is invalid or has expired. Request a new one below.":
-    "Šī pieteikšanās saite nav derīga vai ir beigusies. Pieprasiet jaunu zemāk.",
+    "Šī pieteikšanās saite nav derīga vai tās derīguma termiņš ir beidzies. Pieprasiet jaunu zemāk.",
   "Page not found": "Lapa nav atrasta",
   "The page you are looking for does not exist or has moved.":
     "Meklētā lapa neeksistē vai ir pārvietota.",
   "Go to sign in": "Uz pieteikšanos",
   "Sign in as a resident with an email link, or as an administrator with a password.":
-    "Pieteikties kā iedzīvotājam ar e-pasta saiti vai kā administratoram ar paroli.",
+    "Piesakieties kā iedzīvotājs ar e-pasta saiti vai kā administrators ar paroli.",
   "Access denied": "Piekļuve liegta",
   "This area requires additional verification. Please complete sign-in with your second factor.":
     "Šai sadaļai nepieciešama papildu verifikācija. Lūdzu, pabeidziet pieteikšanos ar otro faktoru.",
@@ -766,9 +768,9 @@ const lv: Record<string, string> = {
   "Enter your admin email and we'll send you a link to choose a new password.":
     "Ievadiet administratora e-pastu, un mēs nosūtīsim saiti jaunas paroles iestatīšanai.",
   "If that email belongs to an admin account, a reset link is on its way.":
-    "Ja šis e-pasts ir reģistrēts administratora kontam, saite paroles atjaunošanai ir nosūtīta.",
+    "Ja šī e-pasta adrese ir saistīta ar administratora kontu, paroles atjaunošanas saite ir nosūtīta.",
   "This reset link is invalid or has expired. Request a new one.":
-    "Šī paroles atjaunošanas saite nav derīga vai ir beigusies. Pieprasiet jaunu.",
+    "Šī paroles atjaunošanas saite nav derīga vai tās derīguma termiņš ir beidzies. Pieprasiet jaunu.",
   "Send reset link": "Nosūtīt atjaunošanas saiti",
   "The password must be at least 8 characters.":
     "Parolei jābūt vismaz 8 rakstzīmes garai.",
@@ -791,7 +793,7 @@ const lv: Record<string, string> = {
     "Parole ir atjaunota. Piesakieties ar savu jauno paroli.",
   "Reset your password": "Atjaunojiet savu paroli",
   "Click below to choose a new password.":
-    "Lai iestatītu jaunu paroli, nospiediet «Turpināt».",
+    "Noklikšķiniet zemāk, lai iestatītu jaunu paroli.",
   Continue: "Turpināt",
   "Adjust this draft": "Pielāgot šo melnrakstu",
   "You can change these amounts until you prepare the invoice.":
@@ -800,13 +802,13 @@ const lv: Record<string, string> = {
   "Applied late fee": "Piemērotā nokavējuma maksa",
   "New late fee amount": "Jaunā nokavējuma maksas summa",
   "Update late fee": "Atjaunināt nokavējuma maksu",
-  "Bank processing delay": "Bankas apstrādes kavēšanās",
+  "Bank processing delay": "Bankas maksājuma apstrādes aizkavēšanās",
   "Billing dispute": "Strīds par rēķinu",
   "Meter issue": "Problēma ar skaitītāju",
   "Agreement with resident": "Vienošanās ar iedzīvotāju",
-  "Administrative waiver": "Administratīva atbrīvošana",
+  "Administrative waiver": "Administratīvs atbrīvojums",
   "Note (required when the reason is Other)":
-    "Piezīme (obligāta, ja iemesls ir Cits)",
+    "Piezīme (obligāta, ja iemesls ir “Cits”)",
   "Adjustment amount": "Korekcijas summa",
   "A negative amount lowers the amount due.":
     "Negatīva summa samazina apmaksājamo summu.",
@@ -843,7 +845,7 @@ const lv: Record<string, string> = {
     "Atveriet rēķinu ar statusu “Melnraksts”. Izmantojiet paneli “Pielāgot šo melnrakstu”. Katrai izmaiņai norādiet iemeslu. Pēc rēķina sagatavošanas to vairs nevar pielāgot.",
   "How do I fix a wrong invoice status?": "Kā labot nepareizu rēķina statusu?",
   "Open the invoice. Use the Override status panel. Choose the correct status and enter a reason. The system records the change in the audit log. The list always offers DRAFT, PREPARED, and OVERDUE. It offers SENT only if the invoice was sent, and PAID only if the invoice is paid.":
-    "Atveriet rēķinu. Izmantojiet paneli “Aizstāt statusu”. Izvēlieties pareizo statusu un ievadiet iemeslu. Sistēma reģistrē izmaiņu audita žurnālā. Sarakstā vienmēr tiek piedāvāts “Melnraksts”, “Sagatavots” un “Kavēts”. “Nosūtīts” tiek piedāvāts tikai tad, ja rēķins tika nosūtīts, un “Apmaksāts” tikai tad, ja rēķins ir apmaksāts.",
+    "Atveriet rēķinu. Izmantojiet paneli “Aizstāt statusu”. Izvēlieties pareizo statusu un ievadiet iemeslu. Sistēma reģistrē izmaiņas audita žurnālā. Sarakstā vienmēr tiek piedāvāti “Melnraksts”, “Sagatavots” un “Kavēts”. “Nosūtīts” tiek piedāvāts tikai tad, ja rēķins tika nosūtīts, un “Apmaksāts” — tikai tad, ja rēķins ir apmaksāts.",
   "How do I disable a resident's access?": "Kā atspējot iedzīvotāja piekļuvi?",
   "Open the dwelling. Click Disable next to the resident. The resident cannot access the system until you click Enable. You cannot disable an administrator or a resident who has access to another organization.":
     "Atveriet īpašumu. Nospiediet “Atspējot” blakus iedzīvotājam. Iedzīvotājs nevarēs piekļūt sistēmai, līdz nospiedīsiet “Iespējot”. Administratoru vai iedzīvotāju, kuram ir piekļuve citai organizācijai, atspējot nevar.",
@@ -858,25 +860,25 @@ const lv: Record<string, string> = {
   "Reason for reversal": "Atcelšanas iemesls",
   "Reverse payment": "Atcelt maksājumu",
   "Reverse this payment? The original payment stays in the history and a cancelling entry is added. The invoice becomes unpaid again.":
-    "Vai atcelt šo maksājumu? Sākotnējais maksājums paliek vēsturē, un tiek pievienots atceļošs ieraksts. Rēķins atkal kļūst neapmaksāts.",
+    "Vai atcelt šo maksājumu? Sākotnējais maksājums paliek vēsturē, un tiek pievienots atcelšanas ieraksts. Rēķins atkal kļūst neapmaksāts.",
   "Choose an invoice": "Izvēlieties rēķinu",
   "Match to invoice": "Piesaistīt rēķinam",
   "Match this payment to the chosen invoice? The payment is applied right away.":
-    "Vai piesaistīt šo maksājumu izvēlētajam rēķinam? Maksājums tiek piemērots uzreiz.",
+    "Vai piesaistīt šo maksājumu izvēlētajam rēķinam? Maksājums tiks ieskaitīts uzreiz.",
   "Record a payment": "Reģistrēt maksājumu",
   "Record payment": "Reģistrēt maksājumu",
   "Use this for a bank transfer that is not in an imported statement. The payment is applied right away.":
-    "Izmantojiet šo bankas pārskaitījumam, kas nav iekļauts importētajā izrakstā. Maksājums tiek piemērots uzreiz.",
+    "Izmantojiet šo funkciju, lai reģistrētu bankas pārskaitījumu, kas nav iekļauts importētajā izrakstā. Maksājums tiks ieskaitīts uzreiz.",
   "Bank reference": "Bankas maksājuma mērķis",
   "Record this payment? It is applied to the invoice right away.":
-    "Vai reģistrēt šo maksājumu? Tas uzreiz tiek piemērots rēķinam.",
+    "Vai reģistrēt šo maksājumu? Tas tiks uzreiz ieskaitīts rēķina apmaksā.",
   "Payment reversed.": "Maksājums atcelts.",
   "Payment matched.": "Maksājums piesaistīts.",
   "Payment recorded.": "Maksājums reģistrēts.",
   "How do I record a payment that is not in a bank statement?":
-    "Kā ievadīt maksājumu, kura nav bankas izrakstā?",
+    "Kā reģistrēt maksājumu, kura nav bankas izrakstā?",
   "Click Record a payment on the Payments page. Choose the invoice. Enter the amount, date, payer, bank reference, and a reason. The payment applies right away. The app blocks a second entry with the same reference, amount, and date. You can record bank transfers only.":
-    "Maksājumu lapā nospiediet “Reģistrēt maksājumu”. Izvēlieties rēķinu. Ievadiet summu, datumu, maksātāju, bankas atsauci un iemeslu. Maksājums tiek piemērots uzreiz. Lietotne bloķē otru ierakstu ar to pašu atsauci, summu un datumu. Var ievadīt tikai bankas pārskaitījumus.",
+    "Maksājumu lapā nospiediet “Reģistrēt maksājumu”. Izvēlieties rēķinu. Ievadiet summu, datumu, maksātāju, bankas maksājuma mērķi un iemeslu. Maksājums tiek piemērots uzreiz. Lietotne bloķē atkārtotu ierakstu ar to pašu maksājuma mērķi, summu un datumu. Var reģistrēt tikai bankas pārskaitījumus.",
   "How do I undo a payment that I matched to the wrong invoice?":
     "Kā atcelt maksājumu, ko piesaistīju nepareizam rēķinam?",
   "Open the Confirmed tab on the Payments page. Click Reverse next to the payment and enter a reason. The original payment stays in the history. The invoice becomes unpaid again. The payment returns to the Unmatched tab. There you can match it to the correct invoice. You cannot reverse a payment if a later invoice already used its credit.":
@@ -915,25 +917,26 @@ const lv: Record<string, string> = {
   "This invoice has already been sent and can no longer be regenerated; issue a correction document instead":
     "Šis rēķins jau ir nosūtīts, un to vairs nevar pārrēķināt; tā vietā izrakstiet korekcijas dokumentu",
   "This invoice has already moved past DRAFT and can no longer be regenerated":
-    "Šis rēķins jau ir pārsniedzis statusu “Melnraksts”, un to vairs nevar pārrēķināt",
+    "Šis rēķins vairs nav statusā “Melnraksts”, un to vairs nevar pārrēķināt",
   "Only a DRAFT invoice can be prepared":
     "Sagatavot var tikai rēķinu statusā “Melnraksts”",
   "Issuer details are incomplete; update organization settings before preparing":
     "Izrakstītāja dati nav pilnīgi; pirms sagatavošanas atjauniniet organizācijas iestatījumus",
   "This dwelling is missing a billing/occupant name or a billing address":
-    "Šim īpašumam trūkst norēķinu/iemītnieka vārda vai norēķinu adreses",
+    "Šim īpašumam trūkst saņēmēja/iemītnieka vārda vai norēķinu adreses",
   "Organization payment details are incomplete (both bank name and IBAN are required)":
     "Organizācijas maksājuma dati nav pilnīgi (nepieciešams gan bankas nosaukums, gan IBAN)",
   "A reason is required for a manual status override":
     "Manuālai statusa aizstāšanai nepieciešams norādīt iemeslu",
   "Billing case not found": "Norēķinu ieraksts nav atrasts",
   "A case can be set to Sent only when its invoice was sent":
-    "Ieraksta statusu var iestatīt uz “Nosūtīts” tikai tad, ja tā rēķins tika nosūtīts",
+    "Ieraksta statusu var iestatīt uz “Nosūtīts” tikai tad, ja tā rēķins ir nosūtīts",
   "A case can be set to Paid only when its invoice is paid":
     "Ieraksta statusu var iestatīt uz “Apmaksāts” tikai tad, ja tā rēķins ir apmaksāts",
   "A case that already has an invoice cannot go back to Missing data or Ready":
     "Ieraksts, kuram jau ir rēķins, nevar atgriezties statusā “Trūkst datu” vai “Gatavs”",
-  "Invalid or expired invoice link": "Nederīga vai beigusies rēķina saite",
+  "Invalid or expired invoice link":
+    "Rēķina saite nav derīga vai tās derīguma termiņš ir beidzies",
   "A meter consumption rule requires a meter type":
     "Skaitītāja patēriņa noteikumam nepieciešams skaitītāja veids",
   "This rule requires a unit price (it would otherwise always bill 0)":
@@ -976,7 +979,7 @@ const lv: Record<string, string> = {
   "This request key was already used":
     "Šī pieprasījuma atslēga jau tika izmantota",
   "Select at least one invoice delivery method (email or paper)":
-    "Izvēlieties vismaz vienu rēķina piegādes veidu (e-pastu vai papīru)",
+    "Izvēlieties vismaz vienu rēķina piegādes veidu (pa e-pastu vai papīra formātā)",
   "The original item is no longer present":
     "Sākotnējais vienums vairs nepastāv",
   "The original access grant is no longer present":
@@ -1004,7 +1007,8 @@ const lv: Record<string, string> = {
   "This payment is already matched": "Šis maksājums jau ir piesaistīts",
   "This payment was reversed from this invoice. Choose a different invoice":
     "Šis maksājums tika atcelts no šī rēķina. Izvēlieties citu rēķinu",
-  "This invoice cannot receive a payment": "Šis rēķins nevar saņemt maksājumu",
+  "This invoice cannot receive a payment":
+    "Šim rēķinam nevar piesaistīt maksājumu",
   "This invoice is already fully allocated":
     "Šis rēķins jau ir pilnībā piesaistīts",
   "Amount must be greater than 0": "Summai jābūt lielākai par 0",
@@ -1024,7 +1028,7 @@ const lv: Record<string, string> = {
   "This match was rejected and cannot be confirmed":
     "Šī piesaiste tika noraidīta, un to nevar apstiprināt",
   "This payment is already applied to another invoice":
-    "Šis maksājums jau ir piemērots citam rēķinam",
+    "Šis maksājums jau ir piesaistīts citam rēķinam",
   "This invoice is already paid": "Šis rēķins jau ir apmaksāts",
   "This match has already been confirmed and cannot be rejected":
     "Šī piesaiste jau ir apstiprināta, un to nevar noraidīt",
@@ -1046,13 +1050,13 @@ const lv: Record<string, string> = {
   "The previous delivery attempt's outcome could not be confirmed. Verify whether the invoice was actually delivered, then use Resend if it needs to go out again.":
     "Iepriekšējā piegādes mēģinājuma rezultātu nevarēja apstiprināt. Pārbaudiet, vai rēķins tika piegādāts, un, ja tas jānosūta vēlreiz, izmantojiet “Nosūtīt atkārtoti”.",
   "Invoices prepared by the end of this day are sent on this day. The app tries a failed send again on the next days.":
-    "Rēķini, kas sagatavoti līdz šīs dienas beigām, tiek nosūtīti šajā dienā. Neizdevušos sūtīšanu lietotne mēģina atkārtot nākamajās dienās.",
+    "Rēķini, kas sagatavoti līdz šīs dienas beigām, tiek nosūtīti tajā pašā dienā. Ja nosūtīšana neizdodas, lietotne mēģina vēlreiz nākamajās dienās.",
   "This email address bounced or reported a complaint. Change the billing email or remove it from the suppressed list":
-    "Uz šo e-pasta adresi vēstules neizdodas nogādāt, vai par to ir saņemta sūdzība. Nomainiet norēķinu e-pastu vai noņemiet adresi no bloķēto saraksta",
+    "Uz šo e-pasta adresi vēstules neizdevās nogādāt vai par to ir saņemta sūdzība. Nomainiet norēķinu e-pastu vai noņemiet adresi no bloķēto saraksta",
   "Suppressed address not found": "Bloķētā adrese nav atrasta",
   "Suppressed email addresses": "Bloķētās e-pasta adreses",
   "Addresses that bounced or reported a complaint.":
-    "Adreses, uz kurām vēstules neizdevās nogādāt vai par kurām saņemta sūdzība.",
+    "Adreses, uz kurām vēstules neizdevās nogādāt vai no kurām saņemta sūdzība.",
   "Invoices are not sent to these addresses. The email provider reported a permanent bounce or a complaint. Remove an address after you fix the problem.":
     "Uz šīm adresēm rēķini netiek sūtīti. E-pasta pakalpojuma sniedzējs ziņoja par pastāvīgu piegādes kļūdu vai sūdzību. Noņemiet adresi pēc tam, kad esat novērsis problēmu.",
   "Address removed.": "Adrese noņemta.",
@@ -1065,7 +1069,7 @@ const lv: Record<string, string> = {
     "Noņemt šo adresi no bloķēto saraksta? Uz to atkal varēs sūtīt rēķinus.",
   "Remove from list": "Noņemt no saraksta",
   "Only an incoming payment can be applied to an invoice":
-    "Rēķinam var piemērot tikai ienākošu maksājumu",
+    "Rēķinam var piesaistīt tikai ienākošu maksājumu",
   "Administrators sign in with a password. Use the Admin sign in form on this page.":
     "Administratori piesakās ar paroli. Izmantojiet šajā lapā administratora pieteikšanās veidlapu.",
   "Request ID": "Pieprasījuma ID",
@@ -1081,7 +1085,7 @@ const lv: Record<string, string> = {
   "The email provider tells the app about a permanent bounce or a complaint. The app adds the address to the suppressed list and sends no more invoices to it. Open Settings, then Suppressed email addresses. Fix the billing email, or remove the address from the list.":
     "E-pasta pakalpojuma sniedzējs paziņo lietotnei par pastāvīgu piegādes kļūdu vai sūdzību. Lietotne pievieno adresi bloķēto sarakstam un vairs nesūta uz to rēķinus. Atveriet “Iestatījumi”, pēc tam “Bloķētās e-pasta adreses”. Izlabojiet norēķinu e-pastu vai noņemiet adresi no saraksta.",
   "Why does a sign-in link not work for me as an administrator?":
-    "Kāpēc pieteikšanās saite man nedarbojas kā administratoram?",
+    "Kāpēc man kā administratoram nedarbojas pieteikšanās saite?",
   "Administrators sign in with a password. Use the Admin sign in form. A sign-in link works for residents only. Click Forgot password? if you do not know your password.":
     "Administratori piesakās ar paroli. Izmantojiet “Administratora pieteikšanās” veidlapu. Pieteikšanās saite darbojas tikai iedzīvotājiem. Ja nezināt paroli, nospiediet “Aizmirsāt paroli?”.",
   "This organization is archived. Restore it in Settings to make changes.":
@@ -1092,7 +1096,7 @@ const lv: Record<string, string> = {
   "Your property manager has closed this account. You cannot see invoices or send messages here. Contact your property manager for help.":
     "Jūsu īpašuma pārvaldnieks ir slēdzis šo kontu. Šeit nevar skatīt rēķinus vai sūtīt ziņas. Vērsieties pēc palīdzības pie sava īpašuma pārvaldnieka.",
   "This organization is archived. You can read it but not change it. Residents cannot sign in. Restore it in Settings > Organization.":
-    "Šī organizācija ir arhivēta. To var lasīt, bet nevar mainīt. Iedzīvotāji nevar pieteikties. Atjaunojiet to sadaļā Iestatījumi > Organizācija.",
+    "Šī organizācija ir arhivēta. To var skatīt, bet nevar mainīt. Iedzīvotāji nevar pieteikties. Atjaunojiet to sadaļā “Iestatījumi” > “Organizācija”.",
   "Archive organization": "Arhivēt organizāciju",
   "Restore organization": "Atjaunot organizāciju",
   "This organization is archived. Restore it to make changes and to let residents sign in again.":
@@ -1117,11 +1121,12 @@ const lv: Record<string, string> = {
   "Open Settings, then Organization. Click Restore organization. The organization works as before. Residents can sign in again. The links in old invoice emails work again.":
     "Atveriet “Iestatījumi”, pēc tam “Organizācija”. Nospiediet “Atjaunot organizāciju”. Organizācija darbojas kā iepriekš. Iedzīvotāji atkal var pieteikties. Saites vecajos rēķinu e-pastos atkal darbojas.",
   "Person not found": "Persona nav atrasta",
+  "unread conversations": "nelasītas sarunas",
   "Payment history": "Maksājumu vēsture",
   "No payments yet.": "Maksājumu vēl nav.",
   "Display name": "Attēlojamais vārds",
   "Enter a name of 1 to 100 characters.":
-    "Ievadiet vārdu no 1 līdz 100 rakstzīmēm.",
+    "Ievadiet vārdu garumā no 1 līdz 100 rakstzīmēm.",
   "Export data": "Eksportēt datus",
   "Your data": "Jūsu dati",
   "Download a copy of the data this service holds about you, as a JSON file.":
@@ -1145,7 +1150,7 @@ const lv: Record<string, string> = {
   "Sending has not finished yet. Check the delivery status.":
     "Sūtīšana vēl nav pabeigta. Pārbaudiet piegādes statusu.",
   "Resend submitted. Check the delivery status.":
-    "Atkārtota sūtīšana iesniegta. Pārbaudiet piegādes statusu.",
+    "Atkārtota nosūtīšana uzsākta. Pārbaudiet piegādes statusu.",
   "Access link revoked.": "Piekļuves saite atsaukta.",
   "Paper dispatch recorded.": "Nosūtīšana pa pastu atzīmēta.",
   "1 change saving": "Tiek saglabāta 1 izmaiņa",
@@ -1204,7 +1209,7 @@ const lv: Record<string, string> = {
   "Add a note about this dwelling…": "Pievienojiet piezīmi par šo īpašumu…",
   Admin: "Administrators",
   "Admin dashboard with billing totals and work that needs attention.":
-    "Administratora panelis ar norēķinu kopsummām un darbiem, kam nepieciešama uzmanība.",
+    "Administratora panelis ar norēķinu kopsummām un darbiem, kam jāpievērš uzmanība.",
   "Apply late fees to overdue invoices.":
     "Piemērot nokavējuma maksu kavētiem rēķiniem.",
   "Auto-send day of month": "Automātiskās nosūtīšanas diena mēnesī",
@@ -1212,7 +1217,7 @@ const lv: Record<string, string> = {
     "Automātiskā ģenerēšana un nosūtīšana notiek tikai atbilstošiem norēķinu periodiem.",
   "Automation scope": "Automatizācijas apjoms",
   "Avoid overlapping rules of the same type. When a new rate applies, create a new rule with a later effective date.":
-    "Izvairieties no pārklājošiem viena veida noteikumiem. Kad stājas spēkā jauna likme, izveidojiet jaunu noteikumu ar vēlāku sākuma datumu.",
+    "Izvairieties no viena veida noteikumu pārklāšanās. Kad stājas spēkā jauna likme, izveidojiet jaunu noteikumu ar vēlāku sākuma datumu.",
   "Billing information": "Norēķinu informācija",
   "Billing summary": "Norēķinu kopsavilkums",
   Breadcrumb: "Navigācijas ceļš",
@@ -1226,7 +1231,7 @@ const lv: Record<string, string> = {
   "Core invoicing preferences for this organization.":
     "Šīs organizācijas galvenie norēķinu iestatījumi.",
   "Creates draft invoices for all eligible accounts at the start of each period.":
-    "Katra perioda sākumā izveido melnrakstu rēķinus visiem atbilstošajiem kontiem.",
+    "Katra perioda sākumā izveido rēķinu melnrakstus visiem atbilstošajiem kontiem.",
   "Current defaults for this organization.":
     "Šīs organizācijas pašreizējās noklusējuma vērtības.",
   "Daily late fee rate as a percentage.":
@@ -1248,40 +1253,40 @@ const lv: Record<string, string> = {
   "Filter by status": "Filtrēt pēc statusa",
   "Fixed rules": "Fiksētie noteikumi",
   "Follow these steps in order for your first billing run. After setup, repeat the monthly cycle every month.":
-    "Izpildiet šos soļus secībā pirmajam norēķinu ciklam. Pēc iestatīšanas atkārtojiet ikmēneša ciklu katru mēnesi.",
+    "Pirmajam norēķinu ciklam izpildiet šos soļus pēc kārtas. Pēc iestatīšanas atkārtojiet ikmēneša ciklu katru mēnesi.",
   "Good to know": "Noderīgi zināt",
-  "Grace period (days)": "Pagarinājuma periods (dienās)",
+  "Grace period (days)": "Labvēlības periods (dienās)",
   "Help & guidance": "Palīdzība un norādes",
   History: "Vēsture",
   "How tariffs are applied": "Kā tiek piemēroti tarifi",
   "How the charge is calculated.": "Kā tiek aprēķināta maksa.",
   "Important details about billing settings.":
     "Svarīga informācija par norēķinu iestatījumiem.",
-  "Internal note (optional)": "Iekšēja piezīme (nav obligāti)",
+  "Internal note (optional)": "Iekšējā piezīme (nav obligāti)",
   "Invoice numbering": "Rēķinu numerācija",
   "Invoice prefix": "Rēķina prefikss",
   "Keep your details current so that invoices, payments, and official communication are processed without delays.":
-    "Uzturiet savus datus aktuālus, lai rēķini, maksājumi un oficiālā saziņa notiktu bez kavēšanās.",
+    "Uzturiet savus datus aktuālus, lai rēķini un maksājumi tiktu apstrādāti un oficiālā saziņa notiktu bez kavēšanās.",
   "Keep your organization details up to date to ensure correct invoicing and communication.":
     "Uzturiet organizācijas datus aktuālus, lai nodrošinātu pareizu rēķinu izrakstīšanu un saziņu.",
   "Late-payment changes": "Nokavēto maksājumu izmaiņas",
   "Leave empty for ongoing.": "Atstājiet tukšu, ja periods turpinās.",
   "Manage legal, contact, and bank details for this organization.":
-    "Pārvaldiet šīs organizācijas juridiskos, kontaktinformācijas un bankas datus.",
+    "Pārvaldiet šīs organizācijas juridisko informāciju, kontaktinformāciju un bankas rekvizītus.",
   "Manage utility rates, billing formulas, and effective periods.":
     "Pārvaldiet komunālo pakalpojumu likmes, aprēķina formulas un spēkā esamības periodus.",
   "Mark resolved": "Atzīmēt kā atrisinātu",
   "Maximum penalty as a percentage of eligible principal.":
     "Maksimālais soda apmērs procentos no piemērojamās pamatsummas.",
-  "Maximum total penalty (%)": "Maksimālā kopējā soda maksa (%)",
+  "Maximum total penalty (%)": "Maksimālais kopējais soda apmērs (%)",
   "Meter type": "Skaitītāja veids",
-  "Meter-based rules": "Uz skaitītāju balstīti noteikumi",
+  "Meter-based rules": "Skaitītāju noteikumi",
   "Need help?": "Nepieciešama palīdzība?",
   "No billing rules match this filter.":
-    "Nevienam norēķinu noteikumam neatbilst šis filtrs.",
+    "Šim filtram neatbilst neviens norēķinu noteikums.",
   "No resident": "Nav iedzīvotāja",
   "Number of days after the due date before late fees apply.":
-    "Dienu skaits pēc apmaksas termiņa, pirms tiek piemērota nokavējuma maksa.",
+    "Dienu skaits no apmaksas termiņa līdz nokavējuma maksas piemērošanai.",
   "Number of days after the invoice date.":
     "Dienu skaits pēc rēķina izrakstīšanas datuma.",
   "Number, occupant, address...": "Numurs, iedzīvotājs, adrese...",
@@ -1293,7 +1298,7 @@ const lv: Record<string, string> = {
   "Price per unit (excl. VAT).": "Cena par vienību (bez PVN).",
   "Resident information": "Iedzīvotāja informācija",
   "Review resident questions, send updates, and keep billing conversations in context.":
-    "Skatiet iedzīvotāju jautājumus, sūtiet paziņojumus un uzturiet norēķinu sarunas pārskatāmas.",
+    "Izskatiet iedzīvotāju jautājumus, sūtiet paziņojumus un saglabājiet norēķinu sarunu kontekstu.",
   "Rule summary": "Noteikuma kopsavilkums",
   "Rules applied to future late-fee calculations. Existing invoices keep their original financial snapshot.":
     "Noteikumi tiek piemēroti turpmākajiem nokavējuma maksas aprēķiniem. Esošie rēķini saglabā sākotnējos finanšu datus.",
@@ -1344,9 +1349,9 @@ const lv: Record<string, string> = {
   "Add the legal name, address, contact details, bank name, IBAN, registration number, and VAT number used on invoices.":
     "Pievienojiet juridisko nosaukumu, adresi, kontaktinformāciju, bankas nosaukumu, IBAN, reģistrācijas numuru un PVN numuru, ko izmanto rēķinos.",
   "Ready when the invoice issuer and payment details are complete.":
-    "Gatavs, kad rēķina izdevēja un maksājuma dati ir pilnīgi.",
+    "Gatavs, kad ir aizpildīti rēķina izrakstītāja dati un maksājuma rekvizīti.",
   "Click Create dwelling to add one dwelling, or import a CSV file for many. Check each number, type, occupant, area, and resident count. A new dwelling joins every currently open billing period.":
-    "Spiediet Izveidot mājokli, lai pievienotu vienu mājokli, vai importējiet CSV failu vairākiem. Pārbaudiet katru numuru, tipu, īpašnieku, platību un iedzīvotāju skaitu. Jauns mājoklis tiek iekļauts katrā pašlaik atvērtajā norēķinu periodā.",
+    "Spiediet “Izveidot īpašumu”, lai pievienotu vienu īpašumu, vai importējiet CSV failu, lai pievienotu vairākus. Pārbaudiet katra īpašuma numuru, tipu, iedzīvotāju, platību un iedzīvotāju skaitu. Jauns īpašums tiek iekļauts visos pašlaik atvērtajos norēķinu periodos.",
   "Open tariffs & rules": "Atvērt tarifus un noteikumus",
   "Why do some actions ask me to confirm?":
     "Kāpēc dažas darbības prasa apstiprinājumu?",
@@ -1354,67 +1359,67 @@ const lv: Record<string, string> = {
     "Rēķina nosūtīšanai un atkārtotai nosūtīšanai, piekļuves saites atsaukšanai un papīra nosūtīšanas reģistrēšanai ir nepieciešams apstiprinājums. Apstiprinājums ir nepieciešams arī arhivēšanai, noņemšanai, atspējošanai, statusa aizstāšanai, maksājuma apstiprināšanai, maksājuma atcelšanai, piesaistīšanai rēķinam un maksājuma reģistrēšanai. Tas palīdz nepieļaut grūti atsaucamas izmaiņas.",
   "What if I forget my password?": "Ko darīt, ja aizmirstu paroli?",
   "Click Forgot password? on the sign-in page. Enter your email address. Follow the link in the email to set a new password.":
-    "Pieteikšanās lapā spiediet Aizmirsu paroli. Ievadiet savu e-pasta adresi. Sekojiet e-pastā saņemtajai saitei, lai iestatītu jaunu paroli.",
+    "Pieteikšanās lapā spiediet “Aizmirsāt paroli?”. Ievadiet savu e-pasta adresi. Sekojiet e-pastā saņemtajai saitei, lai iestatītu jaunu paroli.",
   "Ready when every billable unit appears in the dwelling list.":
-    "Gatavs, kad visas rēķināmās vienības ir redzamas mājokļu sarakstā.",
+    "Gatavs, kad īpašumu sarakstā ir redzamas visas vienības, par kurām jāizraksta rēķini.",
   "Dwelling list with filters and dwelling details.":
-    "Mājokļu saraksts ar filtriem un mājokļu datiem.",
+    "Īpašumu saraksts ar filtriem un īpašumu datiem.",
   "Open each dwelling. Assign resident access. Add billing contact details. Register its meters. You can edit a meter later, but you cannot change its unit of measurement after a reading exists.":
     "Atveriet katru īpašumu. Piešķiriet iedzīvotājam piekļuvi. Pievienojiet norēķinu kontaktinformāciju. Reģistrējiet īpašuma skaitītājus. Skaitītāju var rediģēt arī vēlāk, bet pēc pirmā rādījuma ievadīšanas tā mērvienību mainīt nevar.",
   "Ready when residents can access their dwelling and all meters are listed.":
-    "Gatavs, kad iedzīvotāji var piekļūt savam mājoklim un visi skaitītāji ir uzskaitīti.",
+    "Gatavs, kad iedzīvotāji var piekļūt savam īpašumam un visi skaitītāji ir uzskaitīti.",
   "Dwelling detail page with resident access and meter registration.":
-    "Mājokļa detalizētā lapa ar iedzīvotāja piekļuvi un skaitītāju reģistrāciju.",
+    "Īpašuma informācijas lapa ar iedzīvotāja piekļuvi un skaitītāju reģistrāciju.",
   "Set tariffs and rules": "Iestatiet tarifus un noteikumus",
   "Add the billing rules that set fixed, area, resident-count, or meter-consumption charges.":
-    "Pievienojiet rēķinu noteikumus, kas nosaka fiksētas, platības, iedzīvotāju skaita vai skaitītāju patēriņa maksas.",
+    "Pievienojiet norēķinu noteikumus, kas nosaka fiksētu maksu vai maksu pēc platības, iedzīvotāju skaita vai skaitītāja uzskaitītā patēriņa.",
   "Tariffs and rules list with rule details.":
     "Tarifu un noteikumu saraksts ar noteikumu datiem.",
   "Set the billing window, reading deadline, invoice issue date, and due date. A new period creates a case for each active dwelling. Residents can submit readings through the deadline date in the organization time zone. Administrators can enter readings later.":
-    "Iestatiet norēķinu periodu, rādījumu iesniegšanas termiņu, rēķina izdošanas datumu un apmaksas termiņu. Jauns periods izveido lietu katram aktīvajam īpašumam. Iedzīvotāji var iesniegt rādījumus līdz termiņa dienas beigām pēc organizācijas laika. Administratori var ievadīt rādījumus arī vēlāk.",
+    "Iestatiet norēķinu periodu, rādījumu iesniegšanas termiņu, rēķina izdošanas datumu un apmaksas termiņu. Jauns periods izveido lietu katram aktīvajam īpašumam. Iedzīvotāji var iesniegt rādījumus līdz termiņa dienas beigām organizācijas laika joslā. Administratori var ievadīt rādījumus arī vēlāk.",
   "Ready when the new OPEN period appears in the period list.":
     "Gatavs, kad jaunais ATVĒRTAIS periods parādās periodu sarakstā.",
   "Billing period list and period actions.":
-    "Rēķinu periodu saraksts un periodu darbības.",
+    "Norēķinu periodu saraksts un darbības ar periodiem.",
   "Use the dashboard attention list or the monthly workbench to find missing readings. Residents can also submit readings when allowed.":
-    "Izmantojiet informācijas paneļa uzmanības sarakstu vai ikmēneša darbvirsmu, lai atrastu trūkstošos rādījumus. Iedzīvotāji var arī iesniegt rādījumus, ja tas ir atļauts.",
+    "Izmantojiet informācijas paneļa sarakstu ar lietām, kam jāpievērš uzmanība, vai ikmēneša darbvirsmu, lai atrastu trūkstošos rādījumus. Iedzīvotāji var arī iesniegt rādījumus, ja tas ir atļauts.",
   "Generate eligible invoices in the workbench. Review the calculation lines, recipient details, dates, and totals. You can waive the late fee or add a manual adjustment only before you prepare a DRAFT invoice.":
     "Ģenerējiet atbilstošos rēķinus darbvietā. Pārskatiet aprēķina rindas, saņēmēja datus, datumus un kopsummas. Nokavējuma maksu var atcelt vai pievienot manuālu korekciju tikai pirms rēķina ar statusu “Melnraksts” sagatavošanas.",
   "Ready when correct invoices are in DRAFT and you have fixed all validation blockers.":
-    "Gatavs, kad pareizie rēķini ir statusā MELNRAKSTS un visi validācijas šķēršļi ir novērsti.",
+    "Gatavs, kad pareizie rēķini ir statusā MELNRAKSTS un visas validācijas kļūdas ir novērstas.",
   "Monthly workbench with the billing workflow and case list.":
-    "Ikmēneša darbvirsma ar rēķinu darbplūsmu un lietu sarakstu.",
+    "Ikmēneša darbvirsma ar norēķinu darbplūsmu un lietu sarakstu.",
   "Prepare approved drafts. Send the prepared invoices. Delivery moves each case to SENT and locks the invoice. With automatic sending on, the app sends the invoices that you prepared by the end of the send day. It tries again on the next days if a send fails.":
-    "Sagatavojiet apstiprinātos melnrakstus. Nosūtiet sagatavotos rēķinus. Piegāde pārvieto katru lietu uz statusu NOSŪTĪTS un bloķē rēķinu. Ja automātiskā sūtīšana ir ieslēgta, lietotne nosūta rēķinus, kurus esat sagatavojis līdz sūtīšanas dienas beigām. Ja sūtīšana neizdodas, tā mēģina vēlreiz nākamajās dienās.",
+    "Sagatavojiet apstiprinātos melnrakstus. Nosūtiet sagatavotos rēķinus. Pēc nosūtīšanas katra lieta iegūst statusu NOSŪTĪTS, un rēķins tiek bloķēts. Ja automātiskā sūtīšana ir ieslēgta, lietotne nosūta līdz sūtīšanas dienas beigām sagatavotos rēķinus. Ja sūtīšana neizdodas, tā mēģina vēlreiz nākamajās dienās.",
   "Ready when sent invoices show SENT, or show a clear delivery error to fix.":
-    "Gatavs, kad nosūtītie rēķini rāda statusu NOSŪTĪTS vai skaidru piegādes kļūdu, kas jālabo.",
+    "Gatavs, kad nosūtītajiem rēķiniem ir statuss NOSŪTĪTS vai ir redzama skaidra piegādes kļūda, kas jālabo.",
   "Import a bank statement. Check the preview. Confirm the import. Review proposed or unmatched payments. Use the search box and date fields to find a payment in the selected view. You can also record a payment by hand, reverse a wrong payment, or match an unmatched payment.":
     "Importējiet bankas izrakstu. Pārbaudiet priekšskatījumu. Apstipriniet importu. Pārskatiet piedāvātos vai nesaskaņotos maksājumus. Izmantojiet meklēšanas lauku un datumu laukus, lai izvēlētajā skatā atrastu maksājumu. Varat arī ievadīt maksājumu manuāli, atcelt kļūdainu maksājumu vai piesaistīt nesaskaņotu maksājumu rēķinam.",
   "Ready when you have confirmed valid matches and the matching invoices show PAID.":
-    "Gatavs, kad esat apstiprinājis derīgas atbilstības un attiecīgie rēķini rāda statusu APMAKSĀTS.",
+    "Gatavs, kad pareizie piesaistījumi ir apstiprināti un attiecīgajiem rēķiniem ir statuss APMAKSĀTS.",
   "Review resident messages, overdue invoices, unmatched payments, and delivery failures. Resolve each conversation once its issue is fixed.":
-    "Pārskatiet iedzīvotāju ziņas, kavētus rēķinus, nesaskaņotus maksājumus un piegādes kļūdas. Atrisiniet katru saraksti, kad tās problēma ir novērsta.",
+    "Pārskatiet iedzīvotāju ziņas, kavētos rēķinus, nepiesaistītos maksājumus un piegādes kļūdas. Kad sarakstes problēma ir novērsta, atzīmējiet to kā atrisinātu.",
   "Ready when every attention item has an owner or is resolved.":
-    "Gatavs, kad katram uzmanības vienumam ir atbildīgā persona vai tas ir atrisināts.",
+    "Gatavs, kad katram vienumam, kam jāpievērš uzmanība, ir atbildīgā persona vai tas ir atrisināts.",
   "Messages inbox with a resident conversation open.":
     "Ziņu iesūtne ar atvērtu sarunu ar iedzīvotāju.",
   "MISSING DATA means a required input is missing. READY means all required inputs are in. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.":
     "MISSING DATA nozīmē, ka trūkst nepieciešamās informācijas. READY nozīmē, ka visi nepieciešamie dati ir ievadīti. DRAFT nozīmē, ka joprojām varat to pārskatīt un no jauna ģenerēt. PREPARED nozīmē, ka rēķins ir apstiprināts un gatavs nosūtīšanai. SENT nozīmē, ka piegāde bija sekmīga. OVERDUE nozīmē, ka apmaksas termiņš ir pagājis un rēķins nav apmaksāts. PAID nozīmē, ka rēķins ir pilnībā apmaksāts.",
   "Why can I not generate an invoice?": "Kāpēc nevaru ģenerēt rēķinu?",
   "The system blocks generation when required inputs are missing or the period is locked. Open the affected dwelling in the workbench to see what is missing.":
-    "Sistēma bloķē ģenerēšanu, ja trūkst nepieciešamo datu vai periods ir bloķēts. Atveriet attiecīgo mājokli darbvietā, lai redzētu, kas trūkst.",
+    "Sistēma bloķē ģenerēšanu, ja trūkst nepieciešamo datu vai periods ir bloķēts. Atveriet attiecīgo īpašumu darbvietā, lai redzētu, kas trūkst.",
   "Why can I not prepare an invoice?": "Kāpēc nevaru sagatavot rēķinu?",
   "The invoice must be a DRAFT with complete issuer, recipient, and payment details. Fix the related settings. Regenerate the draft to update its snapshot.":
     "Rēķinam jābūt statusā MELNRAKSTS ar pilnīgiem izdevēja, saņēmēja un maksājuma datiem. Labojiet attiecīgos iestatījumus. Ģenerējiet melnrakstu no jauna, lai atjauninātu tā momentuzņēmumu.",
   "Why can I not send an invoice?": "Kāpēc nevaru nosūtīt rēķinu?",
   "You can send email to a PREPARED invoice. You can also send it to a SENT, PAID, or OVERDUE invoice that first used paper delivery. The invoice needs a billing email. If delivery fails, fix the cause, then retry or resend.":
-    "Varat nosūtīt e-pastu rēķinam statusā PREPARED. Varat to nosūtīt arī rēķinam statusā SENT, PAID vai OVERDUE, kas vispirms nosūtīts pa pastu. Rēķinam nepieciešams e-pasts. Ja piegāde neizdodas, novērsiet cēloni un pēc tam mēģiniet vēlreiz vai nosūtiet atkārtoti.",
+    "Varat pa e-pastu nosūtīt rēķinu statusā PREPARED. Tāpat varat nosūtīt arī rēķinu statusā SENT, PAID vai OVERDUE, kas sākotnēji piegādāts papīra formātā. Rēķinam nepieciešama norēķinu e-pasta adrese. Ja piegāde neizdodas, novērsiet cēloni un pēc tam mēģiniet vēlreiz vai nosūtiet atkārtoti.",
   "No. A sent invoice is a permanent financial record and cannot change. Changes to dwellings, tariffs, or settings apply only to future invoices.":
-    "Nē. Nosūtīts rēķins ir pastāvīgs finanšu dokuments, un to nevar mainīt. Izmaiņas mājokļos, tarifos vai iestatījumos attiecas tikai uz turpmākajiem rēķiniem.",
+    "Nē. Nosūtīts rēķins ir pastāvīgs finanšu dokuments, un to nevar mainīt. Izmaiņas īpašumos, tarifos vai iestatījumos attiecas tikai uz turpmākajiem rēķiniem.",
   "Review its amount, currency, payer, and reference. When you find the correct invoice, choose it in the Unmatched tab and click Match to invoice. The payment applies right away. Do not match a payment if you are not sure.":
-    "Pārskatiet summu, valūtu, maksātāju un atsauci. Kad atrodat pareizo rēķinu, izvēlieties to cilnē “Nesaskaņots” un nospiediet “Piesaistīt rēķinam”. Maksājums tiek piemērots uzreiz. Nepiesaistiet maksājumu, ja neesat pārliecināts.",
+    "Pārbaudiet summu, valūtu, maksātāju un atsauci. Kad atrodat pareizo rēķinu, izvēlieties to cilnē “Nesaskaņotie” un noklikšķiniet uz “Piesaistīt rēķinam”. Maksājums tiks ieskaitīts uzreiz. Nepiesaistiet maksājumu, ja neesat pārliecināts.",
   "Lock a period after its normal reading and invoice work is complete. A locked period stays available for history, but blocks reading edits and invoice regeneration.":
-    "Bloķējiet periodu pēc tam, kad parastais rādījumu un rēķinu darbs ir pabeigts. Bloķēts periods paliek pieejams vēsturei, bet neļauj labot rādījumus un no jauna ģenerēt rēķinus.",
+    "Bloķējiet periodu, kad ir pabeigta ierastā rādījumu apstrāde un rēķinu sagatavošana. Bloķēts periods joprojām ir pieejams vēsturē, taču tajā nevar labot rādījumus vai no jauna ģenerēt rēķinus.",
   "Required input is missing. Generation is blocked.":
     "Trūkst nepieciešamās informācijas. Ģenerēšana ir bloķēta.",
   "All required inputs are in. You can now generate the invoice.":
@@ -1439,11 +1444,11 @@ const lv: Record<string, string> = {
   "Import, export, and bulk updates.":
     "Importēšana, eksportēšana un masveida atjaunināšana.",
   "Track important changes in your organization.":
-    "Sekojiet līdzi svarīgām izmaiņām jūsu organizācijā.",
+    "Sekojiet līdzi svarīgām izmaiņām savā organizācijā.",
 
   // Added: translation coverage pass 4 (manual billing rule input drawer)
   Value: "Vērtība",
-  "Enter the quantity for this period.": "Ievadiet daudzumu šim periodam.",
+  "Enter the quantity for this period.": "Ievadiet daudzumu par šo periodu.",
   "Enter the amount to charge for this period.":
     "Ievadiet summu, kas jāiekasē par šo periodu.",
 
@@ -1455,7 +1460,7 @@ const lv: Record<string, string> = {
   "This preview reflects your current template configuration.":
     "Šis priekšskatījums atspoguļo jūsu pašreizējo veidnes konfigurāciju.",
   "Section title": "Sadaļas nosaukums",
-  "Line items": "Rindas",
+  "Line items": "Pozīcijas",
   "Zoom level": "Tuvinājuma līmenis",
   "Expand section": "Izvērst sadaļu",
   "Collapse section": "Sakļaut sadaļu",
@@ -1464,15 +1469,15 @@ const lv: Record<string, string> = {
   "No billing periods yet — showing tariffs effective today.":
     "Vēl nav norēķinu periodu — tiek rādīti šodien spēkā esošie tarifi.",
   "Charge quantities shown here are illustrative (always 1) and do not reflect any real resident's bill.":
-    "Šeit redzamie daudzumi ir ilustratīvi (vienmēr 1) un neatspoguļo neviena konkrēta iemītnieka rēķinu.",
+    "Šeit redzamie daudzumi ir ilustratīvi (vienmēr 1) un neatspoguļo neviena reāla iedzīvotāja rēķinu.",
   "Latvian is the canonical invoice language. English and Russian are optional translations; a missing translation falls back to Latvian.":
     "Latviešu valoda ir rēķina kanoniskā valoda. Angļu un krievu valoda ir neobligāti tulkojumi; ja tulkojuma nav, tiek izmantots latviešu teksts.",
   "Editing language": "Rediģēšanas valoda",
   "Latvian is the canonical invoice document. English and Russian are optional translated copies of the same invoice — not separate invoices.":
-    "Latviešu valoda ir rēķina kanoniskais dokuments. Angļu un krievu valoda ir šī paša rēķina neobligātas tulkotas kopijas — ne atsevišķi rēķini.",
+    "Rēķins latviešu valodā ir kanoniskais dokuments. Versijas angļu un krievu valodā ir šī paša rēķina neobligātas tulkotas kopijas — nevis atsevišķi rēķini.",
   "Document language": "Dokumenta valoda",
   "Control what appears on generated invoices, in what order, and how each section looks.":
-    "Kontrolējiet, kas parādās uz izveidotajiem rēķiniem, kādā secībā un kā katra sadaļa izskatās.",
+    "Kontrolējiet, kas parādās izveidotajos rēķinos, kādā secībā un kā izskatās katra sadaļa.",
   "Add text block": "Pievienot teksta bloku",
   "Reset layout": "Atiestatīt izkārtojumu",
   "Invoice sections": "Rēķina sadaļas",
@@ -1482,7 +1487,7 @@ const lv: Record<string, string> = {
   "Maintenance fee": "Apsaimniekošanas maksa",
   "Invoice details": "Rēķina informācija",
   "Sender and recipient": "Izdevējs un saņēmējs",
-  "Charges table": "Maksājumu tabula",
+  "Charges table": "Aprēķinu tabula",
   "Payment details": "Maksājuma dati",
   "Default note": "Noklusējuma piezīme",
   Footer: "Kājene",
@@ -1496,7 +1501,7 @@ const lv: Record<string, string> = {
   Duplicate: "Dublēt",
   Delete: "Dzēst",
   "Reset the invoice layout to the default template? Custom text blocks, section titles, and any per-row formatting will be removed. Your header, footer, payment instructions, and note text are kept.":
-    "Atiestatīt rēķina izkārtojumu uz noklusējuma veidni? Pielāgotie teksta bloki, sadaļu nosaukumi un jebkurš rindu formatējums tiks noņemts. Jūsu galvenes, kājenes, maksājuma instrukciju un piezīmes teksts tiks saglabāts.",
+    "Atiestatīt rēķina izkārtojumu uz noklusējuma veidni? Pielāgotie teksta bloki, sadaļu nosaukumi un rindu formatējums tiks noņemti. Jūsu galvenes, kājenes, maksājuma instrukciju un piezīmes teksts tiks saglabāts.",
   "This invoice layout has reached the maximum of 30 sections.":
     "Šis rēķina izkārtojums ir sasniedzis maksimālo 30 sadaļu skaitu.",
   "Enter a valid unit price, for example 0.35 or 12.50. Use up to 4 decimal places.":
@@ -1518,36 +1523,36 @@ const lv: Record<string, string> = {
   "Delivery outcome could not be confirmed. The email provider may have accepted this invoice, but the application did not receive confirmation. Verify the recipient mailbox or provider logs before resending.":
     "Piegādes rezultātu neizdevās apstiprināt. E-pasta pakalpojumu sniedzējs, iespējams, pieņēma šo rēķinu, taču lietojumprogramma nesaņēma apstiprinājumu. Pirms atkārtotas nosūtīšanas pārbaudiet saņēmēja pastkasti vai pakalpojumu sniedzēja žurnālus.",
   "Sending in progress…": "Notiek nosūtīšana…",
-  "Record paper dispatch": "Reģistrēt papīra nosūtīšanu",
-  "Paper dispatched": "Papīrs nosūtīts",
+  "Record paper dispatch": "Reģistrēt nosūtīšanu papīra formātā",
+  "Paper dispatched": "Nosūtīts papīra formātā",
   "This invoice was delivered by email previously. A later attempt's outcome could not be confirmed -- verify the recipient mailbox or provider logs before resending.":
     "Šis rēķins iepriekš tika nosūtīts pa e-pastu. Vēlākā mēģinājuma rezultātu neizdevās apstiprināt -- pirms atkārtotas nosūtīšanas pārbaudiet saņēmēja pastkasti vai pakalpojumu sniedzēja žurnālus.",
   "This invoice was delivered by email previously. The most recent resend failed -- use Resend to try again.":
     'Šis rēķins iepriekš tika nosūtīts pa e-pastu. Jaunākais atkārtotas nosūtīšanas mēģinājums neizdevās -- izmantojiet "Nosūtīt atkārtoti", lai mēģinātu vēlreiz.',
   "Paper (unverified legacy record)":
-    "Papīrs (nepārbaudīts vēsturisks ieraksts)",
+    "Papīra formāts (nepārbaudīts vēsturisks ieraksts)",
   "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch.":
-    "Automātiski reģistrēts saskaņā ar veco piegādes darbplūsmu -- nav apstiprināta manuāla fiziska nosūtīšana.",
+    "Automātiski reģistrēts iepriekšējā piegādes darbplūsmā -- tas neapstiprina manuālu nosūtīšanu papīra formātā.",
 
   // Recurring tariffs (Tariffs & rules + dwelling read-only view).
   "Recurring tariffs": "Regulārie tarifi",
   "Automatically applied": "Automātiski piemēroti",
-  "Assigned specifically": "Piešķirti konkrēti",
-  "All dwellings": "Visi dzīvokļi",
-  "Selected dwellings": "Izvēlētie dzīvokļi",
-  "One dwelling": "Viens dzīvoklis",
+  "Assigned specifically": "Piešķirti individuāli",
+  "All dwellings": "Visi īpašumi",
+  "Selected dwellings": "Izvēlētie īpašumi",
+  "One dwelling": "Viens īpašums",
   "assigned here": "piešķirts šeit",
   automatic: "automātiski",
-  "this dwelling": "šim dzīvoklim",
+  "this dwelling": "šim īpašumam",
   "Edit tariff": "Rediģēt tarifu",
   "View all tariffs": "Skatīt visus tarifus",
   "No recurring tariffs apply to this dwelling.":
-    "Šim dzīvoklim nav piemērojams neviens regulārs tarifs.",
+    "Šim īpašumam nav piemērojams neviens regulārs tarifs.",
   "Recurring tariffs are configured and assigned from Tariffs & rules.":
     "Regulārie tarifi tiek konfigurēti un piešķirti sadaļā “Tarifi un noteikumi”.",
   "Amount set per period": "Summa tiek noteikta katram periodam",
   "Not assigned yet": "Vēl nav piešķirts",
-  dwellings: "dzīvokļi",
+  dwellings: "īpašumi",
   "Applies to": "Attiecas uz",
 
   // Tariff drawer (create/edit form) -- section headings, field hints,
@@ -1558,14 +1563,14 @@ const lv: Record<string, string> = {
   "A price of 0.00 is valid and will show on the invoice.":
     "Cena 0,00 ir derīga un tiks rādīta rēķinā.",
   "Applies to every current and future dwelling.":
-    "Attiecas uz visiem esošajiem un turpmākajiem dzīvokļiem.",
-  "Applies to exactly one dwelling.": "Attiecas tieši uz vienu dzīvokli.",
+    "Attiecas uz visiem esošajiem un turpmākajiem īpašumiem.",
+  "Applies to exactly one dwelling.": "Attiecas tieši uz vienu īpašumu.",
   "Applies only to the dwellings you choose. New dwellings are not included automatically.":
-    "Attiecas tikai uz jūsu izvēlētajiem dzīvokļiem. Jauni dzīvokļi netiek pievienoti automātiski.",
-  "Search dwellings": "Meklēt dzīvokļus",
-  "Filter by dwelling number...": "Filtrēt pēc dzīvokļa numura...",
+    "Attiecas tikai uz jūsu izvēlētajiem īpašumiem. Jauni īpašumi netiek pievienoti automātiski.",
+  "Search dwellings": "Meklēt īpašumus",
+  "Filter by dwelling number...": "Filtrēt pēc īpašuma numura...",
   "Select all visible": "Atlasīt visus redzamos",
-  "-- select a dwelling --": "-- izvēlieties dzīvokli --",
+  "-- select a dwelling --": "-- izvēlieties īpašumu --",
   Validity: "Derīgums",
   Advanced: "Papildu",
   "Sort order": "Kārtošanas secība",
@@ -1640,7 +1645,7 @@ const ru: Record<string, string> = {
   "Required input is missing; generation is blocked.":
     "Не хватает обязательных данных; создание счёта заблокировано.",
   "The invoice can still be reviewed and regenerated.":
-    "Счёт ещё можно проверить и пересчитать.",
+    "Счёт ещё можно проверить и сформировать заново.",
   "The invoice is approved and ready to send.":
     "Счёт утверждён и готов к отправке.",
   "The invoice was delivered successfully.": "Счёт успешно доставлен.",
@@ -1666,24 +1671,24 @@ const ru: Record<string, string> = {
     "Готово, когда данные выставителя счёта и реквизиты для оплаты заполнены.",
   "Add dwellings": "Добавьте помещения",
   "Create dwellings individually or import them from CSV. Check numbers, types, occupants, areas and resident counts.":
-    "Создайте помещения по одному или импортируйте их из CSV. Проверьте номера, типы, жильцов, площадь и количество жильцов.",
+    "Создайте помещения по одному или импортируйте их из CSV. Проверьте номера, типы, проживающих, площади и количество жильцов.",
   "Ready when every billable unit appears in the dwelling directory.":
     "Готово, когда каждое расчётное помещение появилось в списке помещений.",
-  "Assign residents and meters": "Назначьте жильцов и счётчики",
+  "Assign residents and meters": "Привяжите жильцов и счётчики",
   "Open each dwelling to assign resident access, add billing contact details and register its meters.":
     "Откройте каждое помещение, чтобы настроить доступ жильца, указать контакты для счетов и привязать счётчики.",
   "Ready when residents can access the correct dwelling and required meters are listed.":
-    "Готово, когда жильцы могут войти в своё помещение и нужные счётчики указаны.",
+    "Готово, когда у жильцов есть доступ к нужному помещению и нужные счётчики указаны.",
   "Configure tariffs and rules": "Настройте тарифы и правила",
   "Add the billing rules that determine fixed, area, resident-count or meter-consumption charges.":
-    "Добавьте правила расчёта: фиксированные начисления, по площади, по числу жильцов или по расходу по счётчикам.",
+    "Добавьте правила расчёта: фиксированные начисления, по площади, по числу жильцов или по показаниям счётчиков.",
   "Ready when every required charge has an enabled rule for the billing date.":
     "Готово, когда для каждого обязательного начисления включено правило на дату счёта.",
   "Create the billing period": "Создайте расчётный период",
   "Set the billing window, reading deadline, invoice issue date and due date. Creating a period creates a case for each active dwelling.":
     "Задайте границы периода, срок подачи показаний, дату выставления и срок оплаты. При создании периода для каждого активного помещения формируется расчётная запись.",
   "Ready when the new OPEN period appears in period history.":
-    "Готово, когда новый ОТКРЫТЫЙ период появится в истории периодов.",
+    "Готово, когда новый период со статусом ОТКРЫТ появится в истории периодов.",
   "Collect missing readings": "Соберите недостающие показания",
   "Use the dashboard attention list or monthly workbench to find missing readings. Residents may submit their own readings while permitted.":
     "Используйте список задач на панели управления или ежемесячную рабочую область, чтобы найти недостающие показания. Жильцы могут сами передавать показания, пока это разрешено.",
@@ -1698,17 +1703,17 @@ const ru: Record<string, string> = {
   "Prepare approved drafts, then send prepared invoices. A successful delivery moves the case to SENT and preserves the financial document.":
     "Подготовьте утверждённые черновики, затем отправьте подготовленные счета. После успешной доставки статус счёта меняется на ОТПРАВЛЕН, а финансовый документ фиксируется.",
   "Ready when intended invoices show SENT or a clear delivery error to resolve.":
-    "Готово, когда нужные счета показывают статус ОТПРАВЛЕН или понятную ошибку доставки для исправления.",
+    "Готово, когда нужные счета имеют статус ОТПРАВЛЕН или отображается понятная ошибка доставки, которую нужно устранить.",
   "Reconcile incoming payments": "Сверьте поступившие платежи",
   "Import a bank statement, inspect the preview, confirm the import and review proposed or unmatched transactions.":
-    "Импортируйте банковскую выписку, посмотрите предпросмотр, подтвердите импорт и проверьте предложенные или несопоставленные операции.",
+    "Импортируйте банковскую выписку, ознакомьтесь с предпросмотром, подтвердите импорт и проверьте предложенные или несопоставленные операции.",
   "Ready when valid matches are confirmed and the corresponding invoices show PAID.":
     "Готово, когда правильные совпадения подтверждены, а соответствующие счета перешли в статус ОПЛАЧЕН.",
   "Handle questions and exceptions": "Разберите вопросы и спорные ситуации",
   "Review resident messages, overdue invoices, unmatched payments and delivery failures. Resolve conversations when the issue is closed.":
     "Проверяйте сообщения жильцов, просроченные счета, несопоставленные платежи и ошибки доставки. Закрывайте переписку, когда вопрос решён.",
   "Ready when attention items have an owner or are resolved.":
-    "Готово, когда по всем важным задачам назначен ответственный или вопрос решён.",
+    "Готово, когда у каждого требующего внимания вопроса есть ответственный либо вопрос решён.",
   "What do the invoice statuses mean?": "Что означают статусы счетов?",
   "MISSING DATA means a required input is absent. DRAFT can still be regenerated. PREPARED is approved for sending. SENT was delivered successfully. OVERDUE is sent and unpaid after its due date. PAID has a confirmed full payment.":
     "НЕТ ДАННЫХ означает, что не заполнены обязательные данные. ЧЕРНОВИК ещё можно пересчитать. ПОДГОТОВЛЕН — счёт утверждён для отправки. ОТПРАВЛЕН — счёт успешно доставлен. ПРОСРОЧЕН — счёт отправлен, но не оплачен в срок. ОПЛАЧЕН — подтверждена полная оплата.",
@@ -1730,14 +1735,14 @@ const ru: Record<string, string> = {
     "Проверьте сумму, валюту, плательщика и назначение платежа. Оставьте его несопоставленным, пока не определите нужный счёт; не подтверждайте сомнительные совпадения.",
   "When should I lock a period?": "Когда нужно закрывать период?",
   "Lock a period after normal reading and invoice input work is complete. Locked periods remain available for history but block normal reading edits and invoice regeneration.":
-    "Закрывайте период, когда все показания внесены и работа со счетами завершена. Закрытые периоды остаются в истории, но в них нельзя изменить обычные показания или пересчитать счета.",
+    "Закрывайте период, когда все показания внесены и работа со счетами завершена. Закрытые периоды остаются доступными в истории, но блокируют обычное редактирование показаний и пересчёт счетов.",
   "Auto-send day of month (1-28)": "День месяца для автоотправки (1–28)",
   "Automatically generate invoices each period":
     "Автоматически формировать счета в каждом периоде",
   "Automatically send prepared invoices":
     "Автоматически отправлять подготовленные счета",
   "Only applies when auto-send is enabled above.":
-    "Действует только при включённой автоотправке выше.",
+    "Действует, только если выше включена автоотправка.",
   "Area (m2)": "Площадь (м²)",
   Fixed: "Фиксированный",
   "Manual amount": "Сумма вручную",
@@ -1768,9 +1773,9 @@ const ru: Record<string, string> = {
   "This dwelling has no active meters.":
     "В этом помещении нет активных счётчиков.",
   "This exact file has already been imported for this organization. Importing it again will be blocked.":
-    "Этот же файл уже был импортирован для этой организации. Повторный импорт заблокирован.",
+    "Этот же файл уже был импортирован для этой организации. Повторный импорт будет заблокирован.",
   Resend: "Отправить повторно",
-  "Revoke access link": "Отозвать ссылку доступа",
+  "Revoke access link": "Отозвать ссылку для доступа",
   When: "Когда",
   To: "Кому",
   Error: "Ошибка",
@@ -1794,14 +1799,14 @@ const ru: Record<string, string> = {
   "Invoice email is missing. Add a billing email before sending.":
     "Не указана эл. почта для счетов. Добавьте её перед отправкой.",
   "Correct the details and regenerate the draft before preparing it again.":
-    "Исправьте данные и пересчитайте черновик перед повторной подготовкой.",
+    "Исправьте данные и заново сформируйте черновик перед повторной подготовкой.",
   Upload: "Загрузить",
   Preview: "Предпросмотр",
   "Confirm import": "Подтвердить импорт",
   "Choose another file": "Выбрать другой файл",
   "CSV file": "Файл CSV",
   "Import dwellings": "Импортировать помещения",
-  "Bank statement CSV file": "Файл банковской выписки CSV",
+  "Bank statement CSV file": "CSV-файл банковской выписки",
   Row: "Строка",
   Errors: "Ошибки",
   "Review the preview before confirming. Only confirmation saves data.":
@@ -1853,18 +1858,19 @@ const ru: Record<string, string> = {
   Updated: "Обновлено",
   Resolve: "Отметить решённым",
   "No conversations match this filter.":
-    "Нет сообщений, подходящих под этот фильтр.",
-  "No conversations yet.": "Сообщений пока нет.",
+    "Нет диалогов, соответствующих этому фильтру.",
+  "No conversations yet.": "Диалогов пока нет.",
   "This conversation is resolved.": "Этот вопрос решён.",
   "No residents assigned.": "Жильцы не назначены.",
   "Meter added": "Счётчик добавлен",
-  "Resident added": "Житель добавлен",
-  "This resident already has access.": "У этого жителя уже есть доступ.",
+  "Resident added": "Жилец добавлен",
+  "This resident already has access.": "У этого жильца уже есть доступ.",
   "No billing rules yet.": "Правил расчёта пока нет.",
   "No dwellings assigned.": "Помещения не назначены.",
   "No transactions in this import.": "В этом импорте нет операций.",
   "Match status": "Статус сопоставления",
-  "No audit events match this filter.": "Под этот фильтр нет событий аудита.",
+  "No audit events match this filter.":
+    "Нет событий аудита, соответствующих этому фильтру.",
   "Legal and contact details": "Юридические и контактные данные",
   "Bank details": "Банковские реквизиты",
   Automation: "Автоматизация",
@@ -1877,7 +1883,6 @@ const ru: Record<string, string> = {
   Payments: "Платежи",
   Messages: "Сообщения",
   Settings: "Настройки",
-  "Property Billing": "Счета за недвижимость",
   Administration: "Администрирование",
   "Resident portal": "Портал жильца",
   Portal: "Портал",
@@ -1892,7 +1897,7 @@ const ru: Record<string, string> = {
   Overview: "Обзор",
   Invoices: "Счета",
   Dwelling: "Помещение",
-  "Missing data": "Нет данных",
+  "Missing data": "Недостающие данные",
   Draft: "Черновик",
   Prepared: "Подготовлен",
   Sent: "Отправлен",
@@ -1913,7 +1918,7 @@ const ru: Record<string, string> = {
   Enabled: "Включено",
   Disabled: "Выключено",
   "Total invoiced": "Всего выставлено",
-  Outstanding: "Не оплачен",
+  Outstanding: "Неоплаченная сумма",
   "Cold water": "Холодная вода",
   "Hot water": "Горячая вода",
   Consumption: "Расход",
@@ -1930,7 +1935,7 @@ const ru: Record<string, string> = {
   "Review invoice": "Проверить счёт",
   "Review payments": "Проверить платежи",
   "Ready to generate": "Готов к формированию",
-  "Ready to invoice": "Готов к счёту",
+  "Ready to invoice": "Готов к выставлению счёта",
   "Generate the invoice": "Создать счёт",
   "Ready to send": "Готов к отправке",
   "Readings are required before generating an invoice.":
@@ -1968,7 +1973,7 @@ const ru: Record<string, string> = {
   "Period navigation": "Навигация по периодам",
   "Lock this period?": "Закрыть этот период?",
   "Locking this period prevents normal reading edits and invoice regeneration. Historical data will remain available.":
-    "После закрытия этого периода нельзя будет менять показания и пересчитывать счета. История данных останется доступна.",
+    "После закрытия этого периода нельзя будет менять показания и пересчитывать счета. Исторические данные останутся доступны.",
   Cancel: "Отмена",
   "Billing workflow": "Процесс расчётов",
   "billing cases in this period": "расчётных записей в этом периоде",
@@ -1997,7 +2002,7 @@ const ru: Record<string, string> = {
   "eligible to send": "можно отправить",
   "Prepare eligible": "Подготовить подходящие",
   "Send eligible": "Отправить подходящие",
-  "Clear selection": "Снять выбор",
+  "Clear selection": "Снять выделение",
   "Billing inputs": "Данные для счёта",
   "Next action": "Следующее действие",
   missing: "нет данных",
@@ -2006,7 +2011,7 @@ const ru: Record<string, string> = {
   "Billing email missing": "Не указана эл. почта для счетов",
   "Recipient details incomplete": "Данные получателя заполнены не полностью",
   "Issuer or payment details incomplete":
-    "Данные выставителя или реквизиты для оплаты заполнены не полностью",
+    "Данные организации или платёжные реквизиты заполнены не полностью",
   "No invoice": "Нет счёта",
   "View invoice": "Посмотреть счёт",
   "Generate invoice": "Создать счёт",
@@ -2018,7 +2023,7 @@ const ru: Record<string, string> = {
   "No billing cases match these filters.":
     "Нет расчётных записей, подходящих под эти фильтры.",
   "This period is locked. Readings and invoice generation cannot be changed.":
-    "Этот период закрыт. Показания и создание счетов больше нельзя изменить.",
+    "Этот период закрыт. Нельзя изменять показания и создавать счета.",
   "Select draft invoices to prepare, or prepared invoices to send.":
     "Выберите черновики для подготовки или подготовленные счета для отправки.",
   "Select invoice": "Выбрать счёт",
@@ -2067,7 +2072,7 @@ const ru: Record<string, string> = {
   "Manage dwelling details, occupants and resident access.":
     "Управляйте данными помещений, жильцами и доступом.",
   "New dwellings are included in every currently open billing period. Archive historically billed dwellings to preserve their invoices.":
-    "Новые помещения будут включены во все текущие открытые периоды. Архивируйте помещения с прошлыми счетами, чтобы сохранить эти счета.",
+    "Новые помещения будут включены во все открытые на данный момент расчётные периоды. Архивируйте помещения, по которым ранее выставлялись счета, чтобы сохранить эти счета.",
   "No dwellings match this filter.":
     "Нет помещений, подходящих под этот фильтр.",
   Previous: "Предыдущая",
@@ -2075,7 +2080,7 @@ const ru: Record<string, string> = {
   Page: "Страница",
   "Import bank statement": "Импортировать банковскую выписку",
   "Bank imports": "Импорт из банка",
-  Imports: "Импорты",
+  Imports: "Импорт",
   "Review proposed matches and reconcile incoming payments.":
     "Проверьте предложенные совпадения и сверьте поступившие платежи.",
   Reconciliation: "Сверка платежей",
@@ -2092,7 +2097,7 @@ const ru: Record<string, string> = {
   "No imports yet.": "Импортов пока нет.",
   "No transactions in this view.": "В этом списке нет операций.",
   Currency: "Валюта",
-  Issuer: "Выставитель",
+  Issuer: "Выставитель счёта",
   Recipient: "Получатель",
   Payment: "Платёж",
   Subtotal: "Промежуточный итог",
@@ -2107,9 +2112,9 @@ const ru: Record<string, string> = {
   "Download PDF": "Скачать PDF",
   Print: "Печать",
   "Recipient information is incomplete. Add a billing name or occupant name and billing address.":
-    "Данные получателя заполнены не полностью. Укажите имя для счетов или имя жильца и адрес для счетов.",
+    "Данные получателя заполнены не полностью. Укажите имя или наименование для выставления счёта либо имя жильца, а также адрес для выставления счёта.",
   "Issuer or payment information is incomplete. Add the organization name, address, bank name and IBAN.":
-    "Данные выставителя или реквизиты для оплаты заполнены не полностью. Укажите название организации, адрес, название банка и IBAN.",
+    "Данные выставителя счёта или реквизиты для оплаты заполнены не полностью. Укажите название организации, адрес, название банка и IBAN.",
   "Fix dwelling details": "Исправить данные помещения",
   "Fix organization details": "Исправить данные организации",
   "After correcting the details, regenerate this draft in the workbench to refresh its snapshot.":
@@ -2166,7 +2171,7 @@ const ru: Record<string, string> = {
   "Import and export.": "Импорт и экспорт.",
   "Audit history": "История аудита",
   "Review recorded organization activity.":
-    "Посмотрите действия, записанные в организации.",
+    "Просмотрите записи о действиях в организации.",
   Save: "Сохранить",
   "Billing name": "Имя для счетов",
   Email: "Эл. почта",
@@ -2188,18 +2193,18 @@ const ru: Record<string, string> = {
   "Archive dwelling": "Архивировать помещение",
   "Archive this dwelling?": "Архивировать это помещение?",
   "Archiving hides it from new periods and active lists. Past invoices and readings remain intact.":
-    "Архивация скроет его из новых периодов и активных списков. Прошлые счета и показания останутся нетронутыми.",
+    "После архивации помещение не будет отображаться в новых периодах и списках активных помещений. Предыдущие счета и показания сохранятся.",
   Area: "Площадь",
   "Basic information": "Основная информация",
   "Billing details": "Данные для счетов",
   Building: "Здание",
   "Calculated consumption": "Рассчитанный расход",
   "Changes recorded against this dwelling.":
-    "Изменения, записанные по этому помещению.",
+    "Изменения, зафиксированные по этому помещению.",
   "Changes saved": "Изменения сохранены",
   Close: "Закрыть",
   "Complete the details below to resolve invoice preparation blockers.":
-    "Заполните данные ниже, чтобы устранить проблемы с подготовкой счёта.",
+    "Укажите данные ниже, чтобы устранить проблемы с подготовкой счёта.",
   "Consumption is calculated automatically.":
     "Расход рассчитывается автоматически.",
   "Conversations with residents will appear here.":
@@ -2232,10 +2237,10 @@ const ru: Record<string, string> = {
   "No open period": "Нет открытого периода",
   Note: "Примечание",
   Notes: "Примечания",
-  "Open full dwelling": "Открыть помещение полностью",
+  "Open full dwelling": "Открыть полную карточку помещения",
   "Outstanding balance": "Остаток долга",
   Paper: "На бумаге",
-  "Paper delivery": "Доставка на бумаге",
+  "Paper delivery": "Доставка в бумажном виде",
   "People who can access their invoices and messages.":
     "Люди с доступом к своим счетам и сообщениям.",
   "Previous reading": "Предыдущее показание",
@@ -2261,15 +2266,15 @@ const ru: Record<string, string> = {
   "Send sign-in link": "Отправить ссылку для входа",
   "Incorrect email or password.": "Неверный e-mail или пароль.",
   "We couldn't find an account for that sign-in. If you believe this is a mistake, contact your administrator.":
-    "Для этого входа аккаунт не найден. Если вы считаете, что это ошибка, обратитесь к администратору.",
+    "Аккаунт с такими данными для входа не найден. Если вы считаете, что это ошибка, обратитесь к администратору.",
   "Too many sign-in attempts. Please wait a minute and try again.":
-    "Слишком много попыток входа. Подождите минуту и повторите.",
+    "Слишком много попыток входа. Подождите минуту и повторите попытку.",
   "Enter your email and we'll send you a secure sign-in link.":
     "Введите свой e-mail, и мы отправим защищённую ссылку для входа.",
   "If that email is registered, a sign-in link is on its way.":
     "Если этот e-mail зарегистрирован, ссылка для входа уже отправлена.",
   "This sign-in link is invalid or has expired. Request a new one below.":
-    "Эта ссылка для входа недействительна или истекла. Запросите новую ниже.",
+    "Эта ссылка для входа недействительна или срок её действия истёк. Запросите новую ниже.",
   "Page not found": "Страница не найдена",
   "The page you are looking for does not exist or has moved.":
     "Страница, которую вы ищете, не существует или была перемещена.",
@@ -2288,7 +2293,7 @@ const ru: Record<string, string> = {
   "VAT number": "Номер плательщика НДС",
   "View confirmed payments": "Показать подтверждённые платежи",
   "Confirm this payment? The invoice balance will be updated.":
-    "Подтвердить этот платёж? Баланс счёта будет обновлён.",
+    "Подтвердить этот платёж? Остаток по счёту будет обновлён.",
   "The period start date must not be after its end date.":
     "Дата начала периода не может быть позже даты окончания.",
   "The due date must not be before the invoice issue date.":
@@ -2302,7 +2307,7 @@ const ru: Record<string, string> = {
   "If that email belongs to an admin account, a reset link is on its way.":
     "Если этот e-mail принадлежит аккаунту администратора, ссылка для сброса пароля уже отправлена.",
   "This reset link is invalid or has expired. Request a new one.":
-    "Эта ссылка для сброса недействительна или истекла. Запросите новую.",
+    "Эта ссылка для сброса недействительна или срок её действия истёк. Запросите новую.",
   "Send reset link": "Отправить ссылку для сброса",
   "The password must be at least 8 characters.":
     "Пароль должен содержать не менее 8 символов.",
@@ -2311,7 +2316,7 @@ const ru: Record<string, string> = {
   "Your new password can't be the same as your old one.":
     "Новый пароль не должен совпадать со старым.",
   "This password is too weak. Choose a longer or less predictable one.":
-    "Этот пароль слишком простой. Выберите более длинный и менее предсказуемый пароль.",
+    "Этот пароль слишком простой. Выберите более длинный или менее предсказуемый пароль.",
   "Too many attempts. Wait a few minutes and try again.":
     "Слишком много попыток. Подождите несколько минут и попробуйте снова.",
   "Something went wrong changing your password. Try again.":
@@ -2334,13 +2339,13 @@ const ru: Record<string, string> = {
   "Applied late fee": "Применённая плата за просрочку",
   "New late fee amount": "Новая сумма платы за просрочку",
   "Update late fee": "Обновить плату за просрочку",
-  "Bank processing delay": "Задержка банковской обработки",
+  "Bank processing delay": "Задержка обработки платежа банком",
   "Billing dispute": "Спор по счёту",
   "Meter issue": "Проблема со счётчиком",
   "Agreement with resident": "Договорённость с жильцом",
-  "Administrative waiver": "Административное списание",
+  "Administrative waiver": "Списание по решению администрации",
   "Note (required when the reason is Other)":
-    "Примечание (обязательно, если причина — Другое)",
+    "Примечание (обязательно, если причина — «Другое»)",
   "Adjustment amount": "Сумма корректировки",
   "A negative amount lowers the amount due.":
     "Отрицательная сумма уменьшает сумму к оплате.",
@@ -2349,7 +2354,7 @@ const ru: Record<string, string> = {
   "Adjustment saved.": "Корректировка сохранена.",
   "Override status": "Переопределить статус",
   "Use this only to correct a status that is wrong. The change is recorded with your reason.":
-    "Используйте это только для исправления неверного статуса. Изменение записывается с указанием вашей причины.",
+    "Используйте это только для исправления неверного статуса. Изменение записывается с указанием причины.",
   "Change the status of this invoice? This change is recorded in the audit log.":
     "Изменить статус этого счёта? Это изменение записывается в журнал аудита.",
   "New status": "Новый статус",
@@ -2370,7 +2375,7 @@ const ru: Record<string, string> = {
     "Отключить этот аккаунт? Пользователь не сможет войти, пока вы не включите его снова.",
   "Invoice, reference or payer": "Счёт, назначение платежа или плательщик",
   "No payments match these filters.":
-    "Нет платежей, подходящих под эти фильтры.",
+    "Нет платежей, соответствующих этим фильтрам.",
   of: "из",
   "How do I waive a late fee or adjust a draft invoice?":
     "Как отменить плату за просрочку или изменить черновик счёта?",
@@ -2398,21 +2403,21 @@ const ru: Record<string, string> = {
   "Choose an invoice": "Выберите счёт",
   "Match to invoice": "Привязать к счёту",
   "Match this payment to the chosen invoice? The payment is applied right away.":
-    "Привязать этот платёж к выбранному счёту? Платёж применяется сразу.",
+    "Привязать этот платёж к выбранному счёту? Платёж будет зачтён сразу.",
   "Record a payment": "Зарегистрировать платёж",
   "Record payment": "Зарегистрировать платёж",
   "Use this for a bank transfer that is not in an imported statement. The payment is applied right away.":
-    "Используйте это для банковского перевода, которого нет в импортированной выписке. Платёж применяется сразу.",
+    "Используйте эту функцию, чтобы зарегистрировать банковский перевод, которого нет в импортированной выписке. Платёж будет зачтён сразу.",
   "Bank reference": "Банковское назначение платежа",
   "Record this payment? It is applied to the invoice right away.":
-    "Зарегистрировать этот платёж? Он сразу применяется к счёту.",
+    "Зарегистрировать этот платёж? Он будет сразу зачтён в оплату счёта.",
   "Payment reversed.": "Платёж отменён.",
   "Payment matched.": "Платёж привязан.",
   "Payment recorded.": "Платёж зарегистрирован.",
   "How do I record a payment that is not in a bank statement?":
-    "Как внести платёж, которого нет в банковской выписке?",
+    "Как зарегистрировать платёж, которого нет в банковской выписке?",
   "Click Record a payment on the Payments page. Choose the invoice. Enter the amount, date, payer, bank reference, and a reason. The payment applies right away. The app blocks a second entry with the same reference, amount, and date. You can record bank transfers only.":
-    "На странице «Платежи» нажмите «Зарегистрировать платёж». Выберите счёт. Введите сумму, дату, плательщика, банковское назначение платежа и причину. Платёж применяется сразу. Приложение блокирует повторную запись с тем же назначением, суммой и датой. Можно вносить только банковские переводы.",
+    "На странице «Платежи» нажмите «Зарегистрировать платёж». Выберите счёт. Введите сумму, дату, плательщика, банковское назначение платежа и причину. Платёж применяется сразу. Приложение блокирует повторную запись с тем же назначением, суммой и датой. Можно регистрировать только банковские переводы.",
   "How do I undo a payment that I matched to the wrong invoice?":
     "Как отменить платёж, который я сопоставил с неверным счётом?",
   "Open the Confirmed tab on the Payments page. Click Reverse next to the payment and enter a reason. The original payment stays in the history. The invoice becomes unpaid again. The payment returns to the Unmatched tab. There you can match it to the correct invoice. You cannot reverse a payment if a later invoice already used its credit.":
@@ -2453,7 +2458,7 @@ const ru: Record<string, string> = {
   "This invoice has already been sent and can no longer be regenerated; issue a correction document instead":
     "Этот счёт уже отправлен, и его больше нельзя пересчитать; оформите вместо этого корректирующий документ",
   "This invoice has already moved past DRAFT and can no longer be regenerated":
-    "Этот счёт уже прошёл статус «Черновик», и его больше нельзя пересчитать",
+    "Этот счёт уже вышел из статуса «Черновик», и его больше нельзя пересчитать",
   "Only a DRAFT invoice can be prepared":
     "Подготовить можно только счёт в статусе «Черновик»",
   "Issuer details are incomplete; update organization settings before preparing":
@@ -2461,7 +2466,7 @@ const ru: Record<string, string> = {
   "This dwelling is missing a billing/occupant name or a billing address":
     "У этого помещения отсутствует имя для счетов/жильца или адрес для счетов",
   "Organization payment details are incomplete (both bank name and IBAN are required)":
-    "Платёжные данные организации не заполнены (требуются и наименование банка, и IBAN)",
+    "Платёжные реквизиты организации заполнены не полностью (требуются и наименование банка, и IBAN)",
   "A reason is required for a manual status override":
     "Для ручного переопределения статуса необходимо указать причину",
   "Billing case not found": "Расчётная запись не найдена",
@@ -2472,9 +2477,9 @@ const ru: Record<string, string> = {
   "A case that already has an invoice cannot go back to Missing data or Ready":
     "Запись, у которой уже есть счёт, нельзя вернуть в статус «Нет данных» или «Готов»",
   "Invalid or expired invoice link":
-    "Недействительная или истекшая ссылка на счёт",
+    "Ссылка на счёт недействительна или срок её действия истёк",
   "A meter consumption rule requires a meter type":
-    "Для правила по расходу по счётчику требуется тип счётчика",
+    "Для правила «Расход по счётчику» требуется тип счётчика",
   "This rule requires a unit price (it would otherwise always bill 0)":
     "Для этого правила требуется цена за единицу (иначе по нему всегда будет начисляться 0)",
   "A rule that applies to all dwellings cannot also have specific dwelling assignments":
@@ -2519,7 +2524,7 @@ const ru: Record<string, string> = {
   "The original item is no longer present":
     "Исходный элемент больше не существует",
   "The original access grant is no longer present":
-    "Исходное предоставление доступа больше не существует",
+    "Исходные права доступа больше не существуют",
   "You cannot disable your own account":
     "Вы не можете отключить свой собственный аккаунт",
   "Resident not found": "Жилец не найден",
@@ -2545,7 +2550,7 @@ const ru: Record<string, string> = {
   "This payment was reversed from this invoice. Choose a different invoice":
     "Этот платёж был отменён для этого счёта. Выберите другой счёт",
   "This invoice cannot receive a payment":
-    "Этот счёт не может принимать платежи",
+    "К этому счёту нельзя привязать платёж",
   "This invoice is already fully allocated":
     "Этот счёт уже полностью распределён",
   "Amount must be greater than 0": "Сумма должна быть больше 0",
@@ -2565,35 +2570,35 @@ const ru: Record<string, string> = {
   "This match was rejected and cannot be confirmed":
     "Это сопоставление было отклонено и не может быть подтверждено",
   "This payment is already applied to another invoice":
-    "Этот платёж уже применён к другому счёту",
+    "Этот платёж уже привязан к другому счёту",
   "This invoice is already paid": "Этот счёт уже оплачен",
   "This match has already been confirmed and cannot be rejected":
     "Это сопоставление уже подтверждено и не может быть отклонено",
   "Only a confirmed payment can be reversed":
     "Отменить можно только подтверждённый платёж",
   "The credit from this payment was already used on a later invoice. Fix the balance with an adjustment":
-    "Кредит от этого платежа уже был использован в более позднем счёте. Исправьте баланс с помощью корректировки",
+    "Кредит по этому платежу уже был использован для оплаты более позднего счёта. Исправьте баланс с помощью корректировки",
   "Value must be a non-negative number with at most 4 decimal places":
     "Значение должно быть неотрицательным числом не более чем с 4 знаками после запятой",
   "Current value must be a non-negative number with at most 3 decimal places":
     "Текущее значение должно быть неотрицательным числом не более чем с 3 знаками после запятой",
   "The reading deadline for this period has passed":
-    "Срок подачи показаний для этого периода истёк",
+    "Срок подачи показаний за этот период истёк",
   "Cannot record a reading for an archived meter":
-    "Нельзя внести показание для архивного счётчика",
+    "Нельзя внести показание по архивному счётчику",
   "Cannot edit this reading: a later billing period already recorded a reading for this meter":
-    "Нельзя отредактировать это показание: в более позднем расчётном периоде уже внесено показание для этого счётчика",
+    "Нельзя отредактировать это показание: в более позднем расчётном периоде уже внесено показание по этому счётчику",
   "What's this about?": "О чём ваше сообщение?",
   "The previous delivery attempt's outcome could not be confirmed. Verify whether the invoice was actually delivered, then use Resend if it needs to go out again.":
     "Результат предыдущей попытки доставки не удалось подтвердить. Проверьте, был ли счёт доставлен, и, если его нужно отправить снова, используйте «Отправить повторно».",
   "Invoices prepared by the end of this day are sent on this day. The app tries a failed send again on the next days.":
-    "Счета, подготовленные до конца этого дня, отправляются в этот день. Неудачную отправку приложение повторяет в следующие дни.",
+    "Счета, подготовленные до конца этого дня, отправляются в тот же день. Если отправка не удалась, приложение повторяет попытку в последующие дни.",
   "This email address bounced or reported a complaint. Change the billing email or remove it from the suppressed list":
-    "На этот адрес эл. почты не удаётся доставить письма, или на него поступила жалоба. Измените эл. почту для счетов или удалите адрес из списка заблокированных",
+    "На этот адрес эл. почты не удалось доставить письмо или на него поступила жалоба. Измените эл. почту для счетов или удалите адрес из списка заблокированных",
   "Suppressed address not found": "Заблокированный адрес не найден",
   "Suppressed email addresses": "Заблокированные адреса эл. почты",
   "Addresses that bounced or reported a complaint.":
-    "Адреса, на которые не удалось доставить письма или на которые поступила жалоба.",
+    "Адреса, на которые не удалось доставить письма или с которых поступила жалоба.",
   "Invoices are not sent to these addresses. The email provider reported a permanent bounce or a complaint. Remove an address after you fix the problem.":
     "На эти адреса счета не отправляются. Почтовый сервис сообщил о постоянной ошибке доставки или о жалобе. Удалите адрес после устранения проблемы.",
   "Address removed.": "Адрес удалён.",
@@ -2606,9 +2611,9 @@ const ru: Record<string, string> = {
     "Удалить этот адрес из списка заблокированных? На него снова можно будет отправлять счета.",
   "Remove from list": "Удалить из списка",
   "Only an incoming payment can be applied to an invoice":
-    "К счёту можно применить только входящий платёж",
+    "К счёту можно привязать только входящий платёж",
   "Administrators sign in with a password. Use the Admin sign in form on this page.":
-    "Администраторы входят с паролем. Используйте форму входа для администраторов на этой странице.",
+    "Администраторы входят по паролю. Используйте форму входа для администраторов на этой странице.",
   "Request ID": "ID запроса",
   "Audit log entries": "Записи журнала аудита",
   "Billing rules": "Правила расчётов",
@@ -2622,7 +2627,7 @@ const ru: Record<string, string> = {
   "The email provider tells the app about a permanent bounce or a complaint. The app adds the address to the suppressed list and sends no more invoices to it. Open Settings, then Suppressed email addresses. Fix the billing email, or remove the address from the list.":
     "Почтовый сервис сообщает приложению о постоянной ошибке доставки или о жалобе. Приложение добавляет адрес в список заблокированных и больше не отправляет на него счета. Откройте «Настройки», затем «Заблокированные адреса эл. почты». Исправьте эл. почту для счетов или удалите адрес из списка.",
   "Why does a sign-in link not work for me as an administrator?":
-    "Почему ссылка для входа не работает для меня как для администратора?",
+    "Почему у меня как администратора не работает ссылка для входа?",
   "Administrators sign in with a password. Use the Admin sign in form. A sign-in link works for residents only. Click Forgot password? if you do not know your password.":
     "Администраторы входят с паролем. Используйте форму «Вход для администраторов». Ссылка для входа работает только для жильцов. Если вы не знаете пароль, нажмите «Забыли пароль?».",
   "This organization is archived. Restore it in Settings to make changes.":
@@ -2633,11 +2638,11 @@ const ru: Record<string, string> = {
   "Your property manager has closed this account. You cannot see invoices or send messages here. Contact your property manager for help.":
     "Ваш управляющий закрыл этот аккаунт. Здесь нельзя просматривать счета или отправлять сообщения. Обратитесь за помощью к своему управляющему.",
   "This organization is archived. You can read it but not change it. Residents cannot sign in. Restore it in Settings > Organization.":
-    "Эта организация в архиве. Её можно читать, но нельзя менять. Жильцы не могут войти. Восстановите её в разделе «Настройки» > «Организация».",
+    "Эта организация в архиве. Её можно просматривать, но нельзя менять. Жильцы не могут войти. Восстановите её в разделе «Настройки» > «Организация».",
   "Archive organization": "Архивировать организацию",
   "Restore organization": "Восстановить организацию",
   "This organization is archived. Restore it to make changes and to let residents sign in again.":
-    "Эта организация в архиве. Восстановите её, чтобы вносить изменения и снова разрешить жильцам входить.",
+    "Эта организация в архиве. Восстановите её, чтобы вносить изменения и чтобы жильцы снова могли войти.",
   "Archiving makes this organization read-only. Residents cannot sign in and their invoice links stop working. You can restore it later.":
     "Архивирование делает эту организацию доступной только для чтения. Жильцы не могут войти, а ссылки на их счета перестают работать. Позже её можно восстановить.",
   "Archive this organization? Residents cannot sign in until you restore it.":
@@ -2658,6 +2663,7 @@ const ru: Record<string, string> = {
   "Open Settings, then Organization. Click Restore organization. The organization works as before. Residents can sign in again. The links in old invoice emails work again.":
     "Откройте «Настройки», затем «Организация». Нажмите «Восстановить организацию». Организация работает как раньше. Жильцы снова могут войти. Ссылки в старых письмах со счетами снова работают.",
   "Person not found": "Человек не найден",
+  "unread conversations": "непрочитанных бесед",
   "Payment history": "История платежей",
   "No payments yet.": "Платежей пока нет.",
   "Display name": "Отображаемое имя",
@@ -2670,15 +2676,15 @@ const ru: Record<string, string> = {
   "Download my data": "Скачать мои данные",
   "All changes saved": "Все изменения сохранены",
   "Send this invoice to the resident by email now? Sent invoices cannot be edited.":
-    "Отправить этот счёт жильцу по e-mail сейчас? Отправленные счета нельзя редактировать.",
+    "Отправить этот счёт жильцу по электронной почте сейчас? Отправленные счета нельзя редактировать.",
   "Send this invoice to the resident again by email?":
-    "Отправить этот счёт жильцу по e-mail повторно?",
+    "Повторно отправить этот счёт жильцу по электронной почте?",
   "Revoke the resident's access link? They will no longer be able to open this invoice with it.":
     "Отозвать ссылку доступа жильца? С её помощью больше нельзя будет открыть этот счёт.",
   "Record that this invoice was physically posted? This cannot be undone.":
     "Отметить, что этот счёт отправлен по почте? Это нельзя отменить.",
   "Send all selected invoices to residents by email now? Sent invoices cannot be edited.":
-    "Отправить все выбранные счета жильцам по e-mail сейчас? Отправленные счета нельзя редактировать.",
+    "Отправить все выбранные счета жильцам по электронной почте сейчас? Отправленные счета нельзя редактировать.",
   "Archive this tariff? It will no longer be used for new invoices.":
     "Архивировать этот тариф? Он больше не будет использоваться для новых счетов.",
   "Invoice prepared.": "Счёт подготовлен.",
@@ -2692,7 +2698,7 @@ const ru: Record<string, string> = {
   "1 change saving": "Сохраняется 1 изменение",
   "{n} changes saving": "Сохраняется изменений: {n}",
   "1 change needs attention": "1 изменение требует внимания",
-  "{n} changes need attention": "Требуют внимания изменений: {n}",
+  "{n} changes need attention": "Изменений, требующих внимания: {n}",
   "Recent changes": "Недавние изменения",
   "Adding…": "Добавление…",
   "Adding meter…": "Добавление счётчика…",
@@ -2713,7 +2719,7 @@ const ru: Record<string, string> = {
     "Не удалось сохранить настройки доставки",
   "Could not save": "Не удалось сохранить",
   "Saved, but the view could not be updated":
-    "Сохранено, но не удалось обновить представление",
+    "Сохранено, но не удалось обновить отображение",
   Retry: "Повторить",
   "Archiving…": "Архивация…",
   Sections: "Разделы",
@@ -2722,7 +2728,7 @@ const ru: Record<string, string> = {
   "Something went wrong. Please try again.":
     "Что-то пошло не так. Попробуйте ещё раз.",
   "This dwelling's billing case in every period it has existed for.":
-    "Расчётная запись этого помещения в каждом периоде, когда оно существовало.",
+    "Расчётная запись этого помещения за каждый период его существования.",
   "Total credits": "Всего по кредиту",
   "Total debits": "Всего по дебету",
   "View current period": "Посмотреть текущий период",
@@ -2747,7 +2753,7 @@ const ru: Record<string, string> = {
   "Admin dashboard with billing totals and work that needs attention.":
     "Панель администратора с итогами по счетам и задачами, требующими внимания.",
   "Apply late fees to overdue invoices.":
-    "Начислять плату за просрочку на просроченные счета.",
+    "Начислять плату за просрочку по просроченным счетам.",
   "Auto-send day of month": "День месяца для автоматической отправки",
   "Automatic generation and sending run only for eligible billing periods.":
     "Автоматическое формирование и отправка выполняются только для подходящих расчётных периодов.",
@@ -2802,7 +2808,7 @@ const ru: Record<string, string> = {
   "Invoice numbering": "Нумерация счетов",
   "Invoice prefix": "Префикс счёта",
   "Keep your details current so that invoices, payments, and official communication are processed without delays.":
-    "Поддерживайте свои данные в актуальном состоянии, чтобы счета, платежи и официальная переписка обрабатывались без задержек.",
+    "Поддерживайте свои данные в актуальном состоянии, чтобы счета и платежи обрабатывались, а официальная переписка велась без задержек.",
   "Keep your organization details up to date to ensure correct invoicing and communication.":
     "Поддерживайте данные организации в актуальном состоянии для правильного выставления счетов и переписки.",
   "Late-payment changes": "Изменения по просрочке платежа",
@@ -2860,13 +2866,13 @@ const ru: Record<string, string> = {
   "This information is used on invoices and for official communication.":
     "Эта информация используется в счетах и в официальной переписке.",
   "This is how your organization details appear on invoices.":
-    "Так данные вашей организации будут отображаться на счетах.",
-  "Type your reply...": "Введите ваш ответ...",
+    "Так данные вашей организации будут отображаться в счетах.",
+  "Type your reply...": "Введите ответ...",
   "Unique identifier (e.g. cold_water).":
     "Уникальный идентификатор (например, cold_water).",
   "Unit of measurement.": "Единица измерения.",
   "Use fixed rules for regular charges like maintenance fees. The amount is the same each period (per unit).":
-    "Используйте фиксированные правила для регулярных платежей, например за обслуживание. Сумма одинакова каждый период (за единицу).",
+    "Используйте фиксированные правила для регулярных начислений, например платы за обслуживание. Сумма одинакова в каждом периоде (за единицу).",
   "Use meter consumption for utilities like water, heat, or electricity. Charges are calculated from the difference in meter readings.":
     "Используйте расход по счётчику для таких услуг, как вода, отопление или электричество. Плата рассчитывается по разнице показаний счётчика.",
   "Use the status to see what you can do next.":
@@ -2882,89 +2888,89 @@ const ru: Record<string, string> = {
 
   // Added: translation coverage pass 2 (guide setup/monthly steps, faqs, statuses; dashboard ternaries)
   "Add the legal name, address, contact details, bank name, IBAN, registration number, and VAT number used on invoices.":
-    "Укажите юридическое название, адрес, контактные данные, название банка, IBAN, регистрационный номер и номер плательщика НДС, используемые в счетах.",
+    "Укажите юридическое наименование, адрес, контактные данные, название банка, IBAN, регистрационный номер и номер плательщика НДС, используемые в счетах.",
   "Ready when the invoice issuer and payment details are complete.":
-    "Готово, когда данные выставителя счета и реквизиты для оплаты заполнены.",
+    "Готово, когда данные выставителя счёта и реквизиты для оплаты заполнены.",
   "Click Create dwelling to add one dwelling, or import a CSV file for many. Check each number, type, occupant, area, and resident count. A new dwelling joins every currently open billing period.":
-    "Нажмите Создать помещение, чтобы добавить один объект, или импортируйте файл CSV для нескольких. Проверьте номер, тип, владельца, площадь и число жильцов каждого объекта. Новый объект включается в каждый текущий открытый период начислений.",
+    "Нажмите «Создать помещение», чтобы добавить одно помещение, или импортируйте CSV-файл, чтобы добавить несколько. Проверьте номер, тип, жильца, площадь и число жильцов каждого помещения. Новое помещение включается во все открытые в данный момент расчётные периоды.",
   "Open tariffs & rules": "Открыть тарифы и правила",
   "Why do some actions ask me to confirm?":
     "Почему некоторые действия требуют подтверждения?",
   "The Send, Resend, Revoke access link, and Record paper dispatch actions require confirmation. The Archive, Remove, Disable, Override status, Confirm payment, Reverse payment, Match to invoice, and Record payment actions also require confirmation. Confirmation helps prevent changes that are difficult to undo.":
-    "Отправка и повторная отправка счёта, отзыв ссылки доступа и регистрация отправки на бумаге требуют подтверждения. Архивирование, удаление, отключение, переопределение статуса, подтверждение платежа, отмена платежа, сопоставление платежа со счётом и запись платежа также требуют подтверждения. Это помогает избежать изменений, которые трудно отменить.",
+    "Отправка и повторная отправка счёта, отзыв ссылки доступа и регистрация отправки на бумаге требуют подтверждения. Архивирование, удаление, отключение, переопределение статуса, подтверждение платежа, отмена платежа, привязка к счёту и регистрация платежа также требуют подтверждения. Это помогает избежать изменений, которые трудно отменить.",
   "What if I forget my password?": "Что делать, если вы забыли пароль?",
   "Click Forgot password? on the sign-in page. Enter your email address. Follow the link in the email to set a new password.":
-    "На странице входа нажмите Забыли пароль. Введите свой адрес электронной почты. Перейдите по ссылке из письма, чтобы задать новый пароль.",
+    "На странице входа нажмите «Забыли пароль?». Введите свой адрес электронной почты. Перейдите по ссылке из письма, чтобы задать новый пароль.",
   "Ready when every billable unit appears in the dwelling list.":
-    "Готово, когда все объекты для выставления счетов отображаются в списке жилых объектов.",
+    "Готово, когда все расчётные единицы отображаются в списке помещений.",
   "Dwelling list with filters and dwelling details.":
-    "Список жилых объектов с фильтрами и подробными данными.",
+    "Список помещений с фильтрами и подробными данными.",
   "Open each dwelling. Assign resident access. Add billing contact details. Register its meters. You can edit a meter later, but you cannot change its unit of measurement after a reading exists.":
     "Откройте каждое помещение. Предоставьте жильцу доступ. Добавьте контактные данные для выставления счетов. Зарегистрируйте счётчики помещения. Позже счётчик можно изменить, но после внесения первого показания изменить единицу измерения нельзя.",
   "Ready when residents can access their dwelling and all meters are listed.":
-    "Готово, когда жильцы могут получить доступ к своему жилому объекту и все счетчики внесены в список.",
+    "Готово, когда жильцы могут получить доступ к своему помещению и все счётчики внесены в список.",
   "Dwelling detail page with resident access and meter registration.":
-    "Страница сведений о жилом объекте с доступом жильца и регистрацией счетчиков.",
+    "Страница сведений о помещении с доступом жильца и регистрацией счётчиков.",
   "Set tariffs and rules": "Настройте тарифы и правила",
   "Add the billing rules that set fixed, area, resident-count, or meter-consumption charges.":
-    "Добавьте правила начисления, которые задают фиксированную плату, плату за площадь, за число жильцов или за показания счетчиков.",
+    "Добавьте правила начисления, которые задают фиксированную плату, плату за площадь, за число жильцов или за расход по счётчикам.",
   "Tariffs and rules list with rule details.":
     "Список тарифов и правил с подробными данными.",
   "Set the billing window, reading deadline, invoice issue date, and due date. A new period creates a case for each active dwelling. Residents can submit readings through the deadline date in the organization time zone. Administrators can enter readings later.":
     "Задайте расчётный период, срок подачи показаний, дату выставления счёта и срок оплаты. Новый период создаёт дело для каждого активного помещения. Жильцы могут подавать показания до конца установленной даты по часовому поясу организации. Администраторы могут вносить показания и позже.",
   "Ready when the new OPEN period appears in the period list.":
-    "Готово, когда новый ОТКРЫТЫЙ период появляется в списке периодов.",
+    "Готово, когда новый ОТКРЫТЫЙ период появится в списке периодов.",
   "Billing period list and period actions.":
-    "Список периодов выставления счетов и действия с периодами.",
+    "Список расчётных периодов и действия с периодами.",
   "Use the dashboard attention list or the monthly workbench to find missing readings. Residents can also submit readings when allowed.":
     "Используйте список требующих внимания дел на панели управления или ежемесячную рабочую область, чтобы найти недостающие показания. Жильцы также могут подавать показания, если это разрешено.",
   "Generate eligible invoices in the workbench. Review the calculation lines, recipient details, dates, and totals. You can waive the late fee or add a manual adjustment only before you prepare a DRAFT invoice.":
-    "Формируйте подходящие счета в рабочей области. Проверьте строки расчета, данные получателя, даты и итоговые суммы. Плату за просрочку можно отменить или добавить ручную корректировку только до подготовки счёта со статусом «Черновик».",
+    "Сформируйте подходящие счета в рабочей области. Проверьте строки расчёта, данные получателя, даты и итоговые суммы. Плату за просрочку можно отменить или добавить ручную корректировку только до подготовки счёта со статусом «Черновик».",
   "Ready when correct invoices are in DRAFT and you have fixed all validation blockers.":
     "Готово, когда верные счета имеют статус ЧЕРНОВИК и все ошибки проверки устранены.",
   "Monthly workbench with the billing workflow and case list.":
     "Ежемесячная рабочая область с рабочим процессом выставления счетов и списком дел.",
   "Prepare approved drafts. Send the prepared invoices. Delivery moves each case to SENT and locks the invoice. With automatic sending on, the app sends the invoices that you prepared by the end of the send day. It tries again on the next days if a send fails.":
-    "Подготовьте одобренные черновики. Отправьте подготовленные счета. Доставка переводит каждое дело в статус ОТПРАВЛЕНО и блокирует счет. Если автоматическая отправка включена, приложение отправляет счета, которые вы подготовили до конца дня отправки. Если отправка не удалась, оно повторяет попытку в следующие дни.",
+    "Подготовьте одобренные черновики. Отправьте подготовленные счета. Доставка переводит каждое дело в статус ОТПРАВЛЕНО и блокирует счёт. Если автоматическая отправка включена, приложение отправляет подготовленные вами счета до конца дня отправки. Если отправка не удалась, оно повторяет попытку в следующие дни.",
   "Ready when sent invoices show SENT, or show a clear delivery error to fix.":
-    "Готово, когда отправленные счета показывают статус ОТПРАВЛЕНО или четкую ошибку доставки, которую нужно исправить.",
+    "Готово, когда отправленные счета имеют статус ОТПРАВЛЕНО либо для них отображается понятная ошибка доставки, которую нужно исправить.",
   "Import a bank statement. Check the preview. Confirm the import. Review proposed or unmatched payments. Use the search box and date fields to find a payment in the selected view. You can also record a payment by hand, reverse a wrong payment, or match an unmatched payment.":
     "Импортируйте банковскую выписку. Проверьте предварительный просмотр. Подтвердите импорт. Просмотрите предложенные или несопоставленные платежи. Используйте поле поиска и поля дат, чтобы найти платёж в выбранном разделе. Вы также можете внести платёж вручную, отменить ошибочный платёж или сопоставить несопоставленный платёж со счётом.",
   "Ready when you have confirmed valid matches and the matching invoices show PAID.":
-    "Готово, когда вы подтвердили верные совпадения и соответствующие счета показывают статус ОПЛАЧЕНО.",
+    "Готово, когда верные сопоставления подтверждены, а соответствующие счета имеют статус ОПЛАЧЕНО.",
   "Review resident messages, overdue invoices, unmatched payments, and delivery failures. Resolve each conversation once its issue is fixed.":
-    "Просматривайте сообщения жильцов, просроченные счета, несопоставленные платежи и ошибки доставки. Закрывайте каждый разговор после устранения его проблемы.",
+    "Просматривайте сообщения жильцов, просроченные счета, несопоставленные платежи и ошибки доставки. После устранения проблемы отмечайте переписку как решённую.",
   "Ready when every attention item has an owner or is resolved.":
-    "Готово, когда у каждого требующего внимания пункта есть ответственный или он решен.",
+    "Готово, когда у каждого требующего внимания пункта есть ответственный или он решён.",
   "Messages inbox with a resident conversation open.":
-    "Папка входящих сообщений с открытым разговором с жильцом.",
+    "Входящие сообщения с открытой перепиской с жильцом.",
   "MISSING DATA means a required input is missing. READY means all required inputs are in. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.":
-    "MISSING DATA означает, что отсутствуют обязательные данные. READY означает, что все обязательные данные внесены. DRAFT означает, что счет еще можно проверить и сформировать заново. PREPARED означает, что счет одобрен и готов к отправке. SENT означает, что доставка прошла успешно. OVERDUE означает, что срок оплаты истек, а счет не оплачен. PAID означает, что счет оплачен полностью.",
-  "Why can I not generate an invoice?": "Почему я не могу сформировать счет?",
+    "MISSING DATA означает, что отсутствуют обязательные данные. READY означает, что все обязательные данные внесены. DRAFT означает, что счёт ещё можно проверить и сформировать заново. PREPARED означает, что счёт одобрен и готов к отправке. SENT означает, что доставка прошла успешно. OVERDUE означает, что срок оплаты истёк, а счёт не оплачен. PAID означает, что счёт оплачен полностью.",
+  "Why can I not generate an invoice?": "Почему я не могу сформировать счёт?",
   "The system blocks generation when required inputs are missing or the period is locked. Open the affected dwelling in the workbench to see what is missing.":
-    "Система блокирует формирование, если отсутствуют обязательные данные или период заблокирован. Откройте нужный жилой объект в рабочей области, чтобы увидеть, чего не хватает.",
-  "Why can I not prepare an invoice?": "Почему я не могу подготовить счет?",
+    "Система блокирует формирование, если отсутствуют обязательные данные или период заблокирован. Откройте соответствующее помещение в рабочей области, чтобы увидеть, чего не хватает.",
+  "Why can I not prepare an invoice?": "Почему я не могу подготовить счёт?",
   "The invoice must be a DRAFT with complete issuer, recipient, and payment details. Fix the related settings. Regenerate the draft to update its snapshot.":
-    "Счет должен иметь статус ЧЕРНОВИК с полными данными плательщика, получателя и оплаты. Исправьте соответствующие настройки. Сформируйте черновик заново, чтобы обновить его снимок данных.",
-  "Why can I not send an invoice?": "Почему я не могу отправить счет?",
+    "Счёт должен иметь статус ЧЕРНОВИК и содержать полные данные выставителя, получателя и реквизиты для оплаты. Исправьте соответствующие настройки. Сформируйте черновик заново, чтобы обновить сохранённые в нём данные.",
+  "Why can I not send an invoice?": "Почему я не могу отправить счёт?",
   "You can send email to a PREPARED invoice. You can also send it to a SENT, PAID, or OVERDUE invoice that first used paper delivery. The invoice needs a billing email. If delivery fails, fix the cause, then retry or resend.":
-    "Вы можете отправить счёт по электронной почте со статусом PREPARED. Также можно отправить счёт со статусом SENT, PAID или OVERDUE, если сначала он был отправлен по почте. Для счёта нужен адрес электронной почты. Если доставка не удалась, устраните причину, затем повторите попытку или отправьте счет снова.",
+    "Вы можете отправить счёт со статусом PREPARED по электронной почте. Также можно отправить счёт со статусом SENT, PAID или OVERDUE, если сначала он был отправлен по почте. Для счёта нужен адрес электронной почты. Если доставка не удалась, устраните причину, затем повторите попытку или отправьте счёт снова.",
   "No. A sent invoice is a permanent financial record and cannot change. Changes to dwellings, tariffs, or settings apply only to future invoices.":
-    "Нет. Отправленный счет является постоянной финансовой записью и не может быть изменен. Изменения жилых объектов, тарифов или настроек применяются только к будущим счетам.",
+    "Нет. Отправленный счёт — неизменяемый финансовый документ. Изменения в данных помещений, тарифах или настройках применяются только к будущим счетам.",
   "Review its amount, currency, payer, and reference. When you find the correct invoice, choose it in the Unmatched tab and click Match to invoice. The payment applies right away. Do not match a payment if you are not sure.":
-    "Проверьте сумму, валюту, плательщика и назначение платежа. Когда найдёте нужный счёт, выберите его на вкладке «Не сопоставлен» и нажмите «Привязать к счёту». Платёж применяется сразу. Не сопоставляйте платёж, если вы не уверены.",
+    "Проверьте сумму, валюту, плательщика и назначение платежа. Когда найдёте нужный счёт, выберите его на вкладке «Несопоставленные» и нажмите «Привязать к счёту». Платёж будет учтён сразу. Не сопоставляйте платёж, если вы не уверены.",
   "Lock a period after its normal reading and invoice work is complete. A locked period stays available for history, but blocks reading edits and invoice regeneration.":
     "Блокируйте период после завершения обычной работы с показаниями и счетами. Заблокированный период остается доступным для истории, но не позволяет изменять показания и заново формировать счета.",
   "Required input is missing. Generation is blocked.":
     "Отсутствуют обязательные данные. Формирование заблокировано.",
   "All required inputs are in. You can now generate the invoice.":
-    "Все обязательные данные внесены. Теперь вы можете сформировать счет.",
+    "Все обязательные данные внесены. Теперь вы можете сформировать счёт.",
   "You can still review and regenerate the invoice.":
-    "Счет еще можно проверить и сформировать заново.",
+    "Счёт ещё можно проверить и сформировать заново.",
   "Delivery succeeded.": "Доставка прошла успешно.",
-  "The invoice is fully paid.": "Счет оплачен полностью.",
+  "The invoice is fully paid.": "Счёт оплачен полностью.",
   "The due date passed and the invoice is still unpaid.":
-    "Срок оплаты истек, а счет до сих пор не оплачен.",
+    "Срок оплаты истёк, а счёт до сих пор не оплачен.",
   "Awaiting reply": "Ожидает ответа",
 
   // Added: translation coverage pass 3 (settings hub card grid)
@@ -2975,7 +2981,7 @@ const ru: Record<string, string> = {
   "Utility rates and billing calculation rules.":
     "Тарифы на коммунальные услуги и правила расчета счетов.",
   "Invoice appearance and document settings.":
-    "Внешний вид счета и настройки документа.",
+    "Внешний вид счёта и настройки документа.",
   "Import, export, and bulk updates.": "Импорт, экспорт и массовые обновления.",
   "Track important changes in your organization.":
     "Отслеживайте важные изменения в вашей организации.",
@@ -3003,26 +3009,26 @@ const ru: Record<string, string> = {
   "No billing periods yet — showing tariffs effective today.":
     "Расчётных периодов пока нет — показаны тарифы, действующие сегодня.",
   "Charge quantities shown here are illustrative (always 1) and do not reflect any real resident's bill.":
-    "Указанные здесь количества являются иллюстративными (всегда 1) и не отражают счёт какого-либо конкретного жителя.",
+    "Указанные здесь количества приведены для примера (всегда 1) и не отражают счёт реального жильца.",
   "Latvian is the canonical invoice language. English and Russian are optional translations; a missing translation falls back to Latvian.":
     "Латышский язык является каноническим языком счёта. Английский и русский — необязательные переводы; при отсутствии перевода используется латышский текст.",
   "Editing language": "Язык редактирования",
   "Latvian is the canonical invoice document. English and Russian are optional translated copies of the same invoice — not separate invoices.":
-    "Латышский язык — канонический документ счёта. Английский и русский — необязательные переведённые копии того же счёта, а не отдельные счета.",
+    "Счёт на латышском языке — канонический документ. Английская и русская версии — необязательные переведённые копии того же счёта, а не отдельные счета.",
   "Document language": "Язык документа",
   "Control what appears on generated invoices, in what order, and how each section looks.":
     "Управляйте тем, что отображается в сформированных счетах, в каком порядке и как выглядит каждый раздел.",
   "Add text block": "Добавить текстовый блок",
   "Reset layout": "Сбросить макет",
-  "Invoice sections": "Разделы счета",
-  "Invoice preview": "Предпросмотр счета",
-  "Sample resident": "Образец жильца",
-  "Sample Street 1, Riga, LV-1010": "Образцовая улица 1, Рига, LV-1010",
+  "Invoice sections": "Разделы счёта",
+  "Invoice preview": "Предпросмотр счёта",
+  "Sample resident": "Условный жилец",
+  "Sample Street 1, Riga, LV-1010": "Примерная улица, 1, Рига, LV-1010",
   "Maintenance fee": "Плата за обслуживание",
-  "Invoice details": "Данные счета",
+  "Invoice details": "Данные счёта",
   "Sender and recipient": "Отправитель и получатель",
   "Charges table": "Таблица начислений",
-  "Payment details": "Платежные реквизиты",
+  "Payment details": "Платёжные реквизиты",
   "Default note": "Примечание по умолчанию",
   Footer: "Нижний колонтитул",
   "Custom text": "Произвольный текст",
@@ -3035,9 +3041,9 @@ const ru: Record<string, string> = {
   Duplicate: "Дублировать",
   Delete: "Удалить",
   "Reset the invoice layout to the default template? Custom text blocks, section titles, and any per-row formatting will be removed. Your header, footer, payment instructions, and note text are kept.":
-    "Сбросить макет счета к шаблону по умолчанию? Пользовательские текстовые блоки, названия разделов и любое форматирование строк будут удалены. Текст верхнего колонтитула, нижнего колонтитула, платежных инструкций и примечания будет сохранен.",
+    "Восстановить макет счёта по умолчанию? Пользовательские текстовые блоки, названия разделов и всё построчное форматирование будут удалены. Верхний и нижний колонтитулы, платёжные инструкции и текст примечания будут сохранены.",
   "This invoice layout has reached the maximum of 30 sections.":
-    "В этом макете счета достигнут максимум в 30 разделов.",
+    "В этом макете счёта достигнут максимум в 30 разделов.",
   "Enter a valid unit price, for example 0.35 or 12.50. Use up to 4 decimal places.":
     "Введите корректную цену за единицу, например 0,35 или 12,50. Используйте не более 4 знаков после запятой.",
   "Enter a valid VAT percentage, for example 21 or 21.5.":
@@ -3055,38 +3061,38 @@ const ru: Record<string, string> = {
   "Enter a valid value, for example 12.3456. Use up to 4 decimal places.":
     "Введите корректное значение, например 12,3456. Используйте не более 4 знаков после запятой.",
   "Delivery outcome could not be confirmed. The email provider may have accepted this invoice, but the application did not receive confirmation. Verify the recipient mailbox or provider logs before resending.":
-    "Не удалось подтвердить результат доставки. Почтовый провайдер мог принять этот счет, но приложение не получило подтверждения. Проверьте почтовый ящик получателя или логи провайдера перед повторной отправкой.",
+    "Не удалось подтвердить результат доставки. Почтовый провайдер мог принять этот счёт, но приложение не получило подтверждения. Проверьте почтовый ящик получателя или логи провайдера перед повторной отправкой.",
   "Sending in progress…": "Выполняется отправка…",
-  "Record paper dispatch": "Зафиксировать отправку на бумаге",
-  "Paper dispatched": "Отправлено на бумаге",
+  "Record paper dispatch": "Зафиксировать отправку бумажного экземпляра",
+  "Paper dispatched": "Бумажный экземпляр отправлен",
   "This invoice was delivered by email previously. A later attempt's outcome could not be confirmed -- verify the recipient mailbox or provider logs before resending.":
-    "Этот счёт ранее был доставлен по электронной почте. Результат более позднего мероприятия не удалось подтвердить -- проверьте почтовый ящик получателя или логи провайдера перед повторной отправкой.",
+    "Этот счёт ранее был доставлен по электронной почте. Результат более поздней попытки не удалось подтвердить -- проверьте почтовый ящик получателя или логи провайдера перед повторной отправкой.",
   "This invoice was delivered by email previously. The most recent resend failed -- use Resend to try again.":
     "Этот счёт ранее был доставлен по электронной почте. Последняя повторная отправка не удалась -- используйте «Отправить повторно», чтобы попробовать снова.",
   "Paper (unverified legacy record)":
-    "Бумага (непроверенная историческая запись)",
+    "Бумажный экземпляр (непроверенная историческая запись)",
   "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch.":
-    "Зафиксировано автоматически по старому процессу доставки -- не является подтверждённой ручной физической отправкой.",
+    "Зафиксировано автоматически в рамках прежнего процесса доставки -- это не подтверждает отправку бумажного экземпляра вручную.",
 
   // Recurring tariffs (Tariffs & rules + dwelling read-only view).
   "Recurring tariffs": "Регулярные тарифы",
   "Automatically applied": "Применяются автоматически",
   "Assigned specifically": "Назначены отдельно",
-  "All dwellings": "Все квартиры",
-  "Selected dwellings": "Выбранные квартиры",
-  "One dwelling": "Одна квартира",
+  "All dwellings": "Все помещения",
+  "Selected dwellings": "Выбранные помещения",
+  "One dwelling": "Одно помещение",
   "assigned here": "назначено здесь",
   automatic: "автоматически",
-  "this dwelling": "этой квартире",
+  "this dwelling": "этому помещению",
   "Edit tariff": "Редактировать тариф",
   "View all tariffs": "Смотреть все тарифы",
   "No recurring tariffs apply to this dwelling.":
-    "К этой квартире не применяется ни один регулярный тариф.",
+    "К этому помещению не применяется ни один регулярный тариф.",
   "Recurring tariffs are configured and assigned from Tariffs & rules.":
     "Регулярные тарифы настраиваются и назначаются в разделе «Тарифы и правила».",
   "Amount set per period": "Сумма указывается за каждый период",
   "Not assigned yet": "Пока не назначено",
-  dwellings: "квартир",
+  dwellings: "помещений",
   "Applies to": "Применяется к",
 
   // Tariff drawer (create/edit form) -- section headings, field hints,
@@ -3097,14 +3103,14 @@ const ru: Record<string, string> = {
   "A price of 0.00 is valid and will show on the invoice.":
     "Цена 0,00 действительна и будет отображена в счёте.",
   "Applies to every current and future dwelling.":
-    "Применяется ко всем текущим и будущим квартирам.",
-  "Applies to exactly one dwelling.": "Применяется ровно к одной квартире.",
+    "Применяется ко всем текущим и будущим помещениям.",
+  "Applies to exactly one dwelling.": "Применяется ровно к одному помещению.",
   "Applies only to the dwellings you choose. New dwellings are not included automatically.":
-    "Применяется только к выбранным вами квартирам. Новые квартиры не добавляются автоматически.",
-  "Search dwellings": "Поиск квартир",
-  "Filter by dwelling number...": "Фильтр по номеру квартиры...",
+    "Применяется только к выбранным вами помещениям. Новые помещения не добавляются автоматически.",
+  "Search dwellings": "Поиск помещений",
+  "Filter by dwelling number...": "Фильтр по номеру помещения...",
   "Select all visible": "Выбрать все видимые",
-  "-- select a dwelling --": "-- выберите квартиру --",
+  "-- select a dwelling --": "-- выберите помещение --",
   Validity: "Срок действия",
   Advanced: "Дополнительно",
   "Sort order": "Порядок сортировки",

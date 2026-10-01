@@ -29,7 +29,7 @@ export function buildSchedulerAlert(
   results: SchedulerAlertResult[] | null,
   thrown?: unknown
 ): { subject: string; text: string } {
-  const subject = "Property Billing: scheduled job failed";
+  const subject = "Namkopa: scheduled job failed";
 
   if (thrown !== undefined && thrown !== null) {
     const message = safeText(

@@ -219,16 +219,20 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
                   {log.actorDisplayName ?? log.actorEmail ?? "—"}
                 </td>
                 <td class="px-4 py-2">
-                  {log.action}
-                  {log.requestId && (
-                    <div
-                      class="text-xs text-muted"
-                      title={t("Request ID")}
-                      aria-label={`${t("Request ID")}: ${log.requestId}`}
-                    >
-                      {log.requestId}
-                    </div>
-                  )}
+                  {/* One block: in the stacked phone layout a cell is a flex
+                      row, so two separate children would sit side by side. */}
+                  <div>
+                    {log.action}
+                    {log.requestId && (
+                      <div
+                        class="text-xs text-muted break-all"
+                        title={t("Request ID")}
+                        aria-label={`${t("Request ID")}: ${log.requestId}`}
+                      >
+                        {log.requestId}
+                      </div>
+                    )}
+                  </div>
                 </td>
                 <td class="px-4 py-2">
                   {log.entityType}

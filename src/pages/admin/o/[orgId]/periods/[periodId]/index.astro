@@ -1048,6 +1048,12 @@ function filterHref(status?: CaseStatus) {
     font-weight: 600;
     line-height: 1.1;
   }
+  /* Fraunces: 700 above 36px. 4vw passes 36px at 56.25rem. */
+  @media (min-width: 56.25rem) {
+    .period-title h1 {
+      font-weight: 700;
+    }
+  }
   .period-description {
     max-width: 44rem;
     margin-top: 0.75rem;

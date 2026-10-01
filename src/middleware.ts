@@ -33,12 +33,10 @@ function applySecurityHeaders<T extends Response>(
   );
   response.headers.set(
     "Content-Security-Policy",
-    // style-src/font-src allow Google Fonts (global.css @imports Source
-    // Sans 3 + Fraunces from fonts.googleapis.com, which serves @font-face
-    // rules pointing at fonts.gstatic.com) -- without these, the stylesheet
-    // request itself is blocked and every page silently falls back to the
-    // OS default font instead of the design system's typefaces.
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none';"
+    // Fonts are self-hosted (src/fonts, declared in global.css), so font-src
+    // is 'self' only: no third party sees a visitor's address for fonts.
+    // Never load these from a CDN: this policy would block them.
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://*.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none';"
   );
   if (isHttps) {
     response.headers.set(

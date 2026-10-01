@@ -138,7 +138,9 @@ Never rely on color alone for state communication. Combine color with text, icon
 
 ## 4.1 Primary UI Typeface
 
-**Source Sans 3**
+**Switzer**
+
+Letter-spacing is +0.03em on all sans text (--tracking-sans). Switzer is Latin only. Russian text falls back to Overused Grotesk. See docs/decisions/0010-typography.md.
 
 Use for:
 
@@ -170,6 +172,8 @@ Functional UI must remain in the sans-serif system.
 
 **Fraunces**
 
+Axes: SOFT 40, WONK 0. Weight 700 above 36px, 600 at 36px or below. opsz follows the rendered size (font-optical-sizing: auto).
+
 Use selectively for:
 
 - product wordmark
@@ -188,7 +192,7 @@ Fraunces
 550–600
 
 Billing workflow
-Source Sans 3
+Switzer
 18 / 24
 650
 ```
@@ -805,7 +809,7 @@ Across the product:
 - build all interaction states to WCAG contrast requirements
 - respect `prefers-reduced-motion`
 - preserve Latvian diacritic quality throughout
-- use Source Sans 3 for functional interfaces
+- use Switzer for functional interfaces
 - reserve Fraunces for selected display moments
 - prioritize legibility, direct controls, negative space, and task completion over stylistic expression
 

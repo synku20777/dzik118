@@ -894,7 +894,9 @@ const conversationStatusMap = Object.fromEntries(
   }
   .messages-split {
     display: grid;
-    grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+    /* The list takes a share of the width instead of a fixed 380px, so it
+       grows on wide screens and never squeezes the thread below 18rem. */
+    grid-template-columns: minmax(18rem, 32%) minmax(0, 1fr);
     gap: 1.25rem;
     align-items: start;
   }
@@ -923,13 +925,15 @@ const conversationStatusMap = Object.fromEntries(
   }
   .messages-list-item-head {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
+    gap: 0.25rem 0.5rem;
   }
   .messages-list-item-title {
     display: flex;
     align-items: center;
+    min-width: 0;
     gap: 0.5rem;
     font-weight: 650;
     font-size: 0.875rem;
@@ -958,21 +962,24 @@ const conversationStatusMap = Object.fromEntries(
     font-size: 0.8125rem;
   }
   .messages-list-item-foot {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.75rem;
+    display: grid;
+    gap: 0.25rem;
     margin-top: 0.5rem;
   }
+  /* Two lines of preview, then an ellipsis. The date has its own line, so a
+     long date (Latvian, Russian) no longer eats the preview width. */
   .messages-list-item-preview {
     min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow-wrap: anywhere;
     color: var(--color-muted);
     font-size: 0.8125rem;
   }
   .messages-list-item-date {
-    flex: 0 0 auto;
     color: var(--color-muted);
     font-size: 0.75rem;
   }

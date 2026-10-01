@@ -16,7 +16,7 @@ describe("buildSchedulerAlert", () => {
 
     const alert = buildSchedulerAlert(results);
 
-    expect(alert.subject).toBe("Property Billing: scheduled job failed");
+    expect(alert.subject).toBe("Namkopa: scheduled job failed");
     expect(alert.text).toContain("2 of 5 organizations failed.");
     expect(alert.text).toContain("Organization org-1: Connection timeout");
     expect(alert.text).toContain("Organization org-3: Invalid currency code");
@@ -62,7 +62,7 @@ describe("buildSchedulerAlert", () => {
       null,
       new Error("Database connection lost")
     );
-    expect(errorAlert.subject).toBe("Property Billing: scheduled job failed");
+    expect(errorAlert.subject).toBe("Namkopa: scheduled job failed");
     expect(errorAlert.text).toContain(
       "The job stopped with an error: Database connection lost"
     );
@@ -71,9 +71,7 @@ describe("buildSchedulerAlert", () => {
     );
 
     const nonErrorAlert = buildSchedulerAlert(null, "some string rejection");
-    expect(nonErrorAlert.subject).toBe(
-      "Property Billing: scheduled job failed"
-    );
+    expect(nonErrorAlert.subject).toBe("Namkopa: scheduled job failed");
     expect(nonErrorAlert.text).toContain(
       "The job stopped with an error: unknown error"
     );

@@ -4,8 +4,10 @@ import Icon from "./Icon.astro";
 import type { IconName } from "../../lib/ui/icons";
 interface Props {
   organizationId: string;
+  // Conversations with a resident message that no admin has read yet.
+  unreadMessages?: number;
 }
-const { organizationId } = Astro.props;
+const { organizationId, unreadMessages = 0 } = Astro.props;
 const locale = uiLocale(Astro.cookies, Astro.url);
 const links: Array<[string, string, IconName]> = [
   ["dashboard", "Dashboard", "layout-dashboard"],
@@ -30,6 +32,16 @@ const links: Array<[string, string, IconName]> = [
         >
           <Icon name={icon} class="nav-icon" />
           {translate(locale, label)}
+          {path === "messages" && unreadMessages > 0 && (
+            <span class="nav-badge">
+              <span aria-hidden="true">
+                {unreadMessages > 99 ? "99+" : unreadMessages}
+              </span>
+              <span class="sr-only">
+                {unreadMessages} {translate(locale, "unread conversations")}
+              </span>
+            </span>
+          )}
         </a>
       );
     })
