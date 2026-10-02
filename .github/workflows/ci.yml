@@ -28,7 +28,7 @@ jobs:
       INTERNAL_CRON_SECRET: ci-dummy-cron-secret
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
