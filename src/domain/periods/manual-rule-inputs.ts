@@ -146,6 +146,7 @@ export async function submitManualRuleInput(
 
     await recordAuditEvent(tx, {
       organizationId,
+      scopeDwellingId: dwellingId,
       actorUserId,
       action: existing
         ? "MANUAL_RULE_INPUT_UPDATED"

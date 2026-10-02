@@ -1,0 +1,1 @@
+ALTER TABLE "organizations" ADD COLUMN "carry_forward_readings_enabled" boolean DEFAULT false NOT NULL;

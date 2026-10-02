@@ -2,7 +2,12 @@
 import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
 import { requireActiveOrganization } from "../domain/authorization/guards";
-import { createPeriod, lockPeriod } from "../domain/periods/periods";
+import {
+  addDwellingToPeriod,
+  createPeriod,
+  lockPeriod,
+  reopenPeriod,
+} from "../domain/periods/periods";
 import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
 
@@ -41,5 +46,43 @@ export const periods = {
         lockPeriod(db, organizationId, periodId, locals.auth!.userId)
       );
     }),
+  }),
+
+  reopen: defineAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      periodId: z.uuid(),
+    }),
+    handler: safeHandler(async ({ organizationId, periodId }, { locals }) => {
+      requireActiveOrganization(locals.auth, organizationId);
+      return withDb((db) =>
+        reopenPeriod(db, organizationId, periodId, locals.auth!.userId)
+      );
+    }),
+  }),
+
+  // Retroactive billing: give a dwelling a billing case in this period.
+  addDwelling: defineAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      periodId: z.uuid(),
+      dwellingId: z.uuid(),
+    }),
+    handler: safeHandler(
+      async ({ organizationId, periodId, dwellingId }, { locals }) => {
+        requireActiveOrganization(locals.auth, organizationId);
+        return withDb((db) =>
+          addDwellingToPeriod(
+            db,
+            organizationId,
+            periodId,
+            dwellingId,
+            locals.auth!.userId
+          )
+        );
+      }
+    ),
   }),
 };

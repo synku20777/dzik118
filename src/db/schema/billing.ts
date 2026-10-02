@@ -27,6 +27,9 @@ export const readingSourceEnum = pgEnum("reading_source", [
   "ADMIN",
   "RESIDENT",
   "IMPORT",
+  // Written by the system after the reading deadline: the previous value
+  // again, so consumption is zero (readings.ts carryForwardMissingReadings).
+  "CARRIED_FORWARD",
 ]);
 
 export const billingCaseStatusEnum = pgEnum("billing_case_status", [

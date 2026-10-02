@@ -81,6 +81,7 @@ export const workbench = {
                 currentValue: m.currentValue,
                 previousValue: m.previousValue,
                 consumption: m.consumption,
+                source: m.source,
               })),
             manualRuleInputs,
           };

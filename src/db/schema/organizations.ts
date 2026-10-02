@@ -42,6 +42,11 @@ export const organizations = pgTable(
       .default(false),
     autoSendEnabled: boolean("auto_send_enabled").notNull().default(false),
     autoSendDay: smallint("auto_send_day"),
+    // Opt-in: after the reading deadline, a meter with no reading reuses its
+    // previous one (readings.ts carryForwardMissingReadings).
+    carryForwardReadingsEnabled: boolean("carry_forward_readings_enabled")
+      .notNull()
+      .default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

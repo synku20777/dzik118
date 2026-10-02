@@ -4,7 +4,11 @@
 // per Section 15.3's "avoid database-heavy authorization globally".
 import { defineMiddleware } from "astro:middleware";
 import { env } from "cloudflare:workers";
-import { ADMIN_REQUIRE_AAL2, AUDIT_HASH_SECRET } from "astro:env/server";
+import {
+  ADMIN_REQUIRE_AAL2,
+  APP_BASE_URL,
+  AUDIT_HASH_SECRET,
+} from "astro:env/server";
 import { createDb } from "./db/client";
 import { loadAuthContext } from "./domain/authorization/context";
 import {
@@ -50,6 +54,14 @@ function applySecurityHeaders<T extends Response>(
 const handle = defineMiddleware(async (context, next) => {
   const { request, cookies, locals, redirect, url } = context;
   const isHttps = url.protocol === "https:";
+
+  if (url.hostname === "property-billing.nestor-kulik.workers.dev") {
+    const destination = new URL(url);
+    const appOrigin = new URL(APP_BASE_URL);
+    destination.protocol = appOrigin.protocol;
+    destination.host = appOrigin.host;
+    return applySecurityHeaders(redirect(destination.href, 308), isHttps);
+  }
 
   locals.auth = null;
 

@@ -69,6 +69,7 @@ export async function createMeter(
       .returning();
     await recordAuditEvent(tx, {
       organizationId,
+      scopeDwellingId: dwellingId,
       actorUserId,
       action: "METER_CREATED",
       entityType: "meter",
@@ -121,6 +122,7 @@ export async function archiveMeter(
     if (!meter) throw new NotFoundError("Meter not found");
     await recordAuditEvent(tx, {
       organizationId,
+      scopeDwellingId: meter.dwellingId,
       actorUserId,
       action: "METER_ARCHIVED",
       entityType: "meter",
@@ -192,6 +194,7 @@ export async function updateMeter(
 
     await recordAuditEvent(tx, {
       organizationId,
+      scopeDwellingId: after.dwellingId,
       actorUserId,
       action: "METER_UPDATED",
       entityType: "meter",
@@ -199,6 +202,13 @@ export async function updateMeter(
       beforeData: before,
       afterData: after,
     });
+    // installedAt decides whether the meter was active in a period, and the
+    // label is copied into the case's blockers.
+    await recalculateCaseReadinessForOpenPeriods(
+      tx,
+      organizationId,
+      after.dwellingId
+    );
     return after;
   });
 }

@@ -1,0 +1,1 @@
+ALTER TYPE "public"."reading_source" ADD VALUE 'CARRIED_FORWARD';

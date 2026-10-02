@@ -209,6 +209,10 @@ const lv: Record<string, string> = {
     "Automātiskās nosūtīšanas mēneša diena (1–28)",
   "Automatically generate invoices each period":
     "Automātiski izveidot rēķinus katrā periodā",
+  "Reuse the previous reading after the deadline":
+    "Izmantot iepriekšējo rādījumu pēc termiņa",
+  "When no meter reading arrives by the reading deadline, the previous reading is used and the consumption is zero. The next real reading bills the difference.":
+    "Ja līdz rādījumu iesniegšanas termiņam skaitītāja rādījums netiek saņemts, tiek izmantots iepriekšējais rādījums un patēriņš ir nulle. Starpība tiek aprēķināta pēc nākamā faktiskā rādījuma.",
   "Automatically send prepared invoices":
     "Automātiski nosūtīt sagatavotos rēķinus",
   "Only applies when auto-send is enabled above.":
@@ -497,6 +501,17 @@ const lv: Record<string, string> = {
   "Prepare selected": "Sagatavot izvēlētos",
   "Send selected": "Nosūtīt izvēlētos",
   "Lock period": "Slēgt periodu",
+  "Reopen period": "Atvērt periodu",
+  "To bill a dwelling for this period after the fact, reopen the period.":
+    "Lai izrakstītu rēķinu īpašumam par šo periodu ar atpakaļejošu datumu, atveriet periodu.",
+  "Dwellings not in this period": "Šajā periodā neiekļautie īpašumi",
+  "These dwellings have no billing case in this period, so they get no invoice for it. Add a dwelling to bill it for this period. The invoice uses the issue and due dates of this period.":
+    "Šiem īpašumiem šajā periodā nav norēķinu ieraksta, tāpēc tiem netiek izrakstīts rēķins. Pievienojiet īpašumu, lai izrakstītu tam rēķinu par šo periodu. Rēķinā tiek izmantoti šī perioda izrakstīšanas datums un apmaksas termiņš.",
+  "Add to period": "Pievienot periodam",
+  "An archived dwelling cannot be added to a billing period":
+    "Arhivētu īpašumu nevar pievienot norēķinu periodam",
+  "This dwelling already has a billing case in this period":
+    "Šim īpašumam šajā periodā jau ir norēķinu ieraksts",
   Generate: "Izveidot",
   Regenerate: "Pārrēķināt",
   Prepare: "Sagatavot",
@@ -621,6 +636,25 @@ const lv: Record<string, string> = {
   Organization: "Organizācija",
   Billing: "Norēķini",
   "Tariffs & rules": "Tarifi un noteikumi",
+  "Tariffs in this period": "Tarifi šajā periodā",
+  "Applying:": "Piemēroti:",
+  "A tariff applies when its effective dates overlap the period. To bill an earlier period, give the tariff an earlier Effective from date.":
+    "Tarifs tiek piemērots, ja tā spēkā esamības datumi pārklājas ar periodu. Lai izrakstītu rēķinu par agrāku periodu, norādiet tarifam agrāku datumu “Spēkā no”.",
+  "Edit tariffs": "Rediģēt tarifus",
+  "No tariffs exist yet.": "Vēl nav tarifu.",
+  "Does not apply: the tariff is archived.":
+    "Netiek piemērots: tarifs ir arhivēts.",
+  "Does not apply: the tariff is disabled.":
+    "Netiek piemērots: tarifs ir izslēgts.",
+  "Does not apply: it starts after this period ends.":
+    "Netiek piemērots: tas sākas pēc šī perioda beigām.",
+  "Does not apply: it ended before this period starts.":
+    "Netiek piemērots: tas beidzās pirms šī perioda sākuma.",
+  "Applies to all dwellings.": "Attiecas uz visiem īpašumiem.",
+  "Applies to no dwelling: none is assigned.":
+    "Neattiecas ne uz vienu īpašumu: neviens nav piešķirts.",
+  "Applies only to the assigned dwellings:":
+    "Attiecas tikai uz piešķirtajiem īpašumiem:",
   "Invoice template": "Rēķina veidne",
   "Users & access": "Lietotāji un piekļuve",
   Data: "Dati",
@@ -663,6 +697,9 @@ const lv: Record<string, string> = {
   "Billing details": "Norēķinu dati",
   Building: "Ēka",
   "Calculated consumption": "Aprēķinātais patēriņš",
+  "No reading arrived by the deadline, so the previous reading was reused. Enter the real value to replace it.":
+    "Līdz rādījumu iesniegšanas termiņam rādījums netika saņemts, tāpēc tika izmantots iepriekšējais rādījums. Ievadiet faktisko vērtību, lai to aizstātu.",
+  "Previous reading reused": "Izmantots iepriekšējais rādījums",
   "Changes recorded against this dwelling.":
     "Šim īpašumam reģistrētās izmaiņas.",
   "Changes saved": "Izmaiņas saglabātas",
@@ -914,6 +951,10 @@ const lv: Record<string, string> = {
     "Šim īpašumam trūkst datu šajā periodā, un tam vēl nevar izrakstīt rēķinu",
   "No billing rules apply to this dwelling for this period":
     "Šim īpašumam šajā periodā nav piemērojams neviens norēķinu noteikums",
+  "A billing rule assigned to this dwelling has no active meter for this period":
+    "Šim īpašumam piesaistītajam norēķinu noteikumam šajā periodā nav aktīva skaitītāja",
+  "No billing rule applies": "Nav piemērojams neviens norēķinu noteikums",
+  "no active meter": "nav aktīva skaitītāja",
   "This invoice has already been sent and can no longer be regenerated; issue a correction document instead":
     "Šis rēķins jau ir nosūtīts, un to vairs nevar pārrēķināt; tā vietā izrakstiet korekcijas dokumentu",
   "This invoice has already moved past DRAFT and can no longer be regenerated":
@@ -1403,8 +1444,8 @@ const lv: Record<string, string> = {
     "Gatavs, kad katram vienumam, kam jāpievērš uzmanība, ir atbildīgā persona vai tas ir atrisināts.",
   "Messages inbox with a resident conversation open.":
     "Ziņu iesūtne ar atvērtu sarunu ar iedzīvotāju.",
-  "MISSING DATA means a required input is missing. READY means all required inputs are in. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.":
-    "MISSING DATA nozīmē, ka trūkst nepieciešamās informācijas. READY nozīmē, ka visi nepieciešamie dati ir ievadīti. DRAFT nozīmē, ka joprojām varat to pārskatīt un no jauna ģenerēt. PREPARED nozīmē, ka rēķins ir apstiprināts un gatavs nosūtīšanai. SENT nozīmē, ka piegāde bija sekmīga. OVERDUE nozīmē, ka apmaksas termiņš ir pagājis un rēķins nav apmaksāts. PAID nozīmē, ka rēķins ir pilnībā apmaksāts.",
+  "MISSING DATA means something blocks the invoice: a required input is missing, a rule has no active meter, or no billing rule applies. READY means the invoice can be generated. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.":
+    "MISSING DATA nozīmē, ka rēķinu kaut kas bloķē: trūkst nepieciešamās informācijas, noteikumam nav aktīva skaitītāja vai nav piemērojams neviens norēķinu noteikums. READY nozīmē, ka rēķinu var ģenerēt. DRAFT nozīmē, ka joprojām varat to pārskatīt un no jauna ģenerēt. PREPARED nozīmē, ka rēķins ir apstiprināts un gatavs nosūtīšanai. SENT nozīmē, ka piegāde bija sekmīga. OVERDUE nozīmē, ka apmaksas termiņš ir pagājis un rēķins nav apmaksāts. PAID nozīmē, ka rēķins ir pilnībā apmaksāts.",
   "Why can I not generate an invoice?": "Kāpēc nevaru ģenerēt rēķinu?",
   "The system blocks generation when required inputs are missing or the period is locked. Open the affected dwelling in the workbench to see what is missing.":
     "Sistēma bloķē ģenerēšanu, ja trūkst nepieciešamo datu vai periods ir bloķēts. Atveriet attiecīgo īpašumu darbvietā, lai redzētu, kas trūkst.",
@@ -1422,8 +1463,8 @@ const lv: Record<string, string> = {
     "Bloķējiet periodu, kad ir pabeigta ierastā rādījumu apstrāde un rēķinu sagatavošana. Bloķēts periods joprojām ir pieejams vēsturē, taču tajā nevar labot rādījumus vai no jauna ģenerēt rēķinus.",
   "Required input is missing. Generation is blocked.":
     "Trūkst nepieciešamās informācijas. Ģenerēšana ir bloķēta.",
-  "All required inputs are in. You can now generate the invoice.":
-    "Visi nepieciešamie dati ir ievadīti. Tagad varat ģenerēt rēķinu.",
+  "Nothing blocks the invoice. You can now generate it.":
+    "Nekas nebloķē rēķinu. Tagad varat to ģenerēt.",
   "You can still review and regenerate the invoice.":
     "Joprojām varat pārskatīt un no jauna ģenerēt rēķinu.",
   "Delivery succeeded.": "Piegāde bija sekmīga.",
@@ -1739,6 +1780,10 @@ const ru: Record<string, string> = {
   "Auto-send day of month (1-28)": "День месяца для автоотправки (1–28)",
   "Automatically generate invoices each period":
     "Автоматически формировать счета в каждом периоде",
+  "Reuse the previous reading after the deadline":
+    "Использовать предыдущее показание после истечения срока",
+  "When no meter reading arrives by the reading deadline, the previous reading is used and the consumption is zero. The next real reading bills the difference.":
+    "Если до срока подачи показаний показание счётчика не поступило, используется предыдущее показание, а расход равен нулю. Разница рассчитывается по следующему фактическому показанию.",
   "Automatically send prepared invoices":
     "Автоматически отправлять подготовленные счета",
   "Only applies when auto-send is enabled above.":
@@ -2032,6 +2077,17 @@ const ru: Record<string, string> = {
   "Prepare selected": "Подготовить выбранные",
   "Send selected": "Отправить выбранные",
   "Lock period": "Закрыть период",
+  "Reopen period": "Открыть период",
+  "To bill a dwelling for this period after the fact, reopen the period.":
+    "Чтобы выставить счёт помещению за этот период задним числом, откройте период.",
+  "Dwellings not in this period": "Помещения, не включённые в этот период",
+  "These dwellings have no billing case in this period, so they get no invoice for it. Add a dwelling to bill it for this period. The invoice uses the issue and due dates of this period.":
+    "У этих помещений нет расчётной записи в этом периоде, поэтому для них не выставляется счёт. Добавьте помещение, чтобы выставить ему счёт за этот период. В счёте используются дата выставления и срок оплаты этого периода.",
+  "Add to period": "Добавить в период",
+  "An archived dwelling cannot be added to a billing period":
+    "Архивное помещение нельзя добавить в расчётный период",
+  "This dwelling already has a billing case in this period":
+    "Для этого помещения в этом периоде уже есть расчётная запись",
   Generate: "Создать",
   Regenerate: "Пересчитать",
   Prepare: "Подготовить",
@@ -2157,6 +2213,23 @@ const ru: Record<string, string> = {
   Organization: "Организация",
   Billing: "Расчёты",
   "Tariffs & rules": "Тарифы и правила",
+  "Tariffs in this period": "Тарифы в этом периоде",
+  "Applying:": "Применяются:",
+  "A tariff applies when its effective dates overlap the period. To bill an earlier period, give the tariff an earlier Effective from date.":
+    "Тариф применяется, если даты его действия пересекаются с периодом. Чтобы выставить счёт за более ранний период, укажите для тарифа более раннюю дату «Действует с».",
+  "Edit tariffs": "Редактировать тарифы",
+  "No tariffs exist yet.": "Тарифов пока нет.",
+  "Does not apply: the tariff is archived.": "Не применяется: тариф в архиве.",
+  "Does not apply: the tariff is disabled.": "Не применяется: тариф выключен.",
+  "Does not apply: it starts after this period ends.":
+    "Не применяется: он начинается после окончания этого периода.",
+  "Does not apply: it ended before this period starts.":
+    "Не применяется: он закончился до начала этого периода.",
+  "Applies to all dwellings.": "Применяется ко всем помещениям.",
+  "Applies to no dwelling: none is assigned.":
+    "Не применяется ни к одному помещению: ни одно не назначено.",
+  "Applies only to the assigned dwellings:":
+    "Применяется только к назначенным помещениям:",
   "Invoice template": "Шаблон счёта",
   "Users & access": "Пользователи и доступ",
   Data: "Данные",
@@ -2199,6 +2272,9 @@ const ru: Record<string, string> = {
   "Billing details": "Данные для счетов",
   Building: "Здание",
   "Calculated consumption": "Рассчитанный расход",
+  "No reading arrived by the deadline, so the previous reading was reused. Enter the real value to replace it.":
+    "До срока подачи показаний показание не поступило, поэтому было использовано предыдущее показание. Введите фактическое значение, чтобы заменить его.",
+  "Previous reading reused": "Использовано предыдущее показание",
   "Changes recorded against this dwelling.":
     "Изменения, зафиксированные по этому помещению.",
   "Changes saved": "Изменения сохранены",
@@ -2455,6 +2531,10 @@ const ru: Record<string, string> = {
     "У этого помещения отсутствуют данные за этот период, и для него пока нельзя выставить счёт",
   "No billing rules apply to this dwelling for this period":
     "К этому помещению в этом периоде не применяется ни одно правило расчёта",
+  "A billing rule assigned to this dwelling has no active meter for this period":
+    "У назначенного этому помещению правила расчёта нет активного счётчика в этом периоде",
+  "No billing rule applies": "Не применяется ни одно правило расчёта",
+  "no active meter": "нет активного счётчика",
   "This invoice has already been sent and can no longer be regenerated; issue a correction document instead":
     "Этот счёт уже отправлен, и его больше нельзя пересчитать; оформите вместо этого корректирующий документ",
   "This invoice has already moved past DRAFT and can no longer be regenerated":
@@ -2944,8 +3024,8 @@ const ru: Record<string, string> = {
     "Готово, когда у каждого требующего внимания пункта есть ответственный или он решён.",
   "Messages inbox with a resident conversation open.":
     "Входящие сообщения с открытой перепиской с жильцом.",
-  "MISSING DATA means a required input is missing. READY means all required inputs are in. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.":
-    "MISSING DATA означает, что отсутствуют обязательные данные. READY означает, что все обязательные данные внесены. DRAFT означает, что счёт ещё можно проверить и сформировать заново. PREPARED означает, что счёт одобрен и готов к отправке. SENT означает, что доставка прошла успешно. OVERDUE означает, что срок оплаты истёк, а счёт не оплачен. PAID означает, что счёт оплачен полностью.",
+  "MISSING DATA means something blocks the invoice: a required input is missing, a rule has no active meter, or no billing rule applies. READY means the invoice can be generated. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.":
+    "MISSING DATA означает, что счёту что-то препятствует: отсутствуют обязательные данные, у правила нет активного счётчика или не применяется ни одно правило расчёта. READY означает, что счёт можно сформировать. DRAFT означает, что счёт ещё можно проверить и сформировать заново. PREPARED означает, что счёт одобрен и готов к отправке. SENT означает, что доставка прошла успешно. OVERDUE означает, что срок оплаты истёк, а счёт не оплачен. PAID означает, что счёт оплачен полностью.",
   "Why can I not generate an invoice?": "Почему я не могу сформировать счёт?",
   "The system blocks generation when required inputs are missing or the period is locked. Open the affected dwelling in the workbench to see what is missing.":
     "Система блокирует формирование, если отсутствуют обязательные данные или период заблокирован. Откройте соответствующее помещение в рабочей области, чтобы увидеть, чего не хватает.",
@@ -2963,8 +3043,8 @@ const ru: Record<string, string> = {
     "Блокируйте период после завершения обычной работы с показаниями и счетами. Заблокированный период остается доступным для истории, но не позволяет изменять показания и заново формировать счета.",
   "Required input is missing. Generation is blocked.":
     "Отсутствуют обязательные данные. Формирование заблокировано.",
-  "All required inputs are in. You can now generate the invoice.":
-    "Все обязательные данные внесены. Теперь вы можете сформировать счёт.",
+  "Nothing blocks the invoice. You can now generate it.":
+    "Ничто не блокирует счёт. Теперь вы можете сформировать его.",
   "You can still review and regenerate the invoice.":
     "Счёт ещё можно проверить и сформировать заново.",
   "Delivery succeeded.": "Доставка прошла успешно.",
@@ -3236,6 +3316,7 @@ const names: Record<string, string> = {
   ADMIN: "Administrator",
   RESIDENT: "Resident",
   IMPORT: "Import",
+  CARRIED_FORWARD: "Previous reading reused",
 };
 export function entityLabel(value: string, locale: Locale): string {
   return translate(locale, names[value] ?? value);

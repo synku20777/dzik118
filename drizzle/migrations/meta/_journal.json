@@ -127,6 +127,27 @@
       "when": 1790780016275,
       "tag": "0017_suppressed_emails",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790947371672,
+      "tag": "0018_reading_carried_forward",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790949131629,
+      "tag": "0019_carry_forward_setting",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790957238567,
+      "tag": "0020_dwelling_scoped_audit",
+      "breakpoints": true
     }
   ]
 }

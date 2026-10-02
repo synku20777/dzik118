@@ -5,7 +5,7 @@
 // guesses against a known token format offline.
 import { and, eq, gt, isNull, or } from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
-import { invoiceAccessTokens } from "../../db/schema/invoices";
+import { invoiceAccessTokens, invoices } from "../../db/schema/invoices";
 import { organizations } from "../../db/schema/organizations";
 import { hmacSha256Hex } from "../../lib/hash";
 import { recordAuditEvent } from "../../lib/logging/audit";
@@ -34,7 +34,8 @@ export async function createInvoiceAccessToken(
   invoiceId: string,
   tokenSecret: string,
   expiresAt: Date | null,
-  actorUserId: string | null
+  actorUserId: string | null,
+  scopeDwellingId?: string | null
 ): Promise<string> {
   const rawToken = randomToken();
   const tokenHash = await hmacSha256Hex(tokenSecret, rawToken);
@@ -46,6 +47,7 @@ export async function createInvoiceAccessToken(
   });
   await recordAuditEvent(db, {
     organizationId,
+    scopeDwellingId,
     actorUserId,
     action: "INVOICE_ACCESS_TOKEN_CREATED",
     entityType: "invoice",
@@ -102,8 +104,25 @@ export async function revokeInvoiceAccessTokens(
   db: Db,
   organizationId: string,
   invoiceId: string,
-  actorUserId: string
+  actorUserId: string,
+  scopeDwellingId?: string | null
 ): Promise<void> {
+  const dwellingId =
+    scopeDwellingId !== undefined
+      ? scopeDwellingId
+      : (
+          await db
+            .select({ dwellingId: invoices.dwellingId })
+            .from(invoices)
+            .where(
+              and(
+                eq(invoices.id, invoiceId),
+                eq(invoices.organizationId, organizationId)
+              )
+            )
+            .limit(1)
+        )[0]?.dwellingId ?? null;
+
   await db
     .update(invoiceAccessTokens)
     .set({ revokedAt: new Date() })
@@ -116,6 +135,7 @@ export async function revokeInvoiceAccessTokens(
     );
   await recordAuditEvent(db, {
     organizationId,
+    scopeDwellingId: dwellingId,
     actorUserId,
     action: "INVOICE_ACCESS_TOKEN_REVOKED",
     entityType: "invoice",

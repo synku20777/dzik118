@@ -114,8 +114,7 @@ try {
       caseHistory: await listCasesForDwelling(db, organizationId, dwellingId),
       currentOpenPeriod: await getCurrentOpenPeriod(db, organizationId),
       auditEntries: await listAuditLogs(db, organizationId, {
-        entityType: "dwelling",
-        entityId: dwellingId,
+        scopeDwellingId: dwellingId,
         limit: 20,
       }),
       conversationsWithMessages: await listConversationsWithMessagesForDwelling(

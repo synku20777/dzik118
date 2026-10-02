@@ -1,5 +1,24 @@
 # Production Deployment Runbook
 
+## Production domain
+
+The production app is `https://app.namkopa.com`, a Custom Domain of the
+`property-billing` Worker. `wrangler.jsonc` records the route so later deploys
+keep it. The old `property-billing.nestor-kulik.workers.dev` hostname remains
+enabled only for permanent redirects that preserve paths and query strings,
+including existing invoice and authentication links. Preview URLs are disabled.
+
+Set the Worker secret `APP_BASE_URL` to `https://app.namkopa.com`. The deployment
+workflow uses that URL for builds. Supabase project `ovsdkhrxnvpjelqprxmk` must
+use the same Auth Site URL and the exact redirect allow-list entry
+`https://app.namkopa.com/auth/confirm`. Keep the magic-link and recovery email
+templates in [Supabase setup](supabase-setup.md) pointing through `.SiteURL`.
+Local development keeps `http://localhost:4321` in `supabase/config.toml`.
+
+After deployment, run `node scripts/check-app-domain.mjs` to verify HTTPS app
+pages, database health, and legacy redirects. Existing sessions on the old
+hostname require signing in again on the new hostname.
+
 Deployment runbook for deploying this multi-tenant property billing SaaS (Astro SSR `output: "server"` on the `@astrojs/cloudflare` adapter, deployed as a single Cloudflare Worker; Supabase for Postgres/Auth/Storage; AWS SES for production email) to a real Cloudflare + Supabase + AWS account for the first time.
 
 ## 1. Prerequisites

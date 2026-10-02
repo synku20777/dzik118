@@ -654,15 +654,18 @@ export async function setResidentDisabled(
       .where(eq(appUsers.id, userId))
       .returning();
 
-    await recordAuditEvent(tx, {
-      organizationId,
-      actorUserId,
-      action: disabled ? "RESIDENT_DISABLED" : "RESIDENT_ENABLED",
-      entityType: "app_user",
-      entityId: userId,
-      beforeData: { disabledAt: currentUser.disabledAt },
-      afterData: { disabledAt: updatedUser.disabledAt },
-    });
+    for (const { dwellingId } of accessRows) {
+      await recordAuditEvent(tx, {
+        organizationId,
+        scopeDwellingId: dwellingId,
+        actorUserId,
+        action: disabled ? "RESIDENT_DISABLED" : "RESIDENT_ENABLED",
+        entityType: "app_user",
+        entityId: userId,
+        beforeData: { disabledAt: currentUser.disabledAt },
+        afterData: { disabledAt: updatedUser.disabledAt },
+      });
+    }
 
     return updatedUser;
   });

@@ -157,6 +157,20 @@ describe("case readiness recalculation", () => {
       seedAdminId
     );
 
+    // A rule that can be billed, so the case is not blocked for another reason
+    await createRule(
+      db,
+      org.id,
+      {
+        name: "Fee",
+        code: "fee",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "50.00",
+        effectiveFrom: "2026-01-01",
+      },
+      seedAdminId
+    );
     // Rule consumes COLD_WATER, not ELECTRICITY
     await createRule(
       db,
@@ -598,11 +612,12 @@ describe("case readiness recalculation", () => {
       seedAdminId
     );
 
-    // Both start READY
+    // Both start blocked: no billing rule applies yet
+    const noRules = [{ reason: "NO_APPLICABLE_RULES" }];
     const [case1Before] = await listCasesForPeriod(db, org.id, period1.id);
     const [case2Before] = await listCasesForPeriod(db, org.id, period2.id);
-    expect(case1Before.status).toBe("READY");
-    expect(case2Before.status).toBe("READY");
+    expect(case1Before.missingData).toEqual(noRules);
+    expect(case2Before.missingData).toEqual(noRules);
 
     // Add COLD_WATER rule and meter
     await createRule(
@@ -630,15 +645,15 @@ describe("case readiness recalculation", () => {
     // Explicitly run recalculateCaseReadinessForOpenPeriods
     await recalculateCaseReadinessForOpenPeriods(db, org.id, dwelling.id);
 
-    // Locked Period 1 must remain untouched (READY, missingData: [])
+    // Locked Period 1 must remain untouched (still the no-rule blocker)
     const [case1After] = await listCasesForPeriod(db, org.id, period1.id);
-    expect(case1After.status).toBe("READY");
-    expect(case1After.missingData).toEqual([]);
+    expect(case1After.status).toBe("MISSING_DATA");
+    expect(case1After.missingData).toEqual(noRules);
 
-    // Open Period 2 must be updated to MISSING_DATA
+    // Open Period 2 must be updated: the blocker is now the missing reading
     const [case2After] = await listCasesForPeriod(db, org.id, period2.id);
     expect(case2After.status).toBe("MISSING_DATA");
-    expect(case2After.missingData).toHaveLength(1);
+    expect(case2After.missingData).toMatchObject([{ reason: "NO_READING" }]);
 
     await cleanupOrg(org.id);
   });
@@ -731,15 +746,192 @@ describe("case readiness recalculation", () => {
     const openCases = await listCasesForPeriod(db, org.id, openPeriod.id);
     const openCaseA = openCases.find((c) => c.dwellingId === dwellingA.id);
     const openCaseB = openCases.find((c) => c.dwellingId === dwellingB.id);
-    expect(openCaseA?.status).toBe("MISSING_DATA");
-    expect(openCaseB?.status).toBe("MISSING_DATA");
+    expect(openCaseA?.missingData).toMatchObject([
+      { reason: "NO_MANUAL_INPUT" },
+    ]);
+    expect(openCaseB?.missingData).toMatchObject([
+      { reason: "NO_MANUAL_INPUT" },
+    ]);
 
-    // Locked period cases remain READY
+    // Locked period cases remain as created (no rule existed then)
     const lockedCases = await listCasesForPeriod(db, org.id, lockedPeriod.id);
     const lockedCaseA = lockedCases.find((c) => c.dwellingId === dwellingA.id);
     const lockedCaseB = lockedCases.find((c) => c.dwellingId === dwellingB.id);
-    expect(lockedCaseA?.status).toBe("READY");
-    expect(lockedCaseB?.status).toBe("READY");
+    expect(lockedCaseA?.missingData).toEqual([
+      { reason: "NO_APPLICABLE_RULES" },
+    ]);
+    expect(lockedCaseB?.missingData).toEqual([
+      { reason: "NO_APPLICABLE_RULES" },
+    ]);
+
+    await cleanupOrg(org.id);
+  });
+
+  async function orgDwellingPeriod(name: string) {
+    const org = await createOrganization(
+      db,
+      {
+        name,
+        addressLine1: "8 Test St",
+        bankName: "Test Bank",
+        iban: "LV00TEST0000000000000",
+      },
+      seedAdminId
+    );
+    const dwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "8", occupantName: "Jane Doe", billingAddress: "1 Test St" },
+      seedAdminId
+    );
+    const period = await createPeriod(
+      db,
+      org.id,
+      {
+        year: 2026,
+        month: 1,
+        startsOn: "2026-01-01",
+        endsOn: "2026-01-31",
+        invoiceIssueDate: "2026-01-31",
+        invoiceDueDate: "2026-02-14",
+      },
+      seedAdminId
+    );
+    return { org, dwelling, period };
+  }
+
+  it("a case with no billable rule is blocked with NO_APPLICABLE_RULES, generation refuses it, and a FIXED rule makes it READY and generable", async () => {
+    const { org, dwelling, period } =
+      await orgDwellingPeriod("IT-Readiness Org 8");
+    // An org-wide meter rule for a meter type this dwelling does not have:
+    // applicable by scope, but it cannot produce a line.
+    await createRule(
+      db,
+      org.id,
+      {
+        name: "Hot Water",
+        code: "hot_water",
+        calculationType: "METER_CONSUMPTION",
+        meterType: "HOT_WATER",
+        unit: "m3",
+        unitPrice: "3.0000",
+        effectiveFrom: "2026-01-01",
+      },
+      seedAdminId
+    );
+
+    const [blocked] = await listCasesForPeriod(db, org.id, period.id);
+    expect(blocked.status).toBe("MISSING_DATA");
+    expect(blocked.missingData).toEqual([{ reason: "NO_APPLICABLE_RULES" }]);
+    await expect(
+      generateInvoice(db, org.id, period.id, dwelling.id, seedAdminId)
+    ).rejects.toThrow("No billing rules apply");
+
+    await createRule(
+      db,
+      org.id,
+      {
+        name: "Fee",
+        code: "fee",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "50.00",
+        effectiveFrom: "2026-01-01",
+      },
+      seedAdminId
+    );
+    const [ready] = await listCasesForPeriod(db, org.id, period.id);
+    expect(ready.status).toBe("READY");
+    expect(ready.missingData).toEqual([]);
+    // READY must mean generation succeeds.
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    expect(invoice.total).toBe("50.00");
+
+    await cleanupOrg(org.id);
+  });
+
+  it("a meter rule assigned to a dwelling with no active meter blocks with NO_ACTIVE_METER_FOR_RULE even when another rule is billable", async () => {
+    const { org, dwelling, period } =
+      await orgDwellingPeriod("IT-Readiness Org 9");
+    await createRule(
+      db,
+      org.id,
+      {
+        name: "Fee",
+        code: "fee",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "50.00",
+        effectiveFrom: "2026-01-01",
+      },
+      seedAdminId
+    );
+    const rule = await createRule(
+      db,
+      org.id,
+      {
+        name: "Cold Water",
+        code: "cold_water",
+        calculationType: "METER_CONSUMPTION",
+        meterType: "COLD_WATER",
+        unit: "m3",
+        unitPrice: "2.0000",
+        effectiveFrom: "2026-01-01",
+        applicationScope: "ONE_TO_ONE",
+        dwellingIds: [dwelling.id],
+      },
+      seedAdminId
+    );
+
+    const [blocked] = await listCasesForPeriod(db, org.id, period.id);
+    expect(blocked.status).toBe("MISSING_DATA");
+    expect(blocked.missingData).toEqual([
+      {
+        billingRuleId: rule.id,
+        ruleName: "Cold Water",
+        meterType: "COLD_WATER",
+        reason: "NO_ACTIVE_METER_FOR_RULE",
+      },
+    ]);
+    await expect(
+      generateInvoice(db, org.id, period.id, dwelling.id, seedAdminId)
+    ).rejects.toThrow("has no active meter");
+
+    // The meter arrives: the blocker becomes the missing reading.
+    const meter = await createMeter(
+      db,
+      org.id,
+      dwelling.id,
+      { type: "COLD_WATER", unit: "m3" },
+      seedAdminId
+    );
+    const [needsReading] = await listCasesForPeriod(db, org.id, period.id);
+    expect(needsReading.missingData).toMatchObject([{ reason: "NO_READING" }]);
+
+    await submitAdminReading(
+      db,
+      org.id,
+      period.id,
+      meter.id,
+      "4.000",
+      seedAdminId
+    );
+    const [ready] = await listCasesForPeriod(db, org.id, period.id);
+    expect(ready.status).toBe("READY");
+    const invoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    expect(invoice.subtotal).toBe("58.00");
 
     await cleanupOrg(org.id);
   });

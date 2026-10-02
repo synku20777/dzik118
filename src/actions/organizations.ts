@@ -72,6 +72,7 @@ export const organizations = {
       autoGenerateEnabled: z.boolean().optional(),
       autoSendEnabled: z.boolean().optional(),
       autoSendDay: z.number().int().min(1).max(28).nullable().optional(),
+      carryForwardReadingsEnabled: z.boolean().optional(),
     }),
     handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
       requireActiveOrganization(locals.auth, organizationId);

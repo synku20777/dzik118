@@ -313,3 +313,205 @@ as the screens.
 Windows can reserve the ports that Supabase uses after Docker restarts. Then
 `npx supabase start` fails on port 54322. Run `net stop winnat` and then
 `net start winnat` in an administrator shell. Then start Supabase again.
+
+## Invoice eligibility (2026-10-02)
+
+Problem: a billing case was READY when it had no missing inputs. A case with no
+billable rule also had no missing inputs. It showed READY, and invoice generation
+then refused it.
+
+- `resolveInvoiceEligibility` in `src/domain/periods/case-readiness.ts` is now
+  the one answer to "can this dwelling be invoiced?". Case readiness stores its
+  blockers. `generateInvoice` calls it again in its transaction and builds the
+  invoice lines from its rules. READY now means that generation succeeds.
+- Two new blockers are stored in `billing_cases.missing_data`:
+  `NO_APPLICABLE_RULES` (no rule can make an invoice line) and
+  `NO_ACTIVE_METER_FOR_RULE` (a meter rule is assigned to the dwelling by name,
+  and the dwelling has no active meter of that type). An organization-wide meter
+  rule on a dwelling without that meter is not a blocker.
+- Each rule change now recalculates open cases. Before, a FIXED, AREA, or
+  RESIDENT_COUNT rule did not.
+- Codex review found three stale-readiness paths. All are fixed: a meter edit now
+  recalculates, the CSV import makes the cases after the meters, and bulk
+  generation no longer skips on the stored blockers.
+- The period workbench, the dashboard, and the admin guide show the new blockers
+  in EN, LV, and RU (Agy).
+- Checks: typecheck, lint, `astro check`, 279 unit tests. Integration tests are
+  at the usual 41 local failures (SMTP, PDF, Storage). Two new integration tests
+  cover the blockers. The new UI items were not run in a browser.
+- Old cases keep their stored status until the next recalculation. Generation is
+  safe before that, because it resolves the blockers live.
+
+## Tariff applicability on the period page (2026-10-02)
+
+- The rule resolver is unchanged. A tariff applies when its effective dates
+  overlap the period, and the editor accepts an earlier `Effective from` date.
+- The period workbench has a new "Tariffs in this period" panel. It lists each
+  tariff, with its effective dates, and one reason: applies to all dwellings,
+  applies only to the assigned dwellings (with their numbers), no dwelling
+  assigned, disabled, archived, starts after the period, or ended before it.
+- `ruleStatusForPeriod` in `src/domain/billing/rules.ts` gives the reason. A unit
+  test covers it. It must stay in step with `getEffectiveRules`.
+- The "No billing rule applies" item on a case now links to this panel.
+- LV and RU text by Agy. A browser check ran the panel in EN, LV, and RU, and at
+  phone width. The demo data has only tariffs that apply, so the "does not
+  apply" lines were not seen in a browser.
+
+## Retroactive billing (2026-10-02)
+
+See `docs/decisions/0011-retroactive-billing.md`.
+
+- New on the period page: "Reopen period" on a locked period, and a "Dwellings
+  not in this period" panel with "Add to period" on an open period.
+- New domain functions in `src/domain/periods/periods.ts`: `reopenPeriod`,
+  `addDwellingToPeriod`, `listDwellingsWithoutCase`. New actions:
+  `periods.reopen`, `periods.addDwelling`.
+- Codex review found that a reopened older period became the "current" period.
+  Fixed: `getCurrentOpenPeriod` returns the newest period only when it is open,
+  and a new dwelling gets a case in the current period only. Also fixed: the
+  add action locks the dwelling row, and a reopen does not touch cases that have
+  an invoice.
+- Not changed: a retroactive invoice shows the account balance of the day it is
+  generated. The owner selected to keep the period dates.
+- LV and RU text by Agy.
+- Checks: typecheck, lint, `astro check`, 282 unit tests. Integration tests are
+  at the usual 41 local failures. A new integration test covers reopen, add,
+  reading, and invoice. The two new buttons were not run in a browser.
+
+## Carry-forward readings after the deadline (2026-10-02)
+
+- After the reading deadline of a period, a required meter with no reading gets
+  a reading from the system. The value is the previous reading, so the
+  consumption is zero. The next real reading then bills the full difference.
+- The reading has the new source `CARRIED_FORWARD` and no user. Each one writes
+  the audit event `METER_READING_CARRIED_FORWARD`. Migration
+  `0018_reading_carried_forward.sql` adds the enum value.
+- `carryForwardMissingReadings` in `src/domain/periods/readings.ts` does the
+  work. The daily scheduler calls it for the current period of each
+  organization. Bulk generation calls it first. The deadline day is not
+  included. A period with no deadline is never carried.
+- A meter with no earlier reading stays a `NO_READING` blocker.
+- An admin can replace a carried reading. The usual limits apply: not after a
+  later period has a reading, and an invoice that exists must be regenerated or
+  corrected.
+- The reading drawer shows a note on a carried reading. The resident portal
+  shows the source as "Previous reading reused". EN, LV, and RU.
+- Codex review: the function now resolves the blockers live. The other findings
+  are limits of reading edits that existed before.
+- The feature is off by default. The toggle "Reuse the previous reading after
+  the deadline" on the billing settings page turns it on for an organization
+  (column `carry_forward_readings_enabled`, migration
+  `0019_carry_forward_setting.sql`).
+- Fixed on the way: a save of the organization settings page switched the
+  automation toggles off, because its form sent no value for them. The form now
+  sends their current values. A browser check confirmed the fix.
+- Checks: typecheck, lint, `astro check`, unit tests. A new integration test
+  covers the function. The drawer note was not run in a browser.
+
+## Knowledge graph for the agents (2026-10-02)
+
+- `graphify` made a knowledge graph of `src`, `docs`, `tests`, `drizzle`, and
+  `scripts` in `graphify-out/` (not in git). The SQL migrations are included.
+- Agy reads the rule in `.agents/rules/graphify.md`. Codex reads `AGENTS.md` and
+  `.codex/hooks.json`. Both can run `graphify query`, `graphify affected`, and
+  `graphify path` before they open files.
+- `.graphifyignore` keeps agent tooling, build output, and static files out of
+  the graph. Without it, `graphify update .` doubles the graph.
+- `graphify update .` renames the communities after their hub node. Only a full
+  `/graphify` run gives readable names again.
+
+## Summary of 2026-10-02 and open items
+
+Work of the day, in order: knowledge graph, invoice eligibility, tariff
+applicability panel, retroactive billing, carry-forward readings, and the
+carry-forward setting. Each has its own section above. Nothing is committed.
+
+What a deploy needs:
+
+- Migrations `0018_reading_carried_forward.sql` and
+  `0019_carry_forward_setting.sql`.
+
+Behavior that changed for admins:
+
+- A case with no billable tariff shows MISSING DATA, not READY.
+- A new dwelling gets a case in the current period only. Add it to an earlier
+  open period with "Add to period".
+- The current period is the newest period, when it is open.
+- A save of the organization settings page no longer switches the automation
+  toggles off.
+
+Open items:
+
+- Old cases keep their stored status until the next recalculation. A one-time
+  backfill script can refresh them.
+- The status name MISSING DATA also covers "no tariff applies". A new name needs
+  an enum change.
+- A retroactive invoice shows the account balance of the day it is generated.
+- With auto generation and carry-forward both on, the scheduler can send an
+  invoice with zero consumption. A later real reading then needs a regenerated
+  or corrected invoice.
+- A carried reading cannot be replaced after a later period has a reading for
+  the same meter.
+- Not run in a browser: the two new blockers on the period page, the "does not
+  apply" lines of the tariff panel, "Reopen period", "Add to period", and the
+  carry-forward note in the reading drawer.
+- Codex did not review the tariff panel or the carry-forward setting.
+
+## Property change history (2026-10-02)
+
+- Agy implemented the change through the Orca CLI; Codex reviewed and fixed it.
+- Audit events have nullable `scopeDwellingId`. Dwelling events get it from
+  `entityId` in the shared writer. Meter, reading (including carry-forward),
+  invoice delivery and billing, payment, account adjustment, manual rule input,
+  case, and conversation events store their dwelling explicitly. Resident
+  assignments/removals use the dwelling default; enable/disable events are
+  recorded for every dwelling the resident can access in the organization.
+- The dwelling History panel now filters by organization and dwelling scope,
+  keeping its existing 20-event limit. Entity types and IDs are unchanged.
+- Migration `0020_dwelling_scoped_audit.sql` adds the column and timeline index
+  and backfills historical events from same-organization relationships.
+  Manual payment events use their recorded invoice ID; credit events use the
+  actual payment ledger entry. Ambiguous or unresolved events stay unscoped.
+  Historical resident enable/disable events cannot be reliably backfilled.
+  Scope has no foreign key, so deleting a dwelling cannot erase the association.
+- Codex fixed ambiguous payment backfill, unsafe JSON-to-UUID casts, missing
+  resident scope, and a missing dwelling field in the manual-payment query.
+- Checks: typecheck, lint, Astro check (zero diagnostics), 282 unit tests,
+  and 71 targeted integration tests passed. The migration test uses temporary
+  tables and covers all backfill types, organization isolation, malformed
+  payloads, ambiguous credits, and retained scope after dwelling deletion.
+- Graphify code output refreshed with `graphify update .`. No browser check,
+  commit, or deployment. Deployment also needs migration 0020, after 0018/0019.
+
+## Move to app.namkopa.com (2026-10-02, deployed)
+
+- The owner requested the domain move and publication of the pending features.
+  Cloudflare already has `app.namkopa.com` connected to `property-billing`, with
+  working HTTPS and database health. Supabase remains project
+  `ovsdkhrxnvpjelqprxmk`; no database or user-account move is needed.
+- The route is now in `wrangler.jsonc`, with preview URLs disabled. Middleware
+  redirects the old Worker hostname to `APP_BASE_URL`, preserving path/query.
+  The deploy workflow and environment example use the production app URL.
+  The live Worker secret `APP_BASE_URL` was updated to `https://app.namkopa.com`.
+  Supabase Auth Site URL and the exact redirect allow-list were updated and
+  verified through the CLI after access became available. Existing SMTP
+  settings were preserved. `EMAIL_FROM` matches its `billing@namkopa.com` sender.
+- Added `node scripts/check-app-domain.mjs` for post-deploy verification.
+  Build, typecheck, lint, and Wrangler deployment dry-run passed. Graph updated.
+- Production migrations 0018, 0019, and 0020 were applied through Supabase,
+  with matching Drizzle journal hashes. All 143 audit events were retained;
+  108 received a dwelling scope. The enum, setting, and scope index verified.
+  A pre-migration snapshot of the affected organization, reading, audit, and
+  Drizzle-journal data is saved outside the repository at
+  `C:/Users/nesto/.codex/backups/dzik118/2026-10-02-pre-domain-migration.json`.
+- The owner configured the SES credentials; the required-secret check passed.
+  Published the pending features as Worker version
+  `1890a7b5-772d-4cc3-ad3f-0531ddfb7381`, including the scheduled trigger.
+  The domain check passed after brief edge propagation: old home, login, and
+  confirmation URLs return 308 with path/query preserved; new home, login,
+  and database health return 200. Supabase Auth uses the new domain.
+- Supabase security advisors reported existing function search-path and leaked
+  password-protection warnings; no new tables or RLS policy changes were made.
+  References: https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable
+  and https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection.
+  No real invoice email was sent as part of the domain check.

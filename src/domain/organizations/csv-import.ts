@@ -256,9 +256,6 @@ export async function importDwellingsCsv(
           .returning();
         dwellingId = dwelling.id;
         created++;
-        // Same as a single dwelling created through the form -- give it a
-        // case in every currently OPEN period.
-        await syncCasesForDwelling(tx, organizationId, dwelling.id);
         await recordAuditEvent(tx, {
           organizationId,
           actorUserId,
@@ -313,6 +310,10 @@ export async function importDwellingsCsv(
             unit: "m3",
           });
         }
+        // Same as a single dwelling created through the form -- give it a
+        // case in every currently OPEN period. After the meters, so the
+        // case's blockers include their missing readings.
+        await syncCasesForDwelling(tx, organizationId, dwellingId);
       }
     }
   });

@@ -210,7 +210,8 @@ async function deliver(
       invoiceId,
       deps.tokenSecret,
       tokenExpiresAt,
-      actorUserId
+      actorUserId,
+      invoice.dwellingId
     );
 
     // CAS CLAIMED -> DISPATCHING as close to the provider call as this
@@ -306,6 +307,7 @@ async function markAttemptTerminalWithAudit(
   errorCode: string | undefined,
   audit: {
     organizationId: string;
+    scopeDwellingId?: string | null;
     actorUserId: string | null;
     action: string;
     invoiceId: string;
@@ -321,6 +323,7 @@ async function markAttemptTerminalWithAudit(
     }
     await recordAuditEvent(tx, {
       organizationId: audit.organizationId,
+      scopeDwellingId: audit.scopeDwellingId,
       actorUserId: audit.actorUserId,
       action: audit.action,
       entityType: "invoice",
@@ -574,6 +577,7 @@ async function finalizeInvoiceSentInTx(
 
     await recordAuditEvent(tx, {
       organizationId: params.organizationId,
+      scopeDwellingId: inv.dwellingId,
       actorUserId: params.actorUserId,
       action: "INVOICE_SENT",
       entityType: "invoice",
@@ -720,6 +724,7 @@ async function reconcileAttemptForInvoice(
     if (!wasFirstTransition && attemptTransitionedByThisCaller) {
       await recordAuditEvent(db, {
         organizationId,
+        scopeDwellingId: sentInvoice.dwellingId,
         actorUserId,
         action: "INVOICE_RESENT",
         entityType: "invoice",
@@ -962,6 +967,7 @@ export async function sendInvoice(
     if (!wasFirstTransition) {
       await recordAuditEvent(db, {
         organizationId,
+        scopeDwellingId: sentInvoice.dwellingId,
         actorUserId,
         action: "INVOICE_RESENT",
         entityType: "invoice",
@@ -977,6 +983,7 @@ export async function sendInvoice(
       deliverResult.emailErrorCode,
       {
         organizationId,
+        scopeDwellingId: invoice.dwellingId,
         actorUserId,
         action: "INVOICE_SEND_FAILED",
         invoiceId,
@@ -991,6 +998,7 @@ export async function sendInvoice(
       deliverResult.emailErrorCode,
       {
         organizationId,
+        scopeDwellingId: invoice.dwellingId,
         actorUserId,
         action: "INVOICE_SEND_UNKNOWN",
         invoiceId,
@@ -1235,6 +1243,7 @@ export async function resendInvoice(
     if (!wasFirstTransition) {
       await recordAuditEvent(db, {
         organizationId,
+        scopeDwellingId: finalizedInvoice.dwellingId,
         actorUserId,
         action: "INVOICE_RESENT",
         entityType: "invoice",
@@ -1262,6 +1271,7 @@ export async function resendInvoice(
     deliverResult.emailErrorCode,
     {
       organizationId,
+      scopeDwellingId: invoice.dwellingId,
       actorUserId,
       action: success ? "INVOICE_RESENT" : "INVOICE_RESEND_FAILED",
       invoiceId,

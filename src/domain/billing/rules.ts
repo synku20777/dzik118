@@ -164,24 +164,9 @@ async function replaceRuleAssignments(
   );
 }
 
-// FIXED/AREA/RESIDENT_COUNT never produce missing_data -- they're always
-// derivable with no admin input. MANUAL_QUANTITY/MANUAL_AMOUNT always can.
-// METER_CONSUMPTION now can too: case-readiness.ts's requiredMetersForPeriod
-// only requires a reading for a meter type an APPLICABLE METER_CONSUMPTION
-// rule actually consumes, so creating/editing/archiving/rescoping one of
-// these can change missing_data (previously false when every meter's
-// requirement was independent of any rule's existence at all).
-function calculationTypeAffectsReadiness(
-  calculationType: string
-): calculationType is
-  "MANUAL_QUANTITY" | "MANUAL_AMOUNT" | "METER_CONSUMPTION" {
-  return (
-    calculationType === "MANUAL_QUANTITY" ||
-    calculationType === "MANUAL_AMOUNT" ||
-    calculationType === "METER_CONSUMPTION"
-  );
-}
-
+// Every rule change recalculates readiness, whatever the calculation type:
+// a case with no billable rule is blocked (NO_APPLICABLE_RULES), so adding
+// or removing even a FIXED rule can change a case's blockers.
 export async function createRule(
   db: Db,
   organizationId: string,
@@ -214,16 +199,13 @@ export async function createRule(
         entityId: rule.id,
         afterData: { ...rule, dwellingIds: targets },
       });
-      // A new enabled manual rule immediately requires input on every open
-      // period's case its scope applies to -- without this, existing cases
-      // would keep showing READY/whatever they last computed until some
-      // unrelated write (a reading, a meter change) happened to recalculate
-      // them. Org-wide recalculation is still correct for a scoped rule:
-      // recalculateCaseReadiness resolves applicability per dwelling.
-      if (
-        calculationTypeAffectsReadiness(rule.calculationType) &&
-        rule.enabled
-      ) {
+      // A new enabled rule changes the blockers of every open period's case
+      // its scope applies to -- without this, existing cases would keep
+      // whatever they last computed until some unrelated write (a reading, a
+      // meter change) happened to recalculate them. Org-wide recalculation is
+      // still correct for a scoped rule: recalculateCaseReadiness resolves
+      // applicability per dwelling.
+      if (rule.enabled) {
         await recalculateCaseReadinessForOrganizationOpenPeriods(
           tx,
           organizationId
@@ -401,19 +383,14 @@ export async function updateRule(
         },
       });
       // enabled, the effective window, calculation type, or scope/assignment
-      // changes can all change whether a manual rule currently applies to a
-      // given dwelling -- either direction needs every open case's
-      // missingData re-derived. Org-wide is still correct: readiness now
-      // resolves applicability per dwelling.
-      if (
-        calculationTypeAffectsReadiness(after.calculationType) ||
-        calculationTypeAffectsReadiness(before.calculationType)
-      ) {
-        await recalculateCaseReadinessForOrganizationOpenPeriods(
-          tx,
-          organizationId
-        );
-      }
+      // changes can all change whether a rule currently applies to a given
+      // dwelling -- either direction needs every open case's missingData
+      // re-derived. Org-wide is still correct: readiness resolves
+      // applicability per dwelling.
+      await recalculateCaseReadinessForOrganizationOpenPeriods(
+        tx,
+        organizationId
+      );
       return after;
     });
   } catch (err) {
@@ -451,12 +428,10 @@ export async function archiveRule(
       entityType: "billing_rule",
       entityId: ruleId,
     });
-    if (calculationTypeAffectsReadiness(rule.calculationType)) {
-      await recalculateCaseReadinessForOrganizationOpenPeriods(
-        tx,
-        organizationId
-      );
-    }
+    await recalculateCaseReadinessForOrganizationOpenPeriods(
+      tx,
+      organizationId
+    );
     return rule;
   });
 }
@@ -464,6 +439,34 @@ export async function archiveRule(
 interface PeriodDateRange {
   startsOn: string;
   endsOn: string;
+}
+
+export type RulePeriodStatus =
+  | "APPLIES"
+  | "ARCHIVED"
+  | "DISABLED"
+  | "STARTS_AFTER_PERIOD"
+  | "ENDED_BEFORE_PERIOD";
+
+// Why a rule is or is not effective in a period, for the period page. It
+// states the same conditions as getEffectiveRules below; keep the two in step.
+// Dates are ISO `YYYY-MM-DD` strings, so string comparison orders them.
+export function ruleStatusForPeriod(
+  rule: {
+    enabled: boolean;
+    archivedAt: Date | null;
+    effectiveFrom: string;
+    effectiveUntil: string | null;
+  },
+  period: PeriodDateRange
+): RulePeriodStatus {
+  if (rule.archivedAt) return "ARCHIVED";
+  if (!rule.enabled) return "DISABLED";
+  if (rule.effectiveFrom > period.endsOn) return "STARTS_AFTER_PERIOD";
+  if (rule.effectiveUntil && rule.effectiveUntil < period.startsOn) {
+    return "ENDED_BEFORE_PERIOD";
+  }
+  return "APPLIES";
 }
 
 // BIL-005: only the effective rule version applied -- enabled, not

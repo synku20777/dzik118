@@ -8,6 +8,7 @@ import { getRequestContext } from "./request-context";
 
 export interface AuditEventInput {
   organizationId?: string | null;
+  scopeDwellingId?: string | null;
   actorUserId?: string | null;
   action: string;
   entityType: string;
@@ -20,10 +21,18 @@ export async function recordAuditEvent(tx: DbOrTx, event: AuditEventInput) {
   // Set by the middleware for every web request. Scripts and tests that call
   // the domain directly have no context, so both columns stay null there.
   const context = getRequestContext();
+  const scopeDwellingId =
+    event.scopeDwellingId !== undefined
+      ? event.scopeDwellingId
+      : event.entityType === "dwelling" && event.entityId
+        ? event.entityId
+        : null;
+
   await tx.insert(auditLogs).values({
     requestId: context?.requestId ?? null,
     ipHash: context?.ipHash ?? null,
     organizationId: event.organizationId ?? null,
+    scopeDwellingId: scopeDwellingId ?? null,
     actorUserId: event.actorUserId ?? null,
     action: event.action,
     entityType: event.entityType,

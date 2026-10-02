@@ -13,7 +13,13 @@ import {
 } from "../../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../../domain/organizations/organizations";
 import {
+  listRuleAssignmentsWithDwellingNumbers,
+  listRules,
+  ruleStatusForPeriod,
+} from "../../../../../../domain/billing/rules";
+import {
   getPeriod,
+  listDwellingsWithoutCase,
   listPeriods,
 } from "../../../../../../domain/periods/periods";
 import { listCasesForPeriod } from "../../../../../../domain/periods/cases";
@@ -42,7 +48,10 @@ try {
 
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
-const lockResult = Astro.getActionResult(actions.periods.lock);
+const lockResult =
+  Astro.getActionResult(actions.periods.lock) ??
+  Astro.getActionResult(actions.periods.reopen) ??
+  Astro.getActionResult(actions.periods.addDwelling);
 const generateResult = Astro.getActionResult(actions.billing.generate);
 const bulkGenerateResult = Astro.getActionResult(actions.billing.bulkGenerate);
 const bulkPrepareResult = Astro.getActionResult(actions.billing.bulkPrepare);
@@ -57,23 +66,71 @@ const statusFilter = (
   ? (rawStatus as CaseStatus)
   : undefined;
 
-let organization, period, cases, allPeriods, summary;
+let organization, period, cases, allPeriods, summary, rules, assignmentsByRule;
+let dwellingsWithoutCase;
 try {
-  ({ organization, period, cases, allPeriods, summary } = await withRequestDb(
-    async (db) => ({
-      organization: await getOrganization(db, organizationId),
-      period: await getPeriod(db, organizationId, periodId),
-      cases: await listCasesForPeriod(db, organizationId, periodId, {
-        search,
-        statusFilter,
-      }),
-      allPeriods: await listPeriods(db, organizationId),
-      summary: await getDashboardSummary(db, organizationId, periodId),
-    })
-  ));
+  ({
+    dwellingsWithoutCase,
+    organization,
+    period,
+    cases,
+    allPeriods,
+    summary,
+    rules,
+    assignmentsByRule,
+  } = await withRequestDb(async (db) => ({
+    dwellingsWithoutCase: await listDwellingsWithoutCase(
+      db,
+      organizationId,
+      periodId
+    ),
+    rules: await listRules(db, organizationId, { includeArchived: true }),
+    assignmentsByRule: await listRuleAssignmentsWithDwellingNumbers(
+      db,
+      organizationId
+    ),
+    organization: await getOrganization(db, organizationId),
+    period: await getPeriod(db, organizationId, periodId),
+    cases: await listCasesForPeriod(db, organizationId, periodId, {
+      search,
+      statusFilter,
+    }),
+    allPeriods: await listPeriods(db, organizationId),
+    summary: await getDashboardSummary(db, organizationId, periodId),
+  })));
 } catch {
   return Astro.redirect(`/admin/o/${organizationId}/periods`);
 }
+
+// Why each tariff does or does not apply in this period. The verdict comes
+// from the domain (ruleStatusForPeriod); this page only words it.
+const rulesPath = `/admin/o/${organizationId}/settings/rules`;
+const tariffRows = rules.map((rule) => {
+  const status = ruleStatusForPeriod(rule, period);
+  const assigned = assignmentsByRule.get(rule.id) ?? [];
+  const scoped = rule.applicationScope !== "ONE_TO_ALL";
+  let reason: string;
+  if (status === "ARCHIVED") {
+    reason = t("Does not apply: the tariff is archived.");
+  } else if (status === "DISABLED") {
+    reason = t("Does not apply: the tariff is disabled.");
+  } else if (status === "STARTS_AFTER_PERIOD") {
+    reason = t("Does not apply: it starts after this period ends.");
+  } else if (status === "ENDED_BEFORE_PERIOD") {
+    reason = t("Does not apply: it ended before this period starts.");
+  } else if (!scoped) {
+    reason = t("Applies to all dwellings.");
+  } else if (assigned.length === 0) {
+    reason = t("Applies to no dwelling: none is assigned.");
+  } else {
+    reason = `${t("Applies only to the assigned dwellings:")} ${assigned
+      .map((a) => a.number)
+      .join(", ")}`;
+  }
+  const applies = status === "APPLIES" && (!scoped || assigned.length > 0);
+  return { rule, applies, reason };
+});
+const applyingTariffs = tariffRows.filter((row) => row.applies).length;
 
 const currentIndex = allPeriods.findIndex((item) => item.id === periodId);
 const previousPeriod =
@@ -236,13 +293,120 @@ function filterHref(status?: CaseStatus) {
 
     {
       period.status === "LOCKED" && (
-        <p id="locked-notice" class="notice">
-          {t(
-            "This period is locked. Readings and invoice generation cannot be changed."
-          )}
-        </p>
+        <div
+          id="locked-notice"
+          class="notice flex flex-wrap items-center justify-between gap-3"
+        >
+          <p>
+            {t(
+              "This period is locked. Readings and invoice generation cannot be changed."
+            )}{" "}
+            {t(
+              "To bill a dwelling for this period after the fact, reopen the period."
+            )}
+          </p>
+          <form method="POST" action={actions.periods.reopen}>
+            <input type="hidden" name="organizationId" value={organizationId} />
+            <input type="hidden" name="periodId" value={periodId} />
+            <button type="submit" class="btn-secondary btn-sm">
+              {t("Reopen period")}
+            </button>
+          </form>
+        </div>
       )
     }
+
+    {
+      period.status === "OPEN" && dwellingsWithoutCase.length > 0 && (
+        <details id="add-dwelling" class="panel mb-6 p-4">
+          <summary class="cursor-pointer font-semibold">
+            {t("Dwellings not in this period")}
+            <span class="ml-2 font-normal text-muted">
+              {dwellingsWithoutCase.length}
+            </span>
+          </summary>
+          <p class="text-body-sm mt-2 text-muted">
+            {t(
+              "These dwellings have no billing case in this period, so they get no invoice for it. Add a dwelling to bill it for this period. The invoice uses the issue and due dates of this period."
+            )}
+          </p>
+          <form
+            method="POST"
+            action={actions.periods.addDwelling}
+            class="mt-3 flex flex-wrap items-end gap-3"
+          >
+            <input type="hidden" name="organizationId" value={organizationId} />
+            <input type="hidden" name="periodId" value={periodId} />
+            <label class="text-body-sm">
+              <span class="block font-medium">{t("Dwelling")}</span>
+              <select name="dwellingId" required class="mt-1">
+                {dwellingsWithoutCase.map((dwelling) => (
+                  <option value={dwelling.id}>{dwelling.number}</option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" class="btn-secondary">
+              {t("Add to period")}
+            </button>
+          </form>
+        </details>
+      )
+    }
+
+    <details
+      id="period-tariffs"
+      class="panel mb-6 p-4"
+      open={tariffRows.length === 0 ||
+        tariffRows.some(
+          (row) => !row.applies || row.rule.applicationScope !== "ONE_TO_ALL"
+        )}
+    >
+      <summary class="cursor-pointer font-semibold">
+        {t("Tariffs in this period")}
+        <span class="ml-2 font-normal text-muted">
+          {t("Applying:")}{" "}
+          {applyingTariffs} / {tariffRows.length}
+        </span>
+      </summary>
+      <p class="text-body-sm mt-2 text-muted">
+        {
+          t(
+            "A tariff applies when its effective dates overlap the period. To bill an earlier period, give the tariff an earlier Effective from date."
+          )
+        }{" "}
+        <a class="underline" href={rulesPath}>{t("Edit tariffs")}</a>
+      </p>
+      {
+        tariffRows.length === 0 ? (
+          <p class="text-body-sm mt-3">{t("No tariffs exist yet.")}</p>
+        ) : (
+          <ul class="mt-3 divide-y divide-border">
+            {tariffRows.map(({ rule, applies, reason }) => (
+              <li class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2">
+                <span class="min-w-0">
+                  <a
+                    class="font-medium underline"
+                    href={`${rulesPath}?edit=${rule.id}`}
+                  >
+                    {rule.name}
+                  </a>
+                  <span class="text-body-sm block text-muted">
+                    {rule.effectiveFrom} → {rule.effectiveUntil ?? t("ongoing")}
+                  </span>
+                </span>
+                <span
+                  class="readiness-item"
+                  data-tone={applies ? "success" : "danger"}
+                >
+                  <Icon name={applies ? "check" : "alert-triangle"} size="xs" />
+                  {reason}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </details>
 
     <section class="workflow-overview" aria-labelledby="workflow-heading">
       <div class="section-heading">
@@ -515,8 +679,23 @@ function filterHref(status?: CaseStatus) {
             {
               cases.map((billingCase) => {
                 const missing = billingCase.missingData as (
-                  | { label: string | null; meterType: string }
-                  | { billingRuleId: string; ruleName: string }
+                  | {
+                      label: string | null;
+                      meterType: string;
+                      reason?: "NO_READING";
+                    }
+                  | {
+                      billingRuleId: string;
+                      ruleName: string;
+                      reason?: "NO_MANUAL_INPUT";
+                    }
+                  | {
+                      billingRuleId: string;
+                      ruleName: string;
+                      meterType: string;
+                      reason: "NO_ACTIVE_METER_FOR_RULE";
+                    }
+                  | { reason: "NO_APPLICABLE_RULES" }
                   | string
                 )[];
                 const issuer = (billingCase.invoiceIssuerSnapshot ??
@@ -601,7 +780,29 @@ function filterHref(status?: CaseStatus) {
                             // of crashing on a missing meterType.
                             item &&
                             typeof item === "object" &&
-                            "meterType" in item ? (
+                            item.reason === "NO_APPLICABLE_RULES" ? (
+                              <a
+                                class="readiness-item"
+                                data-tone="danger"
+                                href="#period-tariffs"
+                              >
+                                <Icon name="alert-triangle" size="xs" />{" "}
+                                {t("No billing rule applies")}
+                              </a>
+                            ) : item &&
+                              typeof item === "object" &&
+                              item.reason === "NO_ACTIVE_METER_FOR_RULE" ? (
+                              <a
+                                class="readiness-item"
+                                data-tone="danger"
+                                href={dwellingHref}
+                              >
+                                <Icon name="alert-triangle" size="xs" />{" "}
+                                {item.ruleName} — {t("no active meter")}
+                              </a>
+                            ) : item &&
+                              typeof item === "object" &&
+                              "meterType" in item ? (
                               <button
                                 type="button"
                                 class="readiness-item"

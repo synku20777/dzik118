@@ -19,6 +19,7 @@ import {
 } from "../billing/generation";
 import { bulkSendInvoices, type SendInvoiceDeps } from "../billing/sending";
 import { getCurrentOpenPeriod } from "../periods/periods";
+import { carryForwardMissingReadings } from "../periods/readings";
 import { orgLocalDateString } from "../../lib/org-time";
 import { latestSendDay, selectAutoSendBatch } from "./send-window";
 
@@ -202,6 +203,8 @@ export interface OrganizationJobResult {
   // and invoices left for the next run by the batch limit.
   suppressedSends?: number;
   waitingSends?: number;
+  // Readings the system wrote after the deadline from the previous value.
+  carriedForward?: number;
   error?: string;
 }
 
@@ -260,6 +263,19 @@ export async function runScheduledJobs(
       result.overdue = (
         await scanOverdueInvoices(db, org.id, todayLocal)
       ).overdue;
+
+      // Runs for every organization, not only with auto generation: the
+      // admin must see the carried readings on the day after the deadline.
+      const currentPeriod = await getCurrentOpenPeriod(db, org.id);
+      if (currentPeriod && (await stillActive())) {
+        result.carriedForward = await carryForwardMissingReadings(
+          db,
+          org.id,
+          currentPeriod.id,
+          actorUserId,
+          now
+        );
+      }
 
       if (org.autoGenerateEnabled && (await stillActive())) {
         const { generated, prepared } = await autoGenerateForOrganization(

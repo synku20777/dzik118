@@ -11,6 +11,7 @@ export interface ListAuditLogsOptions {
   action?: string;
   entityType?: string;
   entityId?: string;
+  scopeDwellingId?: string;
   actorUserId?: string;
   fromDate?: string;
   toDate?: string;
@@ -28,6 +29,7 @@ export async function listAuditLogs(
     action,
     entityType,
     entityId,
+    scopeDwellingId,
     actorUserId,
     fromDate,
     toDate,
@@ -39,6 +41,8 @@ export async function listAuditLogs(
   if (action) conditions.push(eq(auditLogs.action, action));
   if (entityType) conditions.push(eq(auditLogs.entityType, entityType));
   if (entityId) conditions.push(eq(auditLogs.entityId, entityId));
+  if (scopeDwellingId)
+    conditions.push(eq(auditLogs.scopeDwellingId, scopeDwellingId));
   if (actorUserId) conditions.push(eq(auditLogs.actorUserId, actorUserId));
 
   const tz = timezone ?? "UTC";
@@ -59,6 +63,7 @@ export async function listAuditLogs(
       action: auditLogs.action,
       entityType: auditLogs.entityType,
       entityId: auditLogs.entityId,
+      scopeDwellingId: auditLogs.scopeDwellingId,
       beforeData: auditLogs.beforeData,
       afterData: auditLogs.afterData,
       createdAt: auditLogs.createdAt,

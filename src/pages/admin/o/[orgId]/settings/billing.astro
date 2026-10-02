@@ -241,6 +241,31 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
             <span class="toggle-switch">
               <input
                 type="checkbox"
+                name="carryForwardReadingsEnabled"
+                checked={organization.carryForwardReadingsEnabled}
+                form="billing-defaults-form"
+              />
+              <span class="toggle-switch-track" aria-hidden="true"></span>
+              <span class="toggle-switch-thumb" aria-hidden="true"></span>
+            </span>
+            <span class="toggle-row-text">
+              <span class="toggle-row-title"
+                >{t("Reuse the previous reading after the deadline")}</span
+              >
+              <span class="toggle-row-desc"
+                >{
+                  t(
+                    "When no meter reading arrives by the reading deadline, the previous reading is used and the consumption is zero. The next real reading bills the difference."
+                  )
+                }</span
+              >
+            </span>
+          </label>
+
+          <label class="toggle-row">
+            <span class="toggle-switch">
+              <input
+                type="checkbox"
                 id="autoSendEnabled"
                 name="autoSendEnabled"
                 checked={organization.autoSendEnabled}

@@ -568,6 +568,16 @@ describe("dwellings (spec DWL-001/002/003)", () => {
       key
     );
 
+    const secondDwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "DIS-2" },
+      seedAdminId
+    );
+    await db.$client.query(
+      "insert into dwelling_access (dwelling_id,user_id) values ($1,$2)",
+      [secondDwelling.id, resident.userId]
+    );
     await setResidentDisabled(db, org.id, resident.userId, true, seedAdminId);
 
     const [disabledUser] = await db
@@ -599,7 +609,7 @@ describe("dwellings (spec DWL-001/002/003)", () => {
       setResidentDisabled(db, org.id, randomUUID(), true, seedAdminId)
     ).rejects.toBeInstanceOf(NotFoundError);
 
-    const [auditRow] = await db
+    const scopedAuditRows = await db
       .select()
       .from(auditLogs)
       .where(
@@ -608,8 +618,12 @@ describe("dwellings (spec DWL-001/002/003)", () => {
           eq(auditLogs.action, "RESIDENT_DISABLED")
         )
       );
-    expect(auditRow).toBeDefined();
-    expect(auditRow.entityId).toBe(resident.userId);
+    expect(scopedAuditRows.map((row) => row.scopeDwellingId).sort()).toEqual(
+      [dwelling.id, secondDwelling.id].sort()
+    );
+    expect(
+      scopedAuditRows.every((row) => row.entityId === resident.userId)
+    ).toBe(true);
 
     await db.$client.query("delete from dwelling_access where user_id = $1", [
       resident.userId,

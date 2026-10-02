@@ -1,6 +1,7 @@
 // Phase B (Database) - Audit trail (spec Section 13.20, Section 31).
 // entity_id is intentionally not a foreign key: entity_type varies across
 // every domain table, so it cannot point at a single referenced table.
+// scope_dwelling_id has no FK either: deleting a dwelling must not erase its scope.
 import {
   index,
   jsonb,
@@ -17,6 +18,7 @@ export const auditLogs = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: uuid("organization_id").references(() => organizations.id),
+    scopeDwellingId: uuid("scope_dwelling_id"),
     actorUserId: uuid("actor_user_id").references(() => appUsers.id),
     action: text("action").notNull(),
     entityType: text("entity_type").notNull(),
@@ -32,6 +34,11 @@ export const auditLogs = pgTable(
   (table) => [
     index("audit_logs_organization_id_created_at_idx").on(
       table.organizationId,
+      table.createdAt.desc()
+    ),
+    index("audit_logs_organization_id_scope_dwelling_id_created_at_idx").on(
+      table.organizationId,
+      table.scopeDwellingId,
       table.createdAt.desc()
     ),
   ]

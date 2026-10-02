@@ -513,8 +513,11 @@ describe("billing rule applicability scope", () => {
       (withRuleCase?.missingData as unknown[] | undefined)?.length
     ).toBeGreaterThan(0);
     // The dwelling whose cold-water tariff doesn't apply to it must not be
-    // blocked on a reading invoice generation will never use.
-    expect(withoutRuleCase?.missingData).toEqual([]);
+    // blocked on a reading invoice generation will never use. Its only
+    // blocker is that no rule applies to it at all.
+    expect(withoutRuleCase?.missingData).toEqual([
+      { reason: "NO_APPLICABLE_RULES" },
+    ]);
     await cleanupOrg(org.id);
   });
 
@@ -680,7 +683,9 @@ describe("billing rule applicability scope", () => {
     );
     const otherCase = await getCaseForDwelling(org.id, other.id, period.id);
     const targetCase = await getCaseForDwelling(org.id, target.id, period.id);
-    expect(otherCase?.missingData).toEqual([]);
+    // No manual input is required from the other dwelling; no rule applies
+    // to it at all.
+    expect(otherCase?.missingData).toEqual([{ reason: "NO_APPLICABLE_RULES" }]);
     expect(
       (targetCase?.missingData as unknown[] | undefined)?.length
     ).toBeGreaterThan(0);

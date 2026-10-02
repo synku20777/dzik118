@@ -48,9 +48,14 @@ import {
   ValidationError,
   toSafeSkipReason,
 } from "../errors";
-import { wasMeterActiveDuringPeriod } from "../periods/case-readiness";
+import {
+  invoiceBlockerMessage,
+  resolveInvoiceEligibility,
+  wasMeterActiveDuringPeriod,
+} from "../periods/case-readiness";
+import { carryForwardMissingReadings } from "../periods/readings";
 import { buildInvoiceTemplateSnapshot } from "./invoice-template-schema";
-import { getApplicableRulesForDwelling, getEffectiveRules } from "./rules";
+import { getEffectiveRules } from "./rules";
 
 export { ConflictError, NotFoundError, ValidationError };
 
@@ -207,11 +212,6 @@ export async function generateInvoice(
         "No billing case exists for this dwelling in this period"
       );
     }
-    if ((billingCase.missingData as unknown[]).length > 0) {
-      throw new ConflictError(
-        "This dwelling has missing data for this period and cannot be invoiced yet"
-      );
-    }
     if (
       billingCase.status !== "MISSING_DATA" &&
       billingCase.status !== "READY" &&
@@ -220,6 +220,22 @@ export async function generateInvoice(
       throw new ConflictError(
         `Cannot generate an invoice for a case in ${billingCase.status} status`
       );
+    }
+    // Resolved live, not read from billingCase.missingData: the same resolver
+    // sets READY, so generation and readiness cannot disagree, and a stale
+    // stored value cannot let a blocked case through.
+    const { blockers, billableRules: rules } = await resolveInvoiceEligibility(
+      tx,
+      organizationId,
+      dwellingId,
+      periodId,
+      period
+    );
+    if (blockers.length > 0) {
+      const message = invoiceBlockerMessage(blockers);
+      throw blockers.some((b) => b.reason === "NO_APPLICABLE_RULES")
+        ? new ValidationError(message)
+        : new ConflictError(message);
     }
 
     const [dwelling] = await tx
@@ -234,16 +250,10 @@ export async function generateInvoice(
       .limit(1);
     if (!dwelling) throw new NotFoundError("Dwelling not found");
 
-    // Dwelling-scoped, not org-wide: ONE_TO_MANY/ONE_TO_ONE rules must
-    // never appear on a dwelling they aren't assigned to (spec: "every
-    // org-wide tariff into every dwelling's invoice -- that must stop").
-    const rules = await getApplicableRulesForDwelling(
-      tx,
-      organizationId,
-      dwellingId,
-      period
-    );
-
+    // `rules` is dwelling-scoped, not org-wide: ONE_TO_MANY/ONE_TO_ONE rules
+    // must never appear on a dwelling they aren't assigned to (spec: "every
+    // org-wide tariff into every dwelling's invoice -- that must stop"). The
+    // null/empty checks below are backstops; the resolver already cleared them.
     const lineInputs: Array<{ rule: EffectiveRule; quantity: string }> = [];
     for (const rule of rules) {
       const quantity = await computeQuantity(tx, rule, dwelling, period);
@@ -446,6 +456,7 @@ export async function generateInvoice(
 
     await recordAuditEvent(tx, {
       organizationId,
+      scopeDwellingId: invoice.dwellingId,
       actorUserId,
       action: existingInvoice ? "INVOICE_REGENERATED" : "INVOICE_GENERATED",
       entityType: "invoice",
@@ -470,6 +481,9 @@ export async function bulkGenerateInvoices(
   periodId: string,
   actorUserId: string | null
 ): Promise<BulkGenerateResult> {
+  // After the reading deadline, a meter with no reading reuses its previous
+  // one, so a silent resident does not hold the invoice back.
+  await carryForwardMissingReadings(db, organizationId, periodId, actorUserId);
   const cases = await db
     .select()
     .from(billingCases)
@@ -482,13 +496,8 @@ export async function bulkGenerateInvoices(
 
   const result: BulkGenerateResult = { generated: [], skipped: [] };
   for (const billingCase of cases) {
-    if ((billingCase.missingData as unknown[]).length > 0) {
-      result.skipped.push({
-        dwellingId: billingCase.dwellingId,
-        reason: "Missing required readings",
-      });
-      continue;
-    }
+    // Blockers are not pre-checked from the stored missingData:
+    // generateInvoice resolves them live and its error is the skip reason.
     if (
       billingCase.status !== "MISSING_DATA" &&
       billingCase.status !== "READY" &&
@@ -840,6 +849,7 @@ export async function prepareInvoice(
       .where(eq(billingCases.id, billingCase.id));
     await recordAuditEvent(tx, {
       organizationId,
+      scopeDwellingId: invoice.dwellingId,
       actorUserId,
       action: "INVOICE_PREPARED",
       entityType: "invoice",
@@ -948,6 +958,7 @@ export async function overrideCaseStatus(
       .returning();
     await recordAuditEvent(tx, {
       organizationId,
+      scopeDwellingId: before.dwellingId,
       actorUserId,
       action: "CASE_STATUS_OVERRIDDEN",
       entityType: "billing_case",

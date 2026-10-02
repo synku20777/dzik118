@@ -76,6 +76,7 @@ export async function proposeExactMatches(
     const candidates = await db
       .select({
         id: invoices.id,
+        dwellingId: invoices.dwellingId,
         invoiceNumber: invoices.invoiceNumber,
         amountDue: invoices.amountDue,
       })
@@ -130,6 +131,7 @@ export async function proposeExactMatches(
         .returning();
       await recordAuditEvent(tx, {
         organizationId,
+        scopeDwellingId: matching[0].dwellingId,
         actorUserId,
         action: "PAYMENT_MATCH_PROPOSED",
         entityType: "payment_match",
@@ -291,6 +293,7 @@ export async function confirmMatch(
     }
     await recordAuditEvent(tx, {
       organizationId,
+      scopeDwellingId: invoice.dwellingId,
       actorUserId,
       action:
         resultType === "PARTIAL"
@@ -305,6 +308,7 @@ export async function confirmMatch(
     if (resultType === "OVERPAYMENT") {
       await recordAuditEvent(tx, {
         organizationId,
+        scopeDwellingId: invoice.dwellingId,
         actorUserId,
         action: "ACCOUNT_CREDIT_CREATED",
         entityType: "account_entry",
@@ -355,8 +359,15 @@ export async function rejectMatch(
       .set({ status: "REJECTED" })
       .where(eq(paymentMatches.id, matchId))
       .returning();
+    const [inv] = await tx
+      .select({ dwellingId: invoices.dwellingId })
+      .from(invoices)
+      .where(eq(invoices.id, match.invoiceId))
+      .limit(1);
+
     await recordAuditEvent(tx, {
       organizationId,
+      scopeDwellingId: inv?.dwellingId ?? null,
       actorUserId,
       action: "PAYMENT_MATCH_REJECTED",
       entityType: "payment_match",

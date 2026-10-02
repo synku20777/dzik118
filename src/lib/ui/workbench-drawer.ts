@@ -42,6 +42,7 @@ interface DrawerData {
     currentValue: string | null;
     previousValue: string | null;
     consumption: string | null;
+    source: string | null;
   }>;
   manualRuleInputs: Array<{
     billingRuleId: string;
@@ -422,6 +423,12 @@ onPageLoad(() => {
       });
 
       appendAll(section, head, prevRow, currentRow, consumptionRow);
+      if (meter.source === "CARRIED_FORWARD") {
+        const carried = document.createElement("p");
+        carried.className = "drawer-meter-sub";
+        carried.textContent = s("carriedForward");
+        section.appendChild(carried);
+      }
       section.dataset.meterId = meter.meterId;
       form.appendChild(section);
 

@@ -142,6 +142,7 @@ export async function matchTransactionToInvoice(
 
     await recordAuditEvent(tx, {
       organizationId,
+      scopeDwellingId: invoice.dwellingId,
       actorUserId,
       action: "PAYMENT_MATCH_PROPOSED",
       entityType: "payment_match",
@@ -220,7 +221,11 @@ export async function recordManualPayment(
     }
 
     const [invoice] = await tx
-      .select({ id: invoices.id, currency: invoices.currency })
+      .select({
+        id: invoices.id,
+        currency: invoices.currency,
+        dwellingId: invoices.dwellingId,
+      })
       .from(invoices)
       .where(
         and(
@@ -289,6 +294,7 @@ export async function recordManualPayment(
 
     await recordAuditEvent(tx, {
       organizationId,
+      scopeDwellingId: invoice.dwellingId,
       actorUserId,
       action: "MANUAL_PAYMENT_RECORDED",
       entityType: "bank_transaction",

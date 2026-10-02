@@ -1,0 +1,14 @@
+# Keep the knowledge graph on the application itself.
+# Agent tooling, vendored skills, build output and static assets are noise.
+.agent/
+.agents/
+.codex/
+.gemini/
+.claude/
+.astro/
+.wrangler/
+.ux-shots*/
+dist/
+public/
+fixtures/
+worker-configuration.d.ts

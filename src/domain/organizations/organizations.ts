@@ -165,6 +165,7 @@ export interface UpdateOrganizationInput {
   autoGenerateEnabled?: boolean;
   autoSendEnabled?: boolean;
   autoSendDay?: number | null;
+  carryForwardReadingsEnabled?: boolean;
 }
 
 // ORG-002: this only ever updates the live organization row. Sent invoices

@@ -64,6 +64,7 @@ export async function createConversation(
     });
     await recordAuditEvent(tx, {
       organizationId: dwelling.organizationId,
+      scopeDwellingId: dwellingId,
       actorUserId: userId,
       action: "CONVERSATION_CREATED",
       entityType: "conversation",
@@ -161,6 +162,7 @@ export async function reply(
       .where(eq(conversations.id, conversationId));
     await recordAuditEvent(tx, {
       organizationId: conversation.organizationId,
+      scopeDwellingId: conversation.dwellingId,
       actorUserId: auth.userId,
       action: "MESSAGE_SENT",
       entityType: "message",
@@ -205,6 +207,7 @@ export async function resolveConversation(
       .returning();
     await recordAuditEvent(tx, {
       organizationId,
+      scopeDwellingId: conversation.dwellingId,
       actorUserId,
       action: "CONVERSATION_RESOLVED",
       entityType: "conversation",

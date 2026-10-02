@@ -19,6 +19,7 @@ import {
 } from "../../lib/decimal3";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import {
+  computeMissingData,
   recalculateCaseReadiness,
   wasMeterActiveDuringPeriod,
 } from "./case-readiness";
@@ -181,11 +182,12 @@ async function recordReading(
       )
       .limit(1);
     if (!existingCase) {
-      // A dwelling created after this period was created has no billing
-      // case for it (createPeriod only snapshots dwellings that existed at
-      // the time); accepting a reading anyway would record data no case
-      // (and so no admin workbench row) ever tracks or displays it -- spec
-      // MTR-003's "visible immediately to admin" would silently fail.
+      // A dwelling is in a period only when it has a billing case there.
+      // Accepting a reading without one would record data no case (and so
+      // no admin workbench row) ever tracks or displays -- spec MTR-003's
+      // "visible immediately to admin" would silently fail. To bill a
+      // dwelling for an earlier period, addDwellingToPeriod (periods.ts)
+      // creates the case first.
       throw new NotFoundError(
         "No billing case exists for this dwelling in this period"
       );
@@ -256,6 +258,7 @@ async function recordReading(
       .returning();
     await recordAuditEvent(tx, {
       organizationId,
+      scopeDwellingId: meter.dwellingId,
       actorUserId: submittedByUserId,
       action: existing ? "METER_READING_UPDATED" : "METER_READING_CREATED",
       entityType: "meter_reading",
@@ -271,6 +274,130 @@ async function recordReading(
       periodId
     );
     return reading;
+  });
+}
+
+export const CARRY_FORWARD_NOTE =
+  "Carried forward from the previous reading after the reading deadline";
+
+// After the reading deadline, each required meter that still has no reading
+// for the period gets one written by the system: the previous value again, so
+// consumption is zero and the next real reading bills the whole difference.
+// The row is marked source CARRIED_FORWARD with no submitting user, and each
+// one has its own audit event. A meter with no earlier reading has nothing to
+// carry and stays a NO_READING blocker. An admin can replace a carried
+// reading with the real value under the usual reading-edit rules (not once a
+// later period has a reading; an existing invoice must be regenerated or
+// corrected). Safe to run again: a meter
+// that has a reading is skipped. Returns how many readings it wrote.
+export async function carryForwardMissingReadings(
+  db: Db,
+  organizationId: string,
+  periodId: string,
+  actorUserId: string | null,
+  now: Date = new Date()
+): Promise<number> {
+  return db.transaction(async (tx) => {
+    // FOR UPDATE for the same reason as recordReading above.
+    const [period] = await tx
+      .select()
+      .from(billingPeriods)
+      .where(
+        and(
+          eq(billingPeriods.id, periodId),
+          eq(billingPeriods.organizationId, organizationId)
+        )
+      )
+      .for("update")
+      .limit(1);
+    if (!period || period.status === "LOCKED" || !period.readingDeadline) {
+      return 0;
+    }
+    const [org] = await tx
+      .select({
+        timezone: organizations.timezone,
+        enabled: organizations.carryForwardReadingsEnabled,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, organizationId))
+      .limit(1);
+    // Opt-in per organization (billing settings). And the deadline day
+    // itself still belongs to the residents.
+    if (
+      !org.enabled ||
+      orgLocalDateString(now, org.timezone) <= period.readingDeadline
+    ) {
+      return 0;
+    }
+
+    const blockedCases = await tx
+      .select({ dwellingId: billingCases.dwellingId })
+      .from(billingCases)
+      .where(
+        and(
+          eq(billingCases.periodId, periodId),
+          eq(billingCases.status, "MISSING_DATA")
+        )
+      );
+
+    let written = 0;
+    for (const billingCase of blockedCases) {
+      // Resolved now, not read from the stored missing_data: a meter or rule
+      // edit since the last recalculation must not get a reading it no
+      // longer needs.
+      const blockers = await computeMissingData(
+        tx,
+        organizationId,
+        billingCase.dwellingId,
+        periodId,
+        period
+      );
+      const meterIds = blockers.flatMap((item) =>
+        item.reason === "NO_READING" ? [item.meterId] : []
+      );
+      let wroteForCase = false;
+      for (const meterId of meterIds) {
+        const previousValue = await findPreviousValue(tx, meterId, period);
+        if (previousValue === null) continue;
+        const [reading] = await tx
+          .insert(meterReadings)
+          .values({
+            organizationId,
+            periodId,
+            meterId,
+            previousValue,
+            currentValue: previousValue,
+            consumption: subtractDecimal3(previousValue, previousValue),
+            source: "CARRIED_FORWARD",
+            submittedByUserId: null,
+            submittedAt: now,
+            note: CARRY_FORWARD_NOTE,
+          })
+          .onConflictDoNothing()
+          .returning();
+        if (!reading) continue;
+        await recordAuditEvent(tx, {
+          organizationId,
+          scopeDwellingId: billingCase.dwellingId,
+          actorUserId,
+          action: "METER_READING_CARRIED_FORWARD",
+          entityType: "meter_reading",
+          entityId: reading.id,
+          afterData: reading,
+        });
+        written++;
+        wroteForCase = true;
+      }
+      if (wroteForCase) {
+        await recalculateCaseReadiness(
+          tx,
+          organizationId,
+          billingCase.dwellingId,
+          periodId
+        );
+      }
+    }
+    return written;
   });
 }
 

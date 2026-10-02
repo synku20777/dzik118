@@ -35,8 +35,49 @@ export interface MissingManualRuleInputItem {
   reason: "NO_MANUAL_INPUT";
 }
 
+// A METER_CONSUMPTION rule assigned to this dwelling by name (ONE_TO_ONE /
+// ONE_TO_MANY) that has no meter of its type active in the period. The rule
+// cannot produce an invoice line, and the assignment says it must. An
+// org-wide (ONE_TO_ALL) meter rule on a dwelling without that meter type is
+// not a blocker: the rule does not apply there.
+export interface NoActiveMeterForRuleItem {
+  billingRuleId: string;
+  ruleName: string;
+  meterType: string;
+  reason: "NO_ACTIVE_METER_FOR_RULE";
+}
+
+// No rule can produce an invoice line for this dwelling in this period, so
+// there is nothing to invoice.
+export interface NoApplicableRulesItem {
+  reason: "NO_APPLICABLE_RULES";
+}
+
+// billing_cases.missing_data holds every blocker, not only missing inputs:
+// READY means "the invoice can be generated".
 export type MissingDataItem =
-  MissingMeterReadingItem | MissingManualRuleInputItem;
+  | MissingMeterReadingItem
+  | MissingManualRuleInputItem
+  | NoActiveMeterForRuleItem
+  | NoApplicableRulesItem;
+
+// The one message for a blocked case. generateInvoice and bulk generation
+// both use it, so the single and the bulk path give the same reason. Items
+// are `unknown` because an old row can hold a legacy plain string.
+export function invoiceBlockerMessage(items: unknown[]): string {
+  const reasons = new Set(
+    items.map((i) =>
+      i && typeof i === "object" ? (i as { reason?: string }).reason : undefined
+    )
+  );
+  if (reasons.has("NO_APPLICABLE_RULES")) {
+    return "No billing rules apply to this dwelling for this period";
+  }
+  if (reasons.has("NO_ACTIVE_METER_FOR_RULE") && reasons.size === 1) {
+    return "A billing rule assigned to this dwelling has no active meter for this period";
+  }
+  return "This dwelling has missing data for this period and cannot be invoiced yet";
+}
 
 interface PeriodDateRange {
   startsOn: string;
@@ -79,13 +120,25 @@ type ApplicableRule = Awaited<
 // meter seem billable, or block that dwelling's invoice on a reading nothing
 // will ever use (spec: "don't let an unrelated tariff's existence make every
 // org meter seem billable").
-async function requiredMetersForPeriod(
+//
+// The single answer to "can this dwelling be invoiced for this period?".
+// Case readiness stores `blockers`; generateInvoice builds its lines from
+// `billableRules` and refuses when `blockers` is not empty. Because both use
+// this function, READY cannot disagree with generation. With no blockers,
+// every billable rule produces a line and there is at least one.
+export async function resolveInvoiceEligibility(
   tx: DbOrTx,
   organizationId: string,
   dwellingId: string,
-  period: PeriodDateRange,
-  applicableRules: ApplicableRule[]
-) {
+  periodId: string,
+  period: PeriodDateRange
+): Promise<{ blockers: MissingDataItem[]; billableRules: ApplicableRule[] }> {
+  const applicableRules = await getApplicableRulesForDwelling(
+    tx,
+    organizationId,
+    dwellingId,
+    period
+  );
   const dwellingMeters = await tx
     .select()
     .from(meters)
@@ -95,69 +148,61 @@ async function requiredMetersForPeriod(
         eq(meters.organizationId, organizationId)
       )
     );
-  const active = dwellingMeters.filter((m) =>
+  const activeMeters = dwellingMeters.filter((m) =>
     wasMeterActiveDuringPeriod(m, period)
   );
-  if (active.length === 0) return active;
-  const meteredTypes = new Set(
-    applicableRules
-      .filter((r) => r.calculationType === "METER_CONSUMPTION" && r.meterType)
-      .map((r) => r.meterType)
-  );
-  return active.filter((m) => meteredTypes.has(m.type));
-}
+  const activeTypes = new Set<string>(activeMeters.map((m) => m.type));
 
-// Dwelling-scoped: a ONE_TO_ONE/ONE_TO_MANY manual rule must only ever
-// require input from the dwellings it's actually assigned to (spec: "a
-// ONE_TO_ONE manual rule on Apartment 5 must not require input from
-// Apartment 6").
-function requiredManualRulesForPeriod(applicableRules: ApplicableRule[]) {
-  return applicableRules.filter(
+  // A meter rule is billable only where a meter of its type was active.
+  const isMeterRule = (r: ApplicableRule) =>
+    r.calculationType === "METER_CONSUMPTION";
+  const billableRules = applicableRules.filter(
+    (r) => !isMeterRule(r) || (r.meterType && activeTypes.has(r.meterType))
+  );
+  const noActiveMeter: MissingDataItem[] = applicableRules
+    .filter(
+      (r) =>
+        isMeterRule(r) &&
+        r.applicationScope !== "ONE_TO_ALL" &&
+        !billableRules.includes(r)
+    )
+    .map((r) => ({
+      billingRuleId: r.id,
+      ruleName: r.name,
+      meterType: r.meterType ?? "",
+      reason: "NO_ACTIVE_METER_FOR_RULE" as const,
+    }));
+
+  const meteredTypes = new Set(
+    billableRules.filter(isMeterRule).map((r) => r.meterType)
+  );
+  const requiredMeters = activeMeters.filter((m) => meteredTypes.has(m.type));
+  // Dwelling-scoped: a ONE_TO_ONE/ONE_TO_MANY manual rule must only ever
+  // require input from the dwellings it's actually assigned to (spec: "a
+  // ONE_TO_ONE manual rule on Apartment 5 must not require input from
+  // Apartment 6").
+  const requiredManualRules = billableRules.filter(
     (r) =>
       r.calculationType === "MANUAL_QUANTITY" ||
       r.calculationType === "MANUAL_AMOUNT"
   );
-}
 
-export async function computeMissingData(
-  tx: DbOrTx,
-  organizationId: string,
-  dwellingId: string,
-  periodId: string,
-  period: PeriodDateRange
-): Promise<MissingDataItem[]> {
-  const applicableRules = await getApplicableRulesForDwelling(
-    tx,
-    organizationId,
-    dwellingId,
-    period
-  );
-  const requiredMeters = await requiredMetersForPeriod(
-    tx,
-    organizationId,
-    dwellingId,
-    period,
-    applicableRules
-  );
-  const requiredManualRules = requiredManualRulesForPeriod(applicableRules);
-  if (requiredMeters.length === 0 && requiredManualRules.length === 0) {
-    return [];
+  let missingMeters: MissingDataItem[] = [];
+  if (requiredMeters.length > 0) {
+    const readings = await tx
+      .select({ meterId: meterReadings.meterId })
+      .from(meterReadings)
+      .where(eq(meterReadings.periodId, periodId));
+    const readMeterIds = new Set(readings.map((r) => r.meterId));
+    missingMeters = requiredMeters
+      .filter((m) => !readMeterIds.has(m.id))
+      .map((m) => ({
+        meterId: m.id,
+        meterType: m.type,
+        label: m.label,
+        reason: "NO_READING" as const,
+      }));
   }
-
-  const readings = await tx
-    .select({ meterId: meterReadings.meterId })
-    .from(meterReadings)
-    .where(eq(meterReadings.periodId, periodId));
-  const readMeterIds = new Set(readings.map((r) => r.meterId));
-
-  const missingMeters: MissingDataItem[] = requiredMeters
-    .filter((m) => !readMeterIds.has(m.id))
-    .map((m) => ({
-      meterId: m.id,
-      meterType: m.type,
-      label: m.label,
-      reason: "NO_READING" as const,
-    }));
 
   let missingManualInputs: MissingDataItem[] = [];
   if (requiredManualRules.length > 0) {
@@ -185,12 +230,33 @@ export async function computeMissingData(
       }));
   }
 
-  return [...missingMeters, ...missingManualInputs];
+  const blockers = [...missingMeters, ...missingManualInputs, ...noActiveMeter];
+  if (billableRules.length === 0 && blockers.length === 0) {
+    blockers.push({ reason: "NO_APPLICABLE_RULES" });
+  }
+  return { blockers, billableRules };
 }
 
-// The pre-invoice status derived purely from missingData -- shared by case
-// creation (periods.ts) and readiness recalculation below, so both agree on
-// what "no missing data" means before an invoice exists.
+export async function computeMissingData(
+  tx: DbOrTx,
+  organizationId: string,
+  dwellingId: string,
+  periodId: string,
+  period: PeriodDateRange
+): Promise<MissingDataItem[]> {
+  const { blockers } = await resolveInvoiceEligibility(
+    tx,
+    organizationId,
+    dwellingId,
+    periodId,
+    period
+  );
+  return blockers;
+}
+
+// The pre-invoice status derived purely from missingData (the blockers) --
+// shared by case creation (periods.ts) and readiness recalculation below, so
+// both agree that READY means "the invoice can be generated".
 export function deriveReadinessStatus(
   missingData: MissingDataItem[]
 ): "MISSING_DATA" | "READY" {

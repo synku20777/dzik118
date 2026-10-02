@@ -140,7 +140,7 @@ const monthlySteps = [
 const faqs = [
   [
     "What do the invoice statuses mean?",
-    "MISSING DATA means a required input is missing. READY means all required inputs are in. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.",
+    "MISSING DATA means something blocks the invoice: a required input is missing, a rule has no active meter, or no billing rule applies. READY means the invoice can be generated. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.",
   ],
   [
     "Why can I not generate an invoice?",
@@ -233,7 +233,7 @@ const faqs = [
 // drift apart.
 const statuses = [
   ["MISSING_DATA", "Required input is missing. Generation is blocked."],
-  ["READY", "All required inputs are in. You can now generate the invoice."],
+  ["READY", "Nothing blocks the invoice. You can now generate it."],
   ["DRAFT", "You can still review and regenerate the invoice."],
   ["PREPARED", "The invoice is approved and ready to send."],
   ["SENT", "Delivery succeeded."],

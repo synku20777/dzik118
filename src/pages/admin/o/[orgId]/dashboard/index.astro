@@ -254,8 +254,23 @@ const statuses = [
                     // label, reason} object (see the same fix in
                     // periods/[periodId]/index.astro).
                     const missing = c.missingData as (
-                      | { label: string | null; meterType: string }
-                      | { billingRuleId: string; ruleName: string }
+                      | {
+                          label: string | null;
+                          meterType: string;
+                          reason?: "NO_READING";
+                        }
+                      | {
+                          billingRuleId: string;
+                          ruleName: string;
+                          reason?: "NO_MANUAL_INPUT";
+                        }
+                      | {
+                          billingRuleId: string;
+                          ruleName: string;
+                          meterType: string;
+                          reason: "NO_ACTIVE_METER_FOR_RULE";
+                        }
+                      | { reason: "NO_APPLICABLE_RULES" }
                       | string
                     )[];
                     const overdue = c.status === "OVERDUE";
@@ -286,12 +301,24 @@ const statuses = [
                               : missing.length
                                 ? missing
                                     .map((m) =>
-                                      typeof m === "string"
-                                        ? m
-                                        : "billingRuleId" in m
-                                          ? m.ruleName
-                                          : (m.label ??
-                                            entityLabel(m.meterType, locale))
+                                      typeof m === "object" &&
+                                      m &&
+                                      m.reason === "NO_APPLICABLE_RULES"
+                                        ? t("No billing rule applies")
+                                        : typeof m === "object" &&
+                                            m &&
+                                            m.reason ===
+                                              "NO_ACTIVE_METER_FOR_RULE"
+                                          ? `${m.ruleName} — ${t("no active meter")}`
+                                          : typeof m === "string"
+                                            ? m
+                                            : "billingRuleId" in m
+                                              ? m.ruleName
+                                              : (m.label ??
+                                                entityLabel(
+                                                  m.meterType,
+                                                  locale
+                                                ))
                                     )
                                     .join(", ")
                                 : t(

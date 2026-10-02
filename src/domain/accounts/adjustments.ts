@@ -105,6 +105,7 @@ export async function adjustLateFee(
       .returning();
     await recordAuditEvent(tx, {
       organizationId: input.organizationId,
+      scopeDwellingId: invoice.dwellingId,
       actorUserId: input.actorUserId,
       action: "LATE_FEE_ADJUSTED",
       entityType: "invoice",
@@ -177,6 +178,7 @@ export async function setInvoiceManualAdjustment(
       .returning();
     await recordAuditEvent(tx, {
       organizationId: input.organizationId,
+      scopeDwellingId: invoice.dwellingId,
       actorUserId: input.actorUserId,
       action: "ACCOUNT_ADJUSTMENT_CREATED",
       entityType: "invoice",
@@ -228,6 +230,7 @@ export async function createDwellingAccountAdjustment(
     });
     await recordAuditEvent(tx, {
       organizationId: input.organizationId,
+      scopeDwellingId: input.dwellingId,
       actorUserId: input.actorUserId,
       action: "ACCOUNT_ADJUSTMENT_CREATED",
       entityType: "account_entry",

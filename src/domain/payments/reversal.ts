@@ -167,6 +167,7 @@ export async function reversePayment(
 
     await recordAuditEvent(tx, {
       organizationId,
+      scopeDwellingId: invoice.dwellingId,
       actorUserId,
       action: "PAYMENT_REVERSED",
       entityType: "payment_match",
