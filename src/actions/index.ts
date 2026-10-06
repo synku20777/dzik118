@@ -15,8 +15,10 @@ import { invoiceTemplates } from "./invoice-templates";
 import { mutations } from "./mutations";
 import { emailSuppression } from "./email";
 import { profile } from "./profile";
+import { onboarding } from "./onboarding";
 
 export const server = {
+  onboarding,
   profile,
   emailSuppression,
   organizations,

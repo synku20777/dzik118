@@ -945,6 +945,37 @@ const lv: Record<string, string> = {
   "Organization not found": "Organizācija nav atrasta",
   "Billing period not found": "Norēķinu periods nav atrasts",
   "This billing period is locked": "Šis norēķinu periods ir slēgts",
+  "Select at least one charge": "Izvēlieties vismaz vienu maksu",
+  "Create the first billing period before you add charges":
+    "Izveidojiet pirmo norēķinu periodu pirms maksu pievienošanas",
+  "Enter at least one dwelling number": "Ievadiet vismaz vienu īpašuma numuru",
+  "A dwelling number has more than 50 characters":
+    "Īpašuma numurs pārsniedz 50 rakstzīmes",
+  "A range must go from the smaller number to the larger one":
+    "Diapazonam jābūt no mazākā skaitļa uz lielāko",
+  "A range can have up to 500 dwellings":
+    "Diapazonā var būt līdz 500 īpašumiem",
+  "Enter up to 5,000 dwellings at a time":
+    "Vienā reizē ievadiet līdz 5 000 īpašumiem",
+  "Enter at least one starting reading":
+    "Ievadiet vismaz vienu sākuma rādījumu",
+  "Too many starting readings (up to 5,000)":
+    "Pārāk daudz sākuma rādījumu (līdz 5 000)",
+  "A meter appears more than once": "Skaitītājs ir norādīts vairākas reizes",
+  "This meter already has a later reading, so its starting reading cannot change":
+    "Šim skaitītājam jau ir vēlāks rādījums, tāpēc tā sākuma rādījumu nevar mainīt",
+  "Fix the rows with errors, then import again":
+    "Labojiet rindas ar kļūdām, pēc tam importējiet vēlreiz",
+  "Create the first billing period before you enter starting readings":
+    "Izveidojiet pirmo norēķinu periodu pirms sākuma rādījumu ievadīšanas",
+  "The month before the first billing period is already a billing period":
+    "Mēnesis pirms pirmā norēķinu perioda jau ir norēķinu periods",
+  "This period holds starting readings and cannot be billed":
+    "Šis periods satur sākuma rādījumus, un par to nevar izrakstīt rēķinus",
+  "A billing period must come after the month that holds the starting readings":
+    "Norēķinu periodam jābūt pēc mēneša, kurā ir sākuma rādījumi",
+  "Enter a price for each selected charge, for example 0.35 or 12.50":
+    "Ievadiet cenu katrai izvēlētajai maksai, piemēram, 0,35 vai 12,50",
   "No billing case exists for this dwelling in this period":
     "Šim īpašumam šajā periodā nav norēķinu ieraksta",
   "This dwelling has missing data for this period and cannot be invoiced yet":
@@ -1615,6 +1646,168 @@ const lv: Record<string, string> = {
   Validity: "Derīgums",
   Advanced: "Papildu",
   "Sort order": "Kārtošanas secība",
+
+  // Guided setup and reading grid
+  Maintenance: "Apsaimniekošanas maksa",
+  "Price per m²": "Cena par m²",
+  "Example: 50 m² × 0.50 = 25.00 per month.":
+    "Piemērs: 50 m² × 0.50 = 25.00 mēnesī.",
+  "Fixed fee per dwelling": "Fiksētā maksa par īpašumu",
+  "Price per dwelling": "Cena par īpašumu",
+  "The same amount for every dwelling.": "Vienāda summa katram īpašumam.",
+  "Fee per resident": "Maksa par iedzīvotāju",
+  "Price per resident": "Cena par iedzīvotāju",
+  "Price × the number of residents of the dwelling.":
+    "Cena × iedzīvotāju skaits īpašumā.",
+  "Price per m³": "Cena par m³",
+  "Bills each dwelling's meter consumption. Needs a cold-water meter in the dwelling.":
+    "Aprēķina katra īpašuma skaitītāja patēriņu. Nepieciešams aukstā ūdens skaitītājs īpašumā.",
+  "Bills each dwelling's meter consumption. Needs a hot-water meter in the dwelling.":
+    "Aprēķina katra īpašuma skaitītāja patēriņu. Nepieciešams karstā ūdens skaitītājs īpašumā.",
+  Charges: "Maksas",
+  "Create the first billing period before you add charges.":
+    "Izveidojiet pirmo norēķinu periodu pirms maksu pievienošanas.",
+  "First billing period": "Pirmais norēķinu periods",
+  "Already set up": "Jau iestatīts",
+  "An archived charge uses this name. Open the charges page to decide.":
+    "Arhivēta maksa izmanto šo nosaukumu. Atveriet maksu lapu, lai izlemtu.",
+  "Charges start on the first day of your first billing period:":
+    "Maksas stājas spēkā jūsu pirmā norēķinu perioda pirmajā dienā:",
+  "Add charges": "Pievienot maksas",
+  "Need a different charge? Open the full charges page.":
+    "Nepieciešama cita maksa? Atveriet pilno maksu lapu.",
+  Back: "Atpakaļ",
+  "Import failed. Please check your file and try again.":
+    "Imports neizdevās. Lūdzu, pārbaudiet failu un mēģiniet vēlreiz.",
+  "These dwellings were already created.": "Šie īpašumi jau ir izveidoti.",
+  "Current dwellings:": "Pašreizējie īpašumi:",
+  "View all dwellings": "Skatīt visus īpašumus",
+  "Have a spreadsheet?": "Ir izklājlapa?",
+  "Upload a CSV file": "Augšupielādēt CSV failu",
+  "Download the CSV template": "Lejupielādēt CSV veidni",
+  "New dwellings send invoices by email. Add each billing email and address on the dwelling page before you send invoices.":
+    "Jauniem īpašumiem rēķini tiek sūtīti pa e-pastu. Pirms rēķinu nosūtīšanas pievienojiet katra īpašuma lapā norēķinu e-pastu un adresi.",
+  "Dwelling numbers": "Īpašumu numuri",
+  "Use commas and ranges, for example 1-12, 14, 20A.":
+    "Izmantojiet komatus un diapazonus, piemēram, 1-12, 14, 20A.",
+  "Default values for new dwellings": "Noklusējuma vērtības jauniem īpašumiem",
+  "Default type": "Noklusējuma tips",
+  "Default area (m²)": "Noklusējuma platība (m²)",
+  "Default residents": "Noklusējuma iedzīvotāju skaits",
+  "Preview dwellings": "Priekšskatīt īpašumus",
+  "Dwellings preview": "Īpašumu priekšskatījums",
+  "Dwelling number": "Īpašuma numurs",
+  "Dwelling type": "Īpašuma tips",
+  "Create dwellings": "Izveidot īpašumus",
+  "Back to range entry": "Atpakaļ uz diapazona ievadi",
+  "Add more dwellings": "Pievienot vēl īpašumus",
+  "Organization details": "Organizācijas dati",
+  "Meters and starting readings": "Skaitītāji un sākuma rādījumi",
+  "Meters without a reading this month": "Skaitītāji bez rādījuma šajā mēnesī",
+  "Charges that need a manual value":
+    "Maksas, kurām nepieciešama manuāla vērtība",
+  "Charges with no meter in the dwelling": "Maksas bez skaitītāja īpašumā",
+  "Dwellings with no charge": "Īpašumi bez maksas",
+  "Dwellings not in the first period": "Pirmajā periodā neiekļautie īpašumi",
+  "Set up your organization": "Iestatiet savu organizāciju",
+  "Follow the steps to get from an empty organization to your first invoices. You can leave and come back at any time.":
+    "Izpildiet soļus, lai no tukšas organizācijas nonāktu līdz pirmajiem rēķiniem. Jebkurā laikā varat aiziet un atgriezties.",
+  Steps: "Soļi",
+  "The first billing period is locked. Reopen it on the period page before you change charges or meters.":
+    "Pirmais norēķinu periods ir slēgts. Pirms maksu vai skaitītāju maiņas atveriet to perioda lapā.",
+  "Open the first billing period": "Atvērt pirmo norēķinu periodu",
+  Done: "Pabeigts",
+  "To do": "Jāveic",
+  Readiness: "Gatavība",
+  "Setup complete": "Iestatīšana pabeigta",
+  "Not yet": "Vēl nav",
+  "Ready to generate invoices": "Gatavs rēķinu izveidei",
+  "Ready to prepare and send": "Gatavs sagatavošanai un nosūtīšanai",
+  "Dwellings without a recipient name or address":
+    "Īpašumi bez saņēmēja vārda vai adreses",
+  "Dwellings without a billing email": "Īpašumi bez norēķinu e-pasta",
+  "The setup never sends invoices. You generate, prepare, and send them on the period page.":
+    "Iestatīšana nekad nenosūta rēķinus. Tos ģenerē, sagatavo un nosūta perioda lapā.",
+  "Namkopa bills the difference between two readings. Enter what each meter shows now, or import last month's readings from your old system. They are saved for the month before your first billing period.":
+    "Namkopa aprēķina maksu pēc starpības starp diviem rādījumiem. Ievadiet, ko katrs skaitītājs rāda tagad, vai importējiet iepriekšējā mēneša rādījumus no vecās sistēmas. Tie tiek saglabāti par mēnesi pirms jūsu pirmā norēķinu perioda.",
+  "Create the first billing period first.":
+    "Vispirms izveidojiet pirmo norēķinu periodu.",
+  "Your charges do not use meters. You can skip this step.":
+    "Jūsu maksas neizmanto skaitītājus. Šo soli varat izlaist.",
+  "Meters that still need a starting reading:":
+    "Skaitītāji, kuriem vēl nepieciešams sākuma rādījums:",
+  "Some dwellings have a water charge but no meter of that type.":
+    "Dažiem īpašumiem ir maksa par ūdeni, bet nav attiecīgā veida skaitītāja.",
+  "Import last month's readings": "Importēt iepriekšējā mēneša rādījumus",
+  "Columns: dwelling_number, meter_type (COLD_WATER, HOT_WATER, ELECTRICITY, GAS, HEAT, OTHER), serial_number, unit, reading. A meter that does not exist yet is created.":
+    "Kolonnas: dwelling_number, meter_type (COLD_WATER, HOT_WATER, ELECTRICITY, GAS, HEAT, OTHER), serial_number, unit, reading. Ja skaitītājs vēl nepastāv, tas tiek izveidots.",
+  "Try again": "Mēģināt vēlreiz",
+  "Readings to import": "Importējamie rādījumi",
+  "Existing meter": "Esošs skaitītājs",
+  "New meter": "Jauns skaitītājs",
+  "Meters created": "Izveidotie skaitītāji",
+  "Starting readings saved": "Saglabātie sākuma rādījumi",
+  "Import another file": "Importēt citu failu",
+  "Enter starting readings": "Ievadīt sākuma rādījumus",
+  "Starting readings saved.": "Sākuma rādījumi saglabāti.",
+  "No meters have been added yet. Add a meter below or import readings from CSV.":
+    "Vēl nav pievienots neviens skaitītājs. Pievienojiet skaitītāju zemāk vai importējiet rādījumus no CSV.",
+  Meter: "Skaitītājs",
+  "Starting reading": "Sākuma rādījums",
+  "Starting reading for": "Sākuma rādījums īpašumam",
+  "Save starting readings": "Saglabāt sākuma rādījumus",
+  "Add a meter": "Pievienot skaitītāju",
+  "Meter added.": "Skaitītājs pievienots.",
+  "Select dwelling": "Izvēlēties īpašumu",
+  "e.g. Kitchen or Bathroom": "piem., Virtuve vai Vannasistaba",
+  "Setup navigation": "Iestatīšanas navigācija",
+  "Back to review": "Atpakaļ uz pārskatu",
+  "Skip for now": "Pagaidām izlaist",
+  "Address line 1": "Adreses 1. rinda",
+  "Address line 2": "Adreses 2. rinda",
+  "Needed before invoices are prepared":
+    "Nepieciešams pirms rēķinu sagatavošanas",
+  "Invoices show these details. You can add them later, but you cannot prepare an invoice without the bank name and IBAN.":
+    "Šie dati tiek rādīti rēķinos. Varat tos pievienot vēlāk, bet rēķinu nevar sagatavot bez bankas nosaukuma un IBAN.",
+  IBAN: "IBAN",
+  BIC: "BIC",
+  "Save and continue": "Saglabāt un turpināt",
+  "This is the first month you bill in Namkopa. Meter starting readings are stored for the month before it.":
+    "Šis ir pirmais mēnesis, par kuru izrakstāt rēķinus programmā Namkopa. Skaitītāju sākuma rādījumi tiek saglabāti par mēnesi pirms tā.",
+  "Your first billing period": "Jūsu pirmais norēķinu periods",
+  "Open period": "Atvērt periodu",
+  "Create period and continue": "Izveidot periodu un turpināt",
+  Review: "Pārskats",
+  "Setup steps": "Iestatīšanas soļi",
+  "readings saved": "rādījumi saglabāti",
+  "No changed readings to save.": "Nav mainītu rādījumu, ko saglabāt.",
+  "An error occurred while saving readings.":
+    "Saglabājot rādījumus, radās kļūda.",
+  "Back to the period": "Atpakaļ uz periodu",
+  "This period is locked. Readings cannot be changed.":
+    "Šis periods ir slēgts. Rādījumus nevar mainīt.",
+  "Filter readings": "Filtrēt rādījumus",
+  "Missing only": "Tikai trūkstošie",
+  "All meters": "Visi skaitītāji",
+  "No missing readings.": "Nav trūkstošu rādījumu.",
+  "No meters found.": "Skaitītāji nav atrasti.",
+  Source: "Avots",
+  "Current reading for": "Pašreizējais rādījums īpašumam",
+  "No previous reading: the whole value counts as consumption.":
+    "Nav iepriekšējā rādījuma: visa vērtība tiek uzskatīta par patēriņu.",
+  "Save changed readings": "Saglabāt mainītos rādījumus",
+  "Finish setting up": "Pabeigt iestatīšanu",
+  "Complete the setup steps to send your first invoices.":
+    "Pabeidziet iestatīšanas soļus, lai nosūtītu pirmos rēķinus.",
+  "Continue setup": "Turpināt iestatīšanu",
+  "The guided setup walks you through these steps.":
+    "Vadītā iestatīšana palīdzēs veikt šos soļus.",
+  "Open the setup": "Atvērt iestatīšanu",
+  "Starting readings": "Sākuma rādījumi",
+  "Meter positions before the first billing month. Not billed.":
+    "Skaitītāju rādījumi pirms pirmā norēķinu mēneša. Rēķini netiek izrakstīti.",
+  "This period holds the meters' starting readings. It is never billed.":
+    "Šis periods satur skaitītāju sākuma rādījumus. Par to nekad netiek izrakstīti rēķini.",
 };
 
 const ru: Record<string, string> = {
@@ -2525,6 +2718,37 @@ const ru: Record<string, string> = {
   "Organization not found": "Организация не найдена",
   "Billing period not found": "Расчётный период не найден",
   "This billing period is locked": "Этот расчётный период закрыт",
+  "Select at least one charge": "Выберите хотя бы одно начисление",
+  "Create the first billing period before you add charges":
+    "Создайте первый расчётный период перед добавлением начислений",
+  "Enter at least one dwelling number": "Введите хотя бы один номер помещения",
+  "A dwelling number has more than 50 characters":
+    "Номер помещения превышает 50 символов",
+  "A range must go from the smaller number to the larger one":
+    "Диапазон должен идти от меньшего числа к большему",
+  "A range can have up to 500 dwellings":
+    "В диапазоне может быть до 500 помещений",
+  "Enter up to 5,000 dwellings at a time":
+    "Введите до 5 000 помещений за один раз",
+  "Enter at least one starting reading":
+    "Введите хотя бы одно начальное показание",
+  "Too many starting readings (up to 5,000)":
+    "Слишком много начальных показаний (до 5 000)",
+  "A meter appears more than once": "Счётчик указан несколько раз",
+  "This meter already has a later reading, so its starting reading cannot change":
+    "У этого счётчика уже есть более позднее показание, поэтому его начальное показание нельзя изменить",
+  "Fix the rows with errors, then import again":
+    "Исправьте строки с ошибками, затем повторите импорт",
+  "Create the first billing period before you enter starting readings":
+    "Создайте первый расчётный период перед вводом начальных показаний",
+  "The month before the first billing period is already a billing period":
+    "Месяц перед первым расчётным периодом уже является расчётным периодом",
+  "This period holds starting readings and cannot be billed":
+    "Этот период содержит начальные показания, и по нему нельзя выставлять счета",
+  "A billing period must come after the month that holds the starting readings":
+    "Расчётный период должен идти после месяца с начальными показаниями",
+  "Enter a price for each selected charge, for example 0.35 or 12.50":
+    "Введите цену для каждого выбранного начисления, например 0,35 или 12,50",
   "No billing case exists for this dwelling in this period":
     "Для этого помещения в этом периоде нет расчётной записи",
   "This dwelling has missing data for this period and cannot be invoiced yet":
@@ -3194,6 +3418,171 @@ const ru: Record<string, string> = {
   Validity: "Срок действия",
   Advanced: "Дополнительно",
   "Sort order": "Порядок сортировки",
+
+  // Guided setup and reading grid
+  Maintenance: "Плата за обслуживание",
+  "Price per m²": "Цена за м²",
+  "Example: 50 m² × 0.50 = 25.00 per month.":
+    "Пример: 50 m² × 0.50 = 25.00 в месяц.",
+  "Fixed fee per dwelling": "Фиксированная плата за помещение",
+  "Price per dwelling": "Цена за помещение",
+  "The same amount for every dwelling.":
+    "Одинаковая сумма для каждого помещения.",
+  "Fee per resident": "Плата за жильца",
+  "Price per resident": "Цена за жильца",
+  "Price × the number of residents of the dwelling.":
+    "Цена × число жильцов в помещении.",
+  "Price per m³": "Цена за м³",
+  "Bills each dwelling's meter consumption. Needs a cold-water meter in the dwelling.":
+    "Рассчитывает расход по счётчику каждого помещения. Требуется счётчик холодной воды в помещении.",
+  "Bills each dwelling's meter consumption. Needs a hot-water meter in the dwelling.":
+    "Рассчитывает расход по счётчику каждого помещения. Требуется счётчик горячей воды в помещении.",
+  Charges: "Начисления",
+  "Create the first billing period before you add charges.":
+    "Создайте первый расчётный период перед добавлением начислений.",
+  "First billing period": "Первый расчётный период",
+  "Already set up": "Уже настроено",
+  "An archived charge uses this name. Open the charges page to decide.":
+    "Архивное начисление использует это название. Откройте страницу начислений, чтобы принять решение.",
+  "Charges start on the first day of your first billing period:":
+    "Начисления действуют с первого дня вашего первого расчётного периода:",
+  "Add charges": "Добавить начисления",
+  "Need a different charge? Open the full charges page.":
+    "Нужно другое начисление? Откройте полную страницу начислений.",
+  Back: "Назад",
+  "Import failed. Please check your file and try again.":
+    "Импорт не удался. Проверьте файл и повторите попытку.",
+  "These dwellings were already created.": "Эти помещения уже созданы.",
+  "Current dwellings:": "Текущие помещения:",
+  "View all dwellings": "Смотреть все помещения",
+  "Have a spreadsheet?": "Есть таблица?",
+  "Upload a CSV file": "Загрузить CSV-файл",
+  "Download the CSV template": "Скачать шаблон CSV",
+  "New dwellings send invoices by email. Add each billing email and address on the dwelling page before you send invoices.":
+    "Для новых помещений счета отправляются по эл. почте. Перед отправкой счетов укажите эл. почту для счетов и адрес на странице помещения.",
+  "Dwelling numbers": "Номера помещений",
+  "Use commas and ranges, for example 1-12, 14, 20A.":
+    "Используйте запятые и диапазоны, например 1-12, 14, 20A.",
+  "Default values for new dwellings":
+    "Значения по умолчанию для новых помещений",
+  "Default type": "Тип по умолчанию",
+  "Default area (m²)": "Площадь по умолчанию (м²)",
+  "Default residents": "Число жильцов по умолчанию",
+  "Preview dwellings": "Предпросмотр помещений",
+  "Dwellings preview": "Предпросмотр помещений",
+  "Dwelling number": "Номер помещения",
+  "Dwelling type": "Тип помещения",
+  "Create dwellings": "Создать помещения",
+  "Back to range entry": "Назад к вводу диапазона",
+  "Add more dwellings": "Добавить ещё помещения",
+  "Organization details": "Данные организации",
+  "Meters and starting readings": "Счётчики и начальные показания",
+  "Meters without a reading this month": "Счётчики без показаний в этом месяце",
+  "Charges that need a manual value":
+    "Начисления, требующие ввода значения вручную",
+  "Charges with no meter in the dwelling":
+    "Начисления без счётчика в помещении",
+  "Dwellings with no charge": "Помещения без начислений",
+  "Dwellings not in the first period":
+    "Помещения, не включённые в первый период",
+  "Set up your organization": "Настройте свою организацию",
+  "Follow the steps to get from an empty organization to your first invoices. You can leave and come back at any time.":
+    "Пройдите шаги, чтобы от пустой организации перейти к первым счетам. Вы можете выйти и вернуться в любое время.",
+  Steps: "Шаги",
+  "The first billing period is locked. Reopen it on the period page before you change charges or meters.":
+    "Первый расчётный период закрыт. Откройте его на странице периода перед изменением начислений или счётчиков.",
+  "Open the first billing period": "Открыть первый расчётный период",
+  Done: "Готово",
+  "To do": "К выполнению",
+  Readiness: "Готовность",
+  "Setup complete": "Настройка завершена",
+  "Not yet": "Ещё нет",
+  "Ready to generate invoices": "Готово к формированию счетов",
+  "Ready to prepare and send": "Готово к подготовке и отправке",
+  "Dwellings without a recipient name or address":
+    "Помещения без имени получателя или адреса",
+  "Dwellings without a billing email": "Помещения без эл. почты для счетов",
+  "The setup never sends invoices. You generate, prepare, and send them on the period page.":
+    "Настройка никогда не отправляет счета. Вы формируете, готовите и отправляете их на странице периода.",
+  "Namkopa bills the difference between two readings. Enter what each meter shows now, or import last month's readings from your old system. They are saved for the month before your first billing period.":
+    "Namkopa начисляет плату по разнице между двумя показаниями. Введите текущие показания счётчиков или импортируйте показания за прошлый месяц из старой системы. Они сохраняются за месяц до вашего первого расчётного периода.",
+  "Create the first billing period first.":
+    "Сначала создайте первый расчётный период.",
+  "Your charges do not use meters. You can skip this step.":
+    "Ваши начисления не используют счётчики. Этот шаг можно пропустить.",
+  "Meters that still need a starting reading:":
+    "Счётчики, которым всё ещё требуется начальное показание:",
+  "Some dwellings have a water charge but no meter of that type.":
+    "В некоторых помещениях есть начисление за воду, но нет счётчика этого типа.",
+  "Import last month's readings": "Импортировать показания за прошлый месяц",
+  "Columns: dwelling_number, meter_type (COLD_WATER, HOT_WATER, ELECTRICITY, GAS, HEAT, OTHER), serial_number, unit, reading. A meter that does not exist yet is created.":
+    "Колонки: dwelling_number, meter_type (COLD_WATER, HOT_WATER, ELECTRICITY, GAS, HEAT, OTHER), serial_number, unit, reading. Если счётчик ещё не существует, он создаётся.",
+  "Try again": "Попробовать снова",
+  "Readings to import": "Показания для импорта",
+  "Existing meter": "Существующий счётчик",
+  "New meter": "Новый счётчик",
+  "Meters created": "Создано счётчиков",
+  "Starting readings saved": "Сохранено начальных показаний",
+  "Import another file": "Импортировать другой файл",
+  "Enter starting readings": "Ввести начальные показания",
+  "Starting readings saved.": "Начальные показания сохранены.",
+  "No meters have been added yet. Add a meter below or import readings from CSV.":
+    "Счётчики пока не добавлены. Добавьте счётчик ниже или импортируйте показания из CSV.",
+  Meter: "Счётчик",
+  "Starting reading": "Начальное показание",
+  "Starting reading for": "Начальное показание для помещения",
+  "Save starting readings": "Сохранить начальные показания",
+  "Add a meter": "Добавить счётчик",
+  "Meter added.": "Счётчик добавлен.",
+  "Select dwelling": "Выбрать помещение",
+  "e.g. Kitchen or Bathroom": "напр., Кухня или Ванная",
+  "Setup navigation": "Навигация по настройке",
+  "Back to review": "Назад к обзору",
+  "Skip for now": "Пока пропустить",
+  "Address line 1": "Строка адреса 1",
+  "Address line 2": "Строка адреса 2",
+  "Needed before invoices are prepared": "Необходимо до подготовки счетов",
+  "Invoices show these details. You can add them later, but you cannot prepare an invoice without the bank name and IBAN.":
+    "Эти данные отображаются в счетах. Вы можете добавить их позже, но подготовить счёт без названия банка и IBAN невозможно.",
+  IBAN: "IBAN",
+  BIC: "BIC",
+  "Save and continue": "Сохранить и продолжить",
+  "This is the first month you bill in Namkopa. Meter starting readings are stored for the month before it.":
+    "Это первый месяц, за который вы выставляете счета в Namkopa. Начальные показания счётчиков сохраняются за месяц до него.",
+  "Your first billing period": "Ваш первый расчётный период",
+  "Open period": "Открыть период",
+  "Create period and continue": "Создать период и продолжить",
+  Review: "Обзор",
+  "Setup steps": "Шаги настройки",
+  "readings saved": "показаний сохранено",
+  "No changed readings to save.": "Нет изменённых показаний для сохранения.",
+  "An error occurred while saving readings.":
+    "Произошла ошибка при сохранении показаний.",
+  "Back to the period": "Назад к периоду",
+  "This period is locked. Readings cannot be changed.":
+    "Этот период закрыт. Показания нельзя изменить.",
+  "Filter readings": "Фильтровать показания",
+  "Missing only": "Только недостающие",
+  "All meters": "Все счётчики",
+  "No missing readings.": "Нет недостающих показаний.",
+  "No meters found.": "Счётчики не найдены.",
+  Source: "Источник",
+  "Current reading for": "Текущее показание для помещения",
+  "No previous reading: the whole value counts as consumption.":
+    "Нет предыдущего показания: всё значение считается расходом.",
+  "Save changed readings": "Сохранить изменённые показания",
+  "Finish setting up": "Завершить настройку",
+  "Complete the setup steps to send your first invoices.":
+    "Выполните шаги настройки, чтобы отправить первые счета.",
+  "Continue setup": "Продолжить настройку",
+  "The guided setup walks you through these steps.":
+    "Пошаговая настройка поможет пройти эти шаги.",
+  "Open the setup": "Открыть настройку",
+  "Starting readings": "Начальные показания",
+  "Meter positions before the first billing month. Not billed.":
+    "Показания счётчиков до первого расчётного месяца. Счета не выставляются.",
+  "This period holds the meters' starting readings. It is never billed.":
+    "Этот период содержит начальные показания счётчиков. По нему никогда не выставляются счета.",
 };
 
 export function translate(locale: Locale, text: string): string {

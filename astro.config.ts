@@ -8,6 +8,10 @@ export default defineConfig({
   security: {
     checkOrigin: true,
   },
+  // ClientRouter prefetches a page when you hover its link. Every admin page is
+  // personalized and uncacheable, so the prefetch cannot be reused: the click
+  // then waits for it and loads the page a second time. Prefetch off.
+  prefetch: false,
   vite: {
     plugins: [tailwindcss()],
   },

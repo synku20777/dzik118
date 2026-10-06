@@ -13,6 +13,10 @@ import {
   getDashboardSummary,
   type DashboardSummary,
 } from "../../../../../domain/periods/dashboard";
+import {
+  getSetupStatus,
+  type SetupProgress,
+} from "../../../../../domain/onboarding/progress";
 import { withRequestDb } from "../../../../../lib/db-request";
 
 const organizationId = Astro.params.orgId!;
@@ -29,29 +33,47 @@ let organization: Awaited<ReturnType<typeof getOrganization>>;
 let allPeriods: Awaited<ReturnType<typeof listPeriods>>;
 let summary: DashboardSummary | null = null;
 let attentionCases: Awaited<ReturnType<typeof listCasesForPeriod>> = [];
+let setupComplete = true;
+let setupProgress: SetupProgress | null = null;
 try {
-  ({ organization, allPeriods, summary } = await withRequestDb(async (db) => {
-    const org = await getOrganization(db, organizationId);
-    const periods = await listPeriods(db, organizationId);
+  ({ organization, allPeriods, summary, setupComplete, setupProgress } =
+    await withRequestDb(async (db) => {
+      const org = await getOrganization(db, organizationId);
+      // The starting-readings month is not a billing month to compare with.
+      const periods = (await listPeriods(db, organizationId)).filter(
+        (p) => !p.openingReadings
+      );
+      // Progress is calculated once, and only while setup is open.
+      const { complete, progress } = await getSetupStatus(
+        db,
+        organizationId,
+        org
+      );
 
-    let periodId: string | undefined = requestedPeriodId || undefined;
-    if (!periodId) {
-      const openPeriod = await getCurrentOpenPeriod(db, organizationId);
-      if (openPeriod) {
-        periodId = openPeriod.id;
-      } else if (periods.length > 0) {
-        periodId = periods[0].id;
+      let periodId: string | undefined = requestedPeriodId || undefined;
+      if (!periodId) {
+        const openPeriod = await getCurrentOpenPeriod(db, organizationId);
+        if (openPeriod) {
+          periodId = openPeriod.id;
+        } else if (periods.length > 0) {
+          periodId = periods[0].id;
+        }
       }
-    }
 
-    const summary = periodId
-      ? await getDashboardSummary(db, organizationId, periodId)
-      : null;
+      const summary = periodId
+        ? await getDashboardSummary(db, organizationId, periodId)
+        : null;
 
-    if (periodId)
-      attentionCases = await listCasesForPeriod(db, organizationId, periodId);
-    return { organization: org, allPeriods: periods, summary };
-  }));
+      if (periodId)
+        attentionCases = await listCasesForPeriod(db, organizationId, periodId);
+      return {
+        organization: org,
+        allPeriods: periods,
+        summary,
+        setupComplete: complete,
+        setupProgress: progress,
+      };
+    }));
 } catch {
   return Astro.redirect(`/admin/o/${organizationId}/periods`);
 }
@@ -93,6 +115,31 @@ const statuses = [
   "SENT",
   "PAID",
 ] as const;
+
+const setupSteps = setupProgress
+  ? [
+      {
+        title: t("Organization details"),
+        done: setupProgress.steps.organization,
+      },
+      {
+        title: t("Dwellings"),
+        done: setupProgress.steps.dwellings,
+      },
+      {
+        title: t("First billing period"),
+        done: setupProgress.steps.period,
+      },
+      {
+        title: t("Charges"),
+        done: setupProgress.steps.charges,
+      },
+      {
+        title: t("Meters and starting readings"),
+        done: setupProgress.steps.meters,
+      },
+    ]
+  : [];
 ---
 
 <AdminLayout
@@ -100,6 +147,38 @@ const statuses = [
   organizationId={organizationId}
   organizationName={organization.name}
 >
+  {
+    !setupComplete && setupProgress && (
+      <div class="panel p-4 mb-6">
+        <h2 class="text-h3 font-semibold text-foreground">
+          {t("Finish setting up")}
+        </h2>
+        <p class="mt-1 text-body-sm text-muted">
+          {t("Complete the setup steps to send your first invoices.")}
+        </p>
+        <ul class="my-3 space-y-1.5 text-body-sm">
+          {setupSteps.map((step) => (
+            <li class="flex items-center gap-2">
+              {step.done ? (
+                <span class="text-success font-semibold">
+                  <span aria-hidden="true">✓</span>
+                  <span class="sr-only">{t("Done")}</span>
+                </span>
+              ) : (
+                <span class="text-muted text-caption">{t("To do")}</span>
+              )}
+              <span class={step.done ? "text-foreground" : "text-muted"}>
+                {step.title}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <a class="btn-primary" href={`/admin/o/${organizationId}/setup`}>
+          {t("Continue setup")}
+        </a>
+      </div>
+    )
+  }
   {
     !summary ? (
       <div class="space-y-6">
@@ -111,17 +190,19 @@ const statuses = [
           )}
           display
         />
-        <EmptyState
-          ornament
-          title={t("No billing periods yet.")}
-          description={t(
-            "Create a period to start the monthly billing workflow."
-          )}
-        >
-          <a class="btn-primary" href={base + "/periods"}>
-            {t("Create period")}
-          </a>
-        </EmptyState>
+        {setupComplete && (
+          <EmptyState
+            ornament
+            title={t("No billing periods yet.")}
+            description={t(
+              "Create a period to start the monthly billing workflow."
+            )}
+          >
+            <a class="btn-primary" href={base + "/periods"}>
+              {t("Create period")}
+            </a>
+          </EmptyState>
+        )}
       </div>
     ) : (
       <div class="space-y-6">

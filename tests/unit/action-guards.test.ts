@@ -27,4 +27,20 @@ describe("action guards", () => {
     }
     expect(found).toEqual(ALLOWED_READ_GUARD_CALLS);
   });
+
+  // The guided setup and the reading grid change data, so each handler must
+  // call the write guard itself.
+  it("guards every setup action and the batch reading action", () => {
+    const dir = join(__dirname, "../../src/actions");
+    const onboarding = readFileSync(join(dir, "onboarding.ts"), "utf8");
+    const actions = onboarding.split("defineAction(").slice(1);
+    expect(actions.length).toBeGreaterThan(0);
+    for (const action of actions) {
+      expect(action).toContain("requireActiveOrganization(");
+    }
+    const batch = readFileSync(join(dir, "readings.ts"), "utf8")
+      .split("adminSubmitBatch: defineAction(")[1]
+      .split("defineAction(")[0];
+    expect(batch).toContain("requireActiveOrganization(");
+  });
 });

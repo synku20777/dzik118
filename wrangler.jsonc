@@ -5,6 +5,14 @@
   "workers_dev": true,
   "preview_urls": false,
   "compatibility_date": "2026-09-10",
+  // Run the Worker next to the Supabase database (project region eu-central-1).
+  // Each query is a round trip: from Riga to Frankfurt about 30 ms, from a
+  // Worker next to the database about 2 ms. A setup page makes 10 to 15
+  // sequential queries. Static assets are still served from the nearest edge.
+  // Change this together with the Supabase region. Explicit region on purpose:
+  // Smart Placement needs steady traffic from several locations to move a
+  // Worker, and this app has few users in one country.
+  "placement": { "region": "aws:eu-central-1" },
   // Required for node-postgres (the "pg" package, spec Section 3.2) to run at
   // all in the Workers runtime -- without this it fails on node:net/node:tls.
   "compatibility_flags": ["nodejs_compat"],

@@ -1,0 +1,661 @@
+---
+import {
+  translate,
+  uiLocale,
+  entityLabel,
+  friendlyActionErrorMessage,
+} from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import FieldError from "../../../../../components/ui/FieldError.astro";
+import SetupSteps from "../../../../../components/ui/SetupSteps.astro";
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import { actions } from "astro:actions";
+import {
+  ForbiddenError,
+  requireActiveOrganization,
+} from "../../../../../domain/authorization/guards";
+import { ConflictError, ValidationError } from "../../../../../domain/errors";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { getSetupProgress } from "../../../../../domain/onboarding/progress";
+import { getFirstBillingPeriod } from "../../../../../domain/periods/periods";
+import { listRules } from "../../../../../domain/billing/rules";
+import { listDwellings } from "../../../../../domain/organizations/dwellings";
+import { ImportHeaderError } from "../../../../../domain/organizations/csv-import";
+import {
+  importOpeningReadingsCsv,
+  listMetersWithOpeningReading,
+  validateOpeningReadingsCsv,
+  type OpeningReadingCsvRow,
+} from "../../../../../domain/periods/opening-readings";
+import { meterTypeEnum } from "../../../../../db/schema/dwellings";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireActiveOrganization(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  if (err instanceof ConflictError)
+    return Astro.redirect(`/admin/o/${organizationId}/dashboard`);
+  throw err;
+}
+
+const recordOpeningResult = Astro.getActionResult(
+  actions.onboarding.recordOpeningReadings
+);
+const createMeterResult = Astro.getActionResult(actions.meters.create);
+
+const MAX_CSV_BYTES = 2_000_000;
+let importStep: "upload" | "preview" | "result" = "upload";
+let importRows: OpeningReadingCsvRow[] = [];
+let importHeaderError: string | null = null;
+let importCsvText = "";
+let importResult: { createdMeters: number; written: number } | null = null;
+let importConfirmError: string | null = null;
+const importedParam = /^(\d+)-(\d+)$/.exec(
+  Astro.url.searchParams.get("imported") ?? ""
+);
+if (importedParam && Astro.request.method === "GET") {
+  importResult = {
+    createdMeters: Number(importedParam[1]),
+    written: Number(importedParam[2]),
+  };
+  importStep = "result";
+}
+
+if (
+  Astro.request.method === "POST" &&
+  !recordOpeningResult &&
+  !createMeterResult
+) {
+  const origin = Astro.request.headers.get("origin");
+  if (origin && origin !== Astro.url.origin) {
+    return new Response("Cross-site submission forbidden", { status: 403 });
+  }
+
+  const formData = await Astro.request.formData();
+  if (formData.get("section") === "import") {
+    if (formData.get("confirm") === "1") {
+      importCsvText = String(formData.get("csvText") ?? "");
+      try {
+        const imported = await withRequestDb((db) =>
+          importOpeningReadingsCsv(
+            db,
+            organizationId,
+            importCsvText,
+            Astro.locals.auth!.userId
+          )
+        );
+        // Post/redirect/get: a reload of the result must not import again.
+        return Astro.redirect(
+          `${Astro.url.pathname}?imported=${imported.createdMeters}-${imported.written}`
+        );
+      } catch (err) {
+        if (
+          err instanceof ImportHeaderError ||
+          err instanceof ValidationError
+        ) {
+          importConfirmError = err.message;
+        } else {
+          importConfirmError =
+            "Import failed. Please check your file and try again.";
+        }
+        const preview = await withRequestDb((db) =>
+          validateOpeningReadingsCsv(db, organizationId, importCsvText)
+        );
+        importRows = preview.rows;
+        importHeaderError = preview.headerError;
+        importStep = "preview";
+      }
+    } else {
+      const file = formData.get("file");
+      if (file instanceof File) {
+        if (file.size > MAX_CSV_BYTES) {
+          importHeaderError = "The CSV file is too large (up to 2 MB).";
+          importStep = "preview";
+        } else {
+          importCsvText = await file.text();
+          const preview = await withRequestDb((db) =>
+            validateOpeningReadingsCsv(db, organizationId, importCsvText)
+          );
+          importRows = preview.rows;
+          importHeaderError = preview.headerError;
+          importStep = "preview";
+        }
+      }
+    }
+  }
+}
+
+const {
+  organization,
+  progress,
+  firstPeriod,
+  rules,
+  dwellings,
+  metersWithOpening,
+} = await withRequestDb(async (db) => {
+  const org = await getOrganization(db, organizationId);
+  const [prog, first, r, dwl, mtrs] = await Promise.all([
+    getSetupProgress(db, organizationId, org),
+    getFirstBillingPeriod(db, organizationId),
+    listRules(db, organizationId),
+    listDwellings(db, organizationId, { limit: 5000 }),
+    listMetersWithOpeningReading(db, organizationId),
+  ]);
+  return {
+    organization: org,
+    progress: prog,
+    firstPeriod: first,
+    rules: r,
+    dwellings: dwl,
+    metersWithOpening: mtrs,
+  };
+});
+
+const hasMeterRules = rules.some(
+  (r) => r.calculationType === "METER_CONSUMPTION"
+);
+const clientMutationId = crypto.randomUUID();
+---
+
+<AdminLayout
+  title={`${t("Meters and starting readings")} - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+  archived={!!organization.archivedAt}
+>
+  <div class="setup-page space-y-6">
+    <PageHeader
+      title={t("Meters and starting readings")}
+      description={t(
+        "Namkopa bills the difference between two readings. Enter what each meter shows now, or import last month's readings from your old system. They are saved for the month before your first billing period."
+      )}
+    />
+
+    <SetupSteps
+      organizationId={organizationId}
+      current="meters"
+      steps={progress.steps}
+    />
+
+    {
+      !firstPeriod && (
+        <div class="panel p-6">
+          <p class="notice notice-warning" role="alert">
+            <a
+              href={`/admin/o/${organizationId}/setup/period`}
+              class="underline font-medium"
+            >
+              {t("Create the first billing period first.")}
+            </a>
+          </p>
+        </div>
+      )
+    }
+
+    {
+      !hasMeterRules && (
+        <div class="panel p-4 flex items-center justify-between gap-4 flex-wrap">
+          <p class="notice" role="status">
+            {t("Your charges do not use meters. You can skip this step.")}
+          </p>
+          <a href={`/admin/o/${organizationId}/setup`} class="btn-primary">
+            {t("Continue")}
+          </a>
+        </div>
+      )
+    }
+
+    <div class="space-y-2">
+      <p class="text-body-sm text-muted">
+        {t("Meters that still need a starting reading:")}{" "}
+        <strong class="text-foreground font-semibold"
+          >{progress.metersWithoutStartingReading}</strong
+        >
+      </p>
+      {
+        progress.blockers.NO_ACTIVE_METER_FOR_RULE && (
+          <p class="notice notice-warning" role="alert">
+            {t("Some dwellings have a water charge but no meter of that type.")}
+          </p>
+        )
+      }
+    </div>
+
+    <!-- Section 1: Import last month's readings -->
+    <section class="panel p-6 space-y-4">
+      <div class="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h2 class="text-h3 font-semibold text-foreground">
+            {t("Import last month's readings")}
+          </h2>
+          <p class="text-body-sm text-muted">
+            {
+              t(
+                "Columns: dwelling_number, meter_type (COLD_WATER, HOT_WATER, ELECTRICITY, GAS, HEAT, OTHER), serial_number, unit, reading. A meter that does not exist yet is created."
+              )
+            }
+          </p>
+        </div>
+        <a
+          href={`/admin/o/${organizationId}/setup/templates/starting-readings.csv`}
+          download
+          class="btn-secondary btn-sm"
+        >
+          {t("Download the CSV template")}
+        </a>
+      </div>
+
+      {
+        importStep === "upload" && (
+          <form
+            method="POST"
+            enctype="multipart/form-data"
+            class="max-w-lg space-y-3"
+          >
+            <input type="hidden" name="section" value="import" />
+            <div>
+              <label class="block text-label text-foreground" for="csv-file">
+                {t("CSV file")}
+              </label>
+              <input
+                id="csv-file"
+                name="file"
+                type="file"
+                accept=".csv,text/csv"
+                required
+                class="mt-1 w-full text-body-sm"
+              />
+            </div>
+            <button type="submit" class="btn-primary">
+              {t("Preview")}
+            </button>
+          </form>
+        )
+      }
+
+      {
+        importStep === "preview" && importHeaderError && (
+          <div class="space-y-3">
+            <p class="notice notice-danger" role="alert">
+              {t(importHeaderError)}
+            </p>
+            <a
+              href={`/admin/o/${organizationId}/setup/meters`}
+              class="btn-secondary btn-sm inline-block"
+            >
+              {t("Try again")}
+            </a>
+          </div>
+        )
+      }
+
+      {
+        importStep === "preview" && !importHeaderError && (
+          <div class="space-y-4">
+            {importConfirmError && (
+              <p class="notice notice-danger" role="alert">
+                {t(importConfirmError)}
+              </p>
+            )}
+            <div class="table-wrap stack-table">
+              <table class="w-full text-left text-body-sm">
+                <caption class="sr-only">{t("Readings to import")}</caption>
+                <thead class="border-b border-border bg-surface-hover text-muted">
+                  <tr>
+                    <th scope="col" class="px-4 py-2">
+                      {t("Dwelling")}
+                    </th>
+                    <th scope="col" class="px-4 py-2">
+                      {t("Meter type")}
+                    </th>
+                    <th scope="col" class="px-4 py-2">
+                      {t("Serial number")}
+                    </th>
+                    <th scope="col" class="px-4 py-2">
+                      {t("Unit")}
+                    </th>
+                    <th scope="col" class="px-4 py-2">
+                      {t("Reading")}
+                    </th>
+                    <th scope="col" class="px-4 py-2">
+                      {t("Status")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                  {importRows.map((row) => (
+                    <tr>
+                      <td class="px-4 py-2">{row.dwellingNumber || "—"}</td>
+                      <td class="px-4 py-2">
+                        {entityLabel(row.meterType, locale)}
+                      </td>
+                      <td class="px-4 py-2">{row.serialNumber || "—"}</td>
+                      <td class="px-4 py-2">{row.unit || "—"}</td>
+                      <td class="px-4 py-2">{row.reading || "—"}</td>
+                      <td class="px-4 py-2">
+                        {row.status === "USE" && (
+                          <span class="text-primary font-medium">
+                            {t("Existing meter")}
+                          </span>
+                        )}
+                        {row.status === "CREATE" && (
+                          <span class="text-success font-medium">
+                            {t("New meter")}
+                          </span>
+                        )}
+                        {row.status === "ERROR" && (
+                          <span class="text-destructive font-medium">
+                            {row.errors.map((e) => t(e)).join("; ")}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <form method="POST" class="flex items-center gap-3">
+              <input type="hidden" name="section" value="import" />
+              <input type="hidden" name="confirm" value="1" />
+              <input type="hidden" name="csvText" value={importCsvText} />
+              <button
+                type="submit"
+                disabled={
+                  importRows.some((row) => row.status === "ERROR") ||
+                  importRows.length === 0
+                }
+                class="btn-primary"
+              >
+                {t("Confirm import")}
+              </button>
+              <a
+                href={`/admin/o/${organizationId}/setup/meters`}
+                class="btn-secondary"
+              >
+                {t("Cancel")}
+              </a>
+            </form>
+          </div>
+        )
+      }
+
+      {
+        importStep === "result" && importResult && (
+          <div class="space-y-4">
+            <div class="notice" role="status">
+              <p class="font-medium text-foreground">
+                {t("Meters created")}: {importResult.createdMeters}
+              </p>
+              <p class="font-medium text-foreground">
+                {t("Starting readings saved")}: {importResult.written}
+              </p>
+            </div>
+            <a
+              href={`/admin/o/${organizationId}/setup/meters`}
+              class="btn-secondary btn-sm inline-block"
+            >
+              {t("Import another file")}
+            </a>
+          </div>
+        )
+      }
+    </section>
+
+    <!-- Section 2: Enter starting readings -->
+    <section class="panel p-6 space-y-4">
+      <h2 class="text-h3 font-semibold text-foreground">
+        {t("Enter starting readings")}
+      </h2>
+
+      {
+        recordOpeningResult?.error && (
+          <p class="notice notice-danger" role="alert">
+            {friendlyActionErrorMessage(recordOpeningResult.error, locale)}
+          </p>
+        )
+      }
+      {
+        recordOpeningResult?.data && (
+          <p class="notice" role="status">
+            {t("Starting readings saved.")}
+          </p>
+        )
+      }
+
+      {
+        metersWithOpening.length === 0 ? (
+          <p class="text-body-sm text-muted">
+            {t(
+              "No meters have been added yet. Add a meter below or import readings from CSV."
+            )}
+          </p>
+        ) : (
+          <form
+            method="POST"
+            action={actions.onboarding.recordOpeningReadings}
+            class="space-y-4"
+          >
+            <input type="hidden" name="organizationId" value={organizationId} />
+
+            <div class="table-wrap stack-table">
+              <table class="w-full text-left text-body-sm">
+                <caption class="sr-only">
+                  {t("Enter starting readings")}
+                </caption>
+                <thead class="border-b border-border bg-surface-hover text-muted">
+                  <tr>
+                    <th scope="col" class="px-4 py-2">
+                      {t("Dwelling")}
+                    </th>
+                    <th scope="col" class="px-4 py-2">
+                      {t("Meter")}
+                    </th>
+                    <th scope="col" class="px-4 py-2">
+                      {t("Serial number")}
+                    </th>
+                    <th scope="col" class="px-4 py-2">
+                      {t("Unit")}
+                    </th>
+                    <th scope="col" class="px-4 py-2">
+                      {t("Starting reading")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                  {metersWithOpening.map((meter) => {
+                    const meterDisplay =
+                      meter.label || entityLabel(meter.type, locale);
+                    return (
+                      <tr>
+                        <td class="px-4 py-2 font-medium">
+                          {meter.dwellingNumber}
+                        </td>
+                        <td class="px-4 py-2">{meterDisplay}</td>
+                        <td class="px-4 py-2 text-muted">
+                          {meter.serialNumber || "—"}
+                        </td>
+                        <td class="px-4 py-2 text-muted">{meter.unit}</td>
+                        <td class="px-4 py-2">
+                          <input
+                            type="hidden"
+                            name="meterId"
+                            value={meter.meterId}
+                          />
+                          <label
+                            for={`reading-${meter.meterId}`}
+                            class="sr-only"
+                          >
+                            {t("Starting reading for")} {meter.dwellingNumber}{" "}
+                            {meterDisplay}
+                          </label>
+                          <input
+                            id={`reading-${meter.meterId}`}
+                            type="text"
+                            name="value"
+                            value={meter.openingValue ?? ""}
+                            inputmode="decimal"
+                            class="w-32 rounded-control border border-border px-3 py-1.5 text-body-sm bg-surface text-foreground"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <button type="submit" class="btn-primary">
+              {t("Save starting readings")}
+            </button>
+          </form>
+        )
+      }
+    </section>
+
+    <!-- Section 3: Add a meter -->
+    <section class="panel p-6 space-y-4">
+      <h2 class="text-h3 font-semibold text-foreground">
+        {t("Add a meter")}
+      </h2>
+
+      {
+        createMeterResult?.error && (
+          <p class="notice notice-danger" role="alert">
+            {friendlyActionErrorMessage(createMeterResult.error, locale)}
+          </p>
+        )
+      }
+      {
+        createMeterResult?.data && (
+          <p class="notice" role="status">
+            {t("Meter added.")}
+          </p>
+        )
+      }
+
+      <form method="POST" action={actions.meters.create} class="space-y-4">
+        <input type="hidden" name="organizationId" value={organizationId} />
+        <input type="hidden" name="clientMutationId" value={clientMutationId} />
+
+        <fieldset class="grid gap-4 sm:grid-cols-2 max-w-2xl">
+          <legend class="sr-only">{t("Add a meter")}</legend>
+
+          <div>
+            <label
+              for="meter-dwellingId"
+              class="block text-label text-foreground"
+            >
+              {t("Dwelling")}
+            </label>
+            <select
+              id="meter-dwellingId"
+              name="dwellingId"
+              required
+              class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm bg-surface text-foreground"
+            >
+              <option value="">{t("Select dwelling")}</option>
+              {
+                dwellings.map((d) => (
+                  <option value={d.id}>
+                    {d.number}
+                    {d.displayName ? ` (${d.displayName})` : ""}
+                  </option>
+                ))
+              }
+            </select>
+            <FieldError name="dwellingId" error={createMeterResult?.error} />
+          </div>
+
+          <div>
+            <label for="meter-type" class="block text-label text-foreground">
+              {t("Meter type")}
+            </label>
+            <select
+              id="meter-type"
+              name="type"
+              required
+              class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm bg-surface text-foreground"
+            >
+              {
+                meterTypeEnum.enumValues.map((type) => (
+                  <option value={type}>{entityLabel(type, locale)}</option>
+                ))
+              }
+            </select>
+            <FieldError name="type" error={createMeterResult?.error} />
+          </div>
+
+          <div>
+            <label for="meter-unit" class="block text-label text-foreground">
+              {t("Unit")}
+            </label>
+            <input
+              id="meter-unit"
+              name="unit"
+              type="text"
+              required
+              value="m3"
+              maxlength="20"
+              class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm bg-surface text-foreground"
+            />
+            <FieldError name="unit" error={createMeterResult?.error} />
+          </div>
+
+          <div>
+            <label
+              for="meter-serialNumber"
+              class="block text-label text-foreground"
+            >
+              {t("Serial number")}
+            </label>
+            <input
+              id="meter-serialNumber"
+              name="serialNumber"
+              type="text"
+              maxlength="100"
+              class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm bg-surface text-foreground"
+            />
+            <FieldError name="serialNumber" error={createMeterResult?.error} />
+          </div>
+
+          <div class="sm:col-span-2">
+            <label for="meter-label" class="block text-label text-foreground">
+              {t("Label")}
+            </label>
+            <input
+              id="meter-label"
+              name="label"
+              type="text"
+              maxlength="100"
+              placeholder={t("e.g. Kitchen or Bathroom")}
+              class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm bg-surface text-foreground"
+            />
+            <FieldError name="label" error={createMeterResult?.error} />
+          </div>
+        </fieldset>
+
+        <button type="submit" class="btn-primary">
+          {t("Add meter")}
+        </button>
+      </form>
+    </section>
+
+    <!-- Navigation footer -->
+    <nav aria-label={t("Setup navigation")} class="setup-actions">
+      <a
+        href={`/admin/o/${organizationId}/setup/charges`}
+        class="btn-secondary"
+      >
+        {t("Back")}
+      </a>
+      <a href={`/admin/o/${organizationId}/setup`} class="btn-primary">
+        {t("Review")}
+      </a>
+    </nav>
+  </div>
+</AdminLayout>

@@ -1,0 +1,598 @@
+---
+import { entityLabel, translate, uiLocale } from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import SetupSteps from "../../../../../components/ui/SetupSteps.astro";
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import {
+  ForbiddenError,
+  requireActiveOrganization,
+} from "../../../../../domain/authorization/guards";
+import { ConflictError, ValidationError } from "../../../../../domain/errors";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { getSetupProgress } from "../../../../../domain/onboarding/progress";
+import {
+  ImportHeaderError,
+  importDwellingsCsv,
+  validateDwellingsCsv,
+} from "../../../../../domain/organizations/csv-import";
+import {
+  dwellingRangeToCsv,
+  parseDwellingRange,
+  type DwellingRangeRow,
+} from "../../../../../domain/organizations/dwelling-range";
+import { lookupMutationReceipt } from "../../../../../domain/mutations/receipts";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const DWELLING_TYPES = [
+  "APARTMENT",
+  "COMMERCIAL_UNIT",
+  "PARKING",
+  "STORAGE",
+  "OTHER",
+] as const;
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireActiveOrganization(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  if (err instanceof ConflictError)
+    return Astro.redirect(`/admin/o/${organizationId}/dashboard`);
+  throw err;
+}
+
+// One connection for both reads.
+const loaded = await withRequestDb(async (db) => {
+  const organization = await getOrganization(db, organizationId);
+  return {
+    organization,
+    progress: await getSetupProgress(db, organizationId, organization),
+  };
+});
+const organization = loaded.organization;
+let progress = loaded.progress;
+
+let step: "range" | "preview" | "result" = "range";
+let numbersInput = "";
+let defaultTypeInput = "APARTMENT";
+let defaultAreaInput = "";
+let defaultResidentsInput = "";
+let rangeError: string | null = null;
+let confirmError: string | null = null;
+let headerError: string | null = null;
+let replayedMessage: string | null = null;
+let createdCount = 0;
+let clientMutationId: string = crypto.randomUUID();
+
+interface PreviewRow {
+  number: string;
+  type: string;
+  areaM2: string;
+  residentCount: string;
+  errors: string[];
+}
+let previewRows: PreviewRow[] = [];
+
+if (Astro.request.method === "POST") {
+  const origin = Astro.request.headers.get("origin");
+  if (origin && origin !== Astro.url.origin) {
+    return new Response("Cross-site submission forbidden", { status: 403 });
+  }
+
+  const formData = await Astro.request.formData();
+  const intent = formData.get("intent");
+
+  if (!intent) {
+    // 1. Range form submission -> step=preview
+    numbersInput = String(formData.get("numbers") ?? "");
+    defaultTypeInput = String(formData.get("defaultType") ?? "APARTMENT");
+    defaultAreaInput = String(formData.get("defaultArea") ?? "");
+    defaultResidentsInput = String(formData.get("defaultResidents") ?? "");
+
+    try {
+      const parsedNumbers = parseDwellingRange(numbersInput);
+      const rows: DwellingRangeRow[] = parsedNumbers.map((num) => ({
+        number: num,
+        type: defaultTypeInput,
+        areaM2: defaultAreaInput,
+        residentCount: defaultResidentsInput,
+      }));
+      const csv = dwellingRangeToCsv(rows);
+      const validation = await withRequestDb((db) =>
+        validateDwellingsCsv(db, organizationId, csv, "create")
+      );
+      headerError = validation.headerError;
+      previewRows = validation.rows.map((vr) => ({
+        number: vr.number,
+        type: vr.type,
+        areaM2: vr.areaM2,
+        residentCount: vr.residentCount,
+        errors: vr.errors,
+      }));
+      clientMutationId = crypto.randomUUID();
+      step = "preview";
+    } catch (err) {
+      rangeError =
+        err instanceof ValidationError
+          ? t(err.message)
+          : t("Import failed. Please check your file and try again.");
+      step = "range";
+    }
+  } else {
+    // 2. Preview form submission (refresh or confirm)
+    const existingMutationId = formData.get("clientMutationId");
+    if (typeof existingMutationId === "string" && existingMutationId) {
+      clientMutationId = existingMutationId;
+    }
+
+    const numbers = formData.getAll("number").map(String);
+    const types = formData.getAll("type").map(String);
+    const areaM2s = formData.getAll("areaM2").map(String);
+    const residentCounts = formData.getAll("residentCount").map(String);
+
+    const editedRows: DwellingRangeRow[] = numbers.map((num, i) => ({
+      number: num.trim(),
+      type: types[i] || "APARTMENT",
+      areaM2: (areaM2s[i] ?? "").trim(),
+      residentCount: (residentCounts[i] ?? "").trim(),
+    }));
+
+    const csv = dwellingRangeToCsv(editedRows);
+
+    if (intent === "refresh") {
+      try {
+        const validation = await withRequestDb((db) =>
+          validateDwellingsCsv(db, organizationId, csv, "create")
+        );
+        headerError = validation.headerError;
+        previewRows = validation.rows.map((vr) => ({
+          number: vr.number,
+          type: vr.type,
+          areaM2: vr.areaM2,
+          residentCount: vr.residentCount,
+          errors: vr.errors,
+        }));
+        step = "preview";
+      } catch (err) {
+        confirmError =
+          err instanceof ImportHeaderError || err instanceof ValidationError
+            ? t(err.message)
+            : t("Import failed. Please check your file and try again.");
+        step = "preview";
+      }
+    } else if (
+      intent === "confirm" &&
+      (
+        await withRequestDb((db) =>
+          lookupMutationReceipt(db, organizationId, clientMutationId)
+        )
+      ).state === "committed"
+    ) {
+      // A second click or a reload of the confirm: the first one created them.
+      replayedMessage = t("These dwellings were already created.");
+      step = "result";
+    } else if (intent === "confirm") {
+      try {
+        const validation = await withRequestDb((db) =>
+          validateDwellingsCsv(db, organizationId, csv, "create")
+        );
+        headerError = validation.headerError;
+        previewRows = validation.rows.map((vr) => ({
+          number: vr.number,
+          type: vr.type,
+          areaM2: vr.areaM2,
+          residentCount: vr.residentCount,
+          errors: vr.errors,
+        }));
+
+        if (headerError || previewRows.some((r) => r.errors.length > 0)) {
+          step = "preview";
+        } else {
+          const importResult = await withRequestDb((db) =>
+            importDwellingsCsv(
+              db,
+              organizationId,
+              csv,
+              "create",
+              Astro.locals.auth!.userId,
+              clientMutationId
+            )
+          );
+          if (importResult.replayed) {
+            replayedMessage = t("These dwellings were already created.");
+          }
+          createdCount = importResult.created;
+          progress = await withRequestDb((db) =>
+            getSetupProgress(db, organizationId)
+          );
+          step = "result";
+        }
+      } catch (err) {
+        confirmError =
+          err instanceof ImportHeaderError || err instanceof ValidationError
+            ? t(err.message)
+            : t("Import failed. Please check your file and try again.");
+        step = "preview";
+      }
+    }
+  }
+}
+
+const firstErrorRowIndex = previewRows.findIndex((r) => r.errors.length > 0);
+const hasErrors =
+  Boolean(headerError) ||
+  previewRows.some((r) => r.errors.length > 0) ||
+  previewRows.length === 0;
+---
+
+<AdminLayout
+  title={`${t("Dwellings")} - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+  archived={!!organization.archivedAt}
+>
+  <div class="setup-page space-y-6">
+    <PageHeader title={t("Dwellings")} />
+    <SetupSteps
+      organizationId={organizationId}
+      current="dwellings"
+      steps={progress.steps}
+    />
+
+    <header class="space-y-2">
+      <div
+        class="flex flex-wrap items-center justify-between gap-3 text-body-sm text-muted"
+      >
+        <p>
+          {t("Current dwellings:")}
+          <span class="font-medium text-foreground"
+            >{progress.dwellingCount}</span
+          >.
+          <a
+            href={`/admin/o/${organizationId}/dwellings`}
+            class="underline hover:text-foreground ml-1"
+          >
+            {t("View all dwellings")}
+          </a>
+        </p>
+        <p class="flex items-center gap-1.5">
+          <span>{t("Have a spreadsheet?")}</span>
+          <a
+            href={`/admin/o/${organizationId}/dwellings/import`}
+            class="underline hover:text-foreground"
+          >
+            {t("Upload a CSV file")}
+          </a>
+          <span aria-hidden="true">·</span>
+          <a
+            href={`/admin/o/${organizationId}/setup/templates/dwellings.csv`}
+            download
+            class="underline hover:text-foreground"
+          >
+            {t("Download the CSV template")}
+          </a>
+        </p>
+      </div>
+    </header>
+
+    <p class="notice text-body-sm">
+      {
+        t(
+          "New dwellings send invoices by email. Add each billing email and address on the dwelling page before you send invoices."
+        )
+      }
+    </p>
+
+    {
+      rangeError && (
+        <p class="notice notice-danger" role="alert">
+          {rangeError}
+        </p>
+      )
+    }
+
+    {
+      step === "range" && (
+        <form
+          method="POST"
+          class="space-y-6 rounded-panel border border-border bg-surface p-6 max-w-3xl"
+        >
+          <input type="hidden" name="step" value="preview" />
+
+          <div>
+            <label class="block text-label text-foreground" for="numbers">
+              {t("Dwelling numbers")}
+            </label>
+            <p id="numbers-help" class="mt-1 text-body-sm text-muted">
+              {t("Use commas and ranges, for example 1-12, 14, 20A.")}
+            </p>
+            <textarea
+              id="numbers"
+              name="numbers"
+              required
+              rows="4"
+              aria-describedby="numbers-help"
+              class="mt-2 w-full rounded-control border border-border bg-surface px-3 py-2 text-body-sm"
+              set:text={numbersInput}
+            />
+          </div>
+
+          <fieldset class="space-y-4 rounded-control border border-border p-4">
+            <legend class="px-1 text-label font-medium text-foreground">
+              {t("Default values for new dwellings")}
+            </legend>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div>
+                <label
+                  class="block text-label text-foreground"
+                  for="defaultType"
+                >
+                  {t("Default type")}
+                </label>
+                <select
+                  id="defaultType"
+                  name="defaultType"
+                  class="mt-1 w-full rounded-control border border-border bg-surface px-3 py-2 text-body-sm"
+                >
+                  {DWELLING_TYPES.map((typeVal) => (
+                    <option
+                      value={typeVal}
+                      selected={defaultTypeInput === typeVal}
+                    >
+                      {entityLabel(typeVal, locale)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label
+                  class="block text-label text-foreground"
+                  for="defaultArea"
+                >
+                  {t("Default area (m²)")}
+                </label>
+                <input
+                  id="defaultArea"
+                  name="defaultArea"
+                  type="text"
+                  inputmode="decimal"
+                  value={defaultAreaInput}
+                  placeholder="0.00"
+                  class="mt-1 w-full rounded-control border border-border bg-surface px-3 py-2 text-body-sm"
+                />
+              </div>
+
+              <div>
+                <label
+                  class="block text-label text-foreground"
+                  for="defaultResidents"
+                >
+                  {t("Default residents")}
+                </label>
+                <input
+                  id="defaultResidents"
+                  name="defaultResidents"
+                  type="text"
+                  inputmode="numeric"
+                  value={defaultResidentsInput}
+                  placeholder="0"
+                  class="mt-1 w-full rounded-control border border-border bg-surface px-3 py-2 text-body-sm"
+                />
+              </div>
+            </div>
+          </fieldset>
+
+          <div>
+            <button type="submit" class="btn-primary">
+              {t("Preview dwellings")}
+            </button>
+          </div>
+        </form>
+      )
+    }
+
+    {
+      step === "preview" && (
+        <form method="POST" class="space-y-6">
+          <input type="hidden" name="step" value="preview" />
+          <input
+            type="hidden"
+            name="clientMutationId"
+            value={clientMutationId}
+          />
+
+          {headerError && (
+            <p class="notice notice-danger" role="alert">
+              {t(headerError)}
+            </p>
+          )}
+          {confirmError && (
+            <p class="notice notice-danger" role="alert">
+              {confirmError}
+            </p>
+          )}
+
+          <div class="table-wrap stack-table">
+            <table class="w-full text-left text-body-sm">
+              <caption class="sr-only">{t("Dwellings preview")}</caption>
+              <thead class="border-b border-border bg-surface-hover text-muted">
+                <tr>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Number")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Type")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Area (m²)")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Residents")}
+                  </th>
+                  <th scope="col" class="px-4 py-2">
+                    {t("Errors")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                {previewRows.map((row, index) => {
+                  const isFirstErrorRow = index === firstErrorRowIndex;
+                  return (
+                    <tr>
+                      <td class="px-4 py-2">
+                        <label for={`row-num-${index}`} class="sr-only">
+                          {t("Dwelling number")} {index + 1}
+                        </label>
+                        <input
+                          id={`row-num-${index}`}
+                          type="text"
+                          name="number"
+                          value={row.number}
+                          required
+                          aria-describedby={
+                            row.errors.length > 0
+                              ? `row-err-${index}`
+                              : undefined
+                          }
+                          aria-invalid={row.errors.length > 0 || undefined}
+                          class="w-full min-w-20 rounded-control border border-border bg-surface px-3 py-1.5 text-body-sm"
+                        />
+                      </td>
+                      <td class="px-4 py-2">
+                        <label for={`row-type-${index}`} class="sr-only">
+                          {t("Dwelling type")} {index + 1}
+                        </label>
+                        <select
+                          id={`row-type-${index}`}
+                          name="type"
+                          class="w-full min-w-28 rounded-control border border-border bg-surface px-3 py-1.5 text-body-sm"
+                        >
+                          {DWELLING_TYPES.map((typeVal) => (
+                            <option
+                              value={typeVal}
+                              selected={row.type === typeVal}
+                            >
+                              {entityLabel(typeVal, locale)}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td class="px-4 py-2">
+                        <label for={`row-area-${index}`} class="sr-only">
+                          {t("Area (m²)")} {index + 1}
+                        </label>
+                        <input
+                          id={`row-area-${index}`}
+                          type="text"
+                          inputmode="decimal"
+                          name="areaM2"
+                          value={row.areaM2}
+                          class="w-full min-w-20 rounded-control border border-border bg-surface px-3 py-1.5 text-body-sm"
+                        />
+                      </td>
+                      <td class="px-4 py-2">
+                        <label for={`row-residents-${index}`} class="sr-only">
+                          {t("Residents")} {index + 1}
+                        </label>
+                        <input
+                          id={`row-residents-${index}`}
+                          type="text"
+                          inputmode="numeric"
+                          name="residentCount"
+                          value={row.residentCount}
+                          class="w-full min-w-20 rounded-control border border-border bg-surface px-3 py-1.5 text-body-sm"
+                        />
+                      </td>
+                      <td class="px-4 py-2 text-destructive">
+                        {row.errors.length > 0 ? (
+                          <span
+                            id={`row-err-${index}`}
+                            role={isFirstErrorRow ? "alert" : undefined}
+                            class="font-medium text-destructive"
+                          >
+                            {row.errors.map((e) => t(e)).join("; ")}
+                          </span>
+                        ) : (
+                          <span class="text-muted">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button
+              type="submit"
+              name="intent"
+              value="refresh"
+              class="btn-secondary"
+            >
+              {t("Check again")}
+            </button>
+            <button
+              type="submit"
+              name="intent"
+              value="confirm"
+              disabled={hasErrors}
+              class="btn-primary"
+            >
+              {t("Create dwellings")}
+            </button>
+            <a
+              href={`/admin/o/${organizationId}/setup/dwellings`}
+              class="ml-2 text-body-sm text-muted hover:underline"
+            >
+              {t("Back to range entry")}
+            </a>
+          </div>
+        </form>
+      )
+    }
+
+    {
+      step === "result" && (
+        <div class="space-y-4 rounded-panel border border-border bg-surface p-6">
+          {replayedMessage ? (
+            <p class="notice notice-warning" role="status">
+              {replayedMessage}
+            </p>
+          ) : (
+            <p class="text-body-sm text-foreground">
+              {t("Created")} <span class="font-medium">{createdCount}</span>
+            </p>
+          )}
+          <div class="flex items-center gap-3">
+            <a
+              href={`/admin/o/${organizationId}/setup/dwellings`}
+              class="btn-secondary"
+            >
+              {t("Add more dwellings")}
+            </a>
+          </div>
+        </div>
+      )
+    }
+
+    <footer class="setup-actions">
+      <a
+        href={`/admin/o/${organizationId}/setup/organization`}
+        class="btn-secondary"
+      >
+        {t("Back")}
+      </a>
+      <a
+        href={`/admin/o/${organizationId}/setup/period`}
+        class={progress.steps.dwellings ? "btn-primary" : "btn-secondary"}
+      >
+        {t(progress.steps.dwellings ? "Continue" : "Skip for now")}
+      </a>
+    </footer>
+  </div>
+</AdminLayout>

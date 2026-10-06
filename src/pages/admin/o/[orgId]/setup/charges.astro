@@ -1,0 +1,339 @@
+---
+import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+
+import { actions } from "astro:actions";
+import FieldError from "../../../../../components/ui/FieldError.astro";
+import SetupSteps from "../../../../../components/ui/SetupSteps.astro";
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireActiveOrganization,
+} from "../../../../../domain/authorization/guards";
+import { ConflictError } from "../../../../../domain/errors";
+import { listRules } from "../../../../../domain/billing/rules";
+import {
+  CHARGE_PRESETS,
+  type ChargePresetResult,
+} from "../../../../../domain/onboarding/presets";
+import { getSetupProgress } from "../../../../../domain/onboarding/progress";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { getFirstBillingPeriod } from "../../../../../domain/periods/periods";
+import { withRequestDb } from "../../../../../lib/db-request";
+import { friendlyActionErrorMessage } from "../../../../../lib/ui/i18n";
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireActiveOrganization(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  if (err instanceof ConflictError)
+    return Astro.redirect(`/admin/o/${organizationId}/dashboard`);
+  throw err;
+}
+
+const { organization, progress, firstPeriod, rules } = await withRequestDb(
+  async (db) => {
+    const org = await getOrganization(db, organizationId);
+    const [prog, first, r] = await Promise.all([
+      getSetupProgress(db, organizationId, org),
+      getFirstBillingPeriod(db, organizationId),
+      listRules(db, organizationId, { includeArchived: true }),
+    ]);
+    return {
+      organization: org,
+      progress: prog,
+      firstPeriod: first,
+      rules: r,
+    };
+  }
+);
+
+const result = Astro.getActionResult(actions.onboarding.applyChargePresets);
+
+if (result?.data) {
+  const outcomes = result.data as ChargePresetResult[];
+  const allSucceeded =
+    outcomes.length > 0 &&
+    outcomes.every(
+      (item) => item.outcome === "CREATED" || item.outcome === "EXISTS"
+    );
+  if (allSucceeded) {
+    return Astro.redirect(`/admin/o/${organizationId}/setup/meters`);
+  }
+}
+
+const actionOutcomes = (result?.data as ChargePresetResult[] | undefined) ?? [];
+
+const presetItems = [
+  {
+    key: "maintenance" as const,
+    code: CHARGE_PRESETS.maintenance.code,
+    title: t("Maintenance"),
+    priceLabel: t("Price per m²"),
+    example: t("Example: 50 m² × 0.50 = 25.00 per month."),
+  },
+  {
+    key: "fixed" as const,
+    code: CHARGE_PRESETS.fixed.code,
+    title: t("Fixed fee per dwelling"),
+    priceLabel: t("Price per dwelling"),
+    example: t("The same amount for every dwelling."),
+  },
+  {
+    key: "perResident" as const,
+    code: CHARGE_PRESETS.perResident.code,
+    title: t("Fee per resident"),
+    priceLabel: t("Price per resident"),
+    example: t("Price × the number of residents of the dwelling."),
+  },
+  {
+    key: "coldWater" as const,
+    code: CHARGE_PRESETS.coldWater.code,
+    title: t("Cold water"),
+    priceLabel: t("Price per m³"),
+    example: t(
+      "Bills each dwelling's meter consumption. Needs a cold-water meter in the dwelling."
+    ),
+  },
+  {
+    key: "hotWater" as const,
+    code: CHARGE_PRESETS.hotWater.code,
+    title: t("Hot water"),
+    priceLabel: t("Price per m³"),
+    example: t(
+      "Bills each dwelling's meter consumption. Needs a hot-water meter in the dwelling."
+    ),
+  },
+];
+---
+
+<AdminLayout
+  title={`${t("Charges")} - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+  archived={!!organization.archivedAt}
+>
+  <div class="setup-page space-y-6">
+    <PageHeader title={t("Charges")} />
+    <SetupSteps
+      organizationId={organizationId}
+      current="charges"
+      steps={progress.steps}
+    />
+
+    {
+      !firstPeriod ? (
+        <div class="panel p-6 space-y-4">
+          <p class="notice" role="alert">
+            {t("Create the first billing period before you add charges.")}{" "}
+            <a
+              href={`/admin/o/${organizationId}/setup/period`}
+              class="underline font-medium"
+            >
+              {t("First billing period")}
+            </a>
+          </p>
+        </div>
+      ) : (
+        <div class="space-y-6">
+          {result?.error && (
+            <p class="notice notice-danger" role="alert">
+              {friendlyActionErrorMessage(result.error, locale)}
+            </p>
+          )}
+
+          {actionOutcomes.length > 0 && (
+            <div
+              class="rounded-panel border border-border bg-surface p-4 space-y-2"
+              role="status"
+            >
+              <ul class="space-y-1.5 text-body-sm">
+                {actionOutcomes.map((item) => {
+                  const itemPreset = presetItems.find(
+                    (p) => p.key === item.key
+                  );
+                  const title = itemPreset ? itemPreset.title : item.key;
+                  return (
+                    <li class="flex items-center gap-2">
+                      <span class="font-medium text-foreground">{title}:</span>{" "}
+                      {item.outcome === "CREATED" && (
+                        <span class="text-success">{t("Added")}</span>
+                      )}
+                      {item.outcome === "EXISTS" && (
+                        <span class="text-muted">{t("Already set up")}</span>
+                      )}
+                      {item.outcome === "ARCHIVED" && (
+                        <span class="text-warning">
+                          {t(
+                            "An archived charge uses this name. Open the charges page to decide."
+                          )}
+                        </span>
+                      )}
+                      {item.outcome === "ERROR" && (
+                        <span class="text-destructive">{t(item.message)}</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          <p class="text-body-sm text-muted">
+            {t("Charges start on the first day of your first billing period:")}{" "}
+            <span class="font-semibold text-foreground">
+              {firstPeriod.startsOn}
+            </span>
+          </p>
+
+          <form
+            method="POST"
+            action={actions.onboarding.applyChargePresets}
+            class="space-y-6"
+          >
+            <input type="hidden" name="organizationId" value={organizationId} />
+
+            <div class="grid gap-4 md:grid-cols-2">
+              {presetItems.map((preset) => {
+                const existingRule = rules.find((r) => r.code === preset.code);
+                const isArchived = Boolean(existingRule?.archivedAt);
+                const isExisting = Boolean(existingRule);
+
+                return (
+                  <fieldset class="setup-preset rounded-panel border border-border bg-surface p-6 space-y-4">
+                    <legend class="sr-only">{preset.title}</legend>
+                    {isExisting ? (
+                      <div class="space-y-2">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                          <h2 class="text-h3 font-semibold text-foreground">
+                            {preset.title}
+                          </h2>
+                          {isArchived ? (
+                            <span class="text-body-sm font-medium text-warning">
+                              {t(
+                                "An archived charge uses this name. Open the charges page to decide."
+                              )}
+                            </span>
+                          ) : (
+                            <span class="inline-flex items-center rounded-control border border-border bg-surface-hover px-2.5 py-1 text-xs font-medium text-muted">
+                              {t("Already set up")}
+                            </span>
+                          )}
+                        </div>
+                        <p class="text-body-sm text-muted">{preset.example}</p>
+                      </div>
+                    ) : (
+                      <div class="space-y-4">
+                        <div class="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            id={`${preset.key}Enabled`}
+                            name={`${preset.key}Enabled`}
+                            class="mt-1 h-4 w-4 rounded border-border"
+                          />
+                          <div>
+                            <label
+                              for={`${preset.key}Enabled`}
+                              class="text-h3 font-semibold text-foreground cursor-pointer"
+                            >
+                              {preset.title}
+                            </label>
+                            <p class="text-body-sm text-muted mt-0.5">
+                              {preset.example}
+                            </p>
+                            <FieldError
+                              name={`${preset.key}Enabled`}
+                              error={result?.error}
+                            />
+                          </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                          <div>
+                            <label
+                              for={`${preset.key}Price`}
+                              class="block text-label text-foreground mb-1"
+                            >
+                              {preset.priceLabel}
+                            </label>
+                            <input
+                              type="text"
+                              id={`${preset.key}Price`}
+                              name={`${preset.key}Price`}
+                              inputmode="decimal"
+                              pattern="\d{1,10}([.,]\d{1,4})?"
+                              placeholder="0.00"
+                              aria-describedby={`${preset.key}Price-error`}
+                              class="w-full rounded-control border border-border px-3 py-2 text-body-sm bg-surface text-foreground"
+                            />
+                            <FieldError
+                              name={`${preset.key}Price`}
+                              error={result?.error}
+                            />
+                          </div>
+
+                          <div>
+                            <label
+                              for={`${preset.key}Vat`}
+                              class="block text-label text-foreground mb-1"
+                            >
+                              {t("VAT %")}
+                            </label>
+                            <input
+                              type="text"
+                              id={`${preset.key}Vat`}
+                              name={`${preset.key}Vat`}
+                              inputmode="decimal"
+                              pattern="\d{1,3}([.,]\d{1,4})?"
+                              value="0"
+                              aria-describedby={`${preset.key}Vat-error`}
+                              class="w-full rounded-control border border-border px-3 py-2 text-body-sm bg-surface text-foreground"
+                            />
+                            <FieldError
+                              name={`${preset.key}Vat`}
+                              error={result?.error}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </fieldset>
+                );
+              })}
+            </div>
+
+            <div>
+              <button type="submit" class="btn-primary">
+                {t("Add charges")}
+              </button>
+            </div>
+          </form>
+
+          <p class="text-body-sm text-muted">
+            <a
+              href={`/admin/o/${organizationId}/settings/rules`}
+              class="text-primary hover:underline font-medium"
+            >
+              {t("Need a different charge? Open the full charges page.")}
+            </a>
+          </p>
+        </div>
+      )
+    }
+
+    <footer class="setup-actions">
+      <a href={`/admin/o/${organizationId}/setup/period`} class="btn-secondary">
+        {t("Back")}
+      </a>
+      <a
+        href={`/admin/o/${organizationId}/setup/meters`}
+        class={progress.steps.charges ? "btn-primary" : "btn-secondary"}
+      >
+        {t(progress.steps.charges ? "Continue" : "Skip for now")}
+      </a>
+    </footer>
+  </div>
+</AdminLayout>

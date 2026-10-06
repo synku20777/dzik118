@@ -13,6 +13,8 @@ import {
 import { dwellings, meters } from "../../db/schema/dwellings";
 import { invoices } from "../../db/schema/invoices";
 import { getApplicableRulesForDwelling } from "../billing/rules";
+import { wasMeterActiveDuringPeriod } from "./case-readiness";
+import { findPreviousValue } from "./readings";
 
 // Spec Section 27's required default sort: status priority first, then
 // natural dwelling number. Sorted client-side (post-fetch) rather than with
@@ -170,6 +172,89 @@ export async function listMetersWithReadingForPeriod(
     .orderBy(meters.createdAt);
 }
 
+// The period-wide reading grid: one row per meter that was active during the
+// period, for every dwelling with a case in it. `previousValue` is what the
+// next reading is subtracted from: the stored one, or else the latest earlier
+// reading (findPreviousValue), so the grid shows consumption before saving.
+// `missing` mirrors the case's NO_READING blocker.
+export async function listReadingGridForPeriod(
+  db: Db,
+  organizationId: string,
+  periodId: string
+) {
+  const [period] = await db
+    .select()
+    .from(billingPeriods)
+    .where(
+      and(
+        eq(billingPeriods.id, periodId),
+        eq(billingPeriods.organizationId, organizationId)
+      )
+    )
+    .limit(1);
+  if (!period) return [];
+
+  const rows = await db
+    .select({
+      meterId: meters.id,
+      dwellingId: dwellings.id,
+      dwellingNumber: dwellings.number,
+      type: meters.type,
+      label: meters.label,
+      serialNumber: meters.serialNumber,
+      unit: meters.unit,
+      installedAt: meters.installedAt,
+      archivedAt: meters.archivedAt,
+      missingData: billingCases.missingData,
+      currentValue: meterReadings.currentValue,
+      storedPreviousValue: meterReadings.previousValue,
+      consumption: meterReadings.consumption,
+      source: meterReadings.source,
+    })
+    .from(billingCases)
+    .innerJoin(dwellings, eq(dwellings.id, billingCases.dwellingId))
+    .innerJoin(meters, eq(meters.dwellingId, dwellings.id))
+    .leftJoin(
+      meterReadings,
+      and(
+        eq(meterReadings.meterId, meters.id),
+        eq(meterReadings.periodId, periodId)
+      )
+    )
+    .where(
+      and(
+        eq(billingCases.periodId, periodId),
+        eq(billingCases.organizationId, organizationId)
+      )
+    )
+    .orderBy(dwellings.number, meters.type);
+
+  const grid = [];
+  for (const row of rows) {
+    if (!wasMeterActiveDuringPeriod(row, period)) continue;
+    const missing = (
+      row.missingData as { reason?: string; meterId?: string }[]
+    ).some((m) => m?.reason === "NO_READING" && m.meterId === row.meterId);
+    grid.push({
+      meterId: row.meterId,
+      dwellingId: row.dwellingId,
+      dwellingNumber: row.dwellingNumber,
+      type: row.type,
+      label: row.label,
+      serialNumber: row.serialNumber,
+      unit: row.unit,
+      currentValue: row.currentValue,
+      consumption: row.consumption,
+      source: row.source,
+      previousValue: row.currentValue
+        ? row.storedPreviousValue
+        : await findPreviousValue(db, row.meterId, period),
+      missing,
+    });
+  }
+  return grid;
+}
+
 export interface ManualRuleInputForPeriod {
   billingRuleId: string;
   ruleName: string;
@@ -266,7 +351,13 @@ export async function listConsumptionHistoryForDwelling(
     .from(meterReadings)
     .innerJoin(meters, eq(meters.id, meterReadings.meterId))
     .innerJoin(billingPeriods, eq(billingPeriods.id, meterReadings.periodId))
-    .where(eq(meters.dwellingId, dwellingId))
+    .where(
+      and(
+        eq(meters.dwellingId, dwellingId),
+        // Starting readings are a meter position, not a month's usage.
+        eq(billingPeriods.openingReadings, false)
+      )
+    )
     .groupBy(
       billingPeriods.year,
       billingPeriods.month,

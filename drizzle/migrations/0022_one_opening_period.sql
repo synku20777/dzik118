@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "billing_periods_one_opening_per_org" ON "billing_periods" USING btree ("organization_id") WHERE "billing_periods"."opening_readings";

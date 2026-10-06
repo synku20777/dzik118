@@ -17,6 +17,11 @@ import {
 
 export { ConflictError, NotFoundError, ValidationError };
 
+export const OPENING_PERIOD_MESSAGE =
+  "This period holds starting readings and cannot be billed";
+export const BEFORE_OPENING_PERIOD_MESSAGE =
+  "A billing period must come after the month that holds the starting readings";
+
 export interface CreatePeriodInput {
   year: number;
   month: number;
@@ -66,6 +71,24 @@ export async function createPeriod(
   validatePeriodDates(input);
   try {
     return await db.transaction(async (tx) => {
+      // The starting readings are the meters' position before every billing
+      // month, so no billing month may come before (or at) them.
+      const [opening] = await tx
+        .select({ year: billingPeriods.year, month: billingPeriods.month })
+        .from(billingPeriods)
+        .where(
+          and(
+            eq(billingPeriods.organizationId, organizationId),
+            eq(billingPeriods.openingReadings, true)
+          )
+        )
+        .limit(1);
+      if (
+        opening &&
+        input.year * 12 + input.month <= opening.year * 12 + opening.month
+      ) {
+        throw new ConflictError(BEFORE_OPENING_PERIOD_MESSAGE);
+      }
       const [period] = await tx
         .insert(billingPeriods)
         .values({ organizationId, ...input })
@@ -193,6 +216,26 @@ export async function getCurrentOpenPeriod(db: DbOrTx, organizationId: string) {
   return period?.status === "OPEN" ? period : null;
 }
 
+// The organization's first real billing month: the earliest period that is
+// not the setup's starting-readings period.
+export async function getFirstBillingPeriod(
+  db: DbOrTx,
+  organizationId: string
+) {
+  const [period] = await db
+    .select()
+    .from(billingPeriods)
+    .where(
+      and(
+        eq(billingPeriods.organizationId, organizationId),
+        eq(billingPeriods.openingReadings, false)
+      )
+    )
+    .orderBy(asc(billingPeriods.year), asc(billingPeriods.month))
+    .limit(1);
+  return period ?? null;
+}
+
 export async function listPeriods(db: Db, organizationId: string) {
   return db
     .select()
@@ -246,6 +289,7 @@ export async function reopenPeriod(
 ) {
   return db.transaction(async (tx) => {
     const period = await getPeriod(tx, organizationId, periodId);
+    if (period.openingReadings) throw new ConflictError(OPENING_PERIOD_MESSAGE);
     if (period.status === "OPEN") return period;
 
     const [reopened] = await tx
@@ -330,6 +374,7 @@ export async function addDwellingToPeriod(
       .for("update")
       .limit(1);
     if (!period) throw new NotFoundError("Billing period not found");
+    if (period.openingReadings) throw new ConflictError(OPENING_PERIOD_MESSAGE);
     if (period.status === "LOCKED") {
       throw new ConflictError("This billing period is locked");
     }

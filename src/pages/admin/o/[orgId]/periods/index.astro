@@ -38,6 +38,9 @@ const { organization, periods } = await withRequestDb(async (db) => ({
   periods: await listPeriods(db, organizationId),
 }));
 
+// The starting-readings month is listed but is not a billing period.
+const billingPeriods = periods.filter((p) => !p.openingReadings);
+
 const pageSize = 24;
 const totalPages = Math.max(1, Math.ceil(periods.length / pageSize));
 const rawPage = Number(Astro.url.searchParams.get("page") ?? "1");
@@ -81,15 +84,15 @@ const pageHref = (p: number) => {
       <KpiCard
         icon="invoice"
         label={t("Total periods")}
-        value={periods.length}
+        value={billingPeriods.length}
       /><KpiCard
         icon="open"
         label={t("Open")}
-        value={periods.filter((p) => p.status === "OPEN").length}
+        value={billingPeriods.filter((p) => p.status === "OPEN").length}
       /><KpiCard
         icon="lock"
         label={t("Locked")}
-        value={periods.filter((p) => p.status === "LOCKED").length}
+        value={billingPeriods.filter((p) => p.status === "LOCKED").length}
       />
     </div>
 
@@ -126,17 +129,30 @@ const pageHref = (p: number) => {
                 <td class="px-4 py-2">
                   {formatDate(p.readingDeadline, locale)}
                 </td>
-                <>
-                  <td class="px-4 py-2">
-                    {formatDate(p.invoiceIssueDate, locale)}
+                {p.openingReadings ? (
+                  <td colspan="3" class="px-4 py-2" data-label={t("Status")}>
+                    <span class="font-medium text-foreground">
+                      {t("Starting readings")}
+                    </span>
+                    <span class="block text-caption text-muted">
+                      {t(
+                        "Meter positions before the first billing month. Not billed."
+                      )}
+                    </span>
                   </td>
-                  <td class="px-4 py-2">
-                    {formatDate(p.invoiceDueDate, locale)}
-                  </td>
-                  <td class="px-4 py-2">
-                    <StatusBadge status={p.status} />
-                  </td>
-                </>
+                ) : (
+                  <>
+                    <td class="px-4 py-2">
+                      {formatDate(p.invoiceIssueDate, locale)}
+                    </td>
+                    <td class="px-4 py-2">
+                      {formatDate(p.invoiceDueDate, locale)}
+                    </td>
+                    <td class="px-4 py-2">
+                      <StatusBadge status={p.status} />
+                    </td>
+                  </>
+                )}
               </tr>
             ))
           }

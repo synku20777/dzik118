@@ -31,7 +31,7 @@ export { NotFoundError, ConflictError, ValidationError };
 // reading" -- the most recent reading (by period year/month, not
 // submission time) strictly before this period, regardless of which
 // period it was originally submitted against.
-async function findPreviousValue(
+export async function findPreviousValue(
   tx: DbOrTx,
   meterId: string,
   period: { year: number; month: number }
@@ -62,7 +62,7 @@ async function findPreviousValue(
 // previousValue/consumption were computed from the value being changed and
 // would otherwise silently go stale (this domain doesn't cascade-recompute
 // forward; blocking the edit is the cheaper, safer alternative).
-async function hasLaterReading(
+export async function hasLaterReading(
   tx: DbOrTx,
   meterId: string,
   period: { year: number; month: number }

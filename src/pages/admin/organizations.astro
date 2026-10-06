@@ -24,7 +24,7 @@ try {
 
 const createResult = Astro.getActionResult(actions.organizations.create);
 if (createResult && !createResult.error) {
-  return Astro.redirect(`/admin/o/${createResult.data.id}/dwellings`);
+  return Astro.redirect(`/admin/o/${createResult.data.id}/setup/organization`);
 }
 
 const organizations = await withRequestDb((db) =>

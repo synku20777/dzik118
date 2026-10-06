@@ -11,11 +11,12 @@ import type { DbOrTx } from "../../db/client";
 import {
   billingCases,
   billingPeriods,
+  billingRuleAssignments,
   manualRuleInputs,
   meterReadings,
 } from "../../db/schema/billing";
 import { meters } from "../../db/schema/dwellings";
-import { getApplicableRulesForDwelling } from "../billing/rules";
+import { getEffectiveRules } from "../billing/rules";
 
 export interface MissingMeterReadingItem {
   meterId: string;
@@ -107,9 +108,7 @@ export function wasMeterActiveDuringPeriod(
   return true;
 }
 
-type ApplicableRule = Awaited<
-  ReturnType<typeof getApplicableRulesForDwelling>
->[number];
+type ApplicableRule = Awaited<ReturnType<typeof getEffectiveRules>>[number];
 
 // A meter only requires a reading if some APPLICABLE METER_CONSUMPTION rule
 // actually consumes its type -- before per-dwelling scoping existed, every
@@ -126,28 +125,39 @@ type ApplicableRule = Awaited<
 // `billableRules` and refuses when `blockers` is not empty. Because both use
 // this function, READY cannot disagree with generation. With no blockers,
 // every billable rule produces a line and there is at least one.
-export async function resolveInvoiceEligibility(
-  tx: DbOrTx,
-  organizationId: string,
-  dwellingId: string,
-  periodId: string,
+export interface InvoiceEligibility {
+  blockers: MissingDataItem[];
+  billableRules: ApplicableRule[];
+  // Meters that need a reading for this period (the setup checks that each
+  // has a starting reading).
+  requiredMeterIds: string[];
+}
+
+// Everything the rules below need for ONE dwelling, already loaded. The
+// decision is pure, so a single dwelling (generation, readiness) and a whole
+// organization (setup progress) share exactly the same logic and cannot
+// drift apart.
+interface EligibilityInputs {
+  // Effective rules for the period, every scope.
+  rules: ApplicableRule[];
+  // Ids of the scoped rules assigned to this dwelling.
+  assignedRuleIds: Set<string>;
+  meters: (typeof meters.$inferSelect)[];
+  // Meters that already have a reading in this period.
+  readMeterIds: Set<string>;
+  // Manual rules that already have an input for this dwelling and period.
+  suppliedRuleIds: Set<string>;
+}
+
+function evaluateEligibility(
+  inputs: EligibilityInputs,
   period: PeriodDateRange
-): Promise<{ blockers: MissingDataItem[]; billableRules: ApplicableRule[] }> {
-  const applicableRules = await getApplicableRulesForDwelling(
-    tx,
-    organizationId,
-    dwellingId,
-    period
+): InvoiceEligibility {
+  const applicableRules = inputs.rules.filter(
+    (r) =>
+      r.applicationScope === "ONE_TO_ALL" || inputs.assignedRuleIds.has(r.id)
   );
-  const dwellingMeters = await tx
-    .select()
-    .from(meters)
-    .where(
-      and(
-        eq(meters.dwellingId, dwellingId),
-        eq(meters.organizationId, organizationId)
-      )
-    );
+  const dwellingMeters = inputs.meters;
   const activeMeters = dwellingMeters.filter((m) =>
     wasMeterActiveDuringPeriod(m, period)
   );
@@ -187,54 +197,189 @@ export async function resolveInvoiceEligibility(
       r.calculationType === "MANUAL_AMOUNT"
   );
 
-  let missingMeters: MissingDataItem[] = [];
-  if (requiredMeters.length > 0) {
-    const readings = await tx
-      .select({ meterId: meterReadings.meterId })
-      .from(meterReadings)
-      .where(eq(meterReadings.periodId, periodId));
-    const readMeterIds = new Set(readings.map((r) => r.meterId));
-    missingMeters = requiredMeters
-      .filter((m) => !readMeterIds.has(m.id))
-      .map((m) => ({
-        meterId: m.id,
-        meterType: m.type,
-        label: m.label,
-        reason: "NO_READING" as const,
-      }));
-  }
+  const missingMeters: MissingDataItem[] = requiredMeters
+    .filter((m) => !inputs.readMeterIds.has(m.id))
+    .map((m) => ({
+      meterId: m.id,
+      meterType: m.type,
+      label: m.label,
+      reason: "NO_READING" as const,
+    }));
 
-  let missingManualInputs: MissingDataItem[] = [];
-  if (requiredManualRules.length > 0) {
-    const inputs = await tx
-      .select({ billingRuleId: manualRuleInputs.billingRuleId })
-      .from(manualRuleInputs)
-      .where(
-        and(
-          eq(manualRuleInputs.periodId, periodId),
-          eq(manualRuleInputs.dwellingId, dwellingId),
-          inArray(
-            manualRuleInputs.billingRuleId,
-            requiredManualRules.map((r) => r.id)
-          )
-        )
-      );
-    const suppliedRuleIds = new Set(inputs.map((i) => i.billingRuleId));
-    missingManualInputs = requiredManualRules
-      .filter((r) => !suppliedRuleIds.has(r.id))
-      .map((r) => ({
-        billingRuleId: r.id,
-        ruleName: r.name,
-        unit: r.unit,
-        reason: "NO_MANUAL_INPUT" as const,
-      }));
-  }
+  const missingManualInputs: MissingDataItem[] = requiredManualRules
+    .filter((r) => !inputs.suppliedRuleIds.has(r.id))
+    .map((r) => ({
+      billingRuleId: r.id,
+      ruleName: r.name,
+      unit: r.unit,
+      reason: "NO_MANUAL_INPUT" as const,
+    }));
 
   const blockers = [...missingMeters, ...missingManualInputs, ...noActiveMeter];
   if (billableRules.length === 0 && blockers.length === 0) {
     blockers.push({ reason: "NO_APPLICABLE_RULES" });
   }
-  return { blockers, billableRules };
+  return {
+    blockers,
+    billableRules,
+    requiredMeterIds: requiredMeters.map((m) => m.id),
+  };
+}
+
+// Loads the inputs for many dwellings at once: five queries however many
+// dwellings there are. `onlyDwellingId` narrows every query to one dwelling.
+async function resolveEligibilityMany(
+  tx: DbOrTx,
+  organizationId: string,
+  periodId: string,
+  period: PeriodDateRange,
+  dwellingIds: string[],
+  onlyDwellingId?: string
+): Promise<Map<string, InvoiceEligibility>> {
+  const rules = await getEffectiveRules(tx, organizationId, period);
+
+  const scopedIds = rules
+    .filter((r) => r.applicationScope !== "ONE_TO_ALL")
+    .map((r) => r.id);
+  const assignedByDwelling = new Map<string, Set<string>>();
+  if (scopedIds.length > 0) {
+    const rows = await tx
+      .select({
+        billingRuleId: billingRuleAssignments.billingRuleId,
+        dwellingId: billingRuleAssignments.dwellingId,
+      })
+      .from(billingRuleAssignments)
+      .where(
+        and(
+          inArray(billingRuleAssignments.billingRuleId, scopedIds),
+          onlyDwellingId
+            ? eq(billingRuleAssignments.dwellingId, onlyDwellingId)
+            : undefined
+        )
+      );
+    for (const row of rows) {
+      const set = assignedByDwelling.get(row.dwellingId) ?? new Set<string>();
+      set.add(row.billingRuleId);
+      assignedByDwelling.set(row.dwellingId, set);
+    }
+  }
+
+  const meterRows = await tx
+    .select()
+    .from(meters)
+    .where(
+      and(
+        eq(meters.organizationId, organizationId),
+        onlyDwellingId ? eq(meters.dwellingId, onlyDwellingId) : undefined
+      )
+    );
+  const metersByDwelling = new Map<string, (typeof meters.$inferSelect)[]>();
+  for (const m of meterRows) {
+    const list = metersByDwelling.get(m.dwellingId) ?? [];
+    list.push(m);
+    metersByDwelling.set(m.dwellingId, list);
+  }
+
+  const readMeterIds = new Set<string>();
+  if (meterRows.length > 0) {
+    const readings = await tx
+      .select({ meterId: meterReadings.meterId })
+      .from(meterReadings)
+      .where(
+        and(
+          eq(meterReadings.periodId, periodId),
+          onlyDwellingId
+            ? inArray(
+                meterReadings.meterId,
+                meterRows.map((m) => m.id)
+              )
+            : undefined
+        )
+      );
+    for (const r of readings) readMeterIds.add(r.meterId);
+  }
+
+  const suppliedByDwelling = new Map<string, Set<string>>();
+  if (
+    rules.some(
+      (r) =>
+        r.calculationType === "MANUAL_QUANTITY" ||
+        r.calculationType === "MANUAL_AMOUNT"
+    )
+  ) {
+    const rows = await tx
+      .select({
+        dwellingId: manualRuleInputs.dwellingId,
+        billingRuleId: manualRuleInputs.billingRuleId,
+      })
+      .from(manualRuleInputs)
+      .where(
+        and(
+          eq(manualRuleInputs.periodId, periodId),
+          onlyDwellingId
+            ? eq(manualRuleInputs.dwellingId, onlyDwellingId)
+            : undefined
+        )
+      );
+    for (const row of rows) {
+      const set = suppliedByDwelling.get(row.dwellingId) ?? new Set<string>();
+      set.add(row.billingRuleId);
+      suppliedByDwelling.set(row.dwellingId, set);
+    }
+  }
+
+  const result = new Map<string, InvoiceEligibility>();
+  for (const dwellingId of dwellingIds) {
+    result.set(
+      dwellingId,
+      evaluateEligibility(
+        {
+          rules,
+          assignedRuleIds: assignedByDwelling.get(dwellingId) ?? new Set(),
+          meters: metersByDwelling.get(dwellingId) ?? [],
+          readMeterIds,
+          suppliedRuleIds: suppliedByDwelling.get(dwellingId) ?? new Set(),
+        },
+        period
+      )
+    );
+  }
+  return result;
+}
+
+export async function resolveInvoiceEligibility(
+  tx: DbOrTx,
+  organizationId: string,
+  dwellingId: string,
+  periodId: string,
+  period: PeriodDateRange
+): Promise<InvoiceEligibility> {
+  const result = await resolveEligibilityMany(
+    tx,
+    organizationId,
+    periodId,
+    period,
+    [dwellingId],
+    dwellingId
+  );
+  return result.get(dwellingId)!;
+}
+
+// The same decision for several dwellings in one go (setup progress).
+export function resolveInvoiceEligibilityForDwellings(
+  tx: DbOrTx,
+  organizationId: string,
+  dwellingIds: string[],
+  periodId: string,
+  period: PeriodDateRange
+): Promise<Map<string, InvoiceEligibility>> {
+  return resolveEligibilityMany(
+    tx,
+    organizationId,
+    periodId,
+    period,
+    dwellingIds
+  );
 }
 
 export async function computeMissingData(

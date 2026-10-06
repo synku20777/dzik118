@@ -1,0 +1,551 @@
+---
+import {
+  entityLabel,
+  formatPeriod,
+  translate,
+  uiLocale,
+} from "../../../../../../lib/ui/i18n";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../../domain/organizations/organizations";
+import { getPeriod } from "../../../../../../domain/periods/periods";
+import { listReadingGridForPeriod } from "../../../../../../domain/periods/cases";
+import { withRequestDb } from "../../../../../../lib/db-request";
+import { subtractDecimal3 } from "../../../../../../lib/decimal3";
+import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
+
+const organizationId = Astro.params.orgId!;
+const periodId = Astro.params.periodId!;
+
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+
+let organization, period, gridRows;
+try {
+  ({ organization, period, gridRows } = await withRequestDb(async (db) => ({
+    organization: await getOrganization(db, organizationId),
+    period: await getPeriod(db, organizationId, periodId),
+    gridRows: await listReadingGridForPeriod(db, organizationId, periodId),
+  })));
+} catch {
+  return Astro.redirect(`/admin/o/${organizationId}/periods`);
+}
+
+// An archived organization is read-only (ADR 0009); the save would fail.
+const isLocked = period.status === "LOCKED" || !!organization.archivedAt;
+const filter =
+  Astro.url.searchParams.get("filter") === "all" ? "all" : "missing";
+const visibleRows =
+  filter === "all" ? gridRows : gridRows.filter((r) => r.missing);
+const periodName = formatPeriod(period.year, period.month, locale);
+
+function formatDecimal(val: string): string {
+  const [whole, frac = ""] = val.split(".");
+  return `${whole}.${frac.padEnd(3, "0").slice(0, 3)}`;
+}
+
+function getInitialConsumption(
+  current: string | null,
+  previous: string | null,
+  storedConsumption: string | null
+): { value: string; isUnknown: boolean; isWholeValue: boolean } {
+  if (!current || current.trim() === "") {
+    return { value: "—", isUnknown: true, isWholeValue: false };
+  }
+  if (previous === null || previous.trim() === "") {
+    return {
+      value: formatDecimal(current.trim()),
+      isUnknown: false,
+      isWholeValue: true,
+    };
+  }
+  if (storedConsumption) {
+    return { value: storedConsumption, isUnknown: false, isWholeValue: false };
+  }
+  try {
+    return {
+      value: subtractDecimal3(current.trim(), previous.trim()),
+      isUnknown: false,
+      isWholeValue: false,
+    };
+  } catch {
+    return { value: "—", isUnknown: true, isWholeValue: false };
+  }
+}
+---
+
+<AdminLayout
+  title={`${t("Meter readings")} — ${periodName} — ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+  archived={!!organization.archivedAt}
+>
+  <div
+    class="reading-grid-wrapper space-y-6"
+    data-organization-id={organizationId}
+    data-period-id={periodId}
+    data-label-saving={t("Saving…")}
+    data-label-readings-saved={t("readings saved")}
+    data-label-no-changes={t("No changed readings to save.")}
+    data-label-generic-error={t("An error occurred while saving readings.")}
+  >
+    <a
+      href={`/admin/o/${organizationId}/periods/${periodId}`}
+      class="back-link"
+    >
+      <span aria-hidden="true">←</span>
+      {t("Back to the period")}
+    </a>
+
+    <header class="space-y-1">
+      <h1 class="font-display text-h2 text-foreground">
+        {t("Meter readings")} — {periodName}
+      </h1>
+    </header>
+
+    {
+      isLocked && (
+        <p class="notice" role="status">
+          {t("This period is locked. Readings cannot be changed.")}
+        </p>
+      )
+    }
+
+    <nav class="tabs" aria-label={t("Filter readings")}>
+      <a
+        href={`/admin/o/${organizationId}/periods/${periodId}/readings?filter=missing`}
+        aria-current={filter === "missing" ? "page" : undefined}
+      >
+        {t("Missing only")}
+      </a>
+      <a
+        href={`/admin/o/${organizationId}/periods/${periodId}/readings?filter=all`}
+        aria-current={filter === "all" ? "page" : undefined}
+      >
+        {t("All meters")}
+      </a>
+    </nav>
+
+    {
+      visibleRows.length === 0 ? (
+        <div class="rounded-panel border border-border bg-surface p-6 text-center text-muted text-body-sm">
+          <p>
+            {filter === "missing"
+              ? t("No missing readings.")
+              : t("No meters found.")}
+          </p>
+        </div>
+      ) : (
+        <div class="table-wrap stack-table">
+          <table class="w-full text-left text-body-sm">
+            <caption class="sr-only">{t("Meter readings")}</caption>
+            <thead class="border-b border-border bg-surface-hover text-muted">
+              <tr>
+                <th scope="col" class="px-4 py-2">
+                  {t("Dwelling")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Meter")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Previous reading")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Current reading")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Consumption")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Source")}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {visibleRows.map((row) => {
+                const initialConsumption = getInitialConsumption(
+                  row.currentValue,
+                  row.previousValue,
+                  row.consumption
+                );
+                return (
+                  <tr>
+                    <td
+                      class="px-4 py-2 font-medium"
+                      data-label={t("Dwelling")}
+                    >
+                      <a
+                        href={`/admin/o/${organizationId}/dwellings/${row.dwellingId}`}
+                        class="text-foreground hover:underline"
+                      >
+                        {row.dwellingNumber}
+                      </a>
+                    </td>
+                    <td class="px-4 py-2" data-label={t("Meter")}>
+                      <div class="font-medium text-foreground">
+                        {row.label || entityLabel(row.type, locale)}
+                      </div>
+                      <div class="text-muted text-body-sm">
+                        {row.serialNumber ? `${row.serialNumber} · ` : ""}
+                        {row.unit}
+                      </div>
+                    </td>
+                    <td
+                      class="px-4 py-2 tabular-nums text-muted"
+                      data-label={t("Previous reading")}
+                    >
+                      {row.previousValue ?? "—"}
+                    </td>
+                    <td class="px-4 py-2" data-label={t("Current reading")}>
+                      <div class="flex flex-col items-end sm:items-start gap-1 w-full max-w-[14rem]">
+                        <label for={`reading-${row.meterId}`} class="sr-only">
+                          {t("Current reading for")} {row.dwellingNumber}{" "}
+                          {row.label || entityLabel(row.type, locale)}
+                        </label>
+                        <div class="flex items-center gap-2">
+                          <input
+                            id={`reading-${row.meterId}`}
+                            type="text"
+                            inputmode="decimal"
+                            data-meter-id={row.meterId}
+                            data-previous={row.previousValue ?? ""}
+                            data-initial={row.currentValue ?? ""}
+                            value={row.currentValue ?? ""}
+                            disabled={isLocked}
+                            aria-describedby={`err-${row.meterId}`}
+                            class="rounded-control border border-border px-3 py-1.5 text-body-sm tabular-nums w-32 focus:border-primary focus:outline-none"
+                          />
+                          <span
+                            class="reading-saved-indicator hidden text-success font-semibold"
+                            aria-hidden="true"
+                          >
+                            ✓
+                          </span>
+                        </div>
+                        <p
+                          id={`err-${row.meterId}`}
+                          class="text-destructive text-body-sm text-right sm:text-left"
+                          role="alert"
+                        />
+                      </div>
+                    </td>
+                    <td
+                      class="px-4 py-2 tabular-nums"
+                      data-label={t("Consumption")}
+                    >
+                      <div class="text-right sm:text-left">
+                        <span class="consumption-value font-medium text-foreground">
+                          {initialConsumption.value}
+                        </span>
+                        <span
+                          class:list={[
+                            "consumption-hint block text-xs text-muted mt-0.5",
+                            { hidden: !initialConsumption.isWholeValue },
+                          ]}
+                        >
+                          {t(
+                            "No previous reading: the whole value counts as consumption."
+                          )}
+                        </span>
+                      </div>
+                    </td>
+                    <td class="px-4 py-2 text-muted" data-label={t("Source")}>
+                      {row.source ? entityLabel(row.source, locale) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+
+    <div class="flex flex-wrap items-center gap-4">
+      <button
+        type="button"
+        id="save-readings-btn"
+        class="btn-primary"
+        disabled={isLocked || visibleRows.length === 0}
+      >
+        {t("Save changed readings")}
+      </button>
+      <p
+        id="save-summary"
+        class="text-body-sm text-foreground font-medium"
+        aria-live="polite"
+      >
+      </p>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  import { actions, isInputError } from "astro:actions";
+  import { onPageLoad } from "../../../../../../lib/ui/page-lifecycle";
+
+  function parseThousandths(val: string): bigint | null {
+    const normalized = val.trim().replace(",", ".");
+    if (!normalized) return null;
+    const isNegative = normalized.startsWith("-");
+    const unsigned = isNegative ? normalized.slice(1) : normalized;
+    const parts = unsigned.split(".");
+    // Same limit as the server: at most 3 decimals.
+    if (parts.length > 2 || (parts[1] ?? "").length > 3) return null;
+    const whole = parts[0] || "0";
+    const fraction = (parts[1] || "").padEnd(3, "0").slice(0, 3);
+    if (!/^\d+$/.test(whole) || !/^\d+$/.test(fraction)) return null;
+    const scaled = BigInt(whole) * 1000n + BigInt(fraction);
+    return isNegative ? -scaled : scaled;
+  }
+
+  function formatThousandths(scaled: bigint): string {
+    const isNegative = scaled < 0n;
+    const abs = isNegative ? -scaled : scaled;
+    const whole = abs / 1000n;
+    const fraction = (abs % 1000n).toString().padStart(3, "0");
+    return `${isNegative ? "-" : ""}${whole}.${fraction}`;
+  }
+
+  function updateConsumption(input: HTMLInputElement): void {
+    const row = input.closest("tr");
+    if (!row) return;
+    const valEl = row.querySelector<HTMLElement>(".consumption-value");
+    const hintEl = row.querySelector<HTMLElement>(".consumption-hint");
+    if (!valEl || !hintEl) return;
+
+    const currentRaw = input.value.trim().replace(",", ".");
+    const prevRaw = input.dataset.previous?.trim().replace(",", ".");
+
+    if (!currentRaw) {
+      valEl.textContent = "—";
+      hintEl.classList.add("hidden");
+      return;
+    }
+
+    const currScaled = parseThousandths(currentRaw);
+    if (currScaled === null) {
+      valEl.textContent = "—";
+      hintEl.classList.add("hidden");
+      return;
+    }
+
+    if (!prevRaw) {
+      valEl.textContent = formatThousandths(currScaled);
+      hintEl.classList.remove("hidden");
+      return;
+    }
+
+    const prevScaled = parseThousandths(prevRaw);
+    hintEl.classList.add("hidden");
+    if (prevScaled === null) {
+      valEl.textContent = "—";
+      return;
+    }
+
+    valEl.textContent = formatThousandths(currScaled - prevScaled);
+  }
+
+  onPageLoad(() => {
+    const wrapper = document.querySelector<HTMLElement>(
+      ".reading-grid-wrapper"
+    );
+    if (!wrapper) return;
+
+    const saveButton =
+      wrapper.querySelector<HTMLButtonElement>("#save-readings-btn");
+    const summaryEl = wrapper.querySelector<HTMLElement>("#save-summary");
+    const inputs = wrapper.querySelectorAll<HTMLInputElement>(
+      "input[data-meter-id]"
+    );
+
+    const organizationId = wrapper.dataset.organizationId;
+    const periodId = wrapper.dataset.periodId;
+    const labelSaving = wrapper.dataset.labelSaving || "Saving…";
+    const labelReadingsSaved =
+      wrapper.dataset.labelReadingsSaved || "readings saved";
+    const labelNoChanges =
+      wrapper.dataset.labelNoChanges || "No changed readings to save.";
+    const labelGenericError =
+      wrapper.dataset.labelGenericError ||
+      "An error occurred while saving readings.";
+
+    inputs.forEach((input) => {
+      input.addEventListener("input", () => {
+        updateConsumption(input);
+        const meterId = input.dataset.meterId;
+        if (meterId) {
+          const errEl = document.getElementById(`err-${meterId}`);
+          if (errEl) errEl.textContent = "";
+        }
+        input.removeAttribute("aria-invalid");
+
+        const row = input.closest("tr");
+        const indicator = row?.querySelector<HTMLElement>(
+          ".reading-saved-indicator"
+        );
+        if (indicator) {
+          if (input.value.trim() !== (input.dataset.initial ?? "").trim()) {
+            indicator.classList.add("hidden");
+          } else if (input.dataset.initial) {
+            indicator.classList.remove("hidden");
+          }
+        }
+      });
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          saveButton?.click();
+        }
+      });
+    });
+
+    if (!saveButton || !organizationId || !periodId) return;
+
+    saveButton.addEventListener("click", async () => {
+      const rowsToSubmit: {
+        meterId: string;
+        currentValue: string;
+        input: HTMLInputElement;
+      }[] = [];
+
+      inputs.forEach((input) => {
+        const meterId = input.dataset.meterId;
+        if (!meterId) return;
+        const initial = (input.dataset.initial ?? "").trim();
+        const current = input.value.trim();
+        if (current !== "" && current !== initial) {
+          rowsToSubmit.push({ meterId, currentValue: current, input });
+        }
+      });
+
+      if (rowsToSubmit.length === 0) {
+        if (summaryEl) summaryEl.textContent = labelNoChanges;
+        return;
+      }
+
+      const originalText = saveButton.textContent;
+      saveButton.disabled = true;
+      saveButton.textContent = labelSaving;
+
+      try {
+        // The action takes up to 100 rows; send larger saves in chunks so
+        // each request stays short. Results of every finished chunk count.
+        const data: { meterId: string; ok: boolean; error?: string }[] = [];
+        for (let i = 0; i < rowsToSubmit.length; i += 100) {
+          const chunk = rowsToSubmit.slice(i, i + 100);
+          // A network failure in one chunk must not hide the rows that
+          // earlier chunks already saved.
+          let chunkData:
+            { meterId: string; ok: boolean; error?: string }[] | undefined;
+          let error: Awaited<
+            ReturnType<typeof actions.readings.adminSubmitBatch>
+          >["error"];
+          try {
+            ({ data: chunkData, error } =
+              await actions.readings.adminSubmitBatch({
+                organizationId,
+                periodId,
+                rows: chunk.map((r) => ({
+                  meterId: r.meterId,
+                  currentValue: r.currentValue,
+                })),
+              }));
+          } catch {
+            chunkData = undefined;
+            error = undefined;
+          }
+          if (error || !chunkData) {
+            const message =
+              error && isInputError(error)
+                ? Object.values(error.fields).flat().join(" ") || error.message
+                : error?.message;
+            for (const r of chunk) {
+              data.push({
+                meterId: r.meterId,
+                ok: false,
+                error: message || labelGenericError,
+              });
+            }
+            continue;
+          }
+          data.push(...chunkData);
+        }
+
+        let saved = 0;
+        let firstFailedInput: HTMLInputElement | null = null;
+        const total = data.length;
+
+        for (const item of data) {
+          const input = wrapper.querySelector<HTMLInputElement>(
+            `input[data-meter-id="${item.meterId}"]`
+          );
+          const errEl = document.getElementById(`err-${item.meterId}`);
+          const row = input?.closest("tr");
+          const indicator = row?.querySelector<HTMLElement>(
+            ".reading-saved-indicator"
+          );
+
+          if (item.ok) {
+            saved++;
+            if (errEl) errEl.textContent = "";
+            if (input) {
+              input.removeAttribute("aria-invalid");
+              input.dataset.initial = input.value.trim();
+            }
+            if (indicator) indicator.classList.remove("hidden");
+          } else {
+            const errorText = item.error || labelGenericError;
+            if (errEl) errEl.textContent = errorText;
+            if (input) {
+              input.setAttribute("aria-invalid", "true");
+              if (!firstFailedInput) firstFailedInput = input;
+            }
+            if (indicator) indicator.classList.add("hidden");
+          }
+        }
+
+        if (summaryEl) {
+          summaryEl.textContent = `${saved} / ${total} ${labelReadingsSaved}`;
+        }
+
+        if (firstFailedInput) {
+          firstFailedInput.focus();
+        }
+      } catch (err) {
+        if (summaryEl) {
+          summaryEl.textContent =
+            err instanceof Error ? err.message : labelGenericError;
+        }
+      } finally {
+        saveButton.disabled = false;
+        saveButton.textContent = originalText;
+      }
+    });
+  });
+</script>
+
+<style>
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: fit-content;
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .back-link:hover {
+    text-decoration: underline;
+  }
+</style>

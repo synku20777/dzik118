@@ -59,6 +59,12 @@ Query caching MUST be disabled on this Hyperdrive configuration. This applicatio
   wrangler hyperdrive update <id> --caching-disabled
   ```
 
+### Worker placement
+
+`wrangler.jsonc` pins the Worker to the database region (`"placement": { "region": "aws:eu-central-1" }`). Hyperdrive keeps its connection pool next to the database, so each query from a Worker in another country (for example Riga) crosses to Frankfurt: about 30 ms each, against about 2 ms from a Worker next to the database. A page makes 10 to 15 sequential queries. Static files are still served from the nearest Cloudflare location, and the daily cron does not use placement.
+
+If the Supabase project moves to another region, change the placement region and the Hyperdrive origin in the same release. Smart Placement (`"mode": "smart"`) is not used: it needs steady traffic from several locations and may never move a Worker with few users in one country. To undo, remove the `placement` block and deploy.
+
 ### Rate limiting
 
 `wrangler.jsonc` already declares three Rate Limiting bindings (`AUTH_RATE_LIMITER`, `AUTH_IP_RATE_LIMITER`, `INVOICE_TOKEN_RATE_LIMITER`) with arbitrary `namespace_id` integers (`1001`, `1003`, `1002`). These are declarative -- Cloudflare provisions them automatically on deploy, no manual dashboard step needed. If this Cloudflare account already runs other Workers with their own rate limiter bindings, double-check these three `namespace_id` values don't collide with one of them.
@@ -275,6 +281,19 @@ curl -X POST "<SUPABASE_URL>/auth/v1/admin/users" \
 
 ## 8. Deploy
 
+On the owner's Windows machine, use the restricted Cloudflare token saved by
+`scripts/cloudflare-deploy.ps1`, after completing the checks and backups above:
+
+```powershell
+pwsh -NoProfile -File scripts/cloudflare-deploy.ps1 -Action Deploy -Project App
+```
+
+This retains the Worker-secret preflight and existing build/migration gates.
+The previous broad Wrangler OAuth login has been retired. Initial token setup,
+rotation, scope, and expiry are in [Cloudflare protection](CLOUDFLARE_SECURITY.md).
+For another deployment environment, supply its scoped `CLOUDFLARE_API_TOKEN`
+and `CLOUDFLARE_ACCOUNT_ID` privately before using the usual command below.
+
 Deploy the application to Cloudflare:
 
 ```bash
@@ -295,6 +314,7 @@ The GitHub deploy workflow also runs `npm run deploy:check-secrets` before `npm 
 - [ ] A response carries an `X-Request-Id` header. After an admin action, the audit log shows the same ID.
 - [ ] The Cloudflare dashboard's Cron Triggers page shows the "15 2 * * *" trigger for this Worker.
 - [ ] A Storage upload/download round-trip works (e.g. by sending one real invoice and confirming its PDF downloads).
+- [ ] The Cloudflare dashboard shows the Worker's placement as `aws:eu-central-1`. A page request with 10 dwellings should take well under 1 s of server time.
 - [ ] Verify via `wrangler hyperdrive get <id>` that the production Hyperdrive config shows caching disabled. Perform this explicit manual check every time a Hyperdrive config is created or modified (not just on first deploy).
 
 ## 10. Ongoing maintenance

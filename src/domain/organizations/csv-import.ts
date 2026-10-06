@@ -11,6 +11,7 @@ import type { Db } from "../../db/client";
 import { dwellingTypeEnum, dwellings, meters } from "../../db/schema/dwellings";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { syncCasesForDwelling } from "../periods/periods";
+import { claimMutationReceipt } from "../mutations/receipts";
 
 const DWELLING_TYPES = new Set<string>(dwellingTypeEnum.enumValues);
 
@@ -60,6 +61,20 @@ function cell(row: Record<string, unknown>, key: string): string {
   const value = row[key];
   return typeof value === "string" ? value.trim() : "";
 }
+
+// A UUID-shaped digest of the file, for the receipt's uuid scope column.
+async function contentScopeId(text: string): Promise<string> {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))
+  );
+  const hex = [...digest.slice(0, 16)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+// The exact header row the import requires, for the downloadable template.
+export const DWELLINGS_CSV_TEMPLATE = REQUIRED_HEADERS.join(",") + "\n";
 
 // Parses and validates in one pass; returns rows classified CREATE/UPDATE/
 // ERROR without writing anything (spec Section 26 UX: "preview" before
@@ -207,18 +222,24 @@ export interface ImportDwellingsResult {
   updated: number;
   errored: number;
   rows: DwellingImportRow[];
+  replayed: boolean;
 }
 
 // Re-validates from raw CSV text rather than trusting a client-submitted
 // preview result, so confirm can never persist something that wasn't
 // actually re-checked against the current DB state (spec DWL-004: "error
 // report; duplicate handling deterministic").
+//
+// clientMutationId (optional): makes a confirm idempotent. A second confirm
+// with the same id writes nothing and returns `replayed: true` (the setup's
+// range entry sends one, so a double click or reload cannot import twice).
 export async function importDwellingsCsv(
   db: Db,
   organizationId: string,
   csvText: string,
   mode: DwellingImportMode,
-  actorUserId: string
+  actorUserId: string,
+  clientMutationId?: string
 ): Promise<ImportDwellingsResult> {
   const { rows, headerError } = await validateDwellingsCsv(
     db,
@@ -232,8 +253,25 @@ export async function importDwellingsCsv(
 
   let created = 0;
   let updated = 0;
+  let replayed = false;
 
   await db.transaction(async (tx) => {
+    if (clientMutationId) {
+      // The receipt is bound to this exact file: the same key with other
+      // content is refused ("This request key was already used"), not
+      // silently treated as a repeat.
+      const claim = await claimMutationReceipt(tx, {
+        organizationId,
+        clientMutationId,
+        operation: "dwelling.import",
+        entityType: "dwelling",
+        scopeId: await contentScopeId(csvText),
+      });
+      if (claim.replayed) {
+        replayed = true;
+        return;
+      }
+    }
     for (const row of rows) {
       if (row.status === "ERROR") continue;
 
@@ -318,11 +356,14 @@ export async function importDwellingsCsv(
     }
   });
 
+  if (replayed)
+    return { created: 0, updated: 0, errored: 0, rows: [], replayed };
   return {
     created,
     updated,
     errored: rows.filter((r) => r.status === "ERROR").length,
     rows,
+    replayed,
   };
 }
 

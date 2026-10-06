@@ -148,6 +148,20 @@
       "when": 1790957238567,
       "tag": "0020_dwelling_scoped_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791216169549,
+      "tag": "0021_opening_readings_period",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791217237590,
+      "tag": "0022_one_opening_period",
+      "breakpoints": true
     }
   ]
 }

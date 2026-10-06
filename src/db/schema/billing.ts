@@ -7,6 +7,7 @@ import {
   date,
   foreignKey,
   index,
+  uniqueIndex,
   integer,
   jsonb,
   numeric,
@@ -81,6 +82,10 @@ export const billingPeriods = pgTable(
     invoiceDueDate: date("invoice_due_date").notNull(),
     status: periodStatusEnum("status").notNull().default("OPEN"),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
+    // The month before an organization's first billing month, made by the
+    // setup to hold the meters' starting readings (opening-readings.ts).
+    // Always LOCKED, no billing cases, never billed or reopened.
+    openingReadings: boolean("opening_readings").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -92,6 +97,10 @@ export const billingPeriods = pgTable(
       table.month
     ),
     index("billing_periods_organization_id_idx").on(table.organizationId),
+    // At most one starting-readings period per organization.
+    uniqueIndex("billing_periods_one_opening_per_org")
+      .on(table.organizationId)
+      .where(sql`${table.openingReadings}`),
   ]
 );
 

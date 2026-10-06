@@ -1,0 +1,1 @@
+ALTER TABLE "billing_periods" ADD COLUMN "opening_readings" boolean DEFAULT false NOT NULL;

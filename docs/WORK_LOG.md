@@ -515,3 +515,134 @@ Open items:
   References: https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable
   and https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection.
   No real invoice email was sent as part of the domain check.
+
+## Cloudflare protection (2026-10-03, applied)
+
+- Owner enrolled Cloudflare MFA privately; required 2FA for all account members.
+  Enabled Always Use HTTPS and minimum TLS 1.2, retaining TLS 1.3.
+  Security key active; authenticator backup still awaits owner enrollment.
+- Enabled DNSSEC in Cloudflare and published its DS at Namecheap. Active status
+  and authenticated DS/MX/SPF/app resolution verified; DNS records unchanged.
+- Verified Free Managed Ruleset enforcement in the dashboard and actual events.
+  Added a Free auth burst rule (10 requests/IP/data center/10 seconds, block 10
+  seconds) and external scheduler block. Narrowed the proposed internal-prefix
+  block because `/api/v1/internal/ses-events` must receive Amazon SNS callbacks.
+- Owner created a 90-day token limited to the two Workers and this zone's routes.
+  Added Windows masked-entry/DPAPI deployment helper; encrypted credential lives
+  outside Git. Token API checks and both scoped Wrangler history reads passed,
+  then retired the local broad Wrangler OAuth login. CI secrets were not changed.
+- Persisted website `workers_dev: false`; website build/generated config passed.
+  No app/website deployment, database change, real invoice, or test email sent.
+- HTTP/path/query, TLS 1.2, app health, public auth/marketing routes, invalid links,
+  edge 403/429/recovery, Cron wrapper stubs, and helper failure cleanup passed.
+  Successful credentialed login/email/PDF flows remain owner smoke-test checks.
+- Daily read-only rollout reviews scheduled for seven days through October 10;
+  initial Worker analytics showed zero reported execution errors. Exact state,
+  rule/token IDs, limits, private setup, and rollback are in
+  `docs/deployment/CLOUDFLARE_SECURITY.md` with before/after JSON snapshots.
+  Graphify AST output refreshed (2010 nodes); no semantic API extraction needed.
+
+## Guided setup and starting readings (2026-10-05)
+
+See `docs/decisions/0012-guided-setup-and-starting-readings.md` and the research
+in `docs/research/EASYBILLY_REVIEW_2026-10-05.md`.
+
+- New route `/admin/o/{orgId}/setup` with six steps: organization details,
+  dwellings, first billing period, charges, meters and starting readings, and
+  review. A new organization opens it. The dashboard shows "Finish setting up"
+  until setup is complete or an invoice was sent.
+- Progress comes from saved data (`src/domain/onboarding/progress.ts`). The
+  review shows three lines: setup complete, ready to generate invoices, ready to
+  prepare and send. The setup never generates, prepares, or sends.
+- Starting readings: the owner selected a real past period. The month before the
+  first billing month is a locked period with `opening_readings = true` and no
+  billing cases (migrations `0021_opening_readings_period.sql` and
+  `0022_one_opening_period.sql`). Readings are typed in the setup or imported
+  from a CSV file of last month's readings, which also creates missing meters.
+  Month one now bills the difference (1240.0 - 1234.5 = 5.5 m³), not the whole
+  meter value.
+- The opening period cannot be reopened, get dwellings, or be billed. No billing
+  period can be made at or before it. It is not in KPIs, consumption history,
+  or previous/next navigation, and its page opens the setup.
+- Range entry ("1-12, 14, 20A") with an editable preview, through the existing
+  dwelling import. A request key bound to the file makes a second confirm do
+  nothing. CSV templates download from the setup.
+- Charge presets (maintenance per m², fixed per dwelling, per resident, cold and
+  hot water per m³) become normal billing rules. A second run reports existing
+  ones.
+- New period-wide reading grid `/periods/{periodId}/readings` with live
+  consumption. It saves changed rows in groups of 100; each row on its own.
+- Orchestration: Agy and Codex gave second opinions on the plan (read-only).
+  Codex reviewed the plan, the domain layer, and the UI; 9 + 10 + 9 findings,
+  the real ones fixed (one opening period per organization, locked CSV import,
+  rerunnable presets, honest readiness, post/redirect/get after the CSV import,
+  chunked saves). Agy wrote the first pass of every page and all LV/RU text; I
+  reviewed and fixed each page.
+- Checks: typecheck, lint, `astro check`, 286 unit tests. Integration: the usual
+  41 local failures (SMTP, PDF, Storage), new tests pass. A browser walk-through
+  of the whole setup passed in EN with LV/RU and phone-width checks, no page
+  errors, no horizontal overflow.
+- Open: opening balances, starting values for meters added later, progress
+  speed for large organizations (see KNOWN_GAPS). Form values are lost when a
+  setup form returns a server error. `src/domain/billing/invoice-tokens.ts`
+  fails `prettier --check` in the committed code (not from this work).
+
+## Guided setup UI polish (2026-10-05)
+
+- Reused PageHeader and the app's existing theme, panel, form, and button tokens
+  across all six setup screens. Connected step navigation shows saved progress;
+  it becomes a compact grid on smaller screens. The review opens the next
+  unfinished step directly. Unsaved navigation says "Skip for now" in EN/LV/RU.
+- Charge presets use a two-column layout and native CSS selection feedback.
+  Added restrained active-step, hover, and button-press motion, respecting
+  reduced motion. Mobile actions wrap with a full-width primary button.
+- Verified all six screens at 390px in EN/LV/RU, dark-mode charge selection,
+  the empty period form, next-step destination, and a three-row dwelling preview.
+  No horizontal overflow or browser errors. Used only local demo/test data;
+  created one empty local organization, no production mutations or deployment.
+- Build, typecheck, lint, Astro diagnostics, and touched-file formatting checked;
+  refreshed the AST knowledge graph. No animation dependency added.
+
+## Setup pages were slow in production (2026-10-06)
+
+A browser log from production (an organization with 10 dwellings) showed 1.0 to
+1.2 s of server time for every setup page and 2.3 s for the dashboard. Each
+click also cost two page loads: a hover prefetch (about 1.1 s), then the real
+request, which waited behind the prefetch and loaded the page again.
+
+Cause, with Codex's check of the Supabase logs (Cloudflare and Hyperdrive data
+could not be read):
+
+- Setup progress asked the database two questions per dwelling. 31 statements
+  took 1.05 s and 68 took 2.31 s in the log: about 34 ms per statement, almost
+  no fixed cost. The dashboard calculated progress twice.
+- Supabase Auth is not the problem: 32 calls averaged 52 ms.
+- `ClientRouter` prefetched every hovered link. Admin pages are personalized and
+  uncacheable, so the prefetch could not be reused.
+
+Fixes:
+
+- `resolveInvoiceEligibility` is now a pure decision on preloaded data
+  (`src/domain/periods/case-readiness.ts`). One loader serves a single dwelling
+  (generation, readiness) or the whole organization (setup progress). Progress
+  now uses a fixed number of queries; a test guards it.
+- The dashboard calculates progress once (`getSetupStatus`). Pages pass the
+  organization they already read, and the dwellings step uses one connection.
+- `prefetch: false` in `astro.config.ts`. A browser check showed no prefetch and
+  one page request per click.
+
+Placement (added the same day): nginx cannot help because the app runs on a
+Cloudflare Worker. The remaining cost is about 34 ms per query, because the
+Worker runs in Riga and the database is in Frankfurt (Hyperdrive keeps its pool
+next to the database). `wrangler.jsonc` now has
+`"placement": { "region": "aws:eu-central-1" }`, which runs the Worker next to
+the database. I checked the production Hyperdrive with
+`wrangler hyperdrive get`: caching is disabled (as the runbook requires) and
+the origin is the direct Supabase host. The setting takes effect on the next
+deploy. Not deployed. To undo, remove the block.
+
+Not changed: each page still opens a second connection for the unread-message
+badge in `AdminLayout`, and the sign-in check calls Supabase Auth on every
+request (about 52 ms). Supabase advises indexes on 32 foreign keys (for example
+`billing_cases.dwelling_id`); review them. Production time was not measured after
+the fix, so measure on the next deploy.

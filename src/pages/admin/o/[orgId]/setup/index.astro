@@ -1,0 +1,357 @@
+---
+import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+
+import Icon from "../../../../../components/ui/Icon.astro";
+import SetupSteps from "../../../../../components/ui/SetupSteps.astro";
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { getSetupProgress } from "../../../../../domain/onboarding/progress";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const { organization, progress } = await withRequestDb(async (db) => {
+  const org = await getOrganization(db, organizationId);
+  const prog = await getSetupProgress(db, organizationId, org);
+  return { organization: org, progress: prog };
+});
+
+const firstPeriodHref = progress.firstPeriodId
+  ? `/admin/o/${organizationId}/periods/${progress.firstPeriodId}`
+  : `/admin/o/${organizationId}/setup/period`;
+
+const stepList = [
+  {
+    key: "organization" as const,
+    title: t("Organization details"),
+    path: `/admin/o/${organizationId}/setup/organization`,
+    done: progress.steps.organization,
+  },
+  {
+    key: "dwellings" as const,
+    title: t("Dwellings"),
+    path: `/admin/o/${organizationId}/setup/dwellings`,
+    done: progress.steps.dwellings,
+  },
+  {
+    key: "period" as const,
+    title: t("First billing period"),
+    path: `/admin/o/${organizationId}/setup/period`,
+    done: progress.steps.period,
+  },
+  {
+    key: "charges" as const,
+    title: t("Charges"),
+    path: `/admin/o/${organizationId}/setup/charges`,
+    done: progress.steps.charges,
+  },
+  {
+    key: "meters" as const,
+    title: t("Meters and starting readings"),
+    path: `/admin/o/${organizationId}/setup/meters`,
+    done: progress.steps.meters,
+  },
+];
+const nextStep = stepList.find((step) => !step.done);
+
+const generationBlockers: { count: number; label: string }[] = [];
+if (progress.blockers.NO_READING) {
+  generationBlockers.push({
+    count: progress.blockers.NO_READING,
+    label: t("Meters without a reading this month"),
+  });
+}
+if (progress.blockers.NO_MANUAL_INPUT) {
+  generationBlockers.push({
+    count: progress.blockers.NO_MANUAL_INPUT,
+    label: t("Charges that need a manual value"),
+  });
+}
+if (progress.blockers.NO_ACTIVE_METER_FOR_RULE) {
+  generationBlockers.push({
+    count: progress.blockers.NO_ACTIVE_METER_FOR_RULE,
+    label: t("Charges with no meter in the dwelling"),
+  });
+}
+if (progress.blockers.NO_APPLICABLE_RULES) {
+  generationBlockers.push({
+    count: progress.blockers.NO_APPLICABLE_RULES,
+    label: t("Dwellings with no charge"),
+  });
+}
+if (progress.dwellingsWithoutCase > 0) {
+  generationBlockers.push({
+    count: progress.dwellingsWithoutCase,
+    label: t("Dwellings not in the first period"),
+  });
+}
+
+// Nothing can be prepared before invoices can be generated.
+const readyToPrepareAndSend =
+  progress.readyToGenerate &&
+  progress.issuerMissing.length === 0 &&
+  progress.recipientsIncomplete === 0 &&
+  progress.billingEmailsMissing === 0;
+---
+
+<AdminLayout
+  title={`${t("Set up your organization")} - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+  archived={!!organization.archivedAt}
+>
+  <div class="setup-page space-y-6">
+    <PageHeader
+      title={t("Set up your organization")}
+      description={t(
+        "Follow the steps to get from an empty organization to your first invoices. You can leave and come back at any time."
+      )}
+    />
+
+    <SetupSteps
+      organizationId={organizationId}
+      current="review"
+      steps={progress.steps}
+    />
+
+    <div class="grid gap-6 lg:grid-cols-2 items-start">
+      <!-- Steps panel -->
+      <div class="panel p-6 space-y-4">
+        <h2 class="text-h3 font-semibold text-foreground">{t("Steps")}</h2>
+
+        {
+          progress.firstPeriodLocked && progress.firstPeriodId && (
+            <p class="notice notice-warning">
+              {t(
+                "The first billing period is locked. Reopen it on the period page before you change charges or meters."
+              )}{" "}
+              <a href={firstPeriodHref} class="underline font-medium">
+                {t("Open the first billing period")}
+              </a>
+            </p>
+          )
+        }
+
+        <ol class="divide-y divide-border">
+          {
+            stepList.map((step, index) => (
+              <li class="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-4 flex-wrap">
+                <div class="flex items-center gap-3">
+                  <span
+                    class:list={["step-num", { "is-done": step.done }]}
+                    aria-hidden="true"
+                  >
+                    {step.done ? <Icon name="check" size="xs" /> : index + 1}
+                  </span>
+                  <span class="font-medium text-foreground">{step.title}</span>
+                </div>
+                <div class="flex items-center gap-4">
+                  {step.done ? (
+                    <span class="inline-flex items-center gap-1.5 text-success font-medium text-body-sm">
+                      <Icon name="check" size="xs" />
+                      {t("Done")}
+                    </span>
+                  ) : (
+                    <span class="text-muted text-body-sm">{t("To do")}</span>
+                  )}
+                  <a href={step.path} class="btn-secondary btn-sm">
+                    {t("Open")}
+                  </a>
+                </div>
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+
+      <!-- Readiness panel -->
+      <div class="panel p-6 space-y-4">
+        <h2 class="text-h3 font-semibold text-foreground">{t("Readiness")}</h2>
+
+        <div class="divide-y divide-border">
+          <!-- Line 1: Setup complete -->
+          <div class="py-4 first:pt-0 last:pb-0">
+            <div class="flex items-center justify-between gap-4">
+              <span class="font-medium text-foreground"
+                >{t("Setup complete")}</span
+              >
+              {
+                progress.complete ? (
+                  <span class="inline-flex items-center gap-1.5 text-success font-medium text-body-sm">
+                    <Icon name="check" size="xs" />
+                    <span class="sr-only">{t("Done")}</span>
+                  </span>
+                ) : (
+                  <span class="text-muted text-body-sm">{t("Not yet")}</span>
+                )
+              }
+            </div>
+          </div>
+
+          <!-- Line 2: Ready to generate invoices -->
+          <div class="py-4 first:pt-0 last:pb-0 space-y-2">
+            <div class="flex items-center justify-between gap-4">
+              <span class="font-medium text-foreground"
+                >{t("Ready to generate invoices")}</span
+              >
+              {
+                progress.readyToGenerate ? (
+                  <span class="inline-flex items-center gap-1.5 text-success font-medium text-body-sm">
+                    <Icon name="check" size="xs" />
+                    <span class="sr-only">{t("Done")}</span>
+                  </span>
+                ) : (
+                  <span class="text-muted text-body-sm">{t("Not yet")}</span>
+                )
+              }
+            </div>
+            {
+              !progress.readyToGenerate && generationBlockers.length > 0 && (
+                <ul class="space-y-1.5 pl-5 list-disc text-body-sm text-muted">
+                  {generationBlockers.map((blocker) => (
+                    <li>
+                      <a
+                        href={firstPeriodHref}
+                        class="text-primary hover:underline"
+                      >
+                        {blocker.count} {blocker.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )
+            }
+          </div>
+
+          <!-- Line 3: Ready to prepare and send -->
+          <div class="py-4 first:pt-0 last:pb-0 space-y-2">
+            <div class="flex items-center justify-between gap-4">
+              <span class="font-medium text-foreground"
+                >{t("Ready to prepare and send")}</span
+              >
+              {
+                readyToPrepareAndSend ? (
+                  <span class="inline-flex items-center gap-1.5 text-success font-medium text-body-sm">
+                    <Icon name="check" size="xs" />
+                    <span class="sr-only">{t("Done")}</span>
+                  </span>
+                ) : (
+                  <span class="text-muted text-body-sm">{t("Not yet")}</span>
+                )
+              }
+            </div>
+            {
+              !readyToPrepareAndSend && (
+                <ul class="space-y-1.5 pl-5 list-disc text-body-sm text-muted">
+                  {progress.issuerMissing.map((field) => (
+                    <li>
+                      <a
+                        href={`/admin/o/${organizationId}/setup/organization`}
+                        class="text-primary hover:underline"
+                      >
+                        {t(field)}
+                      </a>
+                    </li>
+                  ))}
+                  {progress.recipientsIncomplete > 0 && (
+                    <li>
+                      <a
+                        href={`/admin/o/${organizationId}/dwellings`}
+                        class="text-primary hover:underline"
+                      >
+                        {progress.recipientsIncomplete}{" "}
+                        {t("Dwellings without a recipient name or address")}
+                      </a>
+                    </li>
+                  )}
+                  {progress.billingEmailsMissing > 0 && (
+                    <li>
+                      <a
+                        href={`/admin/o/${organizationId}/dwellings`}
+                        class="text-primary hover:underline"
+                      >
+                        {progress.billingEmailsMissing}{" "}
+                        {t("Dwellings without a billing email")}
+                      </a>
+                    </li>
+                  )}
+                </ul>
+              )
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="space-y-3 pt-2">
+      <div class="setup-actions">
+        <a
+          href={`/admin/o/${organizationId}/setup/meters`}
+          class="btn-secondary"
+        >
+          {t("Back")}
+        </a>
+        <div>
+          {
+            nextStep && (
+              <a href={nextStep.path} class="btn-primary">
+                {t("Continue setup")}
+              </a>
+            )
+          }
+          {
+            progress.firstPeriodId && (
+              <a
+                href={firstPeriodHref}
+                class={nextStep ? "btn-secondary" : "btn-primary"}
+              >
+                {t("Open the first billing period")}
+              </a>
+            )
+          }
+        </div>
+      </div>
+      <p class="text-body-sm text-muted">
+        {
+          t(
+            "The setup never sends invoices. You generate, prepare, and send them on the period page."
+          )
+        }
+      </p>
+    </footer>
+  </div>
+</AdminLayout>
+
+<style>
+  .step-num {
+    display: inline-grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-badge-neutral-text);
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .step-num.is-done {
+    background: var(--color-badge-success-bg);
+    color: var(--color-badge-success-text);
+  }
+</style>

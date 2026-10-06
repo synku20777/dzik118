@@ -1,0 +1,289 @@
+---
+import Icon from "./Icon.astro";
+import { translate, uiLocale } from "../../lib/ui/i18n";
+
+export interface Props {
+  organizationId: string;
+  current:
+    "organization" | "dwellings" | "period" | "charges" | "meters" | "review";
+  steps: {
+    organization: boolean;
+    dwellings: boolean;
+    period: boolean;
+    charges: boolean;
+    meters: boolean;
+  };
+}
+
+const { organizationId, current, steps } = Astro.props;
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+
+const stepItems = [
+  {
+    key: "organization" as const,
+    path: `/admin/o/${organizationId}/setup/organization`,
+    title: t("Organization details"),
+  },
+  {
+    key: "dwellings" as const,
+    path: `/admin/o/${organizationId}/setup/dwellings`,
+    title: t("Dwellings"),
+  },
+  {
+    key: "period" as const,
+    path: `/admin/o/${organizationId}/setup/period`,
+    title: t("First billing period"),
+  },
+  {
+    key: "charges" as const,
+    path: `/admin/o/${organizationId}/setup/charges`,
+    title: t("Charges"),
+  },
+  {
+    key: "meters" as const,
+    path: `/admin/o/${organizationId}/setup/meters`,
+    title: t("Meters and starting readings"),
+  },
+  {
+    key: "review" as const,
+    path: `/admin/o/${organizationId}/setup`,
+    title: t("Review"),
+  },
+];
+const currentIndex = stepItems.findIndex((step) => step.key === current);
+const completedCount = Object.values(steps).filter(Boolean).length;
+---
+
+<nav class="setup-trail panel" aria-label={t("Setup steps")}>
+  <div class="setup-trail-heading text-body-sm">
+    <span class="font-medium text-foreground"
+      >{t("Step")} {currentIndex + 1} / {stepItems.length}</span
+    >
+    <span class="text-muted"
+      >{completedCount} / 5 {t("Done").toLocaleLowerCase(locale)}</span
+    >
+  </div>
+  <ol class="setup-steps">
+    {
+      stepItems.map((step, index) => {
+        const isCurrent = step.key === current;
+        const isDone = step.key !== "review" && steps[step.key];
+        const stepNum = index + 1;
+
+        return (
+          <li class="setup-step-item">
+            <a
+              href={step.path}
+              class:list={["setup-step-link", { "is-done": isDone }]}
+              aria-current={isCurrent ? "step" : undefined}
+            >
+              <span class="step-num" aria-hidden="true">
+                {isDone ? <Icon name="check" size="xs" /> : stepNum}
+              </span>
+              <span class="step-title">{step.title}</span>
+              {step.key !== "review" && (
+                <span class="sr-only">{isDone ? t("Done") : t("To do")}</span>
+              )}
+            </a>
+          </li>
+        );
+      })
+    }
+  </ol>
+</nav>
+
+<style>
+  .setup-trail {
+    padding: 1rem;
+  }
+  .setup-trail-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.875rem;
+  }
+  .setup-steps {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0.375rem;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .setup-step-item {
+    min-width: 0;
+    position: relative;
+  }
+  .setup-step-item:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    top: 1.75rem;
+    left: calc(50% + 1.25rem);
+    width: calc(100% - 2.125rem);
+    height: 1px;
+    background: var(--color-border);
+  }
+
+  .setup-step-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 0.375rem;
+    border-radius: var(--radius-control);
+    min-height: 6.5rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    text-align: center;
+    text-decoration: none;
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease;
+  }
+
+  .setup-step-link:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-foreground);
+  }
+
+  .setup-step-link[aria-current="step"] {
+    background: var(--color-nav-active-bg);
+    color: var(--color-primary);
+    font-weight: 650;
+  }
+
+  .step-num {
+    display: inline-grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-badge-neutral-text);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .setup-step-link.is-done .step-num {
+    background: var(--color-badge-success-bg);
+    color: var(--color-badge-success-text);
+  }
+
+  .setup-step-link[aria-current="step"] .step-num {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+  }
+
+  .step-title {
+    text-wrap: balance;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .step-num {
+      transition:
+        transform 160ms ease,
+        background-color 160ms ease;
+    }
+    .setup-step-link:hover .step-num {
+      transform: translateY(-2px);
+    }
+    .setup-step-link[aria-current="step"] .step-num {
+      animation: step-settle 220ms ease-out;
+    }
+    @keyframes step-settle {
+      from {
+        transform: scale(0.85);
+      }
+      to {
+        transform: scale(1);
+      }
+    }
+  }
+
+  @media (max-width: 55rem) {
+    .setup-steps {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .setup-step-item::after {
+      display: none;
+    }
+    .setup-step-link {
+      min-height: 0;
+      flex-direction: row;
+      text-align: left;
+      padding: 0.625rem;
+    }
+    .step-title {
+      text-wrap: wrap;
+    }
+  }
+  @media (max-width: 35rem) {
+    .setup-steps {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>
+
+<style is:global>
+  .setup-page {
+    max-width: 68rem;
+  }
+  .setup-page .page-description {
+    max-width: 65ch;
+  }
+  .setup-page .setup-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    border-top: 1px solid var(--color-border);
+    padding-top: 1.25rem;
+  }
+  .setup-page .setup-actions > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .setup-page .setup-preset {
+    min-width: 0;
+    border-inline-start: 3px solid var(--color-border);
+  }
+  .setup-page .setup-preset:has(input[type="checkbox"]:checked) {
+    border-color: var(--color-primary);
+    background: var(--color-nav-active-bg);
+  }
+  .setup-page .setup-preset input[type="checkbox"] {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+  @media (max-width: 40rem) {
+    .setup-page .panel,
+    .setup-page .rounded-panel.border {
+      padding: 1rem;
+    }
+    .setup-page .setup-actions > div {
+      display: contents;
+    }
+    .setup-page .setup-actions .btn-primary {
+      order: 1;
+      flex: 1 0 100%;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .setup-page .setup-preset {
+      transition:
+        border-color 160ms ease,
+        background-color 160ms ease;
+    }
+    .setup-page .setup-actions .btn-primary:active {
+      transform: translateY(1px);
+    }
+  }
+</style>

@@ -1,0 +1,282 @@
+{
+  "captured_at": "2026-10-03T18:34:15.523Z",
+  "account_id": "81a1d4cff6d57963d98d8e847bb6c0b3",
+  "zone_id": "2a3bd97bc827676d093647ecee871be6",
+  "owner_mfa": {
+    "security_key": "Active",
+    "authenticator_backup": "Pending owner enrollment at the last factor check",
+    "recovery_codes": "Private owner step; never read or recorded"
+  },
+  "resources": [
+    {
+      "name": "account",
+      "result": {
+        "id": "81a1d4cff6d57963d98d8e847bb6c0b3",
+        "settings": {
+          "enforce_twofactor": true,
+          "api_access_enabled": null,
+          "access_approval_expiry": null,
+          "abuse_contact_email": null,
+          "oauth_app_access_enabled": true
+        }
+      }
+    },
+    {
+      "name": "settings",
+      "result": [
+        {
+          "id": "always_use_https",
+          "value": "on",
+          "modified_on": "2026-10-03T18:09:54.398021Z",
+          "editable": true
+        },
+        {
+          "id": "min_tls_version",
+          "value": "1.2",
+          "modified_on": null,
+          "editable": true
+        },
+        {
+          "id": "tls_1_3",
+          "value": "on",
+          "modified_on": null,
+          "editable": true
+        }
+      ]
+    },
+    {
+      "name": "dnssec",
+      "result": {
+        "algorithm": "13",
+        "digest": "94DBE6F8297B0B9508DABB5598EB45CF77E58E292B203BD52B51FED01D837680",
+        "digest_algorithm": "SHA256",
+        "digest_type": "2",
+        "ds": "namkopa.com. 3600 IN DS 2371 13 2 94DBE6F8297B0B9508DABB5598EB45CF77E58E292B203BD52B51FED01D837680",
+        "flags": 257,
+        "key_tag": 2371,
+        "key_type": "ECDSAP256SHA256",
+        "modified_on": "2026-10-03T18:11:13.168685+00:00",
+        "public_key": "mdsswUyr3DPW132mOi8V9xESWE8jTo0dxCjjnopKl+GqJxpVXckHAeF+KkxLbxILfDLUT0rAK9iUzy1L53eKGQ==",
+        "status": "active"
+      }
+    },
+    {
+      "name": "dns",
+      "result": [
+        {
+          "id": "7c20747ec6c3224bdf45e2f15d21f47e",
+          "name": "namkopa.com",
+          "type": "MX",
+          "content": "route3.mx.cloudflare.net",
+          "priority": 94,
+          "proxiable": false,
+          "proxied": false,
+          "ttl": 1,
+          "settings": {},
+          "meta": {
+            "email_routing": true,
+            "read_only": true
+          },
+          "comment": null,
+          "tags": [],
+          "created_on": "2026-10-02T18:40:25.378662Z",
+          "modified_on": "2026-10-02T18:40:25.378662Z"
+        },
+        {
+          "id": "cb705e3510070822773c4631ed15173b",
+          "name": "namkopa.com",
+          "type": "MX",
+          "content": "route2.mx.cloudflare.net",
+          "priority": 14,
+          "proxiable": false,
+          "proxied": false,
+          "ttl": 1,
+          "settings": {},
+          "meta": {
+            "email_routing": true,
+            "read_only": true
+          },
+          "comment": null,
+          "tags": [],
+          "created_on": "2026-10-02T18:40:25.371538Z",
+          "modified_on": "2026-10-02T18:40:25.371538Z"
+        },
+        {
+          "id": "c10d3db5920570dad2b7cb7cf1f9bca4",
+          "name": "namkopa.com",
+          "type": "MX",
+          "content": "route1.mx.cloudflare.net",
+          "priority": 75,
+          "proxiable": false,
+          "proxied": false,
+          "ttl": 1,
+          "settings": {},
+          "meta": {
+            "email_routing": true,
+            "read_only": true
+          },
+          "comment": null,
+          "tags": [],
+          "created_on": "2026-10-02T18:40:25.364644Z",
+          "modified_on": "2026-10-02T18:40:25.364644Z"
+        },
+        {
+          "id": "4f584377359e715a03342a7f2cfb58f8",
+          "name": "cf2024-1._domainkey.namkopa.com",
+          "type": "TXT",
+          "content": "\"v=DKIM1; h=sha256; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiweykoi+o48IOGuP7GR3X0MOExCUDY/BCRHoWBnh3rChl7WhdyCxW3jgq1daEjPPqoi7sJvdg5hEQVsgVRQP4DcnQDVjGMbASQtrY4WmB1VebF+RPJB2ECPsEDTpeiI5ZyUAwJaVX7r6bznU67g7LvFq35yIo4sdlmtZGV+i0H4cpYH9+3JJ78k\" \"m4KXwaf9xUJCWF6nxeD+qG6Fyruw1Qlbds2r85U9dkNDVAS3gioCvELryh1TxKGiVTkg4wqHTyHfWsp7KD3WQHYJn0RyfJJu6YEmL77zonn7p2SRMvTMP3ZEXibnC9gz3nnhR6wcYL8Q7zXypKTMD58bTixDSJwIDAQAB\"",
+          "proxiable": false,
+          "proxied": false,
+          "ttl": 1,
+          "settings": {},
+          "meta": {
+            "email_routing": true,
+            "read_only": true
+          },
+          "comment": null,
+          "tags": [],
+          "created_on": "2026-10-02T18:40:25.393267Z",
+          "modified_on": "2026-10-02T18:40:25.393267Z"
+        },
+        {
+          "id": "baa0008543a624f2cabe627fdab88c30",
+          "name": "namkopa.com",
+          "type": "TXT",
+          "content": "\"v=spf1 include:_spf.mx.cloudflare.net ~all\"",
+          "proxiable": false,
+          "proxied": false,
+          "ttl": 1,
+          "settings": {},
+          "meta": {},
+          "comment": null,
+          "tags": [],
+          "created_on": "2026-10-02T18:40:25.38607Z",
+          "modified_on": "2026-10-02T18:40:25.38607Z"
+        },
+        {
+          "id": "96831aba1631e63776aaf3194b4b579b",
+          "name": "app.namkopa.com",
+          "type": "AAAA",
+          "content": "100::",
+          "proxiable": true,
+          "proxied": true,
+          "ttl": 1,
+          "settings": {},
+          "meta": {
+            "origin_worker_id": "5421847a91cf958bf7a619f2240f46efa9b9d624",
+            "read_only": true
+          },
+          "comment": null,
+          "tags": [],
+          "created_on": "2026-09-29T09:38:03.615458Z",
+          "modified_on": "2026-09-29T09:38:03.615458Z"
+        },
+        {
+          "id": "b84a68c1a6eebf9fcec27518ccbb6694",
+          "name": "namkopa.com",
+          "type": "AAAA",
+          "content": "100::",
+          "proxiable": true,
+          "proxied": true,
+          "ttl": 1,
+          "settings": {},
+          "meta": {
+            "origin_worker_id": "2b794c9d3b8700f5c64fdcef4229e18e80ab8aea",
+            "read_only": true
+          },
+          "comment": null,
+          "tags": [],
+          "created_on": "2026-10-02T18:54:27.794703Z",
+          "modified_on": "2026-10-02T18:54:27.794703Z"
+        }
+      ]
+    },
+    {
+      "name": "custom",
+      "result": {
+        "description": "",
+        "id": "e9a53a8d8b8841899ec55d1e413061f0",
+        "kind": "zone",
+        "last_updated": "2026-10-03T18:13:10.960953Z",
+        "name": "default",
+        "phase": "http_request_firewall_custom",
+        "rules": [
+          {
+            "action": "block",
+            "description": "Block external scheduled jobs",
+            "enabled": true,
+            "expression": "(http.host eq \"app.namkopa.com\" and http.request.uri.path in {\"/api/v1/internal/scheduled-jobs\" \"/api/v1/internal/scheduled-jobs/\"})",
+            "id": "fd8fdbf42a8c4651b0f5b677c024bace",
+            "last_updated": "2026-10-03T18:13:10.960953Z",
+            "ref": "fd8fdbf42a8c4651b0f5b677c024bace",
+            "version": "1"
+          }
+        ],
+        "source": "firewall_custom",
+        "version": "1"
+      }
+    },
+    {
+      "name": "ratelimit",
+      "result": {
+        "description": "",
+        "id": "ade2c44e2a04459391c73c2d13128ee3",
+        "kind": "zone",
+        "last_updated": "2026-10-03T18:14:37.522763Z",
+        "name": "default",
+        "phase": "http_ratelimit",
+        "rules": [
+          {
+            "action": "block",
+            "description": "Limit authentication bursts",
+            "enabled": true,
+            "expression": "(http.request.uri.path in {\"/api/v1/auth/admin-login\" \"/api/v1/auth/request-link\" \"/api/v1/auth/request-reset\"})",
+            "id": "d654297f500b4c5a90334df712603381",
+            "last_updated": "2026-10-03T18:14:37.522763Z",
+            "ratelimit": {
+              "characteristics": [
+                "ip.src",
+                "cf.colo.id"
+              ],
+              "mitigation_timeout": 10,
+              "period": 10,
+              "requests_per_period": 10
+            },
+            "ref": "d654297f500b4c5a90334df712603381",
+            "version": "1"
+          }
+        ],
+        "source": "rate_limit",
+        "version": "1"
+      }
+    },
+    {
+      "name": "website_subdomain",
+      "result": {
+        "enabled": false,
+        "previews_enabled": false
+      }
+    }
+  ],
+  "deployment_token": {
+    "id": "381591913bd01b5bc9b501ee69f0a128",
+    "name": "namkopa-deploy",
+    "status": "active",
+    "expires": "2027-01-02",
+    "worker_scope": [
+      "namkopa-website",
+      "property-billing"
+    ],
+    "worker_permission": "Individual Workers Editor",
+    "zone_scope": "namkopa.com",
+    "zone_permission": "Workers Routes Write",
+    "credential_value_recorded": false,
+    "local_replacement_verification": "Encrypted private setup, active-token check, both Worker deployment-history checks, zone-route check, and both scoped Wrangler reads passed",
+    "local_broad_wrangler_oauth": "Logged out after replacement verification"
+  },
+  "rollout_review": {
+    "automation_id": "namkopa-security-rollout-review",
+    "days": 7,
+    "through": "2026-10-10"
+  }
+}

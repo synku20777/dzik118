@@ -11,6 +11,8 @@ import {
   submitAdminReading,
   submitResidentReading,
 } from "../domain/periods/readings";
+import { toSafeSkipReason } from "../domain/errors";
+import { translate, uiLocale } from "../lib/ui/i18n";
 import { DECIMAL3_PATTERN } from "../lib/decimal3";
 import { decimalInput } from "../lib/decimal-input";
 import { safeHandler } from "./_errors";
@@ -61,6 +63,60 @@ export const readings = {
             { note, force }
           )
         );
+      }
+    ),
+  }),
+
+  // The period-wide reading grid. Each row is saved by submitAdminReading on
+  // its own, so some rows can succeed while others fail; the result says
+  // which. Called from the page script with JSON.
+  adminSubmitBatch: defineAction({
+    input: z.object({
+      organizationId: z.uuid(),
+      periodId: z.uuid(),
+      rows: z
+        .array(z.object({ meterId: z.uuid(), currentValue: decimal3 }))
+        .min(1)
+        // Small batches: each row is its own transaction, and a Worker
+        // request has a time limit. The grid sends larger saves in chunks.
+        .max(100)
+        .refine(
+          (rows) => new Set(rows.map((r) => r.meterId)).size === rows.length,
+          "A meter appears more than once"
+        ),
+    }),
+    handler: safeHandler(
+      async ({ organizationId, periodId, rows }, { locals, cookies, url }) => {
+        requireActiveOrganization(locals.auth, organizationId);
+        // The grid shows row errors as is, so translate them here.
+        const locale = uiLocale(cookies, url);
+        return withDb(async (db) => {
+          const results: {
+            meterId: string;
+            ok: boolean;
+            error?: string;
+          }[] = [];
+          for (const row of rows) {
+            try {
+              await submitAdminReading(
+                db,
+                organizationId,
+                periodId,
+                row.meterId,
+                row.currentValue,
+                locals.auth!.userId
+              );
+              results.push({ meterId: row.meterId, ok: true });
+            } catch (err) {
+              results.push({
+                meterId: row.meterId,
+                ok: false,
+                error: translate(locale, toSafeSkipReason(err)),
+              });
+            }
+          }
+          return results;
+        });
       }
     ),
   }),

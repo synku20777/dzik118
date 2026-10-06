@@ -113,6 +113,25 @@ See [ADR 0009](decisions/0009-organization-archive-and-personal-data-export.md).
 - [ ] **Retention.** No rule decides when the app may delete an archived
   organization. The owner has not decided.
 
+## Guided setup (2026-10-05)
+
+See [ADR 0012](decisions/0012-guided-setup-and-starting-readings.md).
+
+- [x] **Guided setup.** Done. Six steps, progress from saved data, honest
+  readiness. A new organization opens it.
+- [x] **First-month meter reading.** Done. Starting readings are stored in a
+  locked opening period, typed or imported from CSV.
+- [x] **Range entry and CSV templates.** Done.
+- [x] **Period-wide reading grid.** Done.
+- [ ] **Opening balances.** Debt or credit from the old system. The ledger has
+  the `OPENING_BALANCE` type, but no audited import exists.
+- [ ] **Meters added later.** A meter added after the first billing month has
+  no starting reading. Its first reading counts as its whole value. Enter the
+  real first value with care, or set it to the dial at installation.
+- [x] **Progress speed.** Done on 2026-10-06. Progress now loads its data in a
+  fixed number of queries (a test guards this). It was one set of queries per
+  dwelling.
+
 ## Checked and not gaps
 
 - Test data in the demo database (`00-E2E-…`, "Zero price repro test", payers

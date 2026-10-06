@@ -101,6 +101,11 @@ try {
 } catch {
   return Astro.redirect(`/admin/o/${organizationId}/periods`);
 }
+// The starting-readings month is not a billing workbench; its readings are
+// edited in the setup.
+if (period.openingReadings) {
+  return Astro.redirect(`/admin/o/${organizationId}/setup/meters`);
+}
 
 // Why each tariff does or does not apply in this period. The verdict comes
 // from the domain (ruleStatusForPeriod); this page only words it.
@@ -132,12 +137,14 @@ const tariffRows = rules.map((rule) => {
 });
 const applyingTariffs = tariffRows.filter((row) => row.applies).length;
 
-const currentIndex = allPeriods.findIndex((item) => item.id === periodId);
+// Previous/next skip the starting-readings month.
+const navPeriods = allPeriods.filter((item) => !item.openingReadings);
+const currentIndex = navPeriods.findIndex((item) => item.id === periodId);
 const previousPeriod =
-  currentIndex >= 0 && currentIndex < allPeriods.length - 1
-    ? allPeriods[currentIndex + 1]
+  currentIndex >= 0 && currentIndex < navPeriods.length - 1
+    ? navPeriods[currentIndex + 1]
     : null;
-const nextPeriod = currentIndex > 0 ? allPeriods[currentIndex - 1] : null;
+const nextPeriod = currentIndex > 0 ? navPeriods[currentIndex - 1] : null;
 const periodName = formatPeriod(period.year, period.month, locale);
 const periodCode = `${period.year}-${String(period.month).padStart(2, "0")}`;
 const workbenchPath = `/admin/o/${organizationId}/periods/${periodId}`;
@@ -197,20 +204,36 @@ function filterHref(status?: CaseStatus) {
       </div>
 
       <div class="period-actions">
-        <form method="POST" action={actions.billing.bulkGenerate}>
-          <input type="hidden" name="organizationId" value={organizationId} />
-          <input type="hidden" name="periodId" value={periodId} />
-          <button
-            type="submit"
-            disabled={period.status === "LOCKED"}
-            aria-describedby={period.status === "LOCKED"
-              ? "locked-notice"
-              : undefined}
-            class="btn-primary"
-          >
-            {t("Generate all eligible")}
-          </button>
-        </form>
+        {
+          !period.openingReadings && (
+            <>
+              <a
+                href={`/admin/o/${organizationId}/periods/${periodId}/readings`}
+                class="btn-secondary"
+              >
+                {t("Enter readings")}
+              </a>
+              <form method="POST" action={actions.billing.bulkGenerate}>
+                <input
+                  type="hidden"
+                  name="organizationId"
+                  value={organizationId}
+                />
+                <input type="hidden" name="periodId" value={periodId} />
+                <button
+                  type="submit"
+                  disabled={period.status === "LOCKED"}
+                  aria-describedby={
+                    period.status === "LOCKED" ? "locked-notice" : undefined
+                  }
+                  class="btn-primary"
+                >
+                  {t("Generate all eligible")}
+                </button>
+              </form>
+            </>
+          )
+        }
         {
           period.status === "OPEN" && (
             <details class="more-menu">
@@ -292,7 +315,7 @@ function filterHref(status?: CaseStatus) {
     }
 
     {
-      period.status === "LOCKED" && (
+      period.status === "LOCKED" && !period.openingReadings && (
         <div
           id="locked-notice"
           class="notice flex flex-wrap items-center justify-between gap-3"
@@ -317,40 +340,46 @@ function filterHref(status?: CaseStatus) {
     }
 
     {
-      period.status === "OPEN" && dwellingsWithoutCase.length > 0 && (
-        <details id="add-dwelling" class="panel mb-6 p-4">
-          <summary class="cursor-pointer font-semibold">
-            {t("Dwellings not in this period")}
-            <span class="ml-2 font-normal text-muted">
-              {dwellingsWithoutCase.length}
-            </span>
-          </summary>
-          <p class="text-body-sm mt-2 text-muted">
-            {t(
-              "These dwellings have no billing case in this period, so they get no invoice for it. Add a dwelling to bill it for this period. The invoice uses the issue and due dates of this period."
-            )}
-          </p>
-          <form
-            method="POST"
-            action={actions.periods.addDwelling}
-            class="mt-3 flex flex-wrap items-end gap-3"
-          >
-            <input type="hidden" name="organizationId" value={organizationId} />
-            <input type="hidden" name="periodId" value={periodId} />
-            <label class="text-body-sm">
-              <span class="block font-medium">{t("Dwelling")}</span>
-              <select name="dwellingId" required class="mt-1">
-                {dwellingsWithoutCase.map((dwelling) => (
-                  <option value={dwelling.id}>{dwelling.number}</option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" class="btn-secondary">
-              {t("Add to period")}
-            </button>
-          </form>
-        </details>
-      )
+      !period.openingReadings &&
+        period.status === "OPEN" &&
+        dwellingsWithoutCase.length > 0 && (
+          <details id="add-dwelling" class="panel mb-6 p-4">
+            <summary class="cursor-pointer font-semibold">
+              {t("Dwellings not in this period")}
+              <span class="ml-2 font-normal text-muted">
+                {dwellingsWithoutCase.length}
+              </span>
+            </summary>
+            <p class="text-body-sm mt-2 text-muted">
+              {t(
+                "These dwellings have no billing case in this period, so they get no invoice for it. Add a dwelling to bill it for this period. The invoice uses the issue and due dates of this period."
+              )}
+            </p>
+            <form
+              method="POST"
+              action={actions.periods.addDwelling}
+              class="mt-3 flex flex-wrap items-end gap-3"
+            >
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="periodId" value={periodId} />
+              <label class="text-body-sm">
+                <span class="block font-medium">{t("Dwelling")}</span>
+                <select name="dwellingId" required class="mt-1">
+                  {dwellingsWithoutCase.map((dwelling) => (
+                    <option value={dwelling.id}>{dwelling.number}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="submit" class="btn-secondary">
+                {t("Add to period")}
+              </button>
+            </form>
+          </details>
+        )
     }
 
     <details
@@ -1743,7 +1772,8 @@ function filterHref(status?: CaseStatus) {
     }
     .period-actions,
     .period-actions form,
-    .period-actions .btn-primary {
+    .period-actions .btn-primary,
+    .period-actions .btn-secondary {
       width: 100%;
     }
     .more-menu {
