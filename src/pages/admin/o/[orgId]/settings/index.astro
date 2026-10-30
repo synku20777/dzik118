@@ -113,35 +113,35 @@ const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
       display
     >
       <a href={`${base}/guide`} class="btn-secondary settings-help">
-        <span class="settings-help-icon" aria-hidden="true">?</span>
+        <span class="settings-help-icon" aria-hidden="true">
+          ?
+        </span>
         {t("Need help?")}
       </a>
     </PageHeader>
 
     <div class="settings-groups">
-      {
-        settingsGroups.map((group) => (
-          <section class="settings-group">
-            <h2 class="eyebrow">{t(group.label)}</h2>
-            <div class="settings-grid">
-              {group.items.map((s) => (
-                <a href={s.href} class="settings-card">
-                  <span class="settings-card-icon" aria-hidden="true">
-                    <Icon name={s.icon} size="lg" />
-                  </span>
-                  <div class="settings-card-text">
-                    <h3>{t(s.label)}</h3>
-                    <p>{t(s.desc)}</p>
-                  </div>
-                  <span class="settings-card-chevron" aria-hidden="true">
-                    ›
-                  </span>
-                </a>
-              ))}
-            </div>
-          </section>
-        ))
-      }
+      {settingsGroups.map((group) => (
+        <section class="settings-group">
+          <h2 class="eyebrow">{t(group.label)}</h2>
+          <div class="settings-grid">
+            {group.items.map((s) => (
+              <a href={s.href} class="settings-card">
+                <span class="settings-card-icon" aria-hidden="true">
+                  <Icon name={s.icon} size="lg" />
+                </span>
+                <div class="settings-card-text">
+                  <h3>{t(s.label)}</h3>
+                  <p>{t(s.desc)}</p>
+                </div>
+                <span class="settings-card-chevron" aria-hidden="true">
+                  ›
+                </span>
+              </a>
+            ))}
+          </div>
+        </section>
+      ))}
     </div>
   </div>
 </AdminLayout>

@@ -8,6 +8,7 @@ import { getOrganization } from "../../../../../domain/organizations/organizatio
 import {
   getCurrentOpenPeriod,
   listPeriods,
+  NotFoundError,
 } from "../../../../../domain/periods/periods";
 import {
   getDashboardSummary,
@@ -18,6 +19,22 @@ import {
   type SetupProgress,
 } from "../../../../../domain/onboarding/progress";
 import { withRequestDb } from "../../../../../lib/db-request";
+import { subtractExact, sumExact } from "../../../../../lib/decimal2";
+import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
+import EmptyState from "../../../../../components/ui/EmptyState.astro";
+import AdminContextDrawer from "../../../../../components/ui/AdminContextDrawer.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
+import type { IconName } from "../../../../../lib/ui/icons";
+import {
+  entityLabel,
+  fill,
+  formatMoney as baseFormatMoney,
+  formatNumber,
+  formatPeriod,
+  plural,
+  translate,
+  uiLocale,
+} from "../../../../../lib/ui/i18n";
 
 const organizationId = Astro.params.orgId!;
 try {
@@ -27,59 +44,61 @@ try {
   throw err;
 }
 
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+const base = "/admin/o/" + organizationId;
 const requestedPeriodId = Astro.url.searchParams.get("periodId");
 
-let organization: Awaited<ReturnType<typeof getOrganization>>;
-let allPeriods: Awaited<ReturnType<typeof listPeriods>>;
-let summary: DashboardSummary | null = null;
-let attentionCases: Awaited<ReturnType<typeof listCasesForPeriod>> = [];
+// The `as` casts stop TypeScript narrowing these to `null`: they are assigned
+// inside the withRequestDb callback, which its control-flow analysis ignores.
+let organization = null as Awaited<ReturnType<typeof getOrganization>> | null;
+let allPeriods: Awaited<ReturnType<typeof listPeriods>> = [];
+let summary = null as DashboardSummary | null;
 let setupComplete = true;
-let setupProgress: SetupProgress | null = null;
+let setupProgress = null as SetupProgress | null;
+let loadError = false;
+
 try {
-  ({ organization, allPeriods, summary, setupComplete, setupProgress } =
-    await withRequestDb(async (db) => {
-      const org = await getOrganization(db, organizationId);
-      // The starting-readings month is not a billing month to compare with.
-      const periods = (await listPeriods(db, organizationId)).filter(
-        (p) => !p.openingReadings
-      );
-      // Progress is calculated once, and only while setup is open.
-      const { complete, progress } = await getSetupStatus(
-        db,
-        organizationId,
-        org
-      );
+  summary = await withRequestDb(async (db) => {
+    const org = await getOrganization(db, organizationId);
+    const periods = (await listPeriods(db, organizationId)).filter(
+      (period) => !period.openingReadings
+    );
+    const { complete, progress } = await getSetupStatus(
+      db,
+      organizationId,
+      org
+    );
 
-      let periodId: string | undefined = requestedPeriodId || undefined;
-      if (!periodId) {
-        const openPeriod = await getCurrentOpenPeriod(db, organizationId);
-        if (openPeriod) {
-          periodId = openPeriod.id;
-        } else if (periods.length > 0) {
-          periodId = periods[0].id;
-        }
+    // Keep the organization and setup shell available if only the summary fails.
+    organization = org;
+    allPeriods = periods;
+    setupComplete = complete;
+    setupProgress = progress;
+
+    let periodId: string | undefined = requestedPeriodId || undefined;
+    if (!periodId) {
+      const openPeriod = await getCurrentOpenPeriod(db, organizationId);
+      if (openPeriod && !openPeriod.openingReadings) {
+        periodId = openPeriod.id;
+      } else if (periods.length > 0) {
+        periodId = periods[0].id;
       }
+    }
 
-      const summary = periodId
-        ? await getDashboardSummary(db, organizationId, periodId)
-        : null;
-
-      if (periodId)
-        attentionCases = await listCasesForPeriod(db, organizationId, periodId);
-      return {
-        organization: org,
-        allPeriods: periods,
-        summary,
-        setupComplete: complete,
-        setupProgress: progress,
-      };
-    }));
-} catch {
-  return Astro.redirect(`/admin/o/${organizationId}/periods`);
+    return periodId
+      ? await getDashboardSummary(db, organizationId, periodId)
+      : null;
+  });
+} catch (err) {
+  if (err instanceof NotFoundError || err instanceof ForbiddenError) {
+    return Astro.redirect(`${base}/periods`);
+  }
+  loadError = true;
 }
 
 const currentIndex = summary
-  ? allPeriods.findIndex((p) => p.id === summary.period.id)
+  ? allPeriods.findIndex((period) => period.id === summary!.period.id)
   : -1;
 const previousPeriod =
   currentIndex >= 0 && currentIndex < allPeriods.length - 1
@@ -87,25 +106,6 @@ const previousPeriod =
     : null;
 const nextPeriod = currentIndex > 0 ? allPeriods[currentIndex - 1] : null;
 
-import PageHeader from "../../../../../components/ui/PageHeader.astro";
-import FacadeAccent from "../../../../../components/ui/FacadeAccent.astro";
-import KpiCard from "../../../../../components/ui/KpiCard.astro";
-import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
-import EmptyState from "../../../../../components/ui/EmptyState.astro";
-import AdminContextDrawer from "../../../../../components/ui/AdminContextDrawer.astro";
-import Icon from "../../../../../components/ui/Icon.astro";
-import { listCasesForPeriod } from "../../../../../domain/periods/cases";
-import {
-  translate,
-  uiLocale,
-  formatMoney,
-  formatNumber,
-  formatPeriod,
-  entityLabel,
-} from "../../../../../lib/ui/i18n";
-const locale = uiLocale(Astro.cookies, Astro.url);
-const t = (text: string) => translate(locale, text);
-const base = "/admin/o/" + organizationId;
 const statuses = [
   "MISSING_DATA",
   "READY",
@@ -121,107 +121,566 @@ const setupSteps = setupProgress
       {
         title: t("Organization details"),
         done: setupProgress.steps.organization,
+        href: `${base}/setup/organization`,
       },
       {
         title: t("Dwellings"),
         done: setupProgress.steps.dwellings,
+        href: `${base}/setup/dwellings`,
       },
       {
         title: t("First billing period"),
         done: setupProgress.steps.period,
+        href: `${base}/setup/period`,
       },
       {
         title: t("Charges"),
         done: setupProgress.steps.charges,
+        href: `${base}/setup/charges`,
       },
       {
         title: t("Meters and starting readings"),
         done: setupProgress.steps.meters,
+        href: `${base}/setup/meters`,
       },
     ]
   : [];
+const completedSetupSteps = setupSteps.filter((step) => step.done).length;
+const nextSetupStep = setupSteps.find((step) => !step.done);
+
+const workbenchPath = summary
+  ? `${base}/periods/${summary.period.id}`
+  : `${base}/periods`;
+const firstMissingItem = summary?.needsAttention.find(
+  (item) => item.status === "MISSING_DATA"
+);
+const readingsUrl = firstMissingItem ? new URL(Astro.url) : null;
+if (readingsUrl && firstMissingItem) {
+  readingsUrl.searchParams.set("drawer", "readings");
+  readingsUrl.searchParams.set("dwelling", firstMissingItem.dwellingId);
+  readingsUrl.searchParams.delete("focus");
+}
+
+function nextActionSentence(value: DashboardSummary): string {
+  const { key, count } = value.nextAction;
+  if (key === "ENTER_READINGS")
+    return plural(
+      locale,
+      count,
+      "{n} dwelling still needs a reading.",
+      "{n} dwellings still need readings."
+    );
+  if (key === "GENERATE_INVOICES")
+    return plural(
+      locale,
+      count,
+      "{n} invoice can be created.",
+      "{n} invoices can be created."
+    );
+  if (key === "SEND_INVOICES")
+    return plural(
+      locale,
+      count,
+      "{n} invoice is ready to send.",
+      "{n} invoices are ready to send."
+    );
+  if (key === "REVIEW_PAYMENTS")
+    return plural(
+      locale,
+      count,
+      "{n} invoice is waiting for payment.",
+      "{n} invoices are waiting for payment."
+    );
+  return t(
+    key === "CREATE_NEXT_PERIOD"
+      ? "This month is closed. Create the next month to continue."
+      : "Everything for this month is done."
+  );
+}
+
+const actionLabel = summary
+  ? {
+      ENTER_READINGS: "Enter readings",
+      GENERATE_INVOICES: "Generate invoices",
+      SEND_INVOICES: "Send invoices",
+      REVIEW_PAYMENTS: "Review payments",
+      CREATE_NEXT_PERIOD: "Create next month",
+      ALL_DONE: "Open workbench",
+    }[summary.nextAction.key]
+  : null;
+const actionHref = summary
+  ? {
+      ENTER_READINGS: readingsUrl
+        ? readingsUrl.pathname + readingsUrl.search
+        : `${workbenchPath}?status=MISSING_DATA`,
+      GENERATE_INVOICES: `${workbenchPath}?status=READY`,
+      SEND_INVOICES: `${workbenchPath}?status=DRAFT`,
+      REVIEW_PAYMENTS: `${base}/payments`,
+      CREATE_NEXT_PERIOD: `${base}/periods#create-period`,
+      ALL_DONE: workbenchPath,
+    }[summary.nextAction.key]
+  : null;
+
+type ProgressState = "done" | "current" | "unavailable";
+const currentProgressIndex = summary
+  ? {
+      ENTER_READINGS: 0,
+      GENERATE_INVOICES: 1,
+      SEND_INVOICES: 2,
+      REVIEW_PAYMENTS: 3,
+      CREATE_NEXT_PERIOD: -1,
+      ALL_DONE: -1,
+    }[summary.nextAction.key]
+  : -1;
+const progressSteps = summary
+  ? [
+      {
+        label: t("Readings"),
+        done: summary.progress.readingsDone,
+        total: summary.progress.dwellingsTotal,
+        date: summary.deadlines.readingDeadline,
+      },
+      {
+        // The shorter existing label avoids breaking the long Russian word in
+        // the two-column mobile strip without reducing the text size.
+        label: t("Invoices"),
+        done: summary.progress.invoicesGenerated,
+        total: summary.progress.dwellingsTotal,
+        date: summary.deadlines.invoiceIssueDate,
+      },
+      {
+        label: t("Sent invoices"),
+        done: summary.progress.invoicesSent,
+        total: summary.progress.dwellingsTotal,
+        date: null,
+      },
+      {
+        label: t("Paid invoices"),
+        done: summary.progress.invoicesPaid,
+        total: summary.progress.dwellingsTotal,
+        date: summary.deadlines.invoiceDueDate,
+      },
+    ].map((step, index) => ({
+      ...step,
+      state: (currentProgressIndex < 0
+        ? "done"
+        : index < currentProgressIndex
+          ? "done"
+          : index === currentProgressIndex
+            ? "current"
+            : "unavailable") as ProgressState,
+    }))
+  : [];
+const progressStateText: Record<ProgressState, string> = {
+  done: t("Done"),
+  current: t("Now"),
+  unavailable: t("Waiting"),
+};
+const progressStateIcon: Record<ProgressState, IconName> = {
+  done: "check",
+  current: "clock",
+  unavailable: "dots",
+};
+
+// dd.mm.yyyy for overdue details; dd.mm. for the quiet deadline under a step.
+const shortDate = (value: string) =>
+  new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(value));
+const dayMonth = (value: string) =>
+  new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(value));
+
+const manualAdjustment = summary
+  ? subtractExact(
+      summary.amountDue,
+      subtractExact(
+        sumExact([
+          summary.currentCharges,
+          summary.carriedOutstanding,
+          summary.lateFees,
+        ]),
+        summary.creditsApplied
+      )
+    )
+  : "0.00";
+const hasManualAdjustment = Number(manualAdjustment) !== 0;
+
+function formatMoney(
+  value: string,
+  currency: string,
+  _displayLocale: typeof locale = locale
+): string {
+  return baseFormatMoney(value, currency, locale, true);
+}
+
+type MissingItem =
+  | { label: string | null; meterType: string; reason?: "NO_READING" }
+  | { billingRuleId: string; ruleName: string; reason?: "NO_MANUAL_INPUT" }
+  | {
+      billingRuleId: string;
+      ruleName: string;
+      meterType: string;
+      reason: "NO_ACTIVE_METER_FOR_RULE";
+    }
+  | { reason: "NO_APPLICABLE_RULES" }
+  | string;
+
+function missingReasons(items: unknown[], limit?: number): string {
+  const labels = (items as MissingItem[])
+    .map((item) => {
+      if (typeof item === "string") {
+        const legacyReading = item.match(
+          /^Missing current-period meter reading for dwelling (.+?)\.?$/
+        );
+        return legacyReading
+          ? fill(
+              t("Missing current-period meter reading for dwelling {number}"),
+              {
+                number: legacyReading[1],
+              }
+            )
+          : item;
+      }
+      if (!item || typeof item !== "object") return "";
+      if (item.reason === "NO_APPLICABLE_RULES")
+        return t("No billing rule applies");
+      if (item.reason === "NO_ACTIVE_METER_FOR_RULE")
+        return `${item.ruleName} — ${t("no active meter")}`;
+      if ("billingRuleId" in item) return item.ruleName;
+      return item.label ?? entityLabel(item.meterType, locale);
+    })
+    .filter(Boolean);
+  const visible = limit ? labels.slice(0, limit) : labels;
+  const remaining = labels.length - visible.length;
+  return `${visible.join(", ")}${remaining > 0 ? `, +${remaining}` : ""}`;
+}
+
+type AttentionRow =
+  | { kind: "case"; item: DashboardSummary["needsAttention"][number] }
+  | {
+      kind: "summary";
+      key: string;
+      label: string;
+      href: string;
+      actionLabel: string;
+      tone: "info" | "warning" | "danger";
+      icon: IconName;
+    };
+
+const attentionRows: AttentionRow[] = summary
+  ? summary.needsAttention.map((item) => ({ kind: "case" as const, item }))
+  : [];
+if (summary?.unmatchedPaymentCount) {
+  attentionRows.push({
+    kind: "summary",
+    key: "unmatched",
+    label: plural(
+      locale,
+      summary.unmatchedPaymentCount,
+      "{n} bank payment is not matched to an invoice yet.",
+      "{n} bank payments are not matched to an invoice yet."
+    ),
+    href: `${base}/payments?view=UNMATCHED`,
+    actionLabel: "Review payments",
+    tone: "warning",
+    icon: "alert-triangle",
+  });
+}
+if (summary?.proposedPaymentCount) {
+  attentionRows.push({
+    kind: "summary",
+    key: "proposed",
+    label: plural(
+      locale,
+      summary.proposedPaymentCount,
+      "{n} suggested payment match is waiting for your check.",
+      "{n} suggested payment matches are waiting for your check."
+    ),
+    href: `${base}/payments?view=PROPOSED`,
+    actionLabel: "Review payments",
+    tone: "info",
+    icon: "clock",
+  });
+}
+if (summary?.deliveryFailureCount) {
+  attentionRows.push({
+    kind: "summary",
+    key: "delivery",
+    label: plural(
+      locale,
+      summary.deliveryFailureCount,
+      "{n} invoice could not be delivered.",
+      "{n} invoices could not be delivered."
+    ),
+    href: `${workbenchPath}?status=PREPARED`,
+    actionLabel: "Review failed deliveries",
+    tone: "danger",
+    icon: "alert-triangle",
+  });
+}
+if (
+  summary?.caseStatusCounts.READY &&
+  summary.nextAction.key !== "GENERATE_INVOICES"
+) {
+  attentionRows.push({
+    kind: "summary",
+    key: "ready",
+    label: plural(
+      locale,
+      summary.caseStatusCounts.READY,
+      "{n} invoice can be created.",
+      "{n} invoices can be created."
+    ),
+    href: `${workbenchPath}?status=READY`,
+    actionLabel: "Generate invoices",
+    tone: "info",
+    icon: "receipt-euro",
+  });
+}
+const readyToSendCount = summary
+  ? summary.caseStatusCounts.DRAFT + summary.caseStatusCounts.PREPARED
+  : 0;
+if (readyToSendCount && summary?.nextAction.key !== "SEND_INVOICES") {
+  attentionRows.push({
+    kind: "summary",
+    key: "send",
+    label: plural(
+      locale,
+      readyToSendCount,
+      "{n} invoice is ready to send.",
+      "{n} invoices are ready to send."
+    ),
+    href: `${workbenchPath}?status=DRAFT`,
+    actionLabel: "Send invoices",
+    tone: "info",
+    icon: "send",
+  });
+}
+if (
+  summary?.caseStatusCounts.SENT &&
+  summary.nextAction.key !== "REVIEW_PAYMENTS"
+) {
+  attentionRows.push({
+    kind: "summary",
+    key: "waiting",
+    label: plural(
+      locale,
+      summary.caseStatusCounts.SENT,
+      "{n} invoice is waiting for payment.",
+      "{n} invoices are waiting for payment."
+    ),
+    href: `${base}/payments`,
+    actionLabel: "Review payments",
+    tone: "info",
+    icon: "clock",
+  });
+}
+
+function attentionPriority(row: AttentionRow): number {
+  if (row.kind === "case") return row.item.status === "OVERDUE" ? 2 : 3;
+  if (row.key === "delivery") return 0;
+  if (row.key === "unmatched") return 1;
+  return 4;
+}
+
+attentionRows.sort((a, b) => attentionPriority(a) - attentionPriority(b));
+
+const showAllAttention = Astro.url.searchParams.get("all") === "1";
+const visibleAttentionRows = showAllAttention
+  ? attentionRows
+  : attentionRows.slice(0, 5);
+const attentionItemCount = attentionRows.length;
+const hiddenAttentionCount = Math.max(
+  0,
+  attentionItemCount - visibleAttentionRows.length
+);
+
+// One quiet heading per kind replaces the badge each row repeated. Immediate
+// failures stay first; routine work is separated as the next-steps group.
+type GroupKey = "urgent" | "overdue" | "missing" | "next";
+const nextStepKeys = new Set(["ready", "send", "waiting"]);
+const groupKey = (row: AttentionRow): GroupKey =>
+  row.kind !== "case"
+    ? nextStepKeys.has(row.key)
+      ? "next"
+      : "urgent"
+    : row.item.status === "OVERDUE"
+      ? "overdue"
+      : "missing";
+const groupHeading: Record<
+  "overdue" | "missing" | "next",
+  {
+    label: string;
+    icon?: IconName;
+    tone?: "danger" | "warning";
+  }
+> = {
+  overdue: {
+    label: t("Overdue payments"),
+    icon: "alert-triangle",
+    tone: "danger",
+  },
+  missing: { label: t("Missing data"), icon: "clock", tone: "warning" },
+  next: { label: t("Next steps") },
+};
+const groupTotal = (key: GroupKey) =>
+  attentionRows.filter((row) => groupKey(row) === key).length;
+const hiddenInGroup = (key: GroupKey, visible: number) =>
+  Math.max(0, groupTotal(key) - visible);
+const attentionGroups: {
+  key: GroupKey;
+  rows: AttentionRow[];
+  start: number;
+}[] = [];
+visibleAttentionRows.forEach((row, index) => {
+  const key = groupKey(row);
+  const last = attentionGroups[attentionGroups.length - 1];
+  if (last?.key === key) last.rows.push(row);
+  else attentionGroups.push({ key, rows: [row], start: index });
+});
+const attentionAllUrl = new URL(Astro.url);
+attentionAllUrl.searchParams.set("all", "1");
+const attentionAllHref = attentionAllUrl.pathname + attentionAllUrl.search;
+
+function readingsHref(
+  item: DashboardSummary["needsAttention"][number]
+): string {
+  const url = new URL(Astro.url);
+  url.searchParams.set("drawer", "readings");
+  url.searchParams.set("dwelling", item.dwellingId);
+  url.searchParams.delete("focus");
+  return url.pathname + url.search;
+}
 ---
 
 <AdminLayout
-  title={t("Dashboard") + " - " + organization.name}
+  title={t("Dashboard") + (organization ? " - " + organization.name : "")}
   organizationId={organizationId}
-  organizationName={organization.name}
+  organizationName={organization?.name}
 >
-  {
-    !setupComplete && setupProgress && (
-      <div class="panel p-4 mb-6">
-        <h2 class="text-h3 font-semibold text-foreground">
-          {t("Finish setting up")}
-        </h2>
-        <p class="mt-1 text-body-sm text-muted">
-          {t("Complete the setup steps to send your first invoices.")}
-        </p>
-        <ul class="my-3 space-y-1.5 text-body-sm">
-          {setupSteps.map((step) => (
-            <li class="flex items-center gap-2">
-              {step.done ? (
-                <span class="text-success font-semibold">
-                  <span aria-hidden="true">✓</span>
-                  <span class="sr-only">{t("Done")}</span>
-                </span>
-              ) : (
-                <span class="text-muted text-caption">{t("To do")}</span>
-              )}
-              <span class={step.done ? "text-foreground" : "text-muted"}>
-                {step.title}
-              </span>
-            </li>
-          ))}
-        </ul>
-        <a class="btn-primary" href={`/admin/o/${organizationId}/setup`}>
-          {t("Continue setup")}
+  {loadError || !organization ? (
+    <section class="dashboard-error panel" role="alert">
+      <Icon name="alert-triangle" size="lg" />
+      <div>
+        <h1>{t("The overview could not be loaded.")}</h1>
+        <p>{t("Try again in a moment, or open the billing periods.")}</p>
+        <a class="btn-secondary" href={`${base}/periods`}>
+          {t("Billing periods")}
         </a>
       </div>
-    )
-  }
-  {
-    !summary ? (
-      <div class="space-y-6">
-        <PageHeader
-          title={t("Dashboard")}
-          eyebrow={organization.name}
-          description={t(
-            "Monitor billing, payments and work requiring attention."
-          )}
-          display
-        />
-        {setupComplete && (
-          <EmptyState
-            ornament
-            title={t("No billing periods yet.")}
-            description={t(
-              "Create a period to start the monthly billing workflow."
+    </section>
+  ) : (
+    <>
+      {!setupComplete && setupProgress && (
+        <section
+          class="dashboard-setup panel"
+          aria-labelledby="dashboard-setup-title"
+        >
+          <div class="setup-banner-intro">
+            <div class="setup-banner-title">
+              <h2 id="dashboard-setup-title">{t("Finish setting up")}</h2>
+              <span class="setup-banner-count">
+                {fill(t("Setup steps done: {done} of {total}"), {
+                  done: completedSetupSteps,
+                  total: setupSteps.length,
+                })}
+              </span>
+            </div>
+            {nextSetupStep && (
+              <p class="setup-banner-next">
+                {t("Next step")}: <strong>{nextSetupStep.title}</strong>
+              </p>
             )}
+          </div>
+          <ol class="setup-banner-steps" aria-label={t("Setup steps")}>
+            {setupSteps.map((step, index) => (
+              <li>
+                <a
+                  href={step.href}
+                  class:list={[
+                    "setup-banner-step",
+                    {
+                      "is-done": step.done,
+                      "is-next": step === nextSetupStep,
+                    },
+                  ]}
+                >
+                  <span class="setup-banner-symbol" aria-hidden="true">
+                    {step.done ? <Icon name="check" size="xs" /> : index + 1}
+                  </span>
+                  <span>
+                    {step.title}
+                    <span class="sr-only">
+                      : {t(step.done ? "Done" : "To do")}
+                    </span>
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ol>
+          <a
+            class="setup-banner-continue btn-primary"
+            href={nextSetupStep?.href ?? `${base}/setup`}
           >
-            <a class="btn-primary" href={base + "/periods"}>
-              {t("Create period")}
-            </a>
-          </EmptyState>
-        )}
-      </div>
-    ) : (
-      <div class="space-y-6">
-        <AdminContextDrawer
-          organizationId={organizationId}
-          periodId={summary.period.id}
-          periodStatus={summary.period.status}
-          periodName={formatPeriod(
-            summary.period.year,
-            summary.period.month,
-            locale
+            {t("Continue setup")}
+          </a>
+        </section>
+      )}
+
+      {!summary ? (
+        <div class="space-y-6">
+          <header class="page-header">
+            <div>
+              <p class="eyebrow">{organization.name}</p>
+              <h1>{t("Dashboard")}</h1>
+              <p class="page-description">
+                {t("Monitor billing, payments and work requiring attention.")}
+              </p>
+            </div>
+          </header>
+          {setupComplete && (
+            <EmptyState
+              ornament
+              title={t("No billing periods yet.")}
+              description={t(
+                "Create a period to start the monthly billing workflow."
+              )}
+            >
+              <a class="btn-primary" href={`${base}/periods#create-period`}>
+                {t("Create period")}
+              </a>
+            </EmptyState>
           )}
-          workbenchPath={base + "/periods/" + summary.period.id}
-          refreshSelectors={[".dashboard-attention", ".dashboard-case-status"]}
-        />
-        <header class="page-header">
-          <div>
-            <p class="eyebrow">{organization.name}</p>
-            <div class="flex flex-wrap items-center gap-3">
+        </div>
+      ) : (
+        <div class="dashboard-page">
+          <AdminContextDrawer
+            organizationId={organizationId}
+            periodId={summary.period.id}
+            periodStatus={summary.period.status}
+            periodName={formatPeriod(
+              summary.period.year,
+              summary.period.month,
+              locale
+            )}
+            workbenchPath={workbenchPath}
+            refreshSelectors={[
+              ".dashboard-month-status",
+              ".dashboard-money",
+              ".dashboard-attention",
+              ".dashboard-more",
+            ]}
+          />
+
+          <header class="dashboard-header">
+            <div class="dashboard-title-row">
               <h1 class="font-display">
                 {formatPeriod(
                   summary.period.year,
@@ -230,286 +689,775 @@ const setupSteps = setupProgress
                 )}
               </h1>
               <StatusBadge status={summary.period.status} />
+              {(summary.period.status === "LOCKED" ||
+                !summary.isNewestPeriod) && (
+                <p class="dashboard-period-context">
+                  <Icon
+                    name={summary.period.status === "LOCKED" ? "lock" : "clock"}
+                    size="xs"
+                  />
+                  {t(
+                    !summary.isNewestPeriod
+                      ? "You are viewing an earlier month."
+                      : "This month is closed."
+                  )}
+                </p>
+              )}
             </div>
-            <FacadeAccent />
-          </div>
-          <div class="page-actions">
-            <a
-              class="btn-primary"
-              href={base + "/periods/" + summary.period.id}
+            <nav
+              class="dashboard-period-nav"
+              aria-label={t("Period navigation")}
             >
-              {t("Open workbench")}
-              <Icon name="arrow-right" size="sm" />
-            </a>
-          </div>
-        </header>
-        <nav
-          class="dashboard-period-nav text-body-sm text-muted"
-          aria-label={t("Period navigation")}
-        >
-          {previousPeriod ? (
-            <a
-              href={base + "/dashboard?periodId=" + previousPeriod.id}
-              class="flex items-center gap-1 hover:text-foreground hover:underline"
-            >
-              <Icon name="arrow-left" size="xs" />
-              {formatPeriod(previousPeriod.year, previousPeriod.month, locale)}
-            </a>
-          ) : (
-            <span class="flex items-center gap-1" aria-disabled="true">
-              <Icon name="arrow-left" size="xs" />
-              {t("Previous period")}
-            </span>
-          )}
-          {nextPeriod ? (
-            <a
-              href={base + "/dashboard?periodId=" + nextPeriod.id}
-              class="flex items-center gap-1 hover:text-foreground hover:underline"
-            >
-              {formatPeriod(nextPeriod.year, nextPeriod.month, locale)}
-              <Icon name="arrow-right" size="xs" />
-            </a>
-          ) : (
-            <span class="flex items-center gap-1" aria-disabled="true">
-              {t("Next period")}
-              <Icon name="arrow-right" size="xs" />
-            </span>
-          )}
-        </nav>
-        <div class="grid gap-4 sm:grid-cols-3">
-          <>
-            <KpiCard
-              icon="invoice"
-              label={t("Total invoiced")}
-              value={formatMoney(
-                summary.totalInvoiced,
-                organization.currency,
-                locale
-              )}
-            />
-            <KpiCard
-              icon="coins"
-              label={t("Paid")}
-              tone="success"
-              value={formatMoney(
-                summary.totalPaid,
-                organization.currency,
-                locale
-              )}
-            />
-            <KpiCard
-              icon="clock"
-              label={t("Outstanding")}
-              tone="warning"
-              value={formatMoney(
-                summary.totalOutstanding,
-                organization.currency,
-                locale
-              )}
-            />
-          </>
-        </div>
-        <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <section class="dashboard-attention">
-            <div class="mb-4 flex items-center justify-between">
-              <>
-                <h2 class="font-semibold">{t("Needs attention")}</h2>
-                <span class="text-body-sm text-muted">
-                  {summary.needsAttention.length}
+              {previousPeriod ? (
+                <a href={`${base}/dashboard?periodId=${previousPeriod.id}`}>
+                  <Icon name="arrow-left" size="xs" />
+                  <span class="sr-only">{t("Previous period")}: </span>
+                  {formatPeriod(
+                    previousPeriod.year,
+                    previousPeriod.month,
+                    locale
+                  )}
+                </a>
+              ) : (
+                <span
+                  class:list={{
+                    "period-context-compact": !summary.isNewestPeriod,
+                  }}
+                  aria-disabled="true"
+                >
+                  <Icon
+                    name={!summary.isNewestPeriod ? "clock" : "arrow-left"}
+                    size="xs"
+                  />
+                  {t(
+                    !summary.isNewestPeriod
+                      ? "Earlier month"
+                      : "Previous period"
+                  )}
                 </span>
-              </>
+              )}
+              {nextPeriod ? (
+                <a href={`${base}/dashboard?periodId=${nextPeriod.id}`}>
+                  <span class="sr-only">{t("Next period")}: </span>
+                  {formatPeriod(nextPeriod.year, nextPeriod.month, locale)}
+                  <Icon name="arrow-right" size="xs" />
+                </a>
+              ) : (
+                <span aria-disabled="true" aria-label={t("Next period")}>
+                  <span class="period-label-full" aria-hidden="true">
+                    {t("Next period")}
+                  </span>
+                  <span class="period-label-mobile" aria-hidden="true">
+                    {t("Next")}
+                  </span>
+                  <Icon name="arrow-right" size="xs" />
+                </span>
+              )}
+            </nav>
+          </header>
+
+          <section
+            class="dashboard-month-status panel"
+            aria-labelledby="month-progress-title"
+          >
+            <h2 id="month-progress-title" class="sr-only">
+              {t("Month progress")}
+            </h2>
+            <div class="month-status-lead">
+              <p class="month-status-sentence">{nextActionSentence(summary)}</p>
+              {summary.nextAction.key === "ALL_DONE" ? (
+                <a class="month-status-link" href={actionHref!}>
+                  {t(actionLabel!)}
+                  <Icon name="arrow-right" size="sm" />
+                </a>
+              ) : (
+                <a
+                  class="btn-primary"
+                  href={actionHref!}
+                  data-open-drawer={
+                    summary.nextAction.key === "ENTER_READINGS" &&
+                    firstMissingItem
+                      ? "readings"
+                      : undefined
+                  }
+                  data-dwelling-id={
+                    summary.nextAction.key === "ENTER_READINGS"
+                      ? firstMissingItem?.dwellingId
+                      : undefined
+                  }
+                  aria-haspopup={
+                    summary.nextAction.key === "ENTER_READINGS" &&
+                    firstMissingItem
+                      ? "dialog"
+                      : undefined
+                  }
+                  aria-controls={
+                    summary.nextAction.key === "ENTER_READINGS" &&
+                    firstMissingItem
+                      ? "admin-context-drawer"
+                      : undefined
+                  }
+                >
+                  {t(actionLabel!)}
+                  <Icon name="arrow-right" size="sm" />
+                </a>
+              )}
             </div>
-            {summary.needsAttention.length === 0 ? (
-              <EmptyState title={t("Nothing needs attention right now.")} />
-            ) : (
-              <div class="panel divide-y divide-border">
-                {attentionCases
-                  .filter(
-                    (c) => c.status === "MISSING_DATA" || c.status === "OVERDUE"
-                  )
-                  .map((c) => {
-                    // missingData is a JSONB column with no schema
-                    // enforcement: cases whose readiness was last computed by
-                    // an older app version can still carry a legacy
-                    // plain-string shape instead of today's {meterType,
-                    // label, reason} object (see the same fix in
-                    // periods/[periodId]/index.astro).
-                    const missing = c.missingData as (
-                      | {
-                          label: string | null;
-                          meterType: string;
-                          reason?: "NO_READING";
-                        }
-                      | {
-                          billingRuleId: string;
-                          ruleName: string;
-                          reason?: "NO_MANUAL_INPUT";
-                        }
-                      | {
-                          billingRuleId: string;
-                          ruleName: string;
-                          meterType: string;
-                          reason: "NO_ACTIVE_METER_FOR_RULE";
-                        }
-                      | { reason: "NO_APPLICABLE_RULES" }
-                      | string
-                    )[];
-                    const overdue = c.status === "OVERDUE";
-                    const href = overdue
-                      ? base + "/payments"
-                      : base + "/periods/" + summary.period.id;
-                    return (
-                      <div
-                        class="dashboard-attention-row flex flex-wrap items-start justify-between gap-3 p-4"
-                        data-overdue={overdue}
-                      >
-                        <div class="min-w-0">
-                          <div class="mb-2 flex flex-wrap items-center gap-3">
-                            <a
-                              class="btn-secondary btn-sm"
-                              href={base + "/dwellings/" + c.dwellingId}
-                            >
-                              <Icon name="building" size="sm" />
-                              {t("Dwelling")} {c.dwellingNumber}
-                            </a>
-                            <StatusBadge status={c.status} />
-                          </div>
-                          <p class="text-body-sm text-muted">
-                            {overdue
-                              ? t(
-                                  "Payment is past its due date. Review reconciliation."
-                                )
-                              : missing.length
-                                ? missing
-                                    .map((m) =>
-                                      typeof m === "object" &&
-                                      m &&
-                                      m.reason === "NO_APPLICABLE_RULES"
-                                        ? t("No billing rule applies")
-                                        : typeof m === "object" &&
-                                            m &&
-                                            m.reason ===
-                                              "NO_ACTIVE_METER_FOR_RULE"
-                                          ? `${m.ruleName} — ${t("no active meter")}`
-                                          : typeof m === "string"
-                                            ? m
-                                            : "billingRuleId" in m
-                                              ? m.ruleName
-                                              : (m.label ??
-                                                entityLabel(
-                                                  m.meterType,
-                                                  locale
-                                                ))
-                                    )
-                                    .join(", ")
-                                : t(
-                                    "All readings are present. Generate the invoice in the workbench."
-                                  )}
-                          </p>
-                          {missing.length > 0 && (
-                            <p class="mt-1 text-caption text-muted">
-                              {t(
-                                "Readings are required before generating an invoice."
-                              )}
-                            </p>
-                          )}
-                        </div>
-                        {missing.length > 0 &&
-                        !overdue &&
-                        summary.period.status !== "LOCKED" ? (
-                          <button
-                            type="button"
-                            class="btn-secondary btn-sm"
-                            data-open-drawer="readings"
-                            data-dwelling-id={c.dwellingId}
-                          >
-                            {t("Add readings")}
-                            <Icon name="arrow-right" size="sm" />
-                          </button>
-                        ) : (
-                          <a class="btn-secondary btn-sm" href={href}>
-                            {t(overdue ? "Review payments" : "Open workbench")}
-                            <Icon name="arrow-right" size="sm" />
-                          </a>
-                        )}
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
+
+            <ol class="month-progress" aria-label={t("Month progress")}>
+              {progressSteps.map((step) => (
+                <li data-state={step.state}>
+                  <span class="progress-marker" aria-hidden="true">
+                    <Icon name={progressStateIcon[step.state]} size="xs" />
+                  </span>
+                  <p class="progress-label">
+                    {step.label}
+                    {step.state === "current" ? (
+                      <span class="progress-now">
+                        {progressStateText.current}
+                      </span>
+                    ) : (
+                      <span class="sr-only">
+                        , {progressStateText[step.state]}
+                      </span>
+                    )}
+                  </p>
+                  <p class="progress-detail">
+                    <span class="progress-count">
+                      {fill(t("{done} of {total}"), {
+                        done: step.done,
+                        total: step.total,
+                      })}
+                    </span>
+                    {step.date && (
+                      <time class="progress-deadline" datetime={step.date}>
+                        {fill(t("by {date}"), { date: dayMonth(step.date) })}
+                      </time>
+                    )}
+                  </p>
+                </li>
+              ))}
+            </ol>
           </section>
-          <div class="space-y-6">
-            <>
-              <section class="dashboard-case-status panel p-5">
-                <>
-                  <h2 class="section-title">{t("Case status")}</h2>
-                  <div class="space-y-1">
-                    {statuses.map((status) => (
-                      <a
-                        class="dashboard-status-link text-body-sm"
-                        href={
-                          base +
-                          "/periods/" +
-                          summary.period.id +
-                          "?status=" +
-                          status
-                        }
-                      >
-                        <StatusBadge status={status} />
-                        <span class="dashboard-status-count font-semibold tabular-nums">
-                          {summary.caseStatusCounts[status]}
-                          <Icon name="arrow-right" size="xs" />
+
+          <div class="dashboard-body-wrap">
+            <div class="dashboard-body">
+              <section class="dashboard-money" aria-labelledby="money-title">
+                <div class="dashboard-section-heading">
+                  <h2 id="money-title">{t("Money this month")}</h2>
+                </div>
+                <div class="money-reconciliation panel">
+                  <dl
+                    aria-label={t("Money this month")}
+                    style={`--eq-rows:${hasManualAdjustment ? 5 : 4}`}
+                  >
+                    <div>
+                      <dt>
+                        <span class="money-operator" aria-hidden="true" />
+                        <span>{t("This month's invoices")}</span>
+                      </dt>
+                      <dd>
+                        {formatMoney(
+                          summary.currentCharges,
+                          organization.currency,
+                          locale
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>
+                        <span class="money-operator" aria-hidden="true">
+                          +
                         </span>
-                      </a>
-                    ))}
-                  </div>
-                </>
-              </section>
-              <section class="panel p-5">
-                <>
-                  <h2 class="section-title flex items-center gap-2">
-                    <Icon name="droplet" size="sm" class="text-muted" />
-                    {t("Consumption")}
-                  </h2>
-                  <dl class="space-y-3 text-body-sm">
-                    <>
-                      <div class="flex justify-between gap-3">
-                        <>
-                          <dt class="text-muted">{t("Cold water")}</dt>
-                          <dd class="font-semibold tabular-nums">
-                            {formatNumber(summary.coldWaterConsumption, locale)}{" "}
-                            m³
-                          </dd>
-                        </>
+                        <span>{t("Previous debt")}</span>
+                      </dt>
+                      <dd>
+                        {formatMoney(
+                          summary.carriedOutstanding,
+                          organization.currency,
+                          locale
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>
+                        <span class="money-operator" aria-hidden="true">
+                          −
+                        </span>
+                        <span>{t("Previous overpayment")}</span>
+                      </dt>
+                      <dd>
+                        {formatMoney(
+                          summary.creditsApplied,
+                          organization.currency,
+                          locale
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>
+                        <span class="money-operator" aria-hidden="true">
+                          +
+                        </span>
+                        <span>{t("Late fees")}</span>
+                      </dt>
+                      <dd>
+                        {formatMoney(
+                          summary.lateFees,
+                          organization.currency,
+                          locale
+                        )}
+                      </dd>
+                    </div>
+                    {hasManualAdjustment && (
+                      <div>
+                        <dt>
+                          <span class="money-operator" aria-hidden="true" />
+                          <span>{t("Manual adjustment")}</span>
+                        </dt>
+                        <dd>
+                          {formatMoney(
+                            manualAdjustment,
+                            organization.currency,
+                            locale
+                          )}
+                        </dd>
                       </div>
-                      <div class="flex justify-between gap-3">
-                        <>
-                          <dt class="text-muted">{t("Hot water")}</dt>
-                          <dd class="font-semibold tabular-nums">
-                            {formatNumber(summary.hotWaterConsumption, locale)}{" "}
-                            m³
-                          </dd>
-                        </>
-                      </div>
-                    </>
+                    )}
+                    <div class="money-total">
+                      <dt>
+                        <span class="money-operator" aria-hidden="true">
+                          =
+                        </span>
+                        <span>{t("Total to pay")}</span>
+                      </dt>
+                      <dd>
+                        {formatMoney(
+                          summary.amountDue,
+                          organization.currency,
+                          locale
+                        )}
+                      </dd>
+                    </div>
+                    <div class="money-split">
+                      <dt>
+                        <span class="money-operator" aria-hidden="true" />
+                        <span>{t("Received in payments")}</span>
+                      </dt>
+                      <dd class="money-received">
+                        {formatMoney(
+                          summary.totalPaid,
+                          organization.currency,
+                          locale
+                        )}
+                      </dd>
+                    </div>
+                    <div
+                      class="money-split"
+                      data-tone={
+                        summary.caseStatusCounts.OVERDUE > 0
+                          ? "danger"
+                          : undefined
+                      }
+                    >
+                      <dt>
+                        <span class="money-operator" aria-hidden="true" />
+                        <span>
+                          {summary.caseStatusCounts.OVERDUE > 0 && (
+                            <Icon name="alert-triangle" size="xs" />
+                          )}
+                          {t("Still unpaid")}
+                        </span>
+                      </dt>
+                      <dd>
+                        {formatMoney(
+                          summary.totalOutstanding,
+                          organization.currency,
+                          locale
+                        )}
+                      </dd>
+                    </div>
                   </dl>
-                </>
+                  <p class="money-note">
+                    {t("Includes invoices that are not sent yet.")}
+                  </p>
+                </div>
               </section>
-            </>
+
+              <section
+                class="dashboard-attention"
+                aria-labelledby="dashboard-attention-title"
+              >
+                <div class="dashboard-section-heading">
+                  <div>
+                    <h2 id="dashboard-attention-title">
+                      {t("Needs attention")}
+                    </h2>
+                    <p>{attentionItemCount}</p>
+                  </div>
+                  {attentionRows.length > visibleAttentionRows.length &&
+                    !showAllAttention && (
+                      <a
+                        href={attentionAllHref}
+                        aria-label={fill(t("Show all ({n})"), {
+                          n: attentionItemCount,
+                        })}
+                      >
+                        {fill(t("Show all ({n})"), { n: attentionItemCount })}
+                        <Icon name="arrow-right" size="xs" />
+                      </a>
+                    )}
+                </div>
+
+                {visibleAttentionRows.length === 0 ? (
+                  <EmptyState title={t("Nothing needs attention right now.")} />
+                ) : (
+                  <div
+                    class:list={[
+                      "attention-list panel",
+                      { "is-expanded": showAllAttention },
+                    ]}
+                  >
+                    {attentionGroups.map((group, groupIndex) => {
+                      const heading =
+                        group.key === "urgent" ? null : groupHeading[group.key];
+                      const hiddenCount = hiddenInGroup(
+                        group.key,
+                        group.rows.length
+                      );
+                      return (
+                        <div
+                          class:list={[
+                            "attention-group",
+                            { "attention-extra": group.start >= 3 },
+                          ]}
+                        >
+                          {heading && (
+                            <h3
+                              class="attention-group-heading"
+                              id={`attention-group-${group.key}`}
+                              data-tone={heading.tone}
+                            >
+                              {heading.icon && (
+                                <span
+                                  class="attention-group-icon"
+                                  aria-hidden="true"
+                                >
+                                  <Icon name={heading.icon} size="xs" />
+                                </span>
+                              )}
+                              {heading.label}
+                              {hiddenCount === 0 && (
+                                <span class="attention-group-count">
+                                  {groupTotal(group.key)}
+                                </span>
+                              )}
+                            </h3>
+                          )}
+                          <div
+                            role="list"
+                            aria-labelledby={
+                              heading
+                                ? `attention-group-${group.key}`
+                                : "dashboard-attention-title"
+                            }
+                          >
+                            {group.rows.map((row, rowIndex) =>
+                              row.kind === "case" ? (
+                                <article
+                                  class:list={[
+                                    "attention-row",
+                                    {
+                                      "attention-extra":
+                                        group.start + rowIndex >= 3,
+                                    },
+                                  ]}
+                                  role="listitem"
+                                >
+                                  <div class="attention-row-main">
+                                    <div class="attention-heading">
+                                      <a
+                                        href={`${base}/dwellings/${row.item.dwellingId}`}
+                                      >
+                                        {t("Dwelling")}{" "}
+                                        {row.item.dwellingNumber}
+                                      </a>
+                                    </div>
+                                    {row.item.status === "OVERDUE" ? (
+                                      <p class="attention-details">
+                                        <strong>
+                                          {formatMoney(
+                                            row.item.overdueAmount ?? "0.00",
+                                            organization!.currency,
+                                            locale
+                                          )}
+                                        </strong>
+                                        {row.item.dueDate && (
+                                          <span>
+                                            {fill(t("Due {date}"), {
+                                              date: shortDate(row.item.dueDate),
+                                            })}
+                                          </span>
+                                        )}
+                                        {row.item.daysLate !== null && (
+                                          <span>
+                                            {plural(
+                                              locale,
+                                              row.item.daysLate,
+                                              "{n} day late",
+                                              "{n} days late"
+                                            )}
+                                          </span>
+                                        )}
+                                      </p>
+                                    ) : (
+                                      <p
+                                        class="attention-reason"
+                                        title={
+                                          missingReasons(
+                                            row.item.missingData
+                                          ) || undefined
+                                        }
+                                        aria-label={
+                                          missingReasons(
+                                            row.item.missingData
+                                          ) ||
+                                          t(
+                                            "Readings are required before generating an invoice."
+                                          )
+                                        }
+                                      >
+                                        {missingReasons(
+                                          row.item.missingData,
+                                          2
+                                        ) ||
+                                          t(
+                                            "Readings are required before generating an invoice."
+                                          )}
+                                      </p>
+                                    )}
+                                  </div>
+                                  {row.item.status === "MISSING_DATA" &&
+                                  summary.period.status !== "LOCKED" ? (
+                                    <a
+                                      class="attention-action"
+                                      href={readingsHref(row.item)}
+                                      data-open-drawer="readings"
+                                      data-dwelling-id={row.item.dwellingId}
+                                      aria-haspopup="dialog"
+                                      aria-controls="admin-context-drawer"
+                                    >
+                                      {t("Enter readings")}
+                                      <Icon name="arrow-right" size="xs" />
+                                    </a>
+                                  ) : (
+                                    <a
+                                      class="attention-action"
+                                      href={`${base}/payments`}
+                                    >
+                                      {t("Review payments")}
+                                      <Icon name="arrow-right" size="xs" />
+                                    </a>
+                                  )}
+                                </article>
+                              ) : (
+                                <article
+                                  class:list={[
+                                    "attention-row attention-summary-row",
+                                    {
+                                      "attention-extra":
+                                        group.start + rowIndex >= 3,
+                                    },
+                                  ]}
+                                  data-tone={row.tone}
+                                  role="listitem"
+                                >
+                                  <span
+                                    class="attention-summary-icon"
+                                    aria-hidden="true"
+                                  >
+                                    <Icon name={row.icon} size="sm" />
+                                  </span>
+                                  <p>{row.label}</p>
+                                  <a class="attention-action" href={row.href}>
+                                    {t(row.actionLabel)}
+                                    <Icon name="arrow-right" size="xs" />
+                                  </a>
+                                </article>
+                              )
+                            )}
+                            {groupIndex === attentionGroups.length - 1 &&
+                              hiddenAttentionCount > 0 && (
+                                <div class="attention-more-row" role="listitem">
+                                  <span>
+                                    {fill(t("+{n} more"), {
+                                      n: hiddenAttentionCount,
+                                    })}
+                                  </span>
+                                  <a href={attentionAllHref}>
+                                    {fill(t("Show all ({n})"), {
+                                      n: attentionItemCount,
+                                    })}
+                                    <Icon name="arrow-right" size="xs" />
+                                  </a>
+                                </div>
+                              )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            </div>
           </div>
+
+          <details class="dashboard-more panel">
+            <summary>{t("Additional information")}</summary>
+            <div class="dashboard-more-grid">
+              {setupComplete && (
+                <section
+                  class="dashboard-readiness"
+                  aria-labelledby="readiness-title"
+                >
+                  <h2 id="readiness-title">{t("Billing readiness")}</h2>
+                  <ul>
+                    <li data-ready="true">
+                      <Icon name="check" size="xs" />
+                      {t("Setup complete")}
+                    </li>
+                    <li data-ready={String(summary.readiness.billingReady)}>
+                      <Icon
+                        name={
+                          summary.readiness.billingReady ? "check" : "clock"
+                        }
+                        size="xs"
+                      />
+                      {t("All readings entered")}:{" "}
+                      {t(summary.readiness.billingReady ? "Done" : "To do")}
+                    </li>
+                    <li data-ready={String(summary.readiness.readyToSend)}>
+                      <Icon
+                        name={summary.readiness.readyToSend ? "check" : "clock"}
+                        size="xs"
+                      />
+                      {t("Ready to send")}:{" "}
+                      {t(summary.readiness.readyToSend ? "Done" : "To do")}
+                    </li>
+                  </ul>
+                </section>
+              )}
+              <section aria-labelledby="case-status-title">
+                <h2 id="case-status-title">{t("Case status")}</h2>
+                <div class="dashboard-status-list">
+                  {statuses.map((status) => (
+                    <a href={`${workbenchPath}?status=${status}`}>
+                      <StatusBadge status={status} />
+                      <span>
+                        {summary.caseStatusCounts[status]}
+                        <Icon name="arrow-right" size="xs" />
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              </section>
+              <section aria-labelledby="consumption-title">
+                <h2 id="consumption-title">
+                  <Icon name="droplet" size="sm" />
+                  {t("Consumption")}
+                </h2>
+                <dl class="consumption-list">
+                  <div>
+                    <dt>{t("Cold water")}</dt>
+                    <dd>
+                      {formatNumber(summary.coldWaterConsumption, locale)} m³
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{t("Hot water")}</dt>
+                    <dd>
+                      {formatNumber(summary.hotWaterConsumption, locale)} m³
+                    </dd>
+                  </div>
+                </dl>
+                {summary.carriedForwardReadingCount > 0 && (
+                  <p class="carried-readings-note">
+                    {plural(
+                      locale,
+                      summary.carriedForwardReadingCount,
+                      "Includes {n} reading carried over from the previous month.",
+                      "Includes {n} readings carried over from the previous month."
+                    )}
+                  </p>
+                )}
+              </section>
+            </div>
+          </details>
         </div>
-      </div>
-    )
-  }
+      )}
+    </>
+  )}
 </AdminLayout>
 
 <style>
-  .dashboard-period-nav {
+  .dashboard-page {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 2rem;
+  }
+  .dashboard-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    max-width: 48rem;
+    padding: 1.5rem;
+    border-color: var(--color-destructive);
+  }
+  .dashboard-error > :global(svg) {
+    flex: 0 0 auto;
+    color: var(--color-destructive);
+  }
+  .dashboard-error h1 {
+    font-size: 1.5rem;
+    line-height: 1.3;
+    font-weight: 650;
+  }
+  .dashboard-error p {
+    margin: 0.5rem 0 1rem;
+    font-size: 1rem;
+    line-height: 1.5;
+    color: var(--color-muted);
+  }
+
+  .dashboard-setup {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem 1.5rem;
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 1rem;
+  }
+  .setup-banner-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem 1rem;
+  }
+  .setup-banner-title h2 {
+    font-size: 1.25rem;
+    line-height: 1.3;
+    font-weight: 600;
+  }
+  .setup-banner-count,
+  .setup-banner-next {
+    color: var(--color-muted);
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+  .setup-banner-next {
+    margin-top: 0.375rem;
+  }
+  .setup-banner-next strong {
+    color: var(--color-foreground);
+    font-weight: 600;
+  }
+  .setup-banner-continue {
+    grid-area: 1 / 2;
+  }
+  .setup-banner-steps {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.75rem;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .setup-banner-step {
+    display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding-block: 0.25rem;
+    position: relative;
+    min-height: 2.75rem;
+    padding: 0.625rem 0.25rem 0.25rem;
+    border-radius: 0 0 var(--radius-control) var(--radius-control);
+    color: var(--color-muted);
+    font-size: 1rem;
+    line-height: 1.5;
+    text-decoration: none;
+  }
+  .setup-banner-step.is-next {
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+  .setup-banner-step:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-foreground);
+  }
+  .setup-banner-symbol {
+    display: grid;
+    place-items: center;
+    flex: 0 0 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-badge-neutral-text);
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+  .setup-banner-step.is-done .setup-banner-symbol {
+    background: var(--color-badge-success-bg);
+    color: var(--color-badge-success-text);
+  }
+  .setup-banner-step.is-next .setup-banner-symbol {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+  }
+
+  /* One compact row: month + status on the left, month switcher on the right. */
+  .dashboard-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.5rem 1.5rem;
+  }
+  /* Never wrap: a wrapped title is what made locked months taller than open ones. */
+  .dashboard-title-row {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.25rem 0.75rem;
+    min-width: 0;
+    min-height: 2.75rem;
+  }
+  .dashboard-title-row h1 {
+    min-width: 0;
+    overflow: hidden;
+    font-size: clamp(1.75rem, 2.6vw, 2.25rem);
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dashboard-title-row > :global(.status-badge) {
+    flex: 0 0 auto;
+  }
+  .dashboard-period-context {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-inline-start: 0.25rem;
+    color: var(--color-muted);
+    font-size: 1rem;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  /* Segmented previous / next month control. */
+  .dashboard-period-nav {
+    display: inline-flex;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    overflow: hidden;
   }
   .dashboard-period-nav > a,
   .dashboard-period-nav > span {
@@ -517,52 +1465,788 @@ const setupSteps = setupProgress
     align-items: center;
     gap: 0.375rem;
     min-height: 2.75rem;
-    border-radius: var(--radius-control);
+    padding: 0.5rem 0.875rem;
+    font-size: 1rem;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  /* With the sidebar, ~1024px leaves the title only a few px of slack: take it
+     from the switcher's padding first so the month name is never ellipsised. */
+  @media (max-width: 70rem) {
+    .dashboard-period-nav > a,
+    .dashboard-period-nav > span {
+      padding-inline: 0.625rem;
+    }
+  }
+  .dashboard-period-nav > * + * {
+    border-inline-start: 1px solid var(--color-border);
+  }
+  .dashboard-period-nav > a {
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+  .dashboard-period-nav > a:hover {
+    background: var(--color-surface-hover);
+  }
+  .dashboard-period-nav > span {
+    color: var(--color-muted);
+    background: var(--color-background);
+    cursor: not-allowed;
+    opacity: 0.72;
+    user-select: none;
+  }
+  .dashboard-period-nav > .period-context-compact {
+    cursor: default;
+    opacity: 1;
   }
   .dashboard-period-nav > :last-child {
     justify-content: flex-end;
     text-align: end;
   }
-  .dashboard-period-nav > a:hover {
-    color: var(--color-primary);
-    background: var(--color-surface-hover);
+  .period-label-mobile {
+    display: none;
   }
-  .dashboard-period-list {
-    padding-inline: 0.75rem;
+
+  .dashboard-month-status {
+    padding: 1.75rem 1.75rem 1.25rem;
+  }
+  .month-status-lead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1.5rem;
+  }
+  .month-status-lead .btn-primary {
+    flex: 0 0 auto;
+    min-width: max-content;
+    white-space: nowrap;
+  }
+  .dashboard-section-heading h2,
+  .dashboard-more h2,
+  .money-reconciliation h2 {
+    font-size: 1.25rem;
+    line-height: 1.4;
+    font-weight: 650;
+  }
+  /* The one focal point of the band. */
+  .month-status-sentence {
+    min-width: 0;
+    font-size: 1.375rem;
+    line-height: 1.25;
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+  .month-status-link,
+  .dashboard-section-heading > a,
+  .attention-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 2.75rem;
+    color: var(--color-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: var(--color-border);
+    text-underline-offset: 0.25em;
+  }
+  .month-status-link:hover,
+  .dashboard-section-heading > a:hover,
+  .attention-action:hover {
+    color: var(--color-primary-hover);
+    text-decoration-color: currentColor;
+  }
+  .month-progress {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    margin: 1.75rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  /* Icon + label on line one, "X of Y" and the step's deadline on line two, so
+     no step is wider than its column even in Latvian or Russian at 1024px. */
+  .month-progress li {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.125rem 0.625rem;
+    min-width: 0;
+    padding: 1rem 1rem 0.5rem 0;
+    border-top: 2px solid var(--color-border);
+  }
+  .progress-detail {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.75rem;
+  }
+  .month-progress li[data-state="done"] {
+    border-top-color: var(--color-success);
+  }
+  .month-progress li[data-state="current"] {
+    border-top-color: var(--color-primary);
+  }
+  .month-progress li + li {
+    padding-left: 1rem;
+  }
+  @media (max-width: 45rem) {
+    .month-progress li + li {
+      padding-left: 0;
+    }
+  }
+  /* Four columns only fit when the band is wide; at ~1024px (680px band) the
+     Russian step labels broke mid-word, so go 2x2 there. */
+  .dashboard-month-status {
+    container-type: inline-size;
+  }
+  @container (max-width: 47.999rem) {
+    .month-progress {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .month-progress {
+      row-gap: 0.75rem;
+    }
+    .month-progress li {
+      padding: 0.875rem 0.5rem 0.375rem 0;
+    }
+    .month-progress li + li {
+      padding-left: 0;
+    }
+    .month-progress li:nth-child(even) {
+      padding-left: 0.75rem;
+    }
+    .progress-detail {
+      grid-column: 1 / -1;
+    }
+  }
+  .progress-marker {
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-badge-neutral-text);
+  }
+  [data-state="done"] .progress-marker {
+    background: var(--color-badge-success-bg);
+    color: var(--color-badge-success-text);
+  }
+  [data-state="current"] .progress-marker {
+    background: var(--color-badge-info-bg);
+    color: var(--color-badge-info-text);
+  }
+  .progress-label,
+  .progress-count,
+  .progress-deadline {
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+  .progress-label {
+    min-width: 0;
+    font-weight: 600;
+    hyphens: manual;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+  /* Only the current step says so out loud; done and waiting steps are carried
+     by their icon, with the state still read out to screen readers. */
+  .progress-now {
+    margin-inline-start: 0.5rem;
+    color: var(--color-primary);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .progress-count,
+  .progress-deadline {
+    color: var(--color-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .dashboard-readiness {
+    grid-column: 1 / -1;
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+  .dashboard-readiness ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    list-style: none;
+    padding: 0;
+  }
+  .dashboard-readiness li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-badge);
+    background: var(--color-badge-warning-bg);
+    color: var(--color-badge-warning-text);
     font-weight: 600;
   }
-
-  .dashboard-totals :global(.kpi[data-tone="success"] .kpi-icon) {
-    color: var(--color-success);
+  .dashboard-readiness li[data-ready="true"] {
     background: var(--color-badge-success-bg);
-  }
-  .dashboard-totals :global(.kpi[data-tone="warning"] .kpi-icon) {
-    color: var(--color-warning);
-    background: var(--color-badge-warning-bg);
+    color: var(--color-badge-success-text);
   }
 
-  .dashboard-attention-row {
-    position: relative;
+  .dashboard-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 2rem;
+    margin-bottom: 0.75rem;
   }
-  .dashboard-attention-row[data-overdue="true"]::before {
-    background: var(--color-destructive);
+  .dashboard-section-heading > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem 1rem;
   }
-  .dashboard-status-link {
+  .dashboard-section-heading p {
+    color: var(--color-muted);
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+  /* Body: needs-attention first (what to do), money beside it on wide screens.
+     A container query is used because the sidebar eats the viewport width. */
+  .dashboard-body-wrap {
+    container-type: inline-size;
+  }
+  .dashboard-body {
+    display: grid;
+    gap: 2.25rem;
+    align-items: start;
+  }
+  .dashboard-attention {
+    order: 1;
+  }
+  .dashboard-money {
+    order: 2;
+  }
+  /* At 1024px the sidebar leaves a narrow main column. Keep the action list
+     first; the compact two-column ledger remains available immediately below. */
+  @container (min-width: 42rem) and (max-width: 55.999rem) {
+    /* Two columns: the sum on the left, the total and what is paid on the
+       right. Each row keeps a full-width label/number pair, so nothing overlaps. */
+    .dashboard-body .money-reconciliation dl {
+      display: grid;
+      grid-auto-flow: column;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: repeat(var(--eq-rows, 4), auto);
+      column-gap: 2.5rem;
+    }
+    .dashboard-body .money-reconciliation dl > div {
+      padding-block: 0.625rem;
+    }
+    .dashboard-body .money-reconciliation .money-total {
+      margin-top: 0;
+      padding-block: 0.625rem;
+      border-top: 0;
+    }
+    .dashboard-body .money-total dd {
+      font-size: 1.5rem;
+    }
+  }
+  @container (min-width: 56rem) {
+    .dashboard-body {
+      grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
+      gap: 2.75rem;
+    }
+    .dashboard-attention {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .dashboard-money {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .attention-row:not(.attention-summary-row) {
+      grid-template-columns: minmax(0, 1fr) minmax(11rem, max-content);
+      grid-template-rows: auto auto;
+    }
+    .attention-row:not(.attention-summary-row) .attention-row-main {
+      display: contents;
+    }
+    .attention-row:not(.attention-summary-row) .attention-heading {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .attention-row:not(.attention-summary-row) .attention-details,
+    .attention-row:not(.attention-summary-row) .attention-reason {
+      grid-column: 1;
+      grid-row: 2;
+    }
+    .attention-row:not(.attention-summary-row) > .attention-action {
+      grid-column: 2;
+      grid-row: 1;
+      justify-self: end;
+    }
+    .attention-details {
+      flex-wrap: nowrap;
+    }
+    .attention-row:not(.attention-summary-row) .attention-reason {
+      -webkit-line-clamp: 1;
+    }
+  }
+
+  /* One column of Excel-style figures that adds up to the total. */
+  .money-reconciliation {
+    padding: 1.75rem 1.75rem 1.25rem;
+  }
+  .money-reconciliation dl > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 0.875rem 0;
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+  .money-reconciliation dl > div + div {
+    border-top: 1px solid var(--color-border);
+  }
+  .money-reconciliation dt {
+    display: grid;
+    grid-template-columns: 1.25rem minmax(0, 1fr);
+    align-items: baseline;
+    gap: 0.25rem;
+    color: var(--color-muted);
+  }
+  .money-operator {
+    width: 1.25rem;
+    color: currentColor;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    text-align: center;
+  }
+  /* An empty operator has no baseline, which dropped its label ~5px low. */
+  .money-operator:empty::before {
+    content: "\200b";
+  }
+  /* Icon + label share the label cell instead of claiming the operator column. */
+  .money-reconciliation dt > span:last-child {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+  .money-reconciliation dd {
+    text-align: right;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .money-reconciliation .money-total {
+    margin-top: 0.5rem;
+    padding-block: 1.125rem;
+    border-top: 2px solid var(--color-foreground);
+    color: var(--color-foreground);
+    font-weight: 700;
+  }
+  .money-reconciliation .money-total dt {
+    color: inherit;
+  }
+  .money-total dd {
+    font-size: 1.75rem;
+    line-height: 1.2;
+    font-weight: 700;
+  }
+  .money-received {
+    color: var(--color-success);
+  }
+  .money-split[data-tone="danger"] dt,
+  .money-split[data-tone="danger"] dd {
+    color: var(--color-destructive);
+  }
+  .money-note {
+    padding: 1rem 0 0.25rem;
+    border-top: 1px solid var(--color-border);
+    color: var(--color-muted);
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+
+  .attention-list {
+    overflow: hidden;
+    padding-block: 1rem;
+  }
+  .attention-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0 1.5rem;
+    min-height: 5rem;
+    padding: 0.5rem 1.75rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  /* Rows hairline-separate inside a group; groups hairline-separate each other. */
+  .attention-group > [role="list"] > .attention-row:last-child {
+    border-bottom: 0;
+  }
+  .attention-group + .attention-group {
+    margin-top: 2rem;
+    border-top: 0;
+  }
+  .attention-group-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-height: 2rem;
+    padding: 0 1.75rem 0.75rem;
+    font-size: 1rem;
+    line-height: 1.5;
+    font-weight: 600;
+  }
+  .attention-group-icon {
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background: var(--color-badge-warning-bg);
+    color: var(--color-badge-warning-text);
+  }
+  .attention-group-heading[data-tone="danger"] .attention-group-icon {
+    background: var(--color-badge-danger-bg);
+    color: var(--color-badge-danger-text);
+  }
+  .attention-group-count {
+    color: var(--color-muted);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  /* The idle save chip (44px, fixed bottom-right) sat on the action arrow at
+     ~1024px: keep row actions clear of the viewport's right edge there. */
+  @media (min-width: 45.01rem) and (max-width: 70rem) {
+    .attention-row {
+      padding-inline-end: 3rem;
+    }
+  }
+  .attention-row-main {
+    min-width: 0;
+  }
+  .attention-row:not(.attention-summary-row) > .attention-action {
+    white-space: nowrap;
+  }
+  /* Dwelling and status form line one; overdue figures form line two. */
+  .attention-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 0.75rem;
+  }
+  .attention-heading > a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    padding-inline: 0.25rem;
+    color: var(--color-foreground);
+    font-size: 1rem;
+    font-weight: 650;
+    text-decoration: underline;
+    text-decoration-color: var(--color-border);
+    text-underline-offset: 0.2em;
+  }
+  .attention-reason,
+  .attention-summary-row > p {
+    color: var(--color-muted);
+    font-size: 1rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  /* Amount, due date and days late are separate items: gaps, no separator glyphs,
+     so a wrapped line never starts with a stray mark. */
+  .attention-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.75rem;
+    margin-top: 0;
+    padding-inline-start: 0.25rem;
+    color: var(--color-muted);
+  }
+  .attention-details > * {
+    white-space: nowrap;
+  }
+  .attention-details strong {
+    color: var(--color-destructive);
+    font-variant-numeric: tabular-nums;
+  }
+  .attention-reason {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    margin-top: 0;
+    padding-inline-start: 0.25rem;
+    overflow: hidden;
+  }
+  .attention-more-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 3.5rem;
+    padding-inline: 1.75rem;
+    color: var(--color-muted);
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+  .attention-more-row > a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 2.75rem;
+    color: var(--color-primary);
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: var(--color-border);
+    text-underline-offset: 0.25em;
+  }
+  .attention-more-row > a:hover {
+    color: var(--color-primary-hover);
+    text-decoration-color: currentColor;
+  }
+  .attention-summary-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .attention-summary-row > p {
+    padding-block: 0.5rem;
+    color: var(--color-foreground);
+  }
+  .attention-summary-icon {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: var(--color-badge-info-bg);
+    color: var(--color-badge-info-text);
+  }
+  .attention-summary-row[data-tone="warning"] .attention-summary-icon {
+    background: var(--color-badge-warning-bg);
+    color: var(--color-badge-warning-text);
+  }
+  .attention-summary-row[data-tone="danger"] .attention-summary-icon {
+    background: var(--color-badge-danger-bg);
+    color: var(--color-badge-danger-text);
+  }
+
+  .dashboard-more {
+    padding: 0;
+  }
+  .dashboard-more > summary {
+    display: flex;
+    align-items: center;
+    min-height: 2.75rem;
+    padding: 1.25rem 1.75rem;
+    font-size: 1rem;
+    font-weight: 650;
+    list-style: none;
+  }
+  .dashboard-more > summary::-webkit-details-marker {
+    display: none;
+  }
+  .dashboard-more > summary::before {
+    content: "+";
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    margin-inline-end: 0.625rem;
+    color: var(--color-primary);
+    font-size: 1.25rem;
+  }
+  .dashboard-more[open] > summary::before {
+    content: "−";
+  }
+  .dashboard-more-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2.5rem 3rem;
+    padding: 0 1.75rem 2rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .dashboard-more-grid > section {
+    min-width: 0;
+    padding-top: 1.75rem;
+  }
+  .dashboard-more h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .dashboard-status-list {
+    display: grid;
+  }
+  .dashboard-status-list > a {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    min-height: 2.75rem;
-    padding-inline: 0.5rem;
+    min-height: 3rem;
+    padding: 0.5rem 0.75rem;
     border-radius: var(--radius-control);
+    font-size: 1rem;
   }
-
-  .dashboard-status-count {
+  .dashboard-status-list > a:hover {
+    background: var(--color-surface-hover);
+  }
+  .dashboard-status-list > a > span:last-child {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.5rem;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
   }
-  .dashboard-status-count :global(svg) {
+  .consumption-list > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+  .consumption-list dt,
+  .carried-readings-note {
     color: var(--color-muted);
+  }
+  .consumption-list dd {
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+  }
+  .carried-readings-note {
+    margin-top: 0.75rem;
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+
+  /* With the sidebar, five setup steps leave ~75px of text each at ~1024px. */
+  @media (max-width: 70rem) {
+    .setup-banner-steps {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 80rem) {
+    .dashboard-period-context {
+      display: none;
+    }
+  }
+
+  @media (max-width: 45rem) {
+    .dashboard-page {
+      gap: 1.75rem;
+    }
+    .dashboard-setup {
+      grid-template-columns: minmax(0, 1fr);
+      padding: 1.25rem;
+      gap: 1rem;
+    }
+    .setup-banner-steps {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.25rem;
+    }
+    .setup-banner-continue {
+      grid-area: auto;
+      width: 100%;
+    }
+    .dashboard-header {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .dashboard-period-nav {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    /* Keep both halves at the same control height; the disabled next action uses
+       its short label while retaining the full accessible name. */
+    .dashboard-period-nav > a,
+    .dashboard-period-nav > span {
+      padding-inline: 0.625rem;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .period-label-full {
+      display: none;
+    }
+    .period-label-mobile {
+      display: inline;
+    }
+    .dashboard-period-nav > a > :global(svg),
+    .dashboard-period-nav > span > :global(svg) {
+      flex: 0 0 auto;
+    }
+    .dashboard-period-nav > :last-child {
+      justify-content: flex-end;
+    }
+    .dashboard-month-status {
+      padding: 1.25rem 1.25rem 0.75rem;
+    }
+    .dashboard-more > summary {
+      padding-inline: 1.25rem;
+    }
+    .dashboard-more-grid {
+      padding-inline: 1.25rem;
+    }
+    .month-status-lead {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .month-status-lead .btn-primary {
+      width: 100%;
+    }
+    .month-progress {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .dashboard-more-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .month-progress {
+      margin-top: 1.25rem;
+    }
+    .month-progress li {
+      padding: 0.875rem 0.5rem 0.375rem 0;
+    }
+    .month-progress li:nth-child(even) {
+      padding-left: 0.75rem;
+    }
+    .progress-now {
+      display: block;
+      margin-inline-start: 0;
+    }
+    .dashboard-readiness ul {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .dashboard-section-heading {
+      flex-wrap: wrap;
+      gap: 0 0.5rem;
+    }
+    .money-reconciliation {
+      padding: 1.25rem 1.25rem 1rem;
+    }
+    .attention-row {
+      grid-template-columns: minmax(0, 1fr);
+      padding: 0.5rem 1.25rem;
+    }
+    .attention-group-heading,
+    .attention-more-row {
+      padding-inline: 1.25rem;
+    }
+    .attention-details {
+      white-space: normal;
+    }
+    .attention-summary-row {
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 0 0.75rem;
+    }
+    .attention-summary-row > .attention-action {
+      grid-column: 2;
+    }
+    .attention-action {
+      justify-self: start;
+    }
   }
 </style>

@@ -1,0 +1,164 @@
+---
+// The "record a payment" form (ADR 0014), shared by the Payments page and the
+// dwelling page. One target select: an open invoice, or a dwelling account that
+// has no open invoice. The page wraps it in its own disclosure.
+import { actions } from "astro:actions";
+import FieldError from "./FieldError.astro";
+import { formatMoney, translate, uiLocale } from "../../lib/ui/i18n";
+
+interface Props {
+  organizationId: string;
+  invoices: Array<{
+    id: string;
+    invoiceNumber: string;
+    dwellingNumber: string;
+    currency: string;
+    remaining: string;
+  }>;
+  dwellings: Array<{ id: string; number: string }>;
+  today: string;
+  error?: unknown;
+  idPrefix?: string;
+}
+
+const { organizationId, invoices, dwellings, today, error, idPrefix } =
+  Astro.props;
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+const id = idPrefix ?? "manual";
+const onlyOne = invoices.length + dwellings.length === 1;
+// A new id for every rendered form: a second submit of this same form (double
+// click, reload after the POST) is refused instead of paying twice.
+const submissionId = crypto.randomUUID();
+const field =
+  "mt-1 w-full rounded-control border border-border px-3 py-1.5 text-sm";
+const label = "block text-sm font-medium text-foreground";
+---
+
+<p class="text-sm text-muted">
+  {t(
+    "Use this for money that is not in an imported statement: a transfer the statement missed, cash, or a payment for a dwelling that has no open invoice. The payment is applied right away."
+  )}
+</p>
+<form
+  method="POST"
+  action={actions.payments.recordManual}
+  class="mt-4 space-y-3"
+>
+  <input type="hidden" name="organizationId" value={organizationId} />
+  <input type="hidden" name="submissionId" value={submissionId} />
+  <div>
+    <label class={label} for={`${id}-target`}>
+      {t("Apply to")}
+    </label>
+    <select id={`${id}-target`} name="target" required class={field}>
+      {!onlyOne && (
+        <option value="" disabled selected>
+          {t("Choose where the payment goes")}
+        </option>
+      )}
+      {invoices.length > 0 && (
+        <optgroup label={t("Open invoices")}>
+          {invoices.map((inv) => (
+            <option value={`invoice:${inv.id}`} selected={onlyOne}>
+              {`${inv.invoiceNumber} · ${t("Dwelling")} ${inv.dwellingNumber} · ${formatMoney(inv.remaining, inv.currency, locale)}`}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {dwellings.length > 0 && (
+        <optgroup label={t("Dwelling account (no open invoice)")}>
+          {dwellings.map((d) => (
+            <option value={`dwelling:${d.id}`} selected={onlyOne}>
+              {`${t("Dwelling")} ${d.number}`}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </select>
+    <FieldError name="target" error={error} />
+  </div>
+  <div>
+    <label class={label} for={`${id}-method`}>
+      {t("Method")}
+    </label>
+    <select id={`${id}-method`} name="method" class={field}>
+      <option value="BANK">{t("Bank transfer")}</option>
+      <option value="CASH">{t("Cash")}</option>
+    </select>
+  </div>
+  <div>
+    <label class={label} for={`${id}-amount`}>
+      {t("Amount")}
+    </label>
+    <input
+      id={`${id}-amount`}
+      name="amount"
+      inputmode="decimal"
+      required
+      class={field}
+    />
+    <FieldError name="amount" error={error} />
+  </div>
+  <div>
+    <label class={label} for={`${id}-date`}>
+      {t("Date")}
+    </label>
+    <input
+      id={`${id}-date`}
+      name="bookingDate"
+      type="date"
+      required
+      max={today}
+      class={field}
+    />
+    <FieldError name="bookingDate" error={error} />
+  </div>
+  <div>
+    <label class={label} for={`${id}-payer`}>
+      {t("Payer")}
+    </label>
+    <input id={`${id}-payer`} name="payerName" class={field} />
+    <FieldError name="payerName" error={error} />
+  </div>
+  <div>
+    <label class={label} for={`${id}-reference`}>
+      {t("Reference")}
+    </label>
+    <input
+      id={`${id}-reference`}
+      name="reference"
+      maxlength="140"
+      aria-describedby={`${id}-reference-hint`}
+      class={field}
+    />
+    <small id={`${id}-reference-hint`} class="text-muted">
+      {t(
+        "Required for a bank transfer. For cash, a receipt number if you have one."
+      )}
+    </small>
+    <FieldError name="reference" error={error} />
+  </div>
+  <div>
+    <label class={label} for={`${id}-reason`}>
+      {t("Reason")}
+    </label>
+    <input
+      id={`${id}-reason`}
+      name="reason"
+      required
+      maxlength="500"
+      class={field}
+    />
+    <FieldError name="reason" error={error} />
+  </div>
+  <div>
+    <button
+      type="submit"
+      class="btn-primary"
+      data-confirm={t("Record this payment? It is applied right away.")}
+    >
+      {t("Record payment")}
+    </button>
+  </div>
+</form>

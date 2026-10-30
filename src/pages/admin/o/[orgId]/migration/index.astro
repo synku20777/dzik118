@@ -1,0 +1,183 @@
+---
+import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+// Migration Center: start an import and see the past ones (ADR 0013).
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { listMigrationImports } from "../../../../../domain/migration/flow";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const organizationId = Astro.params.orgId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const [organization, imports] = await withRequestDb(async (db) => [
+  await getOrganization(db, organizationId),
+  await listMigrationImports(db, organizationId),
+]);
+
+const base = `/admin/o/${organizationId}/migration`;
+// Shown after an import: "none" means the file changed nothing.
+const importedParam = Astro.url.searchParams.get("imported");
+const justImported =
+  importedParam && importedParam !== "none"
+    ? imports.find((i) => i.id === importedParam)
+    : null;
+const nothingChanged = importedParam === "none";
+const dateFormat = new Intl.DateTimeFormat(locale, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+---
+
+<AdminLayout
+  title={`Migration Center - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="space-y-6">
+    <h1 class="font-display text-h2 text-foreground">
+      {t("Migration Center")}
+    </h1>
+    <p class="max-w-2xl text-body-sm text-muted">
+      {t(
+        "Bring your dwellings and recipients from a spreadsheet or your old system. You check every step before anything is saved."
+      )}
+    </p>
+
+    {justImported && (
+      <p class="notice" role="status">
+        {t("Import done")}: {t("Created")} {justImported.createdCount},{" "}
+        {t("Updated")} {justImported.updatedCount}, {t("Left unchanged")}{" "}
+        {justImported.skippedCount}.
+      </p>
+    )}
+    {nothingChanged && (
+      <p class="notice" role="status">
+        {t("The file changed nothing. All rows already exist.")}
+      </p>
+    )}
+
+    <section class="max-w-2xl space-y-3 rounded-panel border border-border bg-surface p-6">
+      <h2 class="text-h3 text-foreground">{t("Dwellings and recipients")}</h2>
+      <p class="text-body-sm text-muted">
+        {t(
+          "Dwelling numbers, billing name, email, area, residents and delivery."
+        )}
+      </p>
+      <div class="flex flex-wrap gap-3">
+        <a href={`${base}/dwellings`} class="btn-primary">
+          {t("Start an import")}
+        </a>
+        <a href={`${base}/templates/dwellings.csv`} class="btn-secondary">
+          {t("Download the template")}
+        </a>
+      </div>
+    </section>
+
+    <section class="max-w-2xl space-y-3 rounded-panel border border-border bg-surface p-6">
+      <h2 class="text-h3 text-foreground">{t("Opening balances")}</h2>
+      <p class="text-body-sm text-muted">
+        {t(
+          "Debt or credit from your old system, one amount for each dwelling. Import the dwellings first."
+        )}
+      </p>
+      <div class="flex flex-wrap gap-3">
+        <a href={`${base}/balances`} class="btn-primary">
+          {t("Start an import")}
+        </a>
+        <a href={`${base}/templates/balances.csv`} class="btn-secondary">
+          {t("Download the template")}
+        </a>
+      </div>
+    </section>
+
+    <section class="max-w-2xl space-y-3 rounded-panel border border-border bg-surface p-6">
+      <h2 class="text-h3 text-foreground">{t("Meters and readings")}</h2>
+      <p class="text-body-sm text-muted">
+        {t(
+          "The meters of each dwelling and the latest reading of each. Import the dwellings first, and create the first billing period."
+        )}
+      </p>
+      <div class="flex flex-wrap gap-3">
+        <a href={`${base}/meters`} class="btn-primary">
+          {t("Start an import")}
+        </a>
+        <a href={`${base}/templates/meters.csv`} class="btn-secondary">
+          {t("Download the template")}
+        </a>
+      </div>
+    </section>
+
+    <section class="space-y-3">
+      <h2 class="text-h3 text-foreground">{t("Past imports")}</h2>
+      {imports.length === 0 ? (
+        <p class="text-body-sm text-muted">{t("No imports yet.")}</p>
+      ) : (
+        <div class="table-wrap stack-table">
+          <table class="w-full text-left text-body-sm">
+            <caption class="sr-only">{t("Past imports")}</caption>
+            <thead class="border-b border-border bg-surface-hover text-muted">
+              <tr>
+                <th scope="col" class="px-4 py-2">
+                  {t("Date")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("File")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Created")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Updated")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Left unchanged")}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {imports.map((i) => (
+                <tr>
+                  <td class="px-4 py-2" data-label={t("Date")}>
+                    {dateFormat.format(i.createdAt)}
+                  </td>
+                  <td class="px-4 py-2" data-label={t("File")}>
+                    {i.kind === "BALANCES" ? (
+                      <a
+                        href={`${base}/report/${i.id}`}
+                        class="text-primary hover:underline"
+                      >
+                        {i.sourceFilename}
+                      </a>
+                    ) : (
+                      i.sourceFilename
+                    )}
+                  </td>
+                  <td class="px-4 py-2" data-label={t("Created")}>
+                    {i.createdCount}
+                  </td>
+                  <td class="px-4 py-2" data-label={t("Updated")}>
+                    {i.updatedCount}
+                  </td>
+                  <td class="px-4 py-2" data-label={t("Left unchanged")}>
+                    {i.skippedCount}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  </div>
+</AdminLayout>

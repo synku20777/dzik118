@@ -77,7 +77,9 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
       display
     >
       <a href={`${base}/guide`} class="btn-secondary settings-help">
-        <span class="settings-help-icon" aria-hidden="true">?</span>
+        <span class="settings-help-icon" aria-hidden="true">
+          ?
+        </span>
         {t("Need help?")}
       </a>
     </PageHeader>
@@ -92,20 +94,16 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
         >
           <input type="hidden" name="organizationId" value={organizationId} />
 
-          {
-            updateResult?.error && (
-              <p class="notice notice-danger" role="alert">
-                {updateResult.error.message}
-              </p>
-            )
-          }
-          {
-            updateResult?.data && (
-              <p class="notice" role="status">
-                {t("Saved successfully.")}
-              </p>
-            )
-          }
+          {updateResult?.error && (
+            <p class="notice notice-danger" role="alert">
+              {updateResult.error.message}
+            </p>
+          )}
+          {updateResult?.data && (
+            <p class="notice" role="status">
+              {t("Saved successfully.")}
+            </p>
+          )}
 
           <div class="billing-card-head">
             <span class="billing-card-icon" aria-hidden="true">
@@ -125,13 +123,11 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
                 name="currency"
                 aria-describedby="currency-error"
               >
-                {
-                  currencyOptions.map((c) => (
-                    <option value={c} selected={c === organization.currency}>
-                      {c}
-                    </option>
-                  ))
-                }
+                {currencyOptions.map((c) => (
+                  <option value={c} selected={c === organization.currency}>
+                    {c}
+                  </option>
+                ))}
               </select>
               <FieldError name="currency" error={updateResult?.error} />
             </div>
@@ -142,13 +138,11 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
                 name="timezone"
                 aria-describedby="timezone-error"
               >
-                {
-                  timezoneOptions.map((tz) => (
-                    <option value={tz} selected={tz === organization.timezone}>
-                      {tz}
-                    </option>
-                  ))
-                }
+                {timezoneOptions.map((tz) => (
+                  <option value={tz} selected={tz === organization.timezone}>
+                    {tz}
+                  </option>
+                ))}
               </select>
               <FieldError name="timezone" error={updateResult?.error} />
             </div>
@@ -158,13 +152,11 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
             <div class="billing-field">
               <label for="locale">{t("Locale")}</label>
               <select id="locale" name="locale" aria-describedby="locale-error">
-                {
-                  localeOptions.map((l) => (
-                    <option value={l} selected={l === organization.locale}>
-                      {l}
-                    </option>
-                  ))
-                }
+                {localeOptions.map((l) => (
+                  <option value={l} selected={l === organization.locale}>
+                    {l}
+                  </option>
+                ))}
               </select>
               <FieldError name="locale" error={updateResult?.error} />
             </div>
@@ -224,16 +216,14 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
               <span class="toggle-switch-thumb" aria-hidden="true"></span>
             </span>
             <span class="toggle-row-text">
-              <span class="toggle-row-title"
-                >{t("Automatically generate invoices each period")}</span
-              >
-              <span class="toggle-row-desc"
-                >{
-                  t(
-                    "Creates draft invoices for all eligible accounts at the start of each period."
-                  )
-                }</span
-              >
+              <span class="toggle-row-title">
+                {t("Automatically generate invoices each period")}
+              </span>
+              <span class="toggle-row-desc">
+                {t(
+                  "Creates draft invoices for all eligible accounts at the start of each period."
+                )}
+              </span>
             </span>
           </label>
 
@@ -249,16 +239,14 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
               <span class="toggle-switch-thumb" aria-hidden="true"></span>
             </span>
             <span class="toggle-row-text">
-              <span class="toggle-row-title"
-                >{t("Reuse the previous reading after the deadline")}</span
-              >
-              <span class="toggle-row-desc"
-                >{
-                  t(
-                    "When no meter reading arrives by the reading deadline, the previous reading is used and the consumption is zero. The next real reading bills the difference."
-                  )
-                }</span
-              >
+              <span class="toggle-row-title">
+                {t("Reuse the previous reading after the deadline")}
+              </span>
+              <span class="toggle-row-desc">
+                {t(
+                  "When no meter reading arrives by the reading deadline, the previous reading is used and the consumption is zero. The next real reading bills the difference."
+                )}
+              </span>
             </span>
           </label>
 
@@ -275,12 +263,12 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
               <span class="toggle-switch-thumb" aria-hidden="true"></span>
             </span>
             <span class="toggle-row-text">
-              <span class="toggle-row-title"
-                >{t("Automatically send prepared invoices")}</span
-              >
-              <span class="toggle-row-desc"
-                >{t("Sends invoices to recipients automatically.")}</span
-              >
+              <span class="toggle-row-title">
+                {t("Automatically send prepared invoices")}
+              </span>
+              <span class="toggle-row-desc">
+                {t("Sends invoices to recipients automatically.")}
+              </span>
             </span>
           </label>
 
@@ -301,17 +289,17 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
               {t("Used only when automatic sending is enabled.")}
             </p>
             <p class="billing-field-hint">
-              {
-                t(
-                  "Invoices prepared by the end of this day are sent on this day. The app tries a failed send again on the next days."
-                )
-              }
+              {t(
+                "Invoices prepared by the end of this day are sent on this day. The app tries a failed send again on the next days."
+              )}
             </p>
             <FieldError name="autoSendDay" error={updateResult?.error} />
           </div>
 
           <div class="billing-form-actions">
-            <a href={settingsHref} class="btn-secondary">{t("Cancel")}</a>
+            <a href={settingsHref} class="btn-secondary">
+              {t("Cancel")}
+            </a>
             <button
               type="submit"
               form="billing-defaults-form"
@@ -330,29 +318,23 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
             <div>
               <h2>{t("Late-payment rules")}</h2>
               <p>
-                {
-                  t(
-                    "Rules applied to future late-fee calculations. Existing invoices keep their original financial snapshot."
-                  )
-                }
+                {t(
+                  "Rules applied to future late-fee calculations. Existing invoices keep their original financial snapshot."
+                )}
               </p>
             </div>
           </div>
 
-          {
-            policyResult?.error && (
-              <p class="notice notice-danger" role="alert">
-                {friendlyActionErrorMessage(policyResult.error, locale)}
-              </p>
-            )
-          }
-          {
-            policyResult?.data && (
-              <p class="notice" role="status">
-                {t("Saved successfully.")}
-              </p>
-            )
-          }
+          {policyResult?.error && (
+            <p class="notice notice-danger" role="alert">
+              {friendlyActionErrorMessage(policyResult.error, locale)}
+            </p>
+          )}
+          {policyResult?.data && (
+            <p class="notice" role="status">
+              {t("Saved successfully.")}
+            </p>
+          )}
 
           <form
             method="POST"
@@ -378,12 +360,12 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
                   checked={lateFeePolicy?.enabled ?? false}
                 />
                 <span>
-                  <span class="checkbox-row-title"
-                    >{t("Late fees enabled")}</span
-                  >
-                  <span class="checkbox-row-desc"
-                    >{t("Apply late fees to overdue invoices.")}</span
-                  >
+                  <span class="checkbox-row-title">
+                    {t("Late fees enabled")}
+                  </span>
+                  <span class="checkbox-row-desc">
+                    {t("Apply late fees to overdue invoices.")}
+                  </span>
                 </span>
               </label>
             </div>
@@ -413,11 +395,9 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
                   required
                 />
                 <p class="billing-field-hint">
-                  {
-                    t(
-                      "Number of days after the due date before late fees apply."
-                    )
-                  }
+                  {t(
+                    "Number of days after the due date before late fees apply."
+                  )}
                 </p>
               </div>
             </div>
@@ -443,25 +423,25 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
                   checked={lateFeePolicy?.stopsAtCap ?? true}
                 />
                 <span>
-                  <span class="checkbox-row-title"
-                    >{t("Stop accrual at cap")}</span
-                  >
-                  <span class="checkbox-row-desc"
-                    >{
-                      t(
-                        "Do not accrue additional fees once the maximum penalty is reached."
-                      )
-                    }</span
-                  >
+                  <span class="checkbox-row-title">
+                    {t("Stop accrual at cap")}
+                  </span>
+                  <span class="checkbox-row-desc">
+                    {t(
+                      "Do not accrue additional fees once the maximum penalty is reached."
+                    )}
+                  </span>
                 </span>
               </label>
             </div>
 
             <div class="billing-form-actions">
-              <a href={settingsHref} class="btn-secondary">{t("Cancel")}</a>
-              <button type="submit" class="btn-primary"
-                >{t("Save changes")}</button
-              >
+              <a href={settingsHref} class="btn-secondary">
+                {t("Cancel")}
+              </a>
+              <button type="submit" class="btn-primary">
+                {t("Save changes")}
+              </button>
             </div>
           </form>
         </div>
@@ -479,23 +459,34 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
             </div>
           </div>
           <dl class="billing-summary-list">
-            <div><dt>{t("Currency")}</dt><dd>{organization.currency}</dd></div>
-            <div><dt>{t("Timezone")}</dt><dd>{organization.timezone}</dd></div>
-            <div><dt>{t("Locale")}</dt><dd>{organization.locale}</dd></div>
             <div>
-              <dt>{t("Invoice prefix")}</dt><dd>
-                {organization.invoicePrefix}
-              </dd>
+              <dt>{t("Currency")}</dt>
+              <dd>{organization.currency}</dd>
             </div>
             <div>
-              <dt>{t("Due days")}</dt><dd>{organization.defaultDueDays}</dd>
+              <dt>{t("Timezone")}</dt>
+              <dd>{organization.timezone}</dd>
+            </div>
+            <div>
+              <dt>{t("Locale")}</dt>
+              <dd>{organization.locale}</dd>
+            </div>
+            <div>
+              <dt>{t("Invoice prefix")}</dt>
+              <dd>{organization.invoicePrefix}</dd>
+            </div>
+            <div>
+              <dt>{t("Due days")}</dt>
+              <dd>{organization.defaultDueDays}</dd>
             </div>
           </dl>
         </div>
 
         <div class="billing-tips">
           <div class="billing-tips-head">
-            <span class="billing-info-icon" aria-hidden="true">i</span>
+            <span class="billing-info-icon" aria-hidden="true">
+              i
+            </span>
             <div>
               <h3>{t("Good to know")}</h3>
               <p>{t("Important details about billing settings.")}</p>
@@ -508,11 +499,9 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
             <div>
               <p class="billing-tip-title">{t("Invoice numbering")}</p>
               <p>
-                {
-                  t(
-                    "The invoice number prefix is applied to newly generated invoices."
-                  )
-                }
+                {t(
+                  "The invoice number prefix is applied to newly generated invoices."
+                )}
               </p>
             </div>
           </div>
@@ -523,11 +512,9 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
             <div>
               <p class="billing-tip-title">{t("Automation scope")}</p>
               <p>
-                {
-                  t(
-                    "Automatic generation and sending run only for eligible billing periods."
-                  )
-                }
+                {t(
+                  "Automatic generation and sending run only for eligible billing periods."
+                )}
               </p>
             </div>
           </div>
@@ -538,11 +525,9 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
             <div>
               <p class="billing-tip-title">{t("Late-payment changes")}</p>
               <p>
-                {
-                  t(
-                    "Changes to late-payment rules affect future calculations only. Existing invoices keep their original financial snapshot."
-                  )
-                }
+                {t(
+                  "Changes to late-payment rules affect future calculations only. Existing invoices keep their original financial snapshot."
+                )}
               </p>
             </div>
           </div>

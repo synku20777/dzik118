@@ -181,11 +181,15 @@ const bootstrap = {
     >
       <div class="header-actions">
         <a href={`${base}/guide`} class="btn-secondary settings-help">
-          <span class="settings-help-icon" aria-hidden="true">?</span>
+          <span class="settings-help-icon" aria-hidden="true">
+            ?
+          </span>
           {t("Need help?")}
         </a>
         <div class="header-action-buttons">
-          <a href={settingsHref} class="btn-secondary">{t("Cancel")}</a>
+          <a href={settingsHref} class="btn-secondary">
+            {t("Cancel")}
+          </a>
           <button type="submit" form="template-editor-form" class="btn-primary">
             {t("Save changes")}
           </button>
@@ -193,20 +197,16 @@ const bootstrap = {
       </div>
     </PageHeader>
 
-    {
-      updateResult?.error && (
-        <p class="notice notice-danger" role="alert">
-          {updateResult.error.message}
-        </p>
-      )
-    }
-    {
-      updateResult?.data && (
-        <p class="notice" role="status">
-          {t("Saved successfully.")}
-        </p>
-      )
-    }
+    {updateResult?.error && (
+      <p class="notice notice-danger" role="alert">
+        {updateResult.error.message}
+      </p>
+    )}
+    {updateResult?.data && (
+      <p class="notice" role="status">
+        {t("Saved successfully.")}
+      </p>
+    )}
 
     <!-- Standalone GET form, deliberately outside template-editor-form below
          (forms cannot be nested) -- the period <select> inside the
@@ -234,7 +234,6 @@ const bootstrap = {
           id="template-editor-bootstrap"
           set:html={JSON.stringify(bootstrap).replace(/</g, "\\u003c")}
         />
-
         <div class="tpl-editor-layout">
           <div class="tpl-editor-column">
             <div class="tpl-column-header">
@@ -244,40 +243,33 @@ const bootstrap = {
               </p>
             </div>
 
-            {
-              periods.length > 0 ? (
-                <div class="tpl-period-select">
-                  <label for="tpl-preview-period">{t("Preview period")}</label>
-                  <select
-                    id="tpl-preview-period"
-                    name="previewPeriodId"
-                    form="preview-period-form"
-                  >
-                    {periods.map((p) => (
-                      <option
-                        value={p.id}
-                        selected={p.id === previewPeriod?.id}
-                      >
-                        {p.year}-{String(p.month).padStart(2, "0")}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="submit"
-                    form="preview-period-form"
-                    class="btn-secondary btn-sm"
-                  >
-                    {t("Preview")}
-                  </button>
-                </div>
-              ) : (
-                <p class="tpl-period-note">
-                  {t(
-                    "No billing periods yet — showing tariffs effective today."
-                  )}
-                </p>
-              )
-            }
+            {periods.length > 0 ? (
+              <div class="tpl-period-select">
+                <label for="tpl-preview-period">{t("Preview period")}</label>
+                <select
+                  id="tpl-preview-period"
+                  name="previewPeriodId"
+                  form="preview-period-form"
+                >
+                  {periods.map((p) => (
+                    <option value={p.id} selected={p.id === previewPeriod?.id}>
+                      {p.year}-{String(p.month).padStart(2, "0")}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  form="preview-period-form"
+                  class="btn-secondary btn-sm"
+                >
+                  {t("Preview")}
+                </button>
+              </div>
+            ) : (
+              <p class="tpl-period-note">
+                {t("No billing periods yet — showing tariffs effective today.")}
+              </p>
+            )}
 
             <div class="tpl-editor-toolbar">
               <button
@@ -301,8 +293,7 @@ const bootstrap = {
               id="tpl-blocks"
               class="tpl-blocks"
               aria-label={t("Invoice sections")}
-            >
-            </ul>
+            ></ul>
           </div>
 
           <div class="tpl-editor-column">
@@ -310,25 +301,19 @@ const bootstrap = {
               <div>
                 <h2 class="tpl-column-title">{t("Live preview")}</h2>
                 <p class="tpl-column-subtitle">
-                  {
-                    t(
-                      "This preview reflects your current template configuration."
-                    )
-                  }
+                  {t(
+                    "This preview reflects your current template configuration."
+                  )}
                 </p>
                 <p class="tpl-column-subtitle tpl-preview-illustrative-note">
-                  {
-                    t(
-                      "Charge quantities shown here are illustrative (always 1) and do not reflect any real resident's bill."
-                    )
-                  }
+                  {t(
+                    "Charge quantities shown here are illustrative (always 1) and do not reflect any real resident's bill."
+                  )}
                 </p>
                 <p class="tpl-column-subtitle">
-                  {
-                    t(
-                      "Latvian is the canonical invoice language. English and Russian are optional translations; a missing translation falls back to Latvian."
-                    )
-                  }
+                  {t(
+                    "Latvian is the canonical invoice language. English and Russian are optional translations; a missing translation falls back to Latvian."
+                  )}
                 </p>
               </div>
               <div class="tpl-preview-controls">
@@ -337,7 +322,9 @@ const bootstrap = {
                   class="tpl-zoom-select"
                   aria-label={t("Editing language")}
                 >
-                  <option value="lv" selected>Latviešu</option>
+                  <option value="lv" selected>
+                    Latviešu
+                  </option>
                   <option value="en">English</option>
                   <option value="ru">Русский</option>
                 </select>
@@ -347,7 +334,9 @@ const bootstrap = {
                   aria-label={t("Zoom level")}
                 >
                   <option value="0.75">75%</option>
-                  <option value="1" selected>100%</option>
+                  <option value="1" selected>
+                    100%
+                  </option>
                   <option value="1.25">125%</option>
                   <option value="1.5">150%</option>
                 </select>
@@ -359,7 +348,8 @@ const bootstrap = {
                 <iframe
                   id="tpl-preview"
                   class="tpl-preview"
-                  title={t("Invoice preview")}></iframe>
+                  title={t("Invoice preview")}
+                ></iframe>
               </div>
             </div>
           </div>

@@ -41,55 +41,45 @@ const adminLinkError = errorCode === "6";
       <p class="font-display text-2xl font-semibold">{t("Namkopa")}</p>
       <Ornament />
     </div>
-    {
-      noAccountError && (
-        <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
-          {t(
-            "We couldn't find an account for that sign-in. If you believe this is a mistake, contact your administrator."
-          )}
-        </p>
-      )
-    }
-    {
-      adminLinkError && (
-        <p
-          class="rounded-control bg-danger-surface p-3 text-sm text-destructive"
-          role="alert"
-        >
-          {t(
-            "Administrators sign in with a password. Use the Admin sign in form on this page."
-          )}
-        </p>
-      )
-    }
-    {
-      rateLimitedError && (
-        <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
-          {t("Too many sign-in attempts. Please wait a minute and try again.")}
-        </p>
-      )
-    }
+    {noAccountError && (
+      <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
+        {t(
+          "We couldn't find an account for that sign-in. If you believe this is a mistake, contact your administrator."
+        )}
+      </p>
+    )}
+    {adminLinkError && (
+      <p
+        class="rounded-control bg-danger-surface p-3 text-sm text-destructive"
+        role="alert"
+      >
+        {t(
+          "Administrators sign in with a password. Use the Admin sign in form on this page."
+        )}
+      </p>
+    )}
+    {rateLimitedError && (
+      <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
+        {t("Too many sign-in attempts. Please wait a minute and try again.")}
+      </p>
+    )}
     <div class="rounded-panel border border-border bg-surface p-8">
       <h1 class="text-xl font-bold text-foreground">{t("Resident sign in")}</h1>
       <p class="mt-1 text-sm text-muted">
         {t("Enter your email and we'll send you a secure sign-in link.")}
       </p>
-      {
-        sent && (
-          <p class="mt-4 rounded-control bg-success-surface p-3 text-sm text-success">
-            {t("If that email is registered, a sign-in link is on its way.")}
-          </p>
-        )
-      }
-      {
-        expiredLinkError && (
-          <p class="mt-4 rounded-control bg-danger-surface p-3 text-sm text-destructive">
-            {t(
-              "This sign-in link is invalid or has expired. Request a new one below."
-            )}
-          </p>
-        )
-      }
+      {sent && (
+        <p class="mt-4 rounded-control bg-success-surface p-3 text-sm text-success">
+          {t("If that email is registered, a sign-in link is on its way.")}
+        </p>
+      )}
+      {expiredLinkError && (
+        <p class="mt-4 rounded-control bg-danger-surface p-3 text-sm text-destructive">
+          {t(
+            "This sign-in link is invalid or has expired. Request a new one below."
+          )}
+        </p>
+      )}
       <form
         method="POST"
         action="/api/v1/auth/request-link"
@@ -98,8 +88,10 @@ const adminLinkError = errorCode === "6";
         <div>
           <label
             class="block text-sm font-medium text-foreground"
-            for="resident-email">{t("Email")}</label
+            for="resident-email"
           >
+            {t("Email")}
+          </label>
           <input
             id="resident-email"
             name="email"
@@ -117,30 +109,24 @@ const adminLinkError = errorCode === "6";
 
     <div class="rounded-panel border border-border bg-surface p-8">
       <h2 class="text-lg font-bold text-foreground">{t("Admin sign in")}</h2>
-      {
-        passwordReset && (
-          <p
-            class="mt-4 rounded-control bg-success-surface p-3 text-sm text-success"
-            role="status"
-          >
-            {t("Password updated. Sign in with your new password.")}
-          </p>
-        )
-      }
-      {
-        adminError && (
-          <p class="mt-4 rounded-control bg-danger-surface p-3 text-sm text-destructive">
-            {t("Incorrect email or password.")}
-          </p>
-        )
-      }
-      {
-        unexpectedError && (
-          <p class="mt-4 rounded-control bg-danger-surface p-3 text-sm text-destructive">
-            {t("Something went wrong. Please try again.")}
-          </p>
-        )
-      }
+      {passwordReset && (
+        <p
+          class="mt-4 rounded-control bg-success-surface p-3 text-sm text-success"
+          role="status"
+        >
+          {t("Password updated. Sign in with your new password.")}
+        </p>
+      )}
+      {adminError && (
+        <p class="mt-4 rounded-control bg-danger-surface p-3 text-sm text-destructive">
+          {t("Incorrect email or password.")}
+        </p>
+      )}
+      {unexpectedError && (
+        <p class="mt-4 rounded-control bg-danger-surface p-3 text-sm text-destructive">
+          {t("Something went wrong. Please try again.")}
+        </p>
+      )}
       <form
         id="admin-login-form"
         method="POST"
@@ -150,8 +136,10 @@ const adminLinkError = errorCode === "6";
         <div>
           <label
             class="block text-sm font-medium text-foreground"
-            for="admin-email">{t("Email")}</label
+            for="admin-email"
           >
+            {t("Email")}
+          </label>
           <input
             id="admin-email"
             name="email"
@@ -164,8 +152,10 @@ const adminLinkError = errorCode === "6";
         <div>
           <label
             class="block text-sm font-medium text-foreground"
-            for="admin-password">{t("Password")}</label
+            for="admin-password"
           >
+            {t("Password")}
+          </label>
           <input
             id="admin-password"
             name="password"
@@ -175,11 +165,13 @@ const adminLinkError = errorCode === "6";
             class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
           />
         </div>
-        <button type="submit" class="btn-primary w-full">{t("Sign in")}</button>
+        <button type="submit" class="btn-primary w-full">
+          {t("Sign in")}
+        </button>
         <p class="text-center text-sm">
-          <a href="/forgot-password" class="text-muted hover:underline"
-            >{t("Forgot password?")}</a
-          >
+          <a href="/forgot-password" class="text-muted hover:underline">
+            {t("Forgot password?")}
+          </a>
         </p>
       </form>
     </div>

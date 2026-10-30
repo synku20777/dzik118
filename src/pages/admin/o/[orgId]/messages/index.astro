@@ -248,22 +248,20 @@ const conversationStatusMap = Object.fromEntries(
       </PageHeader>
     </div>
 
-    {
-      dwellingIdFilter && (
-        <p class="notice">
-          {t("Showing conversations for one dwelling only.")}{" "}
-          <a href={`/admin/o/${organizationId}/messages`} class="clear-filters">
-            {t("Clear")}
-          </a>
-        </p>
-      )
-    }
+    {dwellingIdFilter && (
+      <p class="notice">
+        {t("Showing conversations for one dwelling only.")}{" "}
+        <a href={`/admin/o/${organizationId}/messages`} class="clear-filters">
+          {t("Clear")}
+        </a>
+      </p>
+    )}
 
     <form method="GET" class="filter-bar" data-instant-filter>
       <div>
-        <label class="block text-label text-foreground" for="search"
-          >{t("Search")}</label
-        >
+        <label class="block text-label text-foreground" for="search">
+          {t("Search")}
+        </label>
         <input
           id="search"
           name="search"
@@ -274,20 +272,21 @@ const conversationStatusMap = Object.fromEntries(
         />
       </div>
       <div>
-        <label class="block text-label" for="status-filter">{t("Status")}</label
-        >
+        <label class="block text-label" for="status-filter">
+          {t("Status")}
+        </label>
         <select
           id="status-filter"
           name="status"
           class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
         >
           <option value="">{t("All statuses")}</option>
-          <option value="OPEN" selected={statusFilter === "OPEN"}
-            >{t("Open")}</option
-          >
-          <option value="RESOLVED" selected={statusFilter === "RESOLVED"}
-            >{t("Resolved")}</option
-          >
+          <option value="OPEN" selected={statusFilter === "OPEN"}>
+            {t("Open")}
+          </option>
+          <option value="RESOLVED" selected={statusFilter === "RESOLVED"}>
+            {t("Resolved")}
+          </option>
         </select>
       </div>
       <label class="flex items-center gap-2 pb-2 text-body-sm text-foreground">
@@ -300,20 +299,18 @@ const conversationStatusMap = Object.fromEntries(
         />
         {t("Show unread only")}
       </label>
-      {
-        (search || statusFilter || unreadOnly) && (
-          <a
-            href={filterHref({
-              search: undefined,
-              status: undefined,
-              unread: undefined,
-            })}
-            class="clear-filters"
-          >
-            {t("Clear filters")}
-          </a>
-        )
-      }
+      {(search || statusFilter || unreadOnly) && (
+        <a
+          href={filterHref({
+            search: undefined,
+            status: undefined,
+            unread: undefined,
+          })}
+          class="clear-filters"
+        >
+          {t("Clear filters")}
+        </a>
+      )}
     </form>
 
     <nav class="messages-tabs" aria-label={t("Filter by status")}>
@@ -340,319 +337,304 @@ const conversationStatusMap = Object.fromEntries(
     <div class="messages-split">
       <div class="space-y-3">
         <div class="messages-list-pane">
-          {
-            pagedConversations.map((c) => (
-              <a
-                href={filterHref({
-                  conversationId: c.id,
-                  new: undefined,
-                  page: page > 1 ? String(page) : undefined,
-                })}
-                class="messages-list-item"
-                aria-current={c.id === selectedId ? "true" : undefined}
-              >
-                <div class="messages-list-item-head">
-                  <span class="messages-list-item-title">
-                    {c.hasUnread && (
-                      <span class="unread-dot" aria-hidden="true" />
-                    )}
-                    <Icon name="building" class="messages-house-icon" />
-                    {t("Dwelling")} {c.dwellingNumber}
-                  </span>
-                  <StatusBadge status={c.status} />
-                </div>
-                <p class="messages-list-item-subject">{c.subject}</p>
-                {c.occupantName && (
-                  <p class="messages-list-item-occupant">{c.occupantName}</p>
-                )}
-                <div class="messages-list-item-foot">
-                  <span class="messages-list-item-preview">
-                    {c.lastMessage?.body}
-                  </span>
-                  <span class="messages-list-item-date">
-                    {formatDate(c.updatedAt, locale, organization.timezone)}
-                  </span>
-                </div>
-              </a>
-            ))
-          }
-          {
-            filtered.length === 0 && (
-              <p class="messages-empty">
-                {t("No conversations match this filter.")}
-              </p>
-            )
-          }
+          {pagedConversations.map((c) => (
+            <a
+              href={filterHref({
+                conversationId: c.id,
+                new: undefined,
+                page: page > 1 ? String(page) : undefined,
+              })}
+              class="messages-list-item"
+              aria-current={c.id === selectedId ? "true" : undefined}
+            >
+              <div class="messages-list-item-head">
+                <span class="messages-list-item-title">
+                  {c.hasUnread && (
+                    <span class="unread-dot" aria-hidden="true" />
+                  )}
+                  <Icon name="building" class="messages-house-icon" />
+                  {t("Dwelling")} {c.dwellingNumber}
+                </span>
+                <StatusBadge status={c.status} />
+              </div>
+              <p class="messages-list-item-subject">{c.subject}</p>
+              {c.occupantName && (
+                <p class="messages-list-item-occupant">{c.occupantName}</p>
+              )}
+              <div class="messages-list-item-foot">
+                <span class="messages-list-item-preview">
+                  {c.lastMessage?.body}
+                </span>
+                <span class="messages-list-item-date">
+                  {formatDate(c.updatedAt, locale, organization.timezone)}
+                </span>
+              </div>
+            </a>
+          ))}
+          {filtered.length === 0 && (
+            <p class="messages-empty">
+              {t("No conversations match this filter.")}
+            </p>
+          )}
         </div>
-        {
-          totalPages > 1 && (
-            <div class="flex justify-between text-sm text-muted">
-              <a
-                href={filterHref({
-                  page: String(Math.max(1, page - 1)),
-                  conversationId: undefined,
-                  new: undefined,
-                })}
-                class:list={{ "pointer-events-none opacity-40": page <= 1 }}
-              >
-                ← {t("Previous")}
-              </a>
-              <span>
-                {t("Page")} {page} {t("of")} {totalPages}
-              </span>
-              <a
-                href={filterHref({
-                  page: String(page + 1),
-                  conversationId: undefined,
-                  new: undefined,
-                })}
-                class:list={{
-                  "pointer-events-none opacity-40": page >= totalPages,
-                }}
-              >
-                {t("Next")} →
-              </a>
-            </div>
-          )
-        }
+        {totalPages > 1 && (
+          <div class="flex justify-between text-sm text-muted">
+            <a
+              href={filterHref({
+                page: String(Math.max(1, page - 1)),
+                conversationId: undefined,
+                new: undefined,
+              })}
+              class:list={{ "pointer-events-none opacity-40": page <= 1 }}
+            >
+              ← {t("Previous")}
+            </a>
+            <span>
+              {t("Page")} {page} {t("of")} {totalPages}
+            </span>
+            <a
+              href={filterHref({
+                page: String(page + 1),
+                conversationId: undefined,
+                new: undefined,
+              })}
+              class:list={{
+                "pointer-events-none opacity-40": page >= totalPages,
+              }}
+            >
+              {t("Next")} →
+            </a>
+          </div>
+        )}
       </div>
 
       <div class="messages-detail-pane">
-        {
-          showNewForm ? (
-            <div class="messages-new">
-              <h2>{t("New message")}</h2>
-              {createResult?.error && (
-                <p class="notice notice-danger" role="alert">
-                  {createResult.error.message}
+        {showNewForm ? (
+          <div class="messages-new">
+            <h2>{t("New message")}</h2>
+            {createResult?.error && (
+              <p class="notice notice-danger" role="alert">
+                {createResult.error.message}
+              </p>
+            )}
+            <form
+              method="POST"
+              action={actions.messages.createConversationAdmin}
+              class="messages-new-form"
+            >
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <div>
+                <label for="new-dwelling">{t("Dwelling")}</label>
+                <select id="new-dwelling" name="dwellingId" required>
+                  {dwellingsForNewMessage.map((d) => (
+                    <option value={d.id}>
+                      {d.number} — {d.occupantName ?? t("No resident")}
+                    </option>
+                  ))}
+                </select>
+                <FieldError name="dwellingId" error={createResult?.error} />
+              </div>
+              <div>
+                <label for="new-subject">{t("Subject")}</label>
+                <input
+                  id="new-subject"
+                  name="subject"
+                  required
+                  maxlength="200"
+                />
+                <FieldError name="subject" error={createResult?.error} />
+              </div>
+              <div>
+                <label for="new-body">{t("Message")}</label>
+                <textarea id="new-body" name="body" required rows={5} />
+                <FieldError name="body" error={createResult?.error} />
+              </div>
+              <div class="messages-reply-actions">
+                <a href={filterHref({ new: undefined })} class="btn-secondary">
+                  {t("Cancel")}
+                </a>
+                <button type="submit" class="btn-primary">
+                  {t("Send message")}
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : selectedConversation ? (
+          <>
+            <div class="messages-detail-header">
+              <h2>{selectedConversation.subject}</h2>
+              <span id="detail-status-badge">
+                <StatusBadge status={selectedConversation.status} />
+              </span>
+              <details class="row-menu">
+                <summary aria-label={t("More actions")}>•••</summary>
+                <div>
+                  <a
+                    href={`/admin/o/${organizationId}/dwellings/${selectedConversation.dwellingId}`}
+                  >
+                    {t("Open dwelling")}
+                  </a>
+                </div>
+              </details>
+            </div>
+
+            <div class="messages-dwelling-card">
+              <span class="messages-dwelling-icon" aria-hidden="true">
+                <Icon name="building" />
+              </span>
+              <div>
+                <p class="messages-dwelling-card-title">
+                  {t("Dwelling")} {selectedConversation.dwellingNumber}
                 </p>
-              )}
+                <p class="messages-dwelling-card-sub">
+                  {entityLabel(selectedConversation.dwellingType, locale)}
+                  {" · "}
+                  {formatNumber(
+                    selectedConversation.dwellingAreaM2 ?? 0,
+                    locale,
+                    2
+                  )}{" "}
+                  m²
+                </p>
+              </div>
+              <div>
+                <p
+                  id="conversation-occupant-name"
+                  class="messages-dwelling-card-title"
+                >
+                  {selectedConversation.occupantName ?? t("No resident")}
+                </p>
+                <p class="messages-dwelling-card-sub">
+                  {t("Updated")}{" "}
+                  {formatDate(
+                    selectedConversation.updatedAt,
+                    locale,
+                    organization.timezone
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div class="messages-actions">
+              <a
+                class="btn-secondary btn-sm"
+                href={`/admin/o/${organizationId}/dwellings/${selectedConversation.dwellingId}`}
+              >
+                <span aria-hidden="true">↗</span> {t("Open dwelling")}
+              </a>
+            </div>
+
+            <p
+              id="messages-error"
+              class="notice notice-danger"
+              role="alert"
+              hidden={!(replyResult?.error || resolveResult?.error)}
+            >
+              {replyResult?.error?.message ?? resolveResult?.error?.message}
+            </p>
+
+            <div
+              id="message-thread"
+              class="messages-thread"
+              data-conversation-id={selectedConversation.id}
+              data-status={selectedConversation.status}
+            >
+              {selectedMessages.map((m) => (
+                <div
+                  class="message-row"
+                  data-message-id={m.id}
+                  data-mine={m.senderRole === "ADMIN" ? "true" : "false"}
+                >
+                  <span
+                    class="message-avatar"
+                    data-role={m.senderRole}
+                    aria-hidden="true"
+                  >
+                    {m.senderRole === "ADMIN" ? "A" : "R"}
+                  </span>
+                  <div class="message-col">
+                    <p class="message-meta">
+                      <strong>{senderLabel(m, selectedConversation)}</strong>
+                      <span>
+                        {formatDateTime(
+                          m.createdAt,
+                          locale,
+                          organization.timezone
+                        )}
+                      </span>
+                    </p>
+                    <div class="message-bubble">{m.body}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              id="reply-section"
+              class="messages-reply"
+              hidden={selectedConversation.status === "RESOLVED"}
+            >
+              <h3>{t("Reply")}</h3>
               <form
+                id="reply-form"
                 method="POST"
-                action={actions.messages.createConversationAdmin}
-                class="messages-new-form"
+                action={actions.messages.reply}
+              >
+                <input
+                  type="hidden"
+                  name="conversationId"
+                  value={selectedConversation.id}
+                />
+                <input type="hidden" name="sentAs" value="ADMIN" />
+              </form>
+              <textarea
+                name="body"
+                form="reply-form"
+                required
+                placeholder={t("Type your reply...")}
+              />
+              <form
+                id="resolve-form"
+                method="POST"
+                action={actions.messages.resolve}
               >
                 <input
                   type="hidden"
                   name="organizationId"
                   value={organizationId}
                 />
-                <div>
-                  <label for="new-dwelling">{t("Dwelling")}</label>
-                  <select id="new-dwelling" name="dwellingId" required>
-                    {dwellingsForNewMessage.map((d) => (
-                      <option value={d.id}>
-                        {d.number} — {d.occupantName ?? t("No resident")}
-                      </option>
-                    ))}
-                  </select>
-                  <FieldError name="dwellingId" error={createResult?.error} />
-                </div>
-                <div>
-                  <label for="new-subject">{t("Subject")}</label>
-                  <input
-                    id="new-subject"
-                    name="subject"
-                    required
-                    maxlength="200"
-                  />
-                  <FieldError name="subject" error={createResult?.error} />
-                </div>
-                <div>
-                  <label for="new-body">{t("Message")}</label>
-                  <textarea id="new-body" name="body" required rows={5} />
-                  <FieldError name="body" error={createResult?.error} />
-                </div>
-                <div class="messages-reply-actions">
-                  <a
-                    href={filterHref({ new: undefined })}
-                    class="btn-secondary"
-                  >
-                    {t("Cancel")}
-                  </a>
-                  <button type="submit" class="btn-primary">
-                    {t("Send message")}
-                  </button>
-                </div>
-              </form>
-            </div>
-          ) : selectedConversation ? (
-            <>
-              <div class="messages-detail-header">
-                <h2>{selectedConversation.subject}</h2>
-                <span id="detail-status-badge">
-                  <StatusBadge status={selectedConversation.status} />
-                </span>
-                <details class="row-menu">
-                  <summary aria-label={t("More actions")}>•••</summary>
-                  <div>
-                    <a
-                      href={`/admin/o/${organizationId}/dwellings/${selectedConversation.dwellingId}`}
-                    >
-                      {t("Open dwelling")}
-                    </a>
-                  </div>
-                </details>
-              </div>
-
-              <div class="messages-dwelling-card">
-                <span class="messages-dwelling-icon" aria-hidden="true">
-                  <Icon name="building" />
-                </span>
-                <div>
-                  <p class="messages-dwelling-card-title">
-                    {t("Dwelling")} {selectedConversation.dwellingNumber}
-                  </p>
-                  <p class="messages-dwelling-card-sub">
-                    {entityLabel(selectedConversation.dwellingType, locale)}
-                    {" · "}
-                    {formatNumber(
-                      selectedConversation.dwellingAreaM2 ?? 0,
-                      locale,
-                      2
-                    )}{" "}
-                    m²
-                  </p>
-                </div>
-                <div>
-                  <p
-                    id="conversation-occupant-name"
-                    class="messages-dwelling-card-title"
-                  >
-                    {selectedConversation.occupantName ?? t("No resident")}
-                  </p>
-                  <p class="messages-dwelling-card-sub">
-                    {t("Updated")}{" "}
-                    {formatDate(
-                      selectedConversation.updatedAt,
-                      locale,
-                      organization.timezone
-                    )}
-                  </p>
-                </div>
-              </div>
-
-              <div class="messages-actions">
-                <a
-                  class="btn-secondary btn-sm"
-                  href={`/admin/o/${organizationId}/dwellings/${selectedConversation.dwellingId}`}
-                >
-                  <span aria-hidden="true">↗</span> {t("Open dwelling")}
-                </a>
-              </div>
-
-              <p
-                id="messages-error"
-                class="notice notice-danger"
-                role="alert"
-                hidden={!(replyResult?.error || resolveResult?.error)}
-              >
-                {replyResult?.error?.message ?? resolveResult?.error?.message}
-              </p>
-
-              <div
-                id="message-thread"
-                class="messages-thread"
-                data-conversation-id={selectedConversation.id}
-                data-status={selectedConversation.status}
-              >
-                {selectedMessages.map((m) => (
-                  <div
-                    class="message-row"
-                    data-message-id={m.id}
-                    data-mine={m.senderRole === "ADMIN" ? "true" : "false"}
-                  >
-                    <span
-                      class="message-avatar"
-                      data-role={m.senderRole}
-                      aria-hidden="true"
-                    >
-                      {m.senderRole === "ADMIN" ? "A" : "R"}
-                    </span>
-                    <div class="message-col">
-                      <p class="message-meta">
-                        <strong>{senderLabel(m, selectedConversation)}</strong>
-                        <span>
-                          {formatDateTime(
-                            m.createdAt,
-                            locale,
-                            organization.timezone
-                          )}
-                        </span>
-                      </p>
-                      <div class="message-bubble">{m.body}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div
-                id="reply-section"
-                class="messages-reply"
-                hidden={selectedConversation.status === "RESOLVED"}
-              >
-                <h3>{t("Reply")}</h3>
-                <form
-                  id="reply-form"
-                  method="POST"
-                  action={actions.messages.reply}
-                >
-                  <input
-                    type="hidden"
-                    name="conversationId"
-                    value={selectedConversation.id}
-                  />
-                  <input type="hidden" name="sentAs" value="ADMIN" />
-                </form>
-                <textarea
-                  name="body"
-                  form="reply-form"
-                  required
-                  placeholder={t("Type your reply...")}
+                <input
+                  type="hidden"
+                  name="conversationId"
+                  value={selectedConversation.id}
                 />
-                <form
-                  id="resolve-form"
-                  method="POST"
-                  action={actions.messages.resolve}
-                >
-                  <input
-                    type="hidden"
-                    name="organizationId"
-                    value={organizationId}
-                  />
-                  <input
-                    type="hidden"
-                    name="conversationId"
-                    value={selectedConversation.id}
-                  />
-                </form>
-                <div class="messages-reply-actions">
-                  <button
-                    type="submit"
-                    form="resolve-form"
-                    class="btn-secondary"
-                  >
-                    {t("Mark resolved")}
-                  </button>
-                  <button type="submit" form="reply-form" class="btn-primary">
-                    {t("Send reply")}
-                  </button>
-                </div>
+              </form>
+              <div class="messages-reply-actions">
+                <button type="submit" form="resolve-form" class="btn-secondary">
+                  {t("Mark resolved")}
+                </button>
+                <button type="submit" form="reply-form" class="btn-primary">
+                  {t("Send reply")}
+                </button>
               </div>
-              <p
-                id="resolved-notice"
-                class="messages-resolved-notice"
-                hidden={selectedConversation.status !== "RESOLVED"}
-              >
-                {t("This conversation is resolved.")}
-              </p>
-            </>
-          ) : (
-            <p class="messages-empty">
-              {t("Select a conversation to view it here.")}
+            </div>
+            <p
+              id="resolved-notice"
+              class="messages-resolved-notice"
+              hidden={selectedConversation.status !== "RESOLVED"}
+            >
+              {t("This conversation is resolved.")}
             </p>
-          )
-        }
+          </>
+        ) : (
+          <p class="messages-empty">
+            {t("Select a conversation to view it here.")}
+          </p>
+        )}
       </div>
     </div>
   </div>
@@ -886,11 +868,11 @@ const conversationStatusMap = Object.fromEntries(
     font-size: 0.875rem;
     font-weight: 600;
     color: var(--color-muted);
-    border-bottom: 2px solid transparent;
+    border-radius: var(--radius-control);
   }
   .messages-tabs a[aria-current="page"] {
     color: var(--color-primary);
-    border-color: var(--color-primary);
+    background: var(--color-nav-active-bg);
   }
   .messages-split {
     display: grid;

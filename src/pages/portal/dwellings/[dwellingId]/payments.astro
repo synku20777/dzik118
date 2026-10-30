@@ -56,54 +56,52 @@ const payments = await withRequestDb((db) =>
         {dwelling.number}
       </h1>
 
-      {
-        payments.length === 0 ? (
-          <p class="text-sm text-muted">{t("No payments yet.")}</p>
-        ) : (
-          <div class="table-wrap stack-table">
-            <table class="w-full text-sm">
-              <caption class="sr-only">{t("Payment history")}</caption>
-              <thead>
+      {payments.length === 0 ? (
+        <p class="text-sm text-muted">{t("No payments yet.")}</p>
+      ) : (
+        <div class="table-wrap stack-table">
+          <table class="w-full text-sm">
+            <caption class="sr-only">{t("Payment history")}</caption>
+            <thead>
+              <tr>
+                <th scope="col" class="text-left">
+                  {t("Date")}
+                </th>
+                <th scope="col" class="text-left">
+                  {t("Invoice")}
+                </th>
+                <th scope="col" class="text-left">
+                  {t("Status")}
+                </th>
+                <th scope="col" class="text-right">
+                  {t("Amount")}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {payments.map((payment) => (
                 <tr>
-                  <th scope="col" class="text-left">
-                    {t("Date")}
-                  </th>
-                  <th scope="col" class="text-left">
-                    {t("Invoice")}
-                  </th>
-                  <th scope="col" class="text-left">
-                    {t("Status")}
-                  </th>
-                  <th scope="col" class="text-right">
-                    {t("Amount")}
-                  </th>
+                  <td>{formatDate(payment.date, locale)}</td>
+                  <td>
+                    <a
+                      class="text-primary hover:underline"
+                      href={`/portal/invoices/${payment.invoiceId}?dwellingId=${dwellingId}`}
+                    >
+                      {payment.invoiceNumber}
+                    </a>
+                  </td>
+                  <td>
+                    <StatusBadge status={payment.status} />
+                  </td>
+                  <td class="text-right">
+                    {formatMoney(payment.amount, payment.currency, locale)}
+                  </td>
                 </tr>
-              </thead>
-              <tbody class="divide-y divide-border">
-                {payments.map((payment) => (
-                  <tr>
-                    <td>{formatDate(payment.date, locale)}</td>
-                    <td>
-                      <a
-                        class="text-primary hover:underline"
-                        href={`/portal/invoices/${payment.invoiceId}?dwellingId=${dwellingId}`}
-                      >
-                        {payment.invoiceNumber}
-                      </a>
-                    </td>
-                    <td>
-                      <StatusBadge status={payment.status} />
-                    </td>
-                    <td class="text-right">
-                      {formatMoney(payment.amount, payment.currency, locale)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-      }
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   </div>
 </ResidentLayout>

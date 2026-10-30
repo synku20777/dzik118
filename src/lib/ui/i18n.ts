@@ -45,11 +45,18 @@ export function uiLocale(cookies: AstroCookies, url: URL): Locale {
 }
 
 const lv: Record<string, string> = {
+  "Next step": "Nākamais solis",
+  "Select the charges you bill, then enter their prices. You can add other charges later.":
+    "Izvēlieties piemērojamās maksas un ievadiet to cenas. Citas maksas varēsiet pievienot vēlāk.",
+  "Add the dwellings you manage. Preview the list before saving.":
+    "Pievienojiet pārvaldītos īpašumus. Pirms saglabāšanas pārskatiet sarakstu.",
+  "Start with your organization’s name and address. Add payment details now or before preparing invoices.":
+    "Sāciet ar organizācijas nosaukumu un adresi. Maksājumu rekvizītus pievienojiet tagad vai pirms rēķinu sagatavošanas.",
   "Current charges": "Kārtējā perioda maksa",
   "Previous outstanding": "Iepriekšējais parāds",
   "Previous balance": "Iepriekšējais atlikums",
-  "Credit applied": "Piemērotais kredīts",
-  "Account credit": "Konta kredīts",
+  "Credit applied": "Piemērotā pārmaksa",
+  "Account credit": "Konta pārmaksa",
   "Amount due": "Apmaksai",
   "Late fee": "Nokavējuma maksa",
   "Manual adjustment": "Manuāla korekcija",
@@ -60,9 +67,9 @@ const lv: Record<string, string> = {
   "Adjustments create an auditable account entry and never edit the balance directly.":
     "Katra korekcija rada auditējamu konta ierakstu un nekad nemaina atlikumu tieši.",
   "Charge adjustment": "Maksas korekcija",
-  "Credit adjustment": "Kredīta korekcija",
-  Debit: "Debets",
-  Credit: "Kredīts",
+  "Credit adjustment": "Korekcija (samazinājums)",
+  Debit: "Aprēķināts",
+  Credit: "Ieskaitīts",
   Balance: "Atlikums",
   "Preparation checks": "Sagatavošanas pārbaudes",
   "Recipient details complete": "Norādīti visi saņēmēja dati",
@@ -82,9 +89,9 @@ const lv: Record<string, string> = {
   "Stop accrual at cap": "Pārtraukt uzkrāšanu, sasniedzot limitu",
   "Save late-payment rules": "Saglabāt nokavēto maksājumu noteikumus",
   "Remaining after allocation": "Atlikums pēc piesaistes",
-  "Credit created": "Izveidots kredīts",
+  "Credit created": "Izveidota pārmaksa",
   "carried balance": "pārnestais atlikums",
-  "credit applied": "piemērotais kredīts",
+  "credit applied": "piemērotā pārmaksa",
   "Admin guide": "Administratora ceļvedis",
   "Set up your organization and complete your first billing cycle.":
     "Iestatiet organizāciju un pabeidziet pirmo norēķinu ciklu.",
@@ -371,7 +378,7 @@ const lv: Record<string, string> = {
   Prepared: "Sagatavots",
   Sent: "Nosūtīts",
   Paid: "Apmaksāts",
-  Overdue: "Kavēts",
+  Overdue: "Nokavēts",
   Open: "Atvērts",
   Locked: "Slēgts",
   Active: "Aktīvs",
@@ -393,18 +400,18 @@ const lv: Record<string, string> = {
   Consumption: "Patēriņš",
   "Needs attention": "Nepieciešama uzmanība",
   "Case status": "Norēķinu statuss",
-  "Open workbench": "Atvērt norēķinu darbvietu",
+  "Open workbench": "Atvērt mēneša norēķinus",
   "Monitor billing, payments and work requiring attention.":
     "Pārskatiet rēķinus, maksājumus un veicamos darbus.",
   "No billing periods yet.": "Vēl nav norēķinu periodu.",
   "Create a period to start the monthly billing workflow.":
     "Izveidojiet periodu, lai sāktu ikmēneša norēķinus.",
   "Nothing needs attention right now.": "Pašlaik nav steidzamu darbu.",
-  "Add readings": "Pievienot rādījumus",
+  "Add readings": "Ievadīt rādījumus",
   "Review invoice": "Pārskatīt rēķinu",
   "Review payments": "Pārskatīt maksājumus",
   "Ready to generate": "Gatavs rēķina izveidei",
-  "Ready to invoice": "Gatavs rēķina izrakstīšanai",
+  "Ready to invoice": "Var izrakstīt rēķinu",
   "Generate the invoice": "Izveidot rēķinu",
   "Ready to send": "Gatavs nosūtīšanai",
   "Readings are required before generating an invoice.":
@@ -413,10 +420,96 @@ const lv: Record<string, string> = {
     "Maksājuma termiņš ir pagājis. Pārskatiet maksājumu saskaņošanu.",
   "All readings are present. Generate the invoice in the workbench.":
     "Visi rādījumi ir ievadīti. Izveidojiet rēķinu darbvietā.",
+  // Dashboard redesign (2026-10): next action, progress, money, deadlines.
+  "Generate invoices": "Izrakstīt rēķinus",
+  "Send invoices": "Nosūtīt rēķinus",
+  "Create next month": "Izveidot nākamo mēnesi",
+  // Plural forms: key = the English plural text + "|" + CLDR category; "|other"
+  // also covers "zero" (see plural() below).
+  "{n} dwellings still need readings.|one":
+    "Vēl jāievada rādījumi {n} īpašumam.",
+  "{n} dwellings still need readings.|other":
+    "Vēl jāievada rādījumi {n} īpašumiem.",
+  "{n} invoices can be created.|one": "Var izrakstīt {n} rēķinu.",
+  "{n} invoices can be created.|other": "Var izrakstīt {n} rēķinus.",
+  "{n} invoices are ready to send.|one": "Nosūtīšanai gatavs {n} rēķins.",
+  "{n} invoices are ready to send.|other": "Nosūtīšanai gatavi {n} rēķini.",
+  "{n} invoices are waiting for payment.|one": "Apmaksu gaida {n} rēķins.",
+  "{n} invoices are waiting for payment.|other": "Apmaksu gaida {n} rēķini.",
+  "This month is closed. Create the next month to continue.":
+    "Šis mēnesis ir slēgts. Izveidojiet nākamo mēnesi, lai turpinātu.",
+  "Everything for this month is done.": "Viss šajā mēnesī ir izdarīts.",
+  "This month is closed.": "Šis mēnesis ir slēgts.",
+  "You are viewing an earlier month.": "Jūs skatāt iepriekšēju mēnesi.",
+  "Earlier month": "Iepriekšējais mēnesis",
+  "Back to the current month": "Atpakaļ uz šo mēnesi",
+  "Month progress": "Mēneša gaita",
+  Readings: "Rādījumi",
+  "Created invoices": "Izrakstīti",
+  "Sent invoices": "Nosūtīti",
+  "Paid invoices": "Apmaksāti",
+  "Readings entered": "Rādījumi ievadīti",
+  "Invoices created": "Rēķini izrakstīti",
+  "Invoices sent": "Rēķini nosūtīti",
+  "Payments received": "Maksājumi saņemti",
+  "{done} of {total}": "{done} no {total}",
+  Now: "Tagad",
+  Waiting: "Gaida",
+  "Not available yet": "Vēl nav pieejams",
+  "Setup steps done: {done} of {total}": "Pabeigtie soļi: {done} no {total}",
+  "Money this month": "Nauda šajā mēnesī",
+  "This month's invoices": "Šī mēneša rēķini",
+  "Previous debt": "Iepriekšējais parāds",
+  "Previous overpayment": "Iepriekšējā pārmaksa",
+  "Late fees": "Nokavējuma nauda",
+  "Total to pay": "Kopā jāmaksā",
+  "Received in payments": "Saņemts maksājumos",
+  "Still unpaid": "Vēl neapmaksāts",
+  "Sum of issued invoices": "Izrakstīto rēķinu summa",
+  "Includes invoices that are not sent yet.":
+    "Ietver arī vēl nenosūtītos rēķinus.",
+  "Total due = this month's invoices + previous debt − previous overpayment + late fees.":
+    "Kopā jāmaksā = šī mēneša rēķini + iepriekšējais parāds − iepriekšējā pārmaksa + nokavējuma nauda.",
+  "Still owed": "Vēl jāmaksā",
+  "Due {date}": "Termiņš: {date}",
+  "{n} days late|one": "Nokavēts par {n} dienu",
+  "{n} days late|other": "Nokavēts par {n} dienām",
+  "Show all ({n})": "Rādīt visus ({n})",
+  "+{n} more": "+{n} vēl",
+  "Next steps": "Nākamie soļi",
+  "Missing current-period meter reading for dwelling {number}":
+    "Īpašumam {number} nav ievadīts šī mēneša rādījums.",
+  "Review failed deliveries": "Pārskatīt nenosūtītos rēķinus",
+  "Coming up": "Tuvākie termiņi",
+  "by {date}": "līdz {date}",
+  "Overdue payments": "Nokavēti maksājumi",
+  "Readings due": "Rādījumu termiņš",
+  "Invoices issued": "Rēķinu izrakstīšana",
+  "Payment due": "Apmaksas termiņš",
+  "{n} bank payments are not matched to an invoice yet.|one":
+    "{n} bankas maksājums vēl nav piesaistīts rēķinam.",
+  "{n} bank payments are not matched to an invoice yet.|other":
+    "{n} bankas maksājumi vēl nav piesaistīti rēķiniem.",
+  "{n} suggested payment matches are waiting for your check.|one":
+    "Pārbaudi gaida {n} ieteiktā maksājuma piesaiste.",
+  "{n} suggested payment matches are waiting for your check.|other":
+    "Pārbaudi gaida {n} ieteiktās maksājumu piesaistes.",
+  "{n} invoices could not be delivered.|one": "{n} rēķinu neizdevās nosūtīt.",
+  "{n} invoices could not be delivered.|other":
+    "{n} rēķinus neizdevās nosūtīt.",
+  "Billing readiness": "Gatavība rēķinu izrakstīšanai",
+  "All readings entered": "Visi rādījumi ievadīti",
+  "Includes {n} readings carried over from the previous month.|one":
+    "Ietver {n} no iepriekšējā mēneša pārnestu rādījumu.",
+  "Includes {n} readings carried over from the previous month.|other":
+    "Ietver {n} no iepriekšējā mēneša pārnestus rādījumus.",
+  "The overview could not be loaded.": "Pārskatu neizdevās ielādēt.",
+  "Try again in a moment, or open the billing periods.":
+    "Mēģiniet vēlreiz pēc brīža vai atveriet norēķinu periodus.",
   "Billing periods": "Norēķinu periodi",
   "Period history": "Periodu vēsture",
   "Review past periods or open a monthly billing workbench.":
-    "Pārskatiet iepriekšējos periodus vai atveriet norēķinu darbvietu.",
+    "Pārskatiet iepriekšējos periodus vai atveriet mēneša norēķinus.",
   "Create period": "Izveidot periodu",
   "Total periods": "Periodu skaits",
   "Latest period": "Jaunākais periods",
@@ -882,7 +975,7 @@ const lv: Record<string, string> = {
     "Atveriet rēķinu ar statusu “Melnraksts”. Izmantojiet paneli “Pielāgot šo melnrakstu”. Katrai izmaiņai norādiet iemeslu. Pēc rēķina sagatavošanas to vairs nevar pielāgot.",
   "How do I fix a wrong invoice status?": "Kā labot nepareizu rēķina statusu?",
   "Open the invoice. Use the Override status panel. Choose the correct status and enter a reason. The system records the change in the audit log. The list always offers DRAFT, PREPARED, and OVERDUE. It offers SENT only if the invoice was sent, and PAID only if the invoice is paid.":
-    "Atveriet rēķinu. Izmantojiet paneli “Aizstāt statusu”. Izvēlieties pareizo statusu un ievadiet iemeslu. Sistēma reģistrē izmaiņas audita žurnālā. Sarakstā vienmēr tiek piedāvāti “Melnraksts”, “Sagatavots” un “Kavēts”. “Nosūtīts” tiek piedāvāts tikai tad, ja rēķins tika nosūtīts, un “Apmaksāts” — tikai tad, ja rēķins ir apmaksāts.",
+    "Atveriet rēķinu. Izmantojiet paneli “Aizstāt statusu”. Izvēlieties pareizo statusu un ievadiet iemeslu. Sistēma reģistrē izmaiņas audita žurnālā. Sarakstā vienmēr tiek piedāvāti “Melnraksts”, “Sagatavots” un “Nokavēts”. “Nosūtīts” tiek piedāvāts tikai tad, ja rēķins tika nosūtīts, un “Apmaksāts” — tikai tad, ja rēķins ir apmaksāts.",
   "How do I disable a resident's access?": "Kā atspējot iedzīvotāja piekļuvi?",
   "Open the dwelling. Click Disable next to the resident. The resident cannot access the system until you click Enable. You cannot disable an administrator or a resident who has access to another organization.":
     "Atveriet īpašumu. Nospiediet “Atspējot” blakus iedzīvotājam. Iedzīvotājs nevarēs piekļūt sistēmai, līdz nospiedīsiet “Iespējot”. Administratoru vai iedzīvotāju, kuram ir piekļuve citai organizācijai, atspējot nevar.",
@@ -914,12 +1007,51 @@ const lv: Record<string, string> = {
   "Payment recorded.": "Maksājums reģistrēts.",
   "How do I record a payment that is not in a bank statement?":
     "Kā reģistrēt maksājumu, kura nav bankas izrakstā?",
-  "Click Record a payment on the Payments page. Choose the invoice. Enter the amount, date, payer, bank reference, and a reason. The payment applies right away. The app blocks a second entry with the same reference, amount, and date. You can record bank transfers only.":
-    "Maksājumu lapā nospiediet “Reģistrēt maksājumu”. Izvēlieties rēķinu. Ievadiet summu, datumu, maksātāju, bankas maksājuma mērķi un iemeslu. Maksājums tiek piemērots uzreiz. Lietotne bloķē atkārtotu ierakstu ar to pašu maksājuma mērķi, summu un datumu. Var reģistrēt tikai bankas pārskaitījumus.",
+  "Click Record a payment on the Payments page, or on the dwelling page. Choose an open invoice, or a dwelling that has no open invoice. Choose bank transfer or cash. Enter the amount, date, payer, reference, and a reason. The payment applies right away. A bank transfer needs a reference, and the app blocks a second one with the same reference, amount, and date. A payment to a dwelling with no open invoice goes to the dwelling account, and the next invoice uses it. If the dwelling has an open invoice, choose that invoice.":
+    "Maksājumu lapā vai īpašuma lapā nospiediet “Reģistrēt maksājumu”. Izvēlieties atvērtu rēķinu vai īpašumu, kuram nav atvērta rēķina. Izvēlieties bankas pārskaitījumu vai skaidru naudu. Ievadiet summu, datumu, maksātāju, maksājuma mērķi un iemeslu. Maksājums tiek piemērots uzreiz. Bankas pārskaitījumam ir nepieciešams maksājuma mērķis, un lietotne bloķē otru ierakstu ar to pašu maksājuma mērķi, summu un datumu. Maksājums īpašumam bez atvērta rēķina tiek ieskaitīts īpašuma kontā, un to izmanto nākamais rēķins. Ja īpašumam ir atvērts rēķins, izvēlieties šo rēķinu.",
+  "How do I fix a payment that the statement reader got wrong?":
+    "Kā labot maksājumu, ko izraksta lasītājs nolasīja nepareizi?",
+  "Open the Unmatched tab on the Payments page. Click Edit next to the payment. Change the amount, date, payer, or reference, and enter a reason. The old values stay in the audit history. You cannot edit a payment after it is matched.":
+    "Maksājumu lapā atveriet cilni “Nesaskaņots”. Blakus maksājumam nospiediet “Rediģēt”. Mainiet summu, datumu, maksātāju vai maksājuma mērķi un ievadiet iemeslu. Vecās vērtības paliek revīzijas vēsturē. Pēc piesaistes maksājumu vairs nevar rediģēt.",
+  "How do I undo a payment that I recorded to a dwelling account?":
+    "Kā atcelt maksājumu, ko reģistrēju īpašuma kontā?",
+  "Open the Confirmed tab on the Payments page. Find the payment under Payments to an account. Click Reverse and enter a reason. The dwelling account goes back to its balance before the payment. The payment does not return to the Unmatched tab. Record it again for the correct dwelling. You cannot reverse a payment if a later invoice already used its credit.":
+    "Maksājumu lapā atveriet cilni “Apstiprināts”. Sadaļā “Maksājumi kontam” atrodiet maksājumu. Nospiediet “Atcelt” un ievadiet iemeslu. Īpašuma konts atgriežas pie atlikuma pirms maksājuma. Maksājums neatgriežas cilnē “Nesaskaņots”. Reģistrējiet to vēlreiz pareizajam īpašumam. Maksājumu nevar atcelt, ja vēlāks rēķins jau izmantojis tā pārmaksu.",
+  // Manual payments: dwelling account, cash, edit of an unmatched row
+  "Use this for money that is not in an imported statement: a transfer the statement missed, cash, or a payment for a dwelling that has no open invoice. The payment is applied right away.":
+    "Izmantojiet to naudai, kas nav importētā izrakstā: pārskaitījumam, ko izraksts neietvēra, skaidrai naudai vai maksājumam par īpašumu, kuram nav atvērta rēķina. Maksājums tiek piemērots uzreiz.",
+  "Apply to": "Piemērot",
+  "Choose where the payment goes": "Izvēlieties, kur novirzīt maksājumu",
+  "Open invoices": "Atvērti rēķini",
+  "Dwelling account (no open invoice)": "Īpašuma konts (nav atvērta rēķina)",
+  "Bank transfer": "Bankas pārskaitījums",
+  Cash: "Skaidra nauda",
+  "Required for a bank transfer. For cash, a receipt number if you have one.":
+    "Obligāts bankas pārskaitījumam. Skaidrai naudai — kvīts numurs, ja tāds ir.",
+  "Record this payment? It is applied right away.":
+    "Vai reģistrēt šo maksājumu? Tas tiks piemērots uzreiz.",
+  "Payments to an account": "Maksājumi kontam",
+  "Posted to the dwelling account, not to an invoice.":
+    "Ieskaitīts īpašuma kontā, nevis rēķinā.",
+  "Reverse this payment? The original payment stays in the history and a cancelling entry is added. The dwelling account goes back to its balance before the payment.":
+    "Vai atcelt šo maksājumu? Sākotnējais maksājums paliek vēsturē, un tiek pievienots atceļošs ieraksts. Īpašuma konts atgriežas pie atlikuma pirms maksājuma.",
+  "Fix a row the statement reader got wrong. The old values stay in the audit history.":
+    "Labojiet rindu, ko izraksta lasītājs nolasīja nepareizi. Vecās vērtības paliek revīzijas vēsturē.",
+  "Reason for the change": "Izmaiņu iemesls",
+  "Payment updated.": "Maksājums atjaunināts.",
+  "This payment was already recorded": "Šis maksājums jau ir reģistrēts",
+  "This dwelling has an open invoice. Apply the payment to that invoice":
+    "Īpašumam ir atvērts rēķins. Piemērojiet maksājumu šim rēķinam",
+  "Only a payment posted to a dwelling account can be reversed here":
+    "Šeit var atcelt tikai maksājumu, kas ieskaitīts īpašuma kontā",
+  "This payment is already posted to a dwelling account":
+    "Šis maksājums jau ir ieskaitīts īpašuma kontā",
+  "Only an unmatched payment can be edited":
+    "Rediģēt var tikai nesaskaņotu maksājumu",
   "How do I undo a payment that I matched to the wrong invoice?":
     "Kā atcelt maksājumu, ko piesaistīju nepareizam rēķinam?",
   "Open the Confirmed tab on the Payments page. Click Reverse next to the payment and enter a reason. The original payment stays in the history. The invoice becomes unpaid again. The payment returns to the Unmatched tab. There you can match it to the correct invoice. You cannot reverse a payment if a later invoice already used its credit.":
-    "Maksājumu lapā atveriet cilni “Apstiprināts”. Blakus maksājumam nospiediet “Atcelt” un ievadiet iemeslu. Sākotnējais maksājums paliek vēsturē. Rēķins atkal kļūst neapmaksāts. Maksājums atgriežas cilnē “Nesaskaņots”. Tur to var piesaistīt pareizajam rēķinam. Maksājumu nevar atcelt, ja vēlāks rēķins jau izmantojis tā kredītu.",
+    "Maksājumu lapā atveriet cilni “Apstiprināts”. Blakus maksājumam nospiediet “Atcelt” un ievadiet iemeslu. Sākotnējais maksājums paliek vēsturē. Rēķins atkal kļūst neapmaksāts. Maksājums atgriežas cilnē “Nesaskaņots”. Tur to var piesaistīt pareizajam rēķinam. Maksājumu nevar atcelt, ja vēlāks rēķins jau izmantojis tā pārmaksu.",
   "The CSV file is too large (up to 2 MB).":
     "CSV fails ir pārāk liels (līdz 2 MB).",
   "The CSV file has too many rows (up to 5,000).":
@@ -1107,7 +1239,7 @@ const lv: Record<string, string> = {
   "Only a confirmed payment can be reversed":
     "Atcelt var tikai apstiprinātu maksājumu",
   "The credit from this payment was already used on a later invoice. Fix the balance with an adjustment":
-    "Šī maksājuma kredīts jau tika izmantots vēlākā rēķinā. Izlabojiet atlikumu ar korekciju",
+    "Šī maksājuma pārmaksa jau tika izmantota vēlākā rēķinā. Izlabojiet atlikumu ar korekciju",
   "Value must be a non-negative number with at most 4 decimal places":
     "Vērtībai jābūt nenegatīvam skaitlim ar ne vairāk kā 4 zīmēm aiz komata",
   "Current value must be a non-negative number with at most 3 decimal places":
@@ -1259,8 +1391,8 @@ const lv: Record<string, string> = {
     "Kaut kas nogāja greizi. Lūdzu, mēģiniet vēlreiz.",
   "This dwelling's billing case in every period it has existed for.":
     "Šī īpašuma norēķinu ieraksts katrā periodā, kurā tas pastāvējis.",
-  "Total credits": "Kopējais kredīts",
-  "Total debits": "Kopējais debets",
+  "Total credits": "Kopā ieskaitīts",
+  "Total debits": "Kopā aprēķināts",
   "View current period": "Skatīt pašreizējo periodu",
   "Water and other utility meters in this dwelling.":
     "Ūdens un citi komunālo pakalpojumu skaitītāji šajā īpašumā.",
@@ -1476,7 +1608,7 @@ const lv: Record<string, string> = {
   "Messages inbox with a resident conversation open.":
     "Ziņu iesūtne ar atvērtu sarunu ar iedzīvotāju.",
   "MISSING DATA means something blocks the invoice: a required input is missing, a rule has no active meter, or no billing rule applies. READY means the invoice can be generated. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.":
-    "MISSING DATA nozīmē, ka rēķinu kaut kas bloķē: trūkst nepieciešamās informācijas, noteikumam nav aktīva skaitītāja vai nav piemērojams neviens norēķinu noteikums. READY nozīmē, ka rēķinu var ģenerēt. DRAFT nozīmē, ka joprojām varat to pārskatīt un no jauna ģenerēt. PREPARED nozīmē, ka rēķins ir apstiprināts un gatavs nosūtīšanai. SENT nozīmē, ka piegāde bija sekmīga. OVERDUE nozīmē, ka apmaksas termiņš ir pagājis un rēķins nav apmaksāts. PAID nozīmē, ka rēķins ir pilnībā apmaksāts.",
+    "“Trūkst datu” nozīmē, ka rēķinu kaut kas bloķē: trūkst nepieciešamās informācijas, noteikumam nav aktīva skaitītāja vai nav piemērojams neviens norēķinu noteikums. “Var izrakstīt rēķinu” nozīmē, ka rēķinu var izveidot. “Melnraksts” nozīmē, ka joprojām varat to pārskatīt un no jauna izveidot. “Sagatavots” nozīmē, ka rēķins ir apstiprināts un gatavs nosūtīšanai. “Nosūtīts” nozīmē, ka piegāde bija sekmīga. “Nokavēts” nozīmē, ka apmaksas termiņš ir pagājis un rēķins nav apmaksāts. “Apmaksāts” nozīmē, ka rēķins ir pilnībā apmaksāts.",
   "Why can I not generate an invoice?": "Kāpēc nevaru ģenerēt rēķinu?",
   "The system blocks generation when required inputs are missing or the period is locked. Open the affected dwelling in the workbench to see what is missing.":
     "Sistēma bloķē ģenerēšanu, ja trūkst nepieciešamo datu vai periods ir bloķēts. Atveriet attiecīgo īpašumu darbvietā, lai redzētu, kas trūkst.",
@@ -1485,7 +1617,7 @@ const lv: Record<string, string> = {
     "Rēķinam jābūt statusā MELNRAKSTS ar pilnīgiem izdevēja, saņēmēja un maksājuma datiem. Labojiet attiecīgos iestatījumus. Ģenerējiet melnrakstu no jauna, lai atjauninātu tā momentuzņēmumu.",
   "Why can I not send an invoice?": "Kāpēc nevaru nosūtīt rēķinu?",
   "You can send email to a PREPARED invoice. You can also send it to a SENT, PAID, or OVERDUE invoice that first used paper delivery. The invoice needs a billing email. If delivery fails, fix the cause, then retry or resend.":
-    "Varat pa e-pastu nosūtīt rēķinu statusā PREPARED. Tāpat varat nosūtīt arī rēķinu statusā SENT, PAID vai OVERDUE, kas sākotnēji piegādāts papīra formātā. Rēķinam nepieciešama norēķinu e-pasta adrese. Ja piegāde neizdodas, novērsiet cēloni un pēc tam mēģiniet vēlreiz vai nosūtiet atkārtoti.",
+    "Varat pa e-pastu nosūtīt rēķinu statusā “Sagatavots”. Tāpat varat nosūtīt arī rēķinu statusā “Nosūtīts”, “Apmaksāts” vai “Nokavēts”, kas sākotnēji piegādāts papīra formātā. Rēķinam nepieciešama norēķinu e-pasta adrese. Ja piegāde neizdodas, novērsiet cēloni un pēc tam mēģiniet vēlreiz vai nosūtiet atkārtoti.",
   "No. A sent invoice is a permanent financial record and cannot change. Changes to dwellings, tariffs, or settings apply only to future invoices.":
     "Nē. Nosūtīts rēķins ir pastāvīgs finanšu dokuments, un to nevar mainīt. Izmaiņas īpašumos, tarifos vai iestatījumos attiecas tikai uz turpmākajiem rēķiniem.",
   "Review its amount, currency, payer, and reference. When you find the correct invoice, choose it in the Unmatched tab and click Match to invoice. The payment applies right away. Do not match a payment if you are not sure.":
@@ -1717,7 +1849,7 @@ const lv: Record<string, string> = {
     "Pirmais norēķinu periods ir slēgts. Pirms maksu vai skaitītāju maiņas atveriet to perioda lapā.",
   "Open the first billing period": "Atvērt pirmo norēķinu periodu",
   Done: "Pabeigts",
-  "To do": "Jāveic",
+  "To do": "Jāizdara",
   Readiness: "Gatavība",
   "Setup complete": "Iestatīšana pabeigta",
   "Not yet": "Vēl nav",
@@ -1808,14 +1940,205 @@ const lv: Record<string, string> = {
     "Skaitītāju rādījumi pirms pirmā norēķinu mēneša. Rēķini netiek izrakstīti.",
   "This period holds the meters' starting readings. It is never billed.":
     "Šis periods satur skaitītāju sākuma rādījumus. Par to nekad netiek izrakstīti rēķini.",
+  // Migration Center
+  "Matched by name": "Atpazīts pēc nosaukuma",
+  "AI suggestion": "MI ieteikums",
+  "Your choice": "Jūsu izvēle",
+  "Saved mapping": "Saglabātā sasaiste",
+  Choose: "Izvēlieties",
+  "Migration Center": "Datu pārnešanas centrs",
+  "Upload a CSV file or paste the cells from Excel. You check every step before anything is saved.":
+    "Augšupielādējiet CSV failu vai ielīmējiet šūnas no Excel. Jūs pārbaudāt katru soli, pirms kaut kas tiek saglabāts.",
+  "Or paste the cells here": "Vai ielīmējiet šūnas šeit",
+  "File encoding": "Faila kodējums",
+  "Detect automatically": "Noteikt automātiski",
+  "Download the template": "Lejupielādēt sagatavi",
+  "Title rows skipped": "Izlaistas virsraksta rindas",
+  "Total rows left out": "Izlaistas kopsummu rindas",
+  "This looks like a spreadsheet you imported before. We used the same mapping.":
+    "Šī izskatās pēc tabulas, ko jau importējāt agrāk. Izmantojām to pašu sasaisti.",
+  "Match each column to a Namkopa field. Wrong letters? Go back and choose the file encoding.":
+    "Piesaistiet katru kolonnu Namkopa laukam. Nepareizi burti? Atgriezieties un izvēlieties faila kodējumu.",
+  "Column mapping": "Kolonnu sasaiste",
+  Column: "Kolonna",
+  "First values": "Pirmās vērtības",
+  "Namkopa field": "Namkopa lauks",
+  "Ignore this column": "Neņemt vērā šo kolonnu",
+  "Create only. Existing numbers stay unchanged.":
+    "Tikai izveidot. Esošie numuri paliek nemainīti.",
+  "Update. Existing numbers change only in the mapped columns.":
+    "Atjaunināt. Esošie numuri mainās tikai piesaistītajās kolonnās.",
+  "Check the file": "Pārbaudīt failu",
+  "To create": "Izveidos",
+  "To update": "Atjauninās",
+  "Left unchanged": "Atstāti nemainīti",
+  "Rows that need attention": "Rindas, kurām nepieciešama uzmanība",
+  "The list shows the first 100 rows. Download the full list.":
+    "Saraksts rāda pirmās 100 rindas. Lejupielādējiet pilno sarakstu.",
+  "Change the mapping": "Mainīt sasaisti",
+  "Download the list of issues": "Lejupielādēt problēmu sarakstu",
+  "The file is too large (up to 1 MB)": "Fails ir pārāk liels (līdz 1 MB)",
+  "Choose a file or paste the cells": "Izvēlieties failu vai ielīmējiet šūnas",
+  "Map the dwelling number column, and use each field once":
+    "Piesaistiet īpašuma numura kolonnu un izmantojiet katru lauku tikai vienu reizi",
+  "Bring your dwellings and recipients from a spreadsheet or your old system. You check every step before anything is saved.":
+    "Pārnesiet īpašumus un saņēmējus no tabulas vai vecās sistēmas. Jūs pārbaudāt katru soli, pirms kaut kas tiek saglabāts.",
+  "Import done": "Imports pabeigts",
+  "The file changed nothing. All rows already exist.":
+    "Fails neko nemainīja. Visas rindas jau pastāv.",
+  "Dwellings and recipients": "Īpašumi un saņēmēji",
+  "Dwelling numbers, billing name, email, area, residents and delivery.":
+    "Īpašumu numuri, norēķinu vārds, e-pasts, platība, iedzīvotāji un piegāde.",
+  "Start an import": "Sākt importu",
+  "Past imports": "Iepriekšējie importi",
+  File: "Fails",
+  "The dwelling number is empty": "Īpašuma numurs ir tukšs",
+  "The dwelling number has more than 50 characters":
+    "Īpašuma numurā ir vairāk nekā 50 rakstzīmju",
+  "This dwelling number appears more than once in the file":
+    "Šis īpašuma numurs failā atkārtojas",
+  "The dwelling type is not recognized": "Īpašuma veids netiek atpazīts",
+  "The billing email is not valid": "Norēķinu e-pasts nav derīgs",
+  "The area must be a number with at most 2 decimals":
+    "Platībai jābūt skaitlim ar ne vairāk kā 2 decimāldaļām",
+  "The resident count must be a whole number":
+    "Iedzīvotāju skaitam jābūt veselam skaitlim",
+  "The invoice delivery is not recognized: use email, paper or both":
+    "Rēķinu piegāde netiek atpazīta: izmantojiet e-pastu, papīru vai abus",
+  "A text in this row is too long": "Kāds teksts šajā rindā ir pārāk garš",
+  "No billing email: invoices cannot be sent by email until one is added":
+    "Nav norēķinu e-pasta: rēķinus nevar sūtīt pa e-pastu, kamēr tas nav pievienots",
+  "Another dwelling number in the file differs only by letter case":
+    "Cits īpašuma numurs failā atšķiras tikai ar burtu reģistru",
+  "Already exists; left unchanged": "Jau pastāv; atstāts nemainīts",
+  "Nothing to change": "Nav ko mainīt",
+  "Some dwellings were created by someone else while importing. Check the file again":
+    "Importa laikā kāds cits izveidoja dažus īpašumus. Pārbaudiet failu vēlreiz",
+  "The column mapping is not valid": "Kolonnu sasaiste nav derīga",
+  "The file has no data rows": "Failā nav datu rindu",
+  "The file has too many rows (up to 2,000)":
+    "Failā ir pārāk daudz rindu (līdz 2,000)",
+  "The file has a quote that is never closed":
+    "Failā ir pēdiņas, kas nekad netiek aizvērtas",
+  // Migration Center: opening balances
+  "Import not found": "Imports nav atrasts",
+  "This dwelling number does not exist. Import the dwellings first":
+    "Šāds īpašuma numurs neeksistē. Vispirms importējiet īpašumus",
+  "This dwelling is archived": "Šis īpašums ir arhivēts",
+  "The amount must be a number with at most 2 decimals":
+    "Summai jābūt skaitlim ar ne vairāk kā 2 decimāldaļām",
+  "Debt and credit amounts cannot be negative":
+    "Parāda un pārmaksas summas nevar būt negatīvas",
+  "The debt due date is not a valid date":
+    "Parāda apmaksas termiņš nav derīgs datums",
+  "An invoice was already prepared for this dwelling. Fix the balance with an adjustment":
+    "Šim īpašumam rēķins jau ir sagatavots. Labojiet atlikumu ar korekciju",
+  "Opening balance already posted. Correct it with an adjustment":
+    "Sākuma atlikums jau ir ierakstīts. Labojiet to ar korekciju",
+  "The balance is zero. Nothing to post": "Atlikums ir nulle. Nav ko ierakstīt",
+  "Map the dwelling number and one amount: a balance, or debt and credit":
+    "Piesaistiet īpašuma numuru un vienu summu: atlikumu vai parādu un pārmaksu",
+  "Enter the balance date as a date that is not in the future":
+    "Norādiet atlikuma datumu, kas nav nākotnē",
+  "The balance date is after the first invoice date. Choose a date on or before it":
+    "Atlikuma datums ir pēc pirmā rēķina datuma. Izvēlieties šo datumu vai agrāku",
+  "Some balances were posted by someone else while importing. Check the file again":
+    "Importa laikā kāds cits ierakstīja dažus atlikumus. Pārbaudiet failu vēlreiz",
+  "Import opening balances": "Importēt sākuma atlikumus",
+  "An opening balance is posted once for each dwelling. After that, correct it with an adjustment on the dwelling page.":
+    "Sākuma atlikumu ieraksta vienu reizi katram īpašumam. Pēc tam labojiet to ar korekciju īpašuma lapā.",
+  "Balance date": "Atlikuma datums",
+  "The day the old system struck these balances. It cannot be after your first invoice date.":
+    "Diena, kad vecā sistēma noteica šos atlikumus. Tā nevar būt pēc jūsu pirmā rēķina datuma.",
+  "Positive amounts mean": "Pozitīvas summas nozīmē",
+  "The resident owes money": "Iedzīvotājs ir parādā",
+  "The resident has overpaid": "Iedzīvotājs ir pārmaksājis",
+  "This applies to a single balance column only.":
+    "Tas attiecas tikai uz vienu atlikuma kolonnu.",
+  "To post": "Tiks ierakstīti",
+  "Total debt": "Parāds kopā",
+  "Total credit": "Pārmaksa kopā",
+  "Balances to post": "Ierakstāmie atlikumi",
+  Debt: "Parāds",
+  "Opening balances": "Sākuma atlikumi",
+  "Debt or credit from your old system, one amount for each dwelling. Import the dwellings first.":
+    "Parāds vai pārmaksa no vecās sistēmas, viena summa katram īpašumam. Vispirms importējiet īpašumus.",
+  "Opening balance report": "Sākuma atlikumu atskaite",
+  "The ledger totals match the file.": "Virsgrāmatas kopsummas atbilst failam.",
+  "The ledger totals do not match the file. Contact support.":
+    "Virsgrāmatas kopsummas neatbilst failam. Sazinieties ar atbalstu.",
+  Totals: "Kopsummas",
+  "In the file": "Failā",
+  "In the ledger": "Virsgrāmatā",
+  Posted: "Ierakstīti",
+  "The first invoice shows this debt as previous outstanding. Late fees do not apply to it until it is paid. To change a balance, add an adjustment on the dwelling page.":
+    "Pirmajā rēķinā šis parāds redzams kā iepriekšējais parāds. Nokavējuma maksa tam netiek piemērota, kamēr tas nav samaksāts. Lai mainītu atlikumu, pievienojiet korekciju īpašuma lapā.",
+  "Posted balances": "Ierakstītie atlikumi",
+  "Balance now": "Atlikums tagad",
+  "Download as CSV": "Lejupielādēt kā CSV",
+  "Debt due date": "Parāda termiņš",
+  "Total debt in the file": "Parāds kopā failā",
+  "Total debt in the ledger": "Parāds kopā virsgrāmatā",
+  "Total credit in the file": "Pārmaksa kopā failā",
+  "Total credit in the ledger": "Pārmaksa kopā virsgrāmatā",
+  "The amount is empty. Nothing to post": "Summa ir tukša. Nav ko ierakstīt",
+  "The amount is in another currency than the organization's":
+    "Summa ir citā valūtā nekā organizācijas valūta",
+  "No billing period exists yet. An invoice issued before the balance date will not show these balances":
+    "Vēl nav neviena norēķinu perioda. Rēķinā, kas izrakstīts pirms atlikuma datuma, šie atlikumi netiks rādīti",
+  // Migration Center: meters and readings
+  "The meter type is not recognized: use cold water, hot water, electricity, gas or heat":
+    "Skaitītāja veids netiek atpazīts: izmantojiet aukstais ūdens, karstais ūdens, elektrība, gāze vai siltums",
+  "The reading must be a number of zero or more with at most 3 decimals":
+    "Rādījumam jābūt skaitlim no nulles ar ne vairāk kā 3 decimāldaļām",
+  "The unit is required for this meter type":
+    "Šim skaitītāja veidam mērvienība ir obligāta",
+  "The dwelling has more than one meter of this type. Add the serial number":
+    "Īpašumā ir vairāk nekā viens šāda veida skaitītājs. Pievienojiet sērijas numuru",
+  "This meter appears more than once in the file. Add a reading date to keep the latest":
+    "Šis skaitītājs failā atkārtojas. Pievienojiet rādījuma datumu, lai paturētu jaunāko",
+  "Two readings of this meter have the same date":
+    "Diviem šī skaitītāja rādījumiem ir viens un tas pats datums",
+  "The reading date is not a valid date": "Rādījuma datums nav derīgs datums",
+  "The reading is dated after the first billing period starts. Use the reading from the end of the previous month":
+    "Rādījuma datums ir pēc pirmā norēķinu perioda sākuma. Izmantojiet iepriekšējā mēneša beigu rādījumu",
+  "An older reading of this meter. Only the latest is kept":
+    "Vecāks šī skaitītāja rādījums. Tiek paturēts tikai jaunākais",
+  "Already the starting reading": "Jau ir sākuma rādījums",
+  "Replaces the starting reading already saved":
+    "Aizstāj jau saglabāto sākuma rādījumu",
+  "Map the dwelling number, the meter type and the reading":
+    "Piesaistiet īpašuma numuru, skaitītāja veidu un rādījumu",
+  "Import meter readings": "Importēt skaitītāju rādījumus",
+  "Create the first billing period before you import meter readings. A reading is stored as the meter's position at the end of the month before that period.":
+    "Pirms skaitītāju rādījumu importa izveidojiet pirmo norēķinu periodu. Rādījums tiek saglabāts kā skaitītāja stāvoklis mēneša beigās pirms šī perioda.",
+  "Create the first billing period": "Izveidot pirmo norēķinu periodu",
+  "Each meter keeps one reading: its position at the end of the month before your first billing month. Only the latest reading of a meter is used. Missing meters are created.":
+    "Katram skaitītājam tiek saglabāts viens rādījums: tā stāvoklis mēneša beigās pirms pirmā norēķinu mēneša. Tiek izmantots tikai skaitītāja jaunākais rādījums. Trūkstošie skaitītāji tiek izveidoti.",
+  "To write": "Tiks ierakstīti",
+  "New meters": "Jauni skaitītāji",
+  "Readings to write": "Ierakstāmie rādījumi",
+  "Latest reading": "Jaunākais rādījums",
+  "Saved before": "Saglabāts iepriekš",
+  "Meters and readings": "Skaitītāji un rādījumi",
+  "The meters of each dwelling and the latest reading of each. Import the dwellings first, and create the first billing period.":
+    "Katra īpašuma skaitītāji un katra jaunākais rādījums. Vispirms importējiet īpašumus un izveidojiet pirmo norēķinu periodu.",
+  "Reading date": "Rādījuma datums",
 };
 
 const ru: Record<string, string> = {
+  "Next step": "Следующий шаг",
+  "Select the charges you bill, then enter their prices. You can add other charges later.":
+    "Выберите начисляемые услуги и укажите их стоимость. Другие услуги можно добавить позже.",
+  "Add the dwellings you manage. Preview the list before saving.":
+    "Добавьте помещения, которыми управляете. Проверьте список перед сохранением.",
+  "Start with your organization’s name and address. Add payment details now or before preparing invoices.":
+    "Начните с названия и адреса организации. Платёжные реквизиты можно добавить сейчас или перед подготовкой счетов.",
   "Current charges": "Текущие начисления",
   "Previous outstanding": "Предыдущий долг",
   "Previous balance": "Предыдущий остаток",
-  "Credit applied": "Зачтённый кредит",
-  "Account credit": "Кредит на счёте",
+  "Credit applied": "Зачтённая переплата",
+  "Account credit": "Переплата на счёте",
   "Amount due": "К оплате",
   "Late fee": "Плата за просрочку",
   "Manual adjustment": "Ручная корректировка",
@@ -1826,9 +2149,9 @@ const ru: Record<string, string> = {
   "Adjustments create an auditable account entry and never edit the balance directly.":
     "Каждая корректировка фиксируется в истории счёта и никогда не меняет остаток напрямую.",
   "Charge adjustment": "Корректировка начислений",
-  "Credit adjustment": "Корректировка кредита",
-  Debit: "Дебет",
-  Credit: "Кредит",
+  "Credit adjustment": "Корректировка (уменьшение)",
+  Debit: "Начислено",
+  Credit: "Зачтено",
   Balance: "Остаток",
   "Preparation checks": "Проверки перед подготовкой",
   "Recipient details complete": "Данные получателя заполнены",
@@ -1848,9 +2171,9 @@ const ru: Record<string, string> = {
   "Stop accrual at cap": "Остановить начисление при достижении лимита",
   "Save late-payment rules": "Сохранить правила при просрочке оплаты",
   "Remaining after allocation": "Остаток после распределения",
-  "Credit created": "Создан кредит",
+  "Credit created": "Создана переплата",
   "carried balance": "перенесённый остаток",
-  "credit applied": "зачтённый кредит",
+  "credit applied": "зачтённая переплата",
   "Admin guide": "Руководство администратора",
   "Set up your organization and complete your first billing cycle.":
     "Настройте организацию и проведите первый расчётный цикл.",
@@ -2182,6 +2505,117 @@ const ru: Record<string, string> = {
     "Срок оплаты прошёл. Проверьте сверку платежей.",
   "All readings are present. Generate the invoice in the workbench.":
     "Все показания внесены. Создайте счёт в рабочей области.",
+  // Dashboard redesign (2026-10): next action, progress, money, deadlines.
+  "Generate invoices": "Сформировать счета",
+  "Send invoices": "Отправить счета",
+  "Create next month": "Создать следующий месяц",
+  "{n} dwellings still need readings.|one":
+    "Нужно внести показания для {n} помещения.",
+  "{n} dwellings still need readings.|few":
+    "Нужно внести показания для {n} помещений.",
+  "{n} dwellings still need readings.|many":
+    "Нужно внести показания для {n} помещений.",
+  "{n} dwellings still need readings.|other":
+    "Нужно внести показания для {n} помещений.",
+  "{n} invoices can be created.|one": "Можно сформировать {n} счёт.",
+  "{n} invoices can be created.|few": "Можно сформировать {n} счёта.",
+  "{n} invoices can be created.|many": "Можно сформировать {n} счетов.",
+  "{n} invoices can be created.|other": "Можно сформировать {n} счетов.",
+  "{n} invoices are ready to send.|one": "Готов к отправке {n} счёт.",
+  "{n} invoices are ready to send.|few": "Готовы к отправке {n} счёта.",
+  "{n} invoices are ready to send.|many": "Готовы к отправке {n} счетов.",
+  "{n} invoices are ready to send.|other": "Готовы к отправке {n} счетов.",
+  "{n} invoices are waiting for payment.|one": "Оплаты ждёт {n} счёт.",
+  "{n} invoices are waiting for payment.|few": "Оплаты ждут {n} счёта.",
+  "{n} invoices are waiting for payment.|many": "Оплаты ждут {n} счетов.",
+  "{n} invoices are waiting for payment.|other": "Оплаты ждут {n} счетов.",
+  "This month is closed. Create the next month to continue.":
+    "Этот месяц закрыт. Создайте следующий месяц, чтобы продолжить.",
+  "Everything for this month is done.": "Всё за этот месяц сделано.",
+  "This month is closed.": "Этот месяц закрыт.",
+  "You are viewing an earlier month.": "Вы смотрите прошлый месяц.",
+  "Earlier month": "Прошлый месяц",
+  "Back to the current month": "Вернуться к текущему месяцу",
+  "Month progress": "Ход месяца",
+  Readings: "Показания",
+  "Created invoices": "Сформированы",
+  "Sent invoices": "Отправлены",
+  "Paid invoices": "Оплачены",
+  "Readings entered": "Показания внесены",
+  "Invoices created": "Счета сформированы",
+  "Invoices sent": "Счета отправлены",
+  "Payments received": "Платежи получены",
+  "{done} of {total}": "{done} из {total}",
+  Now: "Сейчас",
+  Waiting: "Ожидание",
+  "Not available yet": "Пока недоступно",
+  "Setup steps done: {done} of {total}": "Выполнено шагов: {done} из {total}",
+  "Money this month": "Деньги за этот месяц",
+  "This month's invoices": "Счета за этот месяц",
+  "Previous debt": "Прежняя задолженность",
+  "Previous overpayment": "Прежняя переплата",
+  "Late fees": "Пени",
+  "Total to pay": "Всего к оплате",
+  "Received in payments": "Получено платежами",
+  "Still unpaid": "Ещё не оплачено",
+  "Sum of issued invoices": "Сумма выставленных счетов",
+  "Includes invoices that are not sent yet.":
+    "Включает ещё не отправленные счета.",
+  "Total due = this month's invoices + previous debt − previous overpayment + late fees.":
+    "Всего к оплате = счета за этот месяц + прежняя задолженность − прежняя переплата + пени.",
+  "Still owed": "Ещё к оплате",
+  "Due {date}": "Срок: {date}",
+  "{n} days late|one": "Просрочено на {n} день",
+  "{n} days late|few": "Просрочено на {n} дня",
+  "{n} days late|many": "Просрочено на {n} дней",
+  "{n} days late|other": "Просрочено на {n} дня",
+  "Show all ({n})": "Показать все ({n})",
+  "+{n} more": "+{n} ещё",
+  "Next steps": "Следующие шаги",
+  "Missing current-period meter reading for dwelling {number}":
+    "Для объекта {number} не внесено показание за этот месяц.",
+  "Review failed deliveries": "Проверить неотправленные счета",
+  "Coming up": "Ближайшие сроки",
+  "by {date}": "до {date}",
+  "Overdue payments": "Просроченные платежи",
+  "Readings due": "Срок подачи показаний",
+  "Invoices issued": "Выставление счетов",
+  "Payment due": "Срок оплаты",
+  "{n} bank payments are not matched to an invoice yet.|one":
+    "{n} банковский платёж ещё не сопоставлен со счётом.",
+  "{n} bank payments are not matched to an invoice yet.|few":
+    "{n} банковских платежа ещё не сопоставлены со счетами.",
+  "{n} bank payments are not matched to an invoice yet.|many":
+    "{n} банковских платежей ещё не сопоставлены со счетами.",
+  "{n} bank payments are not matched to an invoice yet.|other":
+    "{n} банковских платежей ещё не сопоставлены со счетами.",
+  "{n} suggested payment matches are waiting for your check.|one":
+    "Вашей проверки ждёт {n} предложенное сопоставление платежа.",
+  "{n} suggested payment matches are waiting for your check.|few":
+    "Вашей проверки ждут {n} предложенных сопоставления платежей.",
+  "{n} suggested payment matches are waiting for your check.|many":
+    "Вашей проверки ждут {n} предложенных сопоставлений платежей.",
+  "{n} suggested payment matches are waiting for your check.|other":
+    "Вашей проверки ждут {n} предложенных сопоставлений платежей.",
+  "{n} invoices could not be delivered.|one": "{n} счёт не удалось доставить.",
+  "{n} invoices could not be delivered.|few": "{n} счёта не удалось доставить.",
+  "{n} invoices could not be delivered.|many":
+    "{n} счетов не удалось доставить.",
+  "{n} invoices could not be delivered.|other":
+    "{n} счетов не удалось доставить.",
+  "Billing readiness": "Готовность к выставлению счетов",
+  "All readings entered": "Все показания внесены",
+  "Includes {n} readings carried over from the previous month.|one":
+    "Включает {n} показание, перенесённое с прошлого месяца.",
+  "Includes {n} readings carried over from the previous month.|few":
+    "Включает {n} показания, перенесённых с прошлого месяца.",
+  "Includes {n} readings carried over from the previous month.|many":
+    "Включает {n} показаний, перенесённых с прошлого месяца.",
+  "Includes {n} readings carried over from the previous month.|other":
+    "Включает {n} показаний, перенесённых с прошлого месяца.",
+  "The overview could not be loaded.": "Не удалось загрузить обзор.",
+  "Try again in a moment, or open the billing periods.":
+    "Повторите попытку через минуту или откройте расчётные периоды.",
   "Billing periods": "Расчётные периоды",
   "Period history": "История периодов",
   "Review past periods or open a monthly billing workbench.":
@@ -2685,12 +3119,51 @@ const ru: Record<string, string> = {
   "Payment recorded.": "Платёж зарегистрирован.",
   "How do I record a payment that is not in a bank statement?":
     "Как зарегистрировать платёж, которого нет в банковской выписке?",
-  "Click Record a payment on the Payments page. Choose the invoice. Enter the amount, date, payer, bank reference, and a reason. The payment applies right away. The app blocks a second entry with the same reference, amount, and date. You can record bank transfers only.":
-    "На странице «Платежи» нажмите «Зарегистрировать платёж». Выберите счёт. Введите сумму, дату, плательщика, банковское назначение платежа и причину. Платёж применяется сразу. Приложение блокирует повторную запись с тем же назначением, суммой и датой. Можно регистрировать только банковские переводы.",
+  "Click Record a payment on the Payments page, or on the dwelling page. Choose an open invoice, or a dwelling that has no open invoice. Choose bank transfer or cash. Enter the amount, date, payer, reference, and a reason. The payment applies right away. A bank transfer needs a reference, and the app blocks a second one with the same reference, amount, and date. A payment to a dwelling with no open invoice goes to the dwelling account, and the next invoice uses it. If the dwelling has an open invoice, choose that invoice.":
+    "На странице «Платежи» или на странице помещения нажмите «Зарегистрировать платёж». Выберите открытый счёт или помещение, у которого нет открытого счёта. Выберите банковский перевод или наличные. Введите сумму, дату, плательщика, назначение платежа и причину. Платёж применяется сразу. Для банковского перевода нужно назначение платежа, а приложение блокирует второй платёж с тем же назначением, суммой и датой. Платёж за помещение без открытого счёта зачисляется на счёт помещения, и его использует следующий счёт. Если у помещения есть открытый счёт, выберите этот счёт.",
+  "How do I fix a payment that the statement reader got wrong?":
+    "Как исправить платёж, который программа неверно прочитала из выписки?",
+  "Open the Unmatched tab on the Payments page. Click Edit next to the payment. Change the amount, date, payer, or reference, and enter a reason. The old values stay in the audit history. You cannot edit a payment after it is matched.":
+    "На странице «Платежи» откройте вкладку «Не сопоставлен». Нажмите «Редактировать» рядом с платежом. Измените сумму, дату, плательщика или назначение платежа и введите причину. Прежние значения остаются в истории аудита. После сопоставления платёж нельзя редактировать.",
+  "How do I undo a payment that I recorded to a dwelling account?":
+    "Как отменить платёж, зачисленный на счёт помещения?",
+  "Open the Confirmed tab on the Payments page. Find the payment under Payments to an account. Click Reverse and enter a reason. The dwelling account goes back to its balance before the payment. The payment does not return to the Unmatched tab. Record it again for the correct dwelling. You cannot reverse a payment if a later invoice already used its credit.":
+    "На странице «Платежи» откройте вкладку «Подтверждён». В разделе «Платежи на счёт» найдите платёж. Нажмите «Отменить» и введите причину. Счёт помещения вернётся к остатку до платежа. Платёж не возвращается на вкладку «Не сопоставлен». Зарегистрируйте его заново для нужного помещения. Нельзя отменить платёж, если более поздний счёт уже использовал его переплату.",
+  // Manual payments: dwelling account, cash, edit of an unmatched row
+  "Use this for money that is not in an imported statement: a transfer the statement missed, cash, or a payment for a dwelling that has no open invoice. The payment is applied right away.":
+    "Используйте это для денег, которых нет в импортированной выписке: перевода, которого не было в выписке, наличных или платежа за помещение, у которого нет открытого счёта. Платёж применяется сразу.",
+  "Apply to": "Применить к",
+  "Choose where the payment goes": "Выберите, куда направить платёж",
+  "Open invoices": "Открытые счета",
+  "Dwelling account (no open invoice)": "Счёт помещения (нет открытого счёта)",
+  "Bank transfer": "Банковский перевод",
+  Cash: "Наличные",
+  "Required for a bank transfer. For cash, a receipt number if you have one.":
+    "Обязательно для банковского перевода. Для наличных — номер квитанции, если он есть.",
+  "Record this payment? It is applied right away.":
+    "Зарегистрировать этот платёж? Он будет применён сразу.",
+  "Payments to an account": "Платежи на счёт",
+  "Posted to the dwelling account, not to an invoice.":
+    "Зачислен на счёт помещения, а не на счёт на оплату.",
+  "Reverse this payment? The original payment stays in the history and a cancelling entry is added. The dwelling account goes back to its balance before the payment.":
+    "Отменить этот платёж? Исходный платёж остаётся в истории, и добавляется сторнирующая запись. Счёт помещения вернётся к остатку до платежа.",
+  "Fix a row the statement reader got wrong. The old values stay in the audit history.":
+    "Исправьте строку, которую программа неверно прочитала из выписки. Прежние значения остаются в истории аудита.",
+  "Reason for the change": "Причина изменения",
+  "Payment updated.": "Платёж обновлён.",
+  "This payment was already recorded": "Этот платёж уже зарегистрирован",
+  "This dwelling has an open invoice. Apply the payment to that invoice":
+    "У помещения есть открытый счёт. Примените платёж к этому счёту",
+  "Only a payment posted to a dwelling account can be reversed here":
+    "Здесь можно отменить только платёж, зачисленный на счёт помещения",
+  "This payment is already posted to a dwelling account":
+    "Этот платёж уже зачислен на счёт помещения",
+  "Only an unmatched payment can be edited":
+    "Редактировать можно только несопоставленный платёж",
   "How do I undo a payment that I matched to the wrong invoice?":
     "Как отменить платёж, который я сопоставил с неверным счётом?",
   "Open the Confirmed tab on the Payments page. Click Reverse next to the payment and enter a reason. The original payment stays in the history. The invoice becomes unpaid again. The payment returns to the Unmatched tab. There you can match it to the correct invoice. You cannot reverse a payment if a later invoice already used its credit.":
-    "На странице «Платежи» откройте вкладку «Подтверждён». Нажмите «Отменить» рядом с платежом и введите причину. Исходный платёж остаётся в истории. Счёт снова становится неоплаченным. Платёж возвращается на вкладку «Не сопоставлен». Там его можно сопоставить с нужным счётом. Нельзя отменить платёж, если более поздний счёт уже использовал его кредит.",
+    "На странице «Платежи» откройте вкладку «Подтверждён». Нажмите «Отменить» рядом с платежом и введите причину. Исходный платёж остаётся в истории. Счёт снова становится неоплаченным. Платёж возвращается на вкладку «Не сопоставлен». Там его можно сопоставить с нужным счётом. Нельзя отменить платёж, если более поздний счёт уже использовал его переплату.",
   "The CSV file is too large (up to 2 MB).":
     "Файл CSV слишком большой (до 2 МБ).",
   "The CSV file has too many rows (up to 5,000).":
@@ -2881,7 +3354,7 @@ const ru: Record<string, string> = {
   "Only a confirmed payment can be reversed":
     "Отменить можно только подтверждённый платёж",
   "The credit from this payment was already used on a later invoice. Fix the balance with an adjustment":
-    "Кредит по этому платежу уже был использован для оплаты более позднего счёта. Исправьте баланс с помощью корректировки",
+    "Переплата по этому платежу уже была использована для оплаты более позднего счёта. Исправьте баланс с помощью корректировки",
   "Value must be a non-negative number with at most 4 decimal places":
     "Значение должно быть неотрицательным числом не более чем с 4 знаками после запятой",
   "Current value must be a non-negative number with at most 3 decimal places":
@@ -3033,8 +3506,8 @@ const ru: Record<string, string> = {
     "Что-то пошло не так. Попробуйте ещё раз.",
   "This dwelling's billing case in every period it has existed for.":
     "Расчётная запись этого помещения за каждый период его существования.",
-  "Total credits": "Всего по кредиту",
-  "Total debits": "Всего по дебету",
+  "Total credits": "Всего зачтено",
+  "Total debits": "Всего начислено",
   "View current period": "Посмотреть текущий период",
   "Water and other utility meters in this dwelling.":
     "Счётчики воды и других коммунальных услуг в этом помещении.",
@@ -3249,7 +3722,7 @@ const ru: Record<string, string> = {
   "Messages inbox with a resident conversation open.":
     "Входящие сообщения с открытой перепиской с жильцом.",
   "MISSING DATA means something blocks the invoice: a required input is missing, a rule has no active meter, or no billing rule applies. READY means the invoice can be generated. DRAFT means you can still review and regenerate it. PREPARED is approved and ready to send. SENT means delivery succeeded. OVERDUE means the due date passed unpaid. PAID means the invoice is fully paid.":
-    "MISSING DATA означает, что счёту что-то препятствует: отсутствуют обязательные данные, у правила нет активного счётчика или не применяется ни одно правило расчёта. READY означает, что счёт можно сформировать. DRAFT означает, что счёт ещё можно проверить и сформировать заново. PREPARED означает, что счёт одобрен и готов к отправке. SENT означает, что доставка прошла успешно. OVERDUE означает, что срок оплаты истёк, а счёт не оплачен. PAID означает, что счёт оплачен полностью.",
+    "«Недостающие данные» означает, что счёту что-то препятствует: отсутствуют обязательные данные, у правила нет активного счётчика или не применяется ни одно правило расчёта. «Готов к выставлению счёта» означает, что счёт можно сформировать. «Черновик» означает, что счёт ещё можно проверить и сформировать заново. «Подготовлен» означает, что счёт одобрен и готов к отправке. «Отправлен» означает, что доставка прошла успешно. «Просрочен» означает, что срок оплаты истёк, а счёт не оплачен. «Оплачен» означает, что счёт оплачен полностью.",
   "Why can I not generate an invoice?": "Почему я не могу сформировать счёт?",
   "The system blocks generation when required inputs are missing or the period is locked. Open the affected dwelling in the workbench to see what is missing.":
     "Система блокирует формирование, если отсутствуют обязательные данные или период заблокирован. Откройте соответствующее помещение в рабочей области, чтобы увидеть, чего не хватает.",
@@ -3258,7 +3731,7 @@ const ru: Record<string, string> = {
     "Счёт должен иметь статус ЧЕРНОВИК и содержать полные данные выставителя, получателя и реквизиты для оплаты. Исправьте соответствующие настройки. Сформируйте черновик заново, чтобы обновить сохранённые в нём данные.",
   "Why can I not send an invoice?": "Почему я не могу отправить счёт?",
   "You can send email to a PREPARED invoice. You can also send it to a SENT, PAID, or OVERDUE invoice that first used paper delivery. The invoice needs a billing email. If delivery fails, fix the cause, then retry or resend.":
-    "Вы можете отправить счёт со статусом PREPARED по электронной почте. Также можно отправить счёт со статусом SENT, PAID или OVERDUE, если сначала он был отправлен по почте. Для счёта нужен адрес электронной почты. Если доставка не удалась, устраните причину, затем повторите попытку или отправьте счёт снова.",
+    "Вы можете отправить счёт со статусом «Подготовлен» по электронной почте. Также можно отправить счёт со статусом «Отправлен», «Оплачен» или «Просрочен», если сначала он был отправлен по почте. Для счёта нужен адрес электронной почты. Если доставка не удалась, устраните причину, затем повторите попытку или отправьте счёт снова.",
   "No. A sent invoice is a permanent financial record and cannot change. Changes to dwellings, tariffs, or settings apply only to future invoices.":
     "Нет. Отправленный счёт — неизменяемый финансовый документ. Изменения в данных помещений, тарифах или настройках применяются только к будущим счетам.",
   "Review its amount, currency, payer, and reference. When you find the correct invoice, choose it in the Unmatched tab and click Match to invoice. The payment applies right away. Do not match a payment if you are not sure.":
@@ -3583,12 +4056,229 @@ const ru: Record<string, string> = {
     "Показания счётчиков до первого расчётного месяца. Счета не выставляются.",
   "This period holds the meters' starting readings. It is never billed.":
     "Этот период содержит начальные показания счётчиков. По нему никогда не выставляются счета.",
+  // Migration Center
+  "Matched by name": "Найдено по названию",
+  "AI suggestion": "Подсказка ИИ",
+  "Your choice": "Ваш выбор",
+  "Saved mapping": "Сохранённое сопоставление",
+  Choose: "Выберите",
+  "Migration Center": "Центр переноса данных",
+  "Upload a CSV file or paste the cells from Excel. You check every step before anything is saved.":
+    "Загрузите файл CSV или вставьте ячейки из Excel. Вы проверяете каждый шаг, прежде чем что-либо сохранится.",
+  "Or paste the cells here": "Или вставьте ячейки сюда",
+  "File encoding": "Кодировка файла",
+  "Detect automatically": "Определить автоматически",
+  "Download the template": "Скачать шаблон",
+  "Title rows skipped": "Пропущено строк заголовка",
+  "Total rows left out": "Пропущено итоговых строк",
+  "This looks like a spreadsheet you imported before. We used the same mapping.":
+    "Похоже, вы уже импортировали такую таблицу. Мы использовали то же сопоставление.",
+  "Match each column to a Namkopa field. Wrong letters? Go back and choose the file encoding.":
+    "Сопоставьте каждый столбец с полем Namkopa. Неправильные буквы? Вернитесь и выберите кодировку файла.",
+  "Column mapping": "Сопоставление столбцов",
+  Column: "Столбец",
+  "First values": "Первые значения",
+  "Namkopa field": "Поле Namkopa",
+  "Ignore this column": "Не использовать этот столбец",
+  "Create only. Existing numbers stay unchanged.":
+    "Только создать. Существующие номера остаются без изменений.",
+  "Update. Existing numbers change only in the mapped columns.":
+    "Обновить. Существующие номера меняются только в сопоставленных столбцах.",
+  "Check the file": "Проверить файл",
+  "To create": "Будет создано",
+  "To update": "Будет обновлено",
+  "Left unchanged": "Оставлено без изменений",
+  "Rows that need attention": "Строки, требующие внимания",
+  "The list shows the first 100 rows. Download the full list.":
+    "В списке показаны первые 100 строк. Скачайте полный список.",
+  "Change the mapping": "Изменить сопоставление",
+  "Download the list of issues": "Скачать список проблем",
+  "The file is too large (up to 1 MB)": "Файл слишком большой (до 1 МБ)",
+  "Choose a file or paste the cells": "Выберите файл или вставьте ячейки",
+  "Map the dwelling number column, and use each field once":
+    "Сопоставьте столбец с номером помещения и используйте каждое поле только один раз",
+  "Bring your dwellings and recipients from a spreadsheet or your old system. You check every step before anything is saved.":
+    "Перенесите помещения и получателей из таблицы или старой системы. Вы проверяете каждый шаг, прежде чем что-либо сохранится.",
+  "Import done": "Импорт завершён",
+  "The file changed nothing. All rows already exist.":
+    "Файл ничего не изменил. Все строки уже существуют.",
+  "Dwellings and recipients": "Помещения и получатели",
+  "Dwelling numbers, billing name, email, area, residents and delivery.":
+    "Номера помещений, имя для счетов, эл. почта, площадь, жильцы и доставка.",
+  "Start an import": "Начать импорт",
+  "Past imports": "Прошлые импорты",
+  File: "Файл",
+  "The dwelling number is empty": "Номер помещения пуст",
+  "The dwelling number has more than 50 characters":
+    "Номер помещения длиннее 50 символов",
+  "This dwelling number appears more than once in the file":
+    "Этот номер помещения встречается в файле больше одного раза",
+  "The dwelling type is not recognized": "Тип помещения не распознан",
+  "The billing email is not valid": "Эл. почта для счетов недействительна",
+  "The area must be a number with at most 2 decimals":
+    "Площадь должна быть числом не более чем с 2 знаками после запятой",
+  "The resident count must be a whole number":
+    "Количество жильцов должно быть целым числом",
+  "The invoice delivery is not recognized: use email, paper or both":
+    "Способ доставки счетов не распознан: укажите эл. почту, бумагу или оба",
+  "A text in this row is too long":
+    "Один из текстов в этой строке слишком длинный",
+  "No billing email: invoices cannot be sent by email until one is added":
+    "Нет эл. почты для счетов: счета нельзя отправить по эл. почте, пока её не добавят",
+  "Another dwelling number in the file differs only by letter case":
+    "Другой номер помещения в файле отличается только регистром букв",
+  "Already exists; left unchanged": "Уже существует; оставлено без изменений",
+  "Nothing to change": "Нечего менять",
+  "Some dwellings were created by someone else while importing. Check the file again":
+    "Во время импорта кто-то другой создал часть помещений. Проверьте файл ещё раз",
+  "The column mapping is not valid": "Сопоставление столбцов недействительно",
+  "The file has no data rows": "В файле нет строк с данными",
+  "The file has too many rows (up to 2,000)":
+    "В файле слишком много строк (до 2,000)",
+  "The file has a quote that is never closed":
+    "В файле есть кавычка, которая нигде не закрывается",
+  // Migration Center: opening balances
+  "Import not found": "Импорт не найден",
+  "This dwelling number does not exist. Import the dwellings first":
+    "Такого номера помещения нет. Сначала импортируйте помещения",
+  "This dwelling is archived": "Это помещение в архиве",
+  "The amount must be a number with at most 2 decimals":
+    "Сумма должна быть числом не более чем с 2 знаками после запятой",
+  "Debt and credit amounts cannot be negative":
+    "Суммы долга и переплаты не могут быть отрицательными",
+  "The debt due date is not a valid date":
+    "Срок оплаты долга не является допустимой датой",
+  "An invoice was already prepared for this dwelling. Fix the balance with an adjustment":
+    "Для этого помещения счёт уже подготовлен. Исправьте остаток корректировкой",
+  "Opening balance already posted. Correct it with an adjustment":
+    "Начальный остаток уже записан. Исправьте его корректировкой",
+  "The balance is zero. Nothing to post":
+    "Остаток равен нулю. Записывать нечего",
+  "Map the dwelling number and one amount: a balance, or debt and credit":
+    "Сопоставьте номер помещения и одну сумму: остаток или долг и переплату",
+  "Enter the balance date as a date that is not in the future":
+    "Укажите дату остатка, которая не находится в будущем",
+  "The balance date is after the first invoice date. Choose a date on or before it":
+    "Дата остатка позже даты первого счёта. Выберите эту дату или более раннюю",
+  "Some balances were posted by someone else while importing. Check the file again":
+    "Во время импорта кто-то другой записал часть остатков. Проверьте файл ещё раз",
+  "Import opening balances": "Импорт начальных остатков",
+  "An opening balance is posted once for each dwelling. After that, correct it with an adjustment on the dwelling page.":
+    "Начальный остаток записывается один раз для каждого помещения. После этого исправляйте его корректировкой на странице помещения.",
+  "Balance date": "Дата остатка",
+  "The day the old system struck these balances. It cannot be after your first invoice date.":
+    "День, на который старая система зафиксировала эти остатки. Он не может быть позже даты вашего первого счёта.",
+  "Positive amounts mean": "Положительные суммы означают",
+  "The resident owes money": "Жилец должен деньги",
+  "The resident has overpaid": "Жилец переплатил",
+  "This applies to a single balance column only.":
+    "Это относится только к одному столбцу остатка.",
+  "To post": "Будет записано",
+  "Total debt": "Долг всего",
+  "Total credit": "Переплата всего",
+  "Balances to post": "Остатки к записи",
+  Debt: "Долг",
+  "Opening balances": "Начальные остатки",
+  "Debt or credit from your old system, one amount for each dwelling. Import the dwellings first.":
+    "Долг или переплата из старой системы, одна сумма на каждое помещение. Сначала импортируйте помещения.",
+  "Opening balance report": "Отчёт о начальных остатках",
+  "The ledger totals match the file.": "Итоги в книге совпадают с файлом.",
+  "The ledger totals do not match the file. Contact support.":
+    "Итоги в книге не совпадают с файлом. Обратитесь в поддержку.",
+  Totals: "Итоги",
+  "In the file": "В файле",
+  "In the ledger": "В книге",
+  Posted: "Записано",
+  "The first invoice shows this debt as previous outstanding. Late fees do not apply to it until it is paid. To change a balance, add an adjustment on the dwelling page.":
+    "В первом счёте этот долг показан как предыдущая задолженность. Плата за просрочку на него не начисляется, пока он не оплачен. Чтобы изменить остаток, добавьте корректировку на странице помещения.",
+  "Posted balances": "Записанные остатки",
+  "Balance now": "Остаток сейчас",
+  "Download as CSV": "Скачать как CSV",
+  "Debt due date": "Срок оплаты долга",
+  "Total debt in the file": "Долг всего в файле",
+  "Total debt in the ledger": "Долг всего в книге",
+  "Total credit in the file": "Переплата всего в файле",
+  "Total credit in the ledger": "Переплата всего в книге",
+  "The amount is empty. Nothing to post": "Сумма пуста. Записывать нечего",
+  "The amount is in another currency than the organization's":
+    "Сумма указана в другой валюте, чем валюта организации",
+  "No billing period exists yet. An invoice issued before the balance date will not show these balances":
+    "Расчётного периода пока нет. В счёте, выставленном раньше даты остатка, эти остатки не будут показаны",
+  // Migration Center: meters and readings
+  "The meter type is not recognized: use cold water, hot water, electricity, gas or heat":
+    "Тип счётчика не распознан: укажите холодная вода, горячая вода, электричество, газ или отопление",
+  "The reading must be a number of zero or more with at most 3 decimals":
+    "Показание должно быть числом от нуля не более чем с 3 знаками после запятой",
+  "The unit is required for this meter type":
+    "Для этого типа счётчика единица измерения обязательна",
+  "The dwelling has more than one meter of this type. Add the serial number":
+    "В помещении больше одного счётчика этого типа. Добавьте серийный номер",
+  "This meter appears more than once in the file. Add a reading date to keep the latest":
+    "Этот счётчик встречается в файле больше одного раза. Добавьте дату показания, чтобы сохранить последнее",
+  "Two readings of this meter have the same date":
+    "У двух показаний этого счётчика одна и та же дата",
+  "The reading date is not a valid date":
+    "Дата показания не является допустимой датой",
+  "The reading is dated after the first billing period starts. Use the reading from the end of the previous month":
+    "Дата показания позже начала первого расчётного периода. Используйте показание на конец предыдущего месяца",
+  "An older reading of this meter. Only the latest is kept":
+    "Более старое показание этого счётчика. Сохраняется только последнее",
+  "Already the starting reading": "Это уже начальное показание",
+  "Replaces the starting reading already saved":
+    "Заменяет уже сохранённое начальное показание",
+  "Map the dwelling number, the meter type and the reading":
+    "Сопоставьте номер помещения, тип счётчика и показание",
+  "Import meter readings": "Импорт показаний счётчиков",
+  "Create the first billing period before you import meter readings. A reading is stored as the meter's position at the end of the month before that period.":
+    "Создайте первый расчётный период, прежде чем импортировать показания счётчиков. Показание сохраняется как положение счётчика на конец месяца перед этим периодом.",
+  "Create the first billing period": "Создать первый расчётный период",
+  "Each meter keeps one reading: its position at the end of the month before your first billing month. Only the latest reading of a meter is used. Missing meters are created.":
+    "У каждого счётчика сохраняется одно показание: его положение на конец месяца перед первым расчётным месяцем. Используется только последнее показание счётчика. Недостающие счётчики создаются.",
+  "To write": "Будет записано",
+  "New meters": "Новые счётчики",
+  "Readings to write": "Показания к записи",
+  "Latest reading": "Последнее показание",
+  "Saved before": "Сохранено ранее",
+  "Meters and readings": "Счётчики и показания",
+  "The meters of each dwelling and the latest reading of each. Import the dwellings first, and create the first billing period.":
+    "Счётчики каждого помещения и последнее показание каждого. Сначала импортируйте помещения и создайте первый расчётный период.",
+  "Reading date": "Дата показания",
 };
 
 export function translate(locale: Locale, text: string): string {
   if (locale === "lv") return lv[text] ?? text;
   if (locale === "ru") return ru[text] ?? text;
   return text;
+}
+
+// "{done} of {total}" -> "3 of 5". Values are shown as given.
+export function fill(
+  text: string,
+  values: Record<string, string | number>
+): string {
+  return text.replace(/\{(\w+)\}/g, (m, k) =>
+    k in values ? String(values[k]) : m
+  );
+}
+
+// Count-dependent sentence. English picks `one` for 1, else `other`. Latvian
+// and Russian look up `${other}|${category}` (CLDR via Intl.PluralRules; Latvian
+// "zero" uses the "|other" entry), so "21 dienu" / "11 dienām" come out right.
+export function plural(
+  locale: Locale,
+  n: number,
+  one: string,
+  other: string
+): string {
+  let text = n === 1 ? one : other;
+  if (locale !== "en") {
+    const category = new Intl.PluralRules(locale).select(n);
+    const forms = [`${other}|${category}`, `${other}|other`];
+    text = translate(locale, forms[0]);
+    if (text === forms[0]) text = translate(locale, forms[1]);
+    if (text === forms[1]) text = translate(locale, other);
+  }
+  return fill(text, { n: formatNumber(n, locale) });
 }
 
 // Shared by every page rendering an Astro Action's error: never shows raw
@@ -3645,11 +4335,14 @@ export function formatNumber(
 export function formatMoney(
   value: string,
   currency: string,
-  locale: Locale
+  locale: Locale,
+  forceGrouping = false
 ): string {
-  return new Intl.NumberFormat(locale, { style: "currency", currency }).format(
-    Number(value)
-  );
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    useGrouping: forceGrouping ? "always" : "auto",
+  }).format(Number(value));
 }
 
 export function formatDate(

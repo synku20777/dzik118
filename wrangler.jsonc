@@ -16,6 +16,22 @@
   // Required for node-postgres (the "pg" package, spec Section 3.2) to run at
   // all in the Workers runtime -- without this it fails on node:net/node:tls.
   "compatibility_flags": ["nodejs_compat"],
+  // Capture intermittent latency, including outbound Supabase auth calls.
+  "observability": {
+    "redact_query_string": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true,
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+    },
+    "issue_detection": { "enabled": false },
+  },
   // Cloudflare Browser Rendering for invoice PDF generation (spec Section
   // 3.4/3.5/22). Unlike Hyperdrive, this has no localConnectionString-style
   // passthrough. Confirmed empirically: merely declaring this binding makes
@@ -23,9 +39,9 @@
   // just requests that call renderPdf) -- see src/lib/pdf/render.ts for the
   // full diagnosis. Real Cloudflare deploys are unaffected; this is a local
   // sandbox limitation only.
-  "browser": {
-    "binding": "BROWSER",
-  },
+  // "browser": {
+  //   "binding": "BROWSER",
+  // },
   // Phase L (Automation/audit, spec Section 32): billing-overdue-scan,
   // auto-invoice-generate, auto-invoice-send all run from one daily tick.
   // 02:15 UTC keeps it well clear of any organization's local midnight
@@ -40,7 +56,7 @@
       "id": "935a51fab52f464db770b6232c5dd9d1",
       // Local dev only: wrangler dev/preview needs this to boot without a live
       // Cloudflare account. Matches .env.example DATABASE_URL. Not used in production.
-      // "localConnectionString": "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+      "localConnectionString": "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
     },
   ],
   // Native platform rate limiting (spec Section 15.1: "endpoint

@@ -1,0 +1,197 @@
+---
+import Icon from "./Icon.astro";
+import { translate, uiLocale } from "../../lib/ui/i18n";
+
+interface Props {
+  organizationId?: string;
+  organizationName?: string;
+  organizations: { id: string; name: string; archivedAt: Date | null }[];
+  residentAccess: boolean;
+}
+const { organizationId, organizationName, organizations, residentAccess } =
+  Astro.props;
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+const ordered = [...organizations].sort(
+  (a, b) =>
+    Number(Boolean(a.archivedAt)) - Number(Boolean(b.archivedAt)) ||
+    a.name.localeCompare(b.name, locale)
+);
+---
+
+<details class="organization-switcher" name="organization-switcher">
+  <summary class="organization-trigger" title={t("Switch organization")}>
+    <span class="organization-symbol">
+      <Icon name="building" size="sm" />
+    </span>
+    <span class="organization-name">
+      {organizationName ?? t("Your organizations")}
+    </span>
+    <span class="organization-chevron">
+      <Icon name="chevron-right" size="xs" />
+    </span>
+  </summary>
+  <nav class="organization-menu" aria-label={t("Switch organization")}>
+    {ordered.length > 0 && (
+      <ul class="organization-options">
+        {ordered.map((org) => (
+          <li>
+            <a
+              href={`/admin/o/${org.id}/dashboard`}
+              aria-current={org.id === organizationId ? "true" : undefined}
+            >
+              <span class="organization-option-name">
+                {org.name}
+                {org.archivedAt && (
+                  <span class="organization-archived">{t("Archived")}</span>
+                )}
+              </span>
+              {org.id === organizationId && <Icon name="check" size="sm" />}
+            </a>
+          </li>
+        ))}
+      </ul>
+    )}
+    <div class="organization-menu-actions">
+      <a href="/admin/organizations">
+        <Icon name="building-community" size="sm" />
+        {t("Your organizations")}
+      </a>
+      {residentAccess && (
+        <a href="/portal">
+          <Icon name="user" size="sm" />
+          {t("Switch to resident view")}
+        </a>
+      )}
+    </div>
+  </nav>
+</details>
+
+<script>
+  import { onPageLoad } from "../../lib/ui/page-lifecycle";
+  import { bindOrganizationSwitcher } from "../../lib/ui/organization-switcher";
+  onPageLoad(() => {
+    const cleanups = Array.from(
+      document.querySelectorAll<HTMLDetailsElement>(".organization-switcher"),
+      bindOrganizationSwitcher
+    );
+    return () => cleanups.forEach((cleanup) => cleanup());
+  });
+</script>
+
+<style>
+  .organization-switcher {
+    position: relative;
+    margin: 1.5rem 0 1rem;
+  }
+  .organization-trigger {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.625rem;
+    min-height: 3.5rem;
+    padding: 0.625rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-foreground);
+    cursor: pointer;
+    list-style: none;
+  }
+  .organization-trigger::-webkit-details-marker {
+    display: none;
+  }
+  .organization-trigger:hover,
+  .organization-switcher[open] > .organization-trigger {
+    background: var(--color-surface-hover);
+  }
+  .organization-trigger:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 3px;
+  }
+  .organization-symbol {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--radius-control);
+    background: var(--color-nav-active-bg);
+    color: var(--color-primary);
+  }
+  .organization-name {
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .organization-chevron {
+    display: flex;
+    transform: rotate(90deg);
+    color: var(--color-muted);
+  }
+  .organization-switcher[open] .organization-chevron {
+    transform: rotate(-90deg);
+  }
+  .organization-menu {
+    position: absolute;
+    inset-inline-start: 0;
+    top: calc(100% + 0.5rem);
+    z-index: 30;
+    width: min(19rem, calc(100vw - 3rem));
+    padding: 0.375rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow: var(--elevation-1);
+  }
+  .organization-options {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 16rem;
+    overflow-y: auto;
+  }
+  .organization-menu a {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-height: 2.75rem;
+    padding: 0.625rem 0.75rem;
+    border-radius: var(--radius-control);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--color-foreground);
+    text-decoration: none;
+  }
+  .organization-menu a:hover {
+    background: var(--color-surface-hover);
+  }
+  .organization-menu a[aria-current] {
+    background: var(--color-nav-active-bg);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+  .organization-option-name {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .organization-archived {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--color-muted);
+  }
+  .organization-menu-actions {
+    padding-top: 0.375rem;
+  }
+  .organization-options + .organization-menu-actions {
+    margin-top: 0.375rem;
+    border-top: 1px solid var(--color-border);
+  }
+  @media (max-width: 63.99rem) {
+    .organization-menu {
+      width: 100%;
+    }
+  }
+</style>

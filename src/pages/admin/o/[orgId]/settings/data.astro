@@ -40,6 +40,14 @@ const organization = await withRequestDb((db) =>
   <ul class="mt-6 grid gap-4 sm:grid-cols-2">
     <li>
       <a
+        href={`/admin/o/${organizationId}/migration`}
+        class="panel block p-5 font-medium text-primary hover:underline"
+      >
+        {t("Migration Center")}
+      </a>
+    </li>
+    <li>
+      <a
         href={`/admin/o/${organizationId}/dwellings/import`}
         class="panel block p-5 font-medium text-primary hover:underline"
       >

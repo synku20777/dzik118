@@ -28,6 +28,7 @@ import { billingCaseStatusEnum } from "../../../../../../db/schema/billing";
 import { withRequestDb } from "../../../../../../lib/db-request";
 import {
   entityLabel,
+  fill,
   formatMoney,
   formatPeriod,
   translate,
@@ -186,8 +187,7 @@ function filterHref(status?: CaseStatus) {
       workbenchPath={workbenchPath}
     />
     <a href={`/admin/o/${organizationId}/periods`} class="back-link">
-      <span aria-hidden="true">←</span>{" "}
-      {t("Periods")}
+      <span aria-hidden="true">←</span> {t("Periods")}
     </a>
 
     <header class="workbench-header">
@@ -200,278 +200,255 @@ function filterHref(status?: CaseStatus) {
         <p class="period-description">
           {t("Collect readings, generate invoices, then prepare and send.")}
         </p>
-        <p class="period-code">{t("Period")} {periodCode}</p>
+        <p class="period-code">
+          {t("Period")} {periodCode}
+        </p>
       </div>
 
       <div class="period-actions">
-        {
-          !period.openingReadings && (
-            <>
-              <a
-                href={`/admin/o/${organizationId}/periods/${periodId}/readings`}
-                class="btn-secondary"
+        {!period.openingReadings && (
+          <>
+            <a
+              href={`/admin/o/${organizationId}/periods/${periodId}/readings`}
+              class="btn-secondary"
+            >
+              {t("Enter readings")}
+            </a>
+            <form method="POST" action={actions.billing.bulkGenerate}>
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="periodId" value={periodId} />
+              <button
+                type="submit"
+                disabled={period.status === "LOCKED"}
+                aria-describedby={
+                  period.status === "LOCKED" ? "locked-notice" : undefined
+                }
+                class="btn-primary"
               >
-                {t("Enter readings")}
-              </a>
-              <form method="POST" action={actions.billing.bulkGenerate}>
-                <input
-                  type="hidden"
-                  name="organizationId"
-                  value={organizationId}
-                />
-                <input type="hidden" name="periodId" value={periodId} />
-                <button
-                  type="submit"
-                  disabled={period.status === "LOCKED"}
-                  aria-describedby={
-                    period.status === "LOCKED" ? "locked-notice" : undefined
-                  }
-                  class="btn-primary"
-                >
-                  {t("Generate all eligible")}
-                </button>
-              </form>
-            </>
-          )
-        }
-        {
-          period.status === "OPEN" && (
-            <details class="more-menu">
-              <summary aria-label={t("More actions")}>•••</summary>
-              <div>
-                <button type="button" data-open-lock-dialog>
-                  {t("Lock period")}
-                </button>
-              </div>
-            </details>
-          )
-        }
+                {t("Generate all eligible")}
+              </button>
+            </form>
+          </>
+        )}
+        {period.status === "OPEN" && (
+          <details class="more-menu">
+            <summary aria-label={t("More actions")}>•••</summary>
+            <div>
+              <button type="button" data-open-lock-dialog>
+                {t("Lock period")}
+              </button>
+            </div>
+          </details>
+        )}
       </div>
     </header>
 
     <nav class="period-navigation" aria-label={t("Period navigation")}>
-      {
-        previousPeriod ? (
-          <a href={`/admin/o/${organizationId}/periods/${previousPeriod.id}`}>
-            <span aria-hidden="true">←</span>
-            <span>
-              {formatPeriod(previousPeriod.year, previousPeriod.month, locale)}
-            </span>
-          </a>
-        ) : (
-          <span aria-disabled="true">← {t("Previous period")}</span>
-        )
-      }
-      {
-        nextPeriod ? (
-          <a href={`/admin/o/${organizationId}/periods/${nextPeriod.id}`}>
-            <span>
-              {formatPeriod(nextPeriod.year, nextPeriod.month, locale)}
-            </span>
-            <span aria-hidden="true">→</span>
-          </a>
-        ) : (
-          <span aria-disabled="true">{t("Next period")} →</span>
-        )
-      }
+      {previousPeriod ? (
+        <a href={`/admin/o/${organizationId}/periods/${previousPeriod.id}`}>
+          <span aria-hidden="true">←</span>
+          <span>
+            {formatPeriod(previousPeriod.year, previousPeriod.month, locale)}
+          </span>
+        </a>
+      ) : (
+        <span aria-disabled="true">← {t("Previous period")}</span>
+      )}
+      {nextPeriod ? (
+        <a href={`/admin/o/${organizationId}/periods/${nextPeriod.id}`}>
+          <span>{formatPeriod(nextPeriod.year, nextPeriod.month, locale)}</span>
+          <span aria-hidden="true">→</span>
+        </a>
+      ) : (
+        <span aria-disabled="true">{t("Next period")} →</span>
+      )}
     </nav>
 
-    {
-      period.status === "OPEN" && (
-        <dialog class="lock-dialog" id="lock-period-dialog">
-          <div class="dialog-body">
-            <div class="dialog-icon" aria-hidden="true">
-              !
-            </div>
-            <div>
-              <h2>{t("Lock this period?")}</h2>
-              <p>
-                {t(
-                  "Locking this period prevents normal reading edits and invoice regeneration. Historical data will remain available."
-                )}
-              </p>
-            </div>
+    {period.status === "OPEN" && (
+      <dialog class="lock-dialog" id="lock-period-dialog">
+        <div class="dialog-body">
+          <div class="dialog-icon" aria-hidden="true">
+            !
           </div>
-          <div class="dialog-actions">
-            <form method="dialog">
-              <button class="btn-secondary" value="cancel">
-                {t("Cancel")}
-              </button>
-            </form>
-            <form method="POST" action={actions.periods.lock}>
-              <input
-                type="hidden"
-                name="organizationId"
-                value={organizationId}
-              />
-              <input type="hidden" name="periodId" value={periodId} />
-              <button type="submit" class="btn-danger">
-                {t("Lock period")}
-              </button>
-            </form>
+          <div>
+            <h2>{t("Lock this period?")}</h2>
+            <p>
+              {t(
+                "Locking this period prevents normal reading edits and invoice regeneration. Historical data will remain available."
+              )}
+            </p>
           </div>
-        </dialog>
-      )
-    }
-
-    {
-      period.status === "LOCKED" && !period.openingReadings && (
-        <div
-          id="locked-notice"
-          class="notice flex flex-wrap items-center justify-between gap-3"
-        >
-          <p>
-            {t(
-              "This period is locked. Readings and invoice generation cannot be changed."
-            )}{" "}
-            {t(
-              "To bill a dwelling for this period after the fact, reopen the period."
-            )}
-          </p>
-          <form method="POST" action={actions.periods.reopen}>
+        </div>
+        <div class="dialog-actions">
+          <form method="dialog">
+            <button class="btn-secondary" value="cancel">
+              {t("Cancel")}
+            </button>
+          </form>
+          <form method="POST" action={actions.periods.lock}>
             <input type="hidden" name="organizationId" value={organizationId} />
             <input type="hidden" name="periodId" value={periodId} />
-            <button type="submit" class="btn-secondary btn-sm">
-              {t("Reopen period")}
+            <button type="submit" class="btn-danger">
+              {t("Lock period")}
             </button>
           </form>
         </div>
-      )
-    }
+      </dialog>
+    )}
 
-    {
-      !period.openingReadings &&
-        period.status === "OPEN" &&
-        dwellingsWithoutCase.length > 0 && (
-          <details id="add-dwelling" class="panel mb-6 p-4">
-            <summary class="cursor-pointer font-semibold">
-              {t("Dwellings not in this period")}
-              <span class="ml-2 font-normal text-muted">
-                {dwellingsWithoutCase.length}
-              </span>
-            </summary>
-            <p class="text-body-sm mt-2 text-muted">
-              {t(
-                "These dwellings have no billing case in this period, so they get no invoice for it. Add a dwelling to bill it for this period. The invoice uses the issue and due dates of this period."
-              )}
-            </p>
-            <form
-              method="POST"
-              action={actions.periods.addDwelling}
-              class="mt-3 flex flex-wrap items-end gap-3"
-            >
-              <input
-                type="hidden"
-                name="organizationId"
-                value={organizationId}
-              />
-              <input type="hidden" name="periodId" value={periodId} />
-              <label class="text-body-sm">
-                <span class="block font-medium">{t("Dwelling")}</span>
-                <select name="dwellingId" required class="mt-1">
-                  {dwellingsWithoutCase.map((dwelling) => (
-                    <option value={dwelling.id}>{dwelling.number}</option>
-                  ))}
-                </select>
-              </label>
-              <button type="submit" class="btn-secondary">
-                {t("Add to period")}
-              </button>
-            </form>
-          </details>
-        )
-    }
+    {period.status === "LOCKED" && !period.openingReadings && (
+      <div
+        id="locked-notice"
+        class="notice flex flex-wrap items-center justify-between gap-3"
+      >
+        <p>
+          {t(
+            "This period is locked. Readings and invoice generation cannot be changed."
+          )}{" "}
+          {t(
+            "To bill a dwelling for this period after the fact, reopen the period."
+          )}
+        </p>
+        <form method="POST" action={actions.periods.reopen}>
+          <input type="hidden" name="organizationId" value={organizationId} />
+          <input type="hidden" name="periodId" value={periodId} />
+          <button type="submit" class="btn-secondary btn-sm">
+            {t("Reopen period")}
+          </button>
+        </form>
+      </div>
+    )}
+
+    {!period.openingReadings &&
+      period.status === "OPEN" &&
+      dwellingsWithoutCase.length > 0 && (
+        <details id="add-dwelling" class="panel mb-6 p-4">
+          <summary class="cursor-pointer font-semibold">
+            {t("Dwellings not in this period")}
+            <span class="ml-2 font-normal text-muted">
+              {dwellingsWithoutCase.length}
+            </span>
+          </summary>
+          <p class="text-body-sm mt-2 text-muted">
+            {t(
+              "These dwellings have no billing case in this period, so they get no invoice for it. Add a dwelling to bill it for this period. The invoice uses the issue and due dates of this period."
+            )}
+          </p>
+          <form
+            method="POST"
+            action={actions.periods.addDwelling}
+            class="mt-3 flex flex-wrap items-end gap-3"
+          >
+            <input type="hidden" name="organizationId" value={organizationId} />
+            <input type="hidden" name="periodId" value={periodId} />
+            <label class="text-body-sm">
+              <span class="block font-medium">{t("Dwelling")}</span>
+              <select name="dwellingId" required class="mt-1">
+                {dwellingsWithoutCase.map((dwelling) => (
+                  <option value={dwelling.id}>{dwelling.number}</option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" class="btn-secondary">
+              {t("Add to period")}
+            </button>
+          </form>
+        </details>
+      )}
 
     <details
       id="period-tariffs"
       class="panel mb-6 p-4"
-      open={tariffRows.length === 0 ||
+      open={
+        tariffRows.length === 0 ||
         tariffRows.some(
           (row) => !row.applies || row.rule.applicationScope !== "ONE_TO_ALL"
-        )}
+        )
+      }
     >
       <summary class="cursor-pointer font-semibold">
         {t("Tariffs in this period")}
         <span class="ml-2 font-normal text-muted">
-          {t("Applying:")}{" "}
-          {applyingTariffs} / {tariffRows.length}
+          {t("Applying:")} {applyingTariffs} / {tariffRows.length}
         </span>
       </summary>
       <p class="text-body-sm mt-2 text-muted">
-        {
-          t(
-            "A tariff applies when its effective dates overlap the period. To bill an earlier period, give the tariff an earlier Effective from date."
-          )
-        }{" "}
-        <a class="underline" href={rulesPath}>{t("Edit tariffs")}</a>
+        {t(
+          "A tariff applies when its effective dates overlap the period. To bill an earlier period, give the tariff an earlier Effective from date."
+        )}{" "}
+        <a class="underline" href={rulesPath}>
+          {t("Edit tariffs")}
+        </a>
       </p>
-      {
-        tariffRows.length === 0 ? (
-          <p class="text-body-sm mt-3">{t("No tariffs exist yet.")}</p>
-        ) : (
-          <ul class="mt-3 divide-y divide-border">
-            {tariffRows.map(({ rule, applies, reason }) => (
-              <li class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2">
-                <span class="min-w-0">
-                  <a
-                    class="font-medium underline"
-                    href={`${rulesPath}?edit=${rule.id}`}
-                  >
-                    {rule.name}
-                  </a>
-                  <span class="text-body-sm block text-muted">
-                    {rule.effectiveFrom} → {rule.effectiveUntil ?? t("ongoing")}
-                  </span>
-                </span>
-                <span
-                  class="readiness-item"
-                  data-tone={applies ? "success" : "danger"}
+      {tariffRows.length === 0 ? (
+        <p class="text-body-sm mt-3">{t("No tariffs exist yet.")}</p>
+      ) : (
+        <ul class="mt-3 divide-y divide-border">
+          {tariffRows.map(({ rule, applies, reason }) => (
+            <li class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2">
+              <span class="min-w-0">
+                <a
+                  class="font-medium underline"
+                  href={`${rulesPath}?edit=${rule.id}`}
                 >
-                  <Icon name={applies ? "check" : "alert-triangle"} size="xs" />
-                  {reason}
+                  {rule.name}
+                </a>
+                <span class="text-body-sm block text-muted">
+                  {rule.effectiveFrom} → {rule.effectiveUntil ?? t("ongoing")}
                 </span>
-              </li>
-            ))}
-          </ul>
-        )
-      }
+              </span>
+              <span
+                class="readiness-item"
+                data-tone={applies ? "success" : "danger"}
+              >
+                <Icon name={applies ? "check" : "alert-triangle"} size="xs" />
+                {reason}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </details>
 
     <section class="workflow-overview" aria-labelledby="workflow-heading">
       <div class="section-heading">
         <div>
           <h2 id="workflow-heading">{t("Billing workflow")}</h2>
-          <p>{totalCases} {t("billing cases in this period")}</p>
+          <p>
+            {totalCases} {t("billing cases in this period")}
+          </p>
         </div>
         <span>{t("Select a stage to filter the queue")}</span>
       </div>
       <div class="workflow-scroll">
         <nav class="workflow-rail" aria-label={t("Filter by workflow stage")}>
-          {
-            workflowFilters.map(([status, label, description, tone, icon]) => {
-              const count = status
-                ? summary.caseStatusCounts[status]
-                : totalCases;
-              const active = status ? statusFilter === status : !statusFilter;
-              return (
-                <a
-                  href={filterHref(status)}
-                  class="workflow-filter"
-                  data-tone={tone}
-                  aria-current={active ? "page" : undefined}
-                >
-                  <span class="workflow-label">
-                    <span class="workflow-icon" aria-hidden="true">
-                      {icon}
-                    </span>
-                    {t(label)}
-                    <strong>{count}</strong>
+          {workflowFilters.map(([status, label, description, tone, icon]) => {
+            const count = status
+              ? summary.caseStatusCounts[status]
+              : totalCases;
+            const active = status ? statusFilter === status : !statusFilter;
+            return (
+              <a
+                href={filterHref(status)}
+                class="workflow-filter"
+                data-tone={tone}
+                aria-current={active ? "page" : undefined}
+              >
+                <span class="workflow-label">
+                  <span class="workflow-icon" aria-hidden="true">
+                    {icon}
                   </span>
-                  <span>{t(description)}</span>
-                </a>
-              );
-            })
-          }
+                  {t(label)}
+                  <strong>{count}</strong>
+                </span>
+                <span>{t(description)}</span>
+              </a>
+            );
+          })}
         </nav>
       </div>
     </section>
@@ -480,7 +457,9 @@ function filterHref(status?: CaseStatus) {
       class="grid gap-4 sm:grid-cols-3"
       aria-labelledby="financial-heading"
     >
-      <h2 id="financial-heading" class="sr-only">{t("Financial summary")}</h2>
+      <h2 id="financial-heading" class="sr-only">
+        {t("Financial summary")}
+      </h2>
       <KpiCard
         icon="invoice"
         label={t("Invoiced")}
@@ -508,93 +487,75 @@ function filterHref(status?: CaseStatus) {
       />
     </section>
 
-    {
-      (lockResult?.error || generateResult?.error || sendResult?.error) && (
-        <p class="notice notice-danger" role="alert">
-          {lockResult?.error?.message ??
-            generateResult?.error?.message ??
-            sendResult?.error?.message}
-        </p>
-      )
-    }
-    {
-      sendResult && !sendResult.error && (
-        <p class="notice" role="status">
-          {sendResult.data?.sentAt
-            ? t("Invoice sent.")
-            : t("Sending has not finished yet. Check the delivery status.")}
-        </p>
-      )
-    }
-    {
-      bulkGenerateResult?.data && (
-        <p class="notice" role="status">
-          {bulkGenerateResult.data.generated.length} {t("invoices generated")}.
-          {bulkGenerateResult.data.skipped.length > 0 && (
-            <>
-              {" "}
-              {bulkGenerateResult.data.skipped.length} {t("skipped")}:{" "}
-              {bulkGenerateResult.data.skipped
-                .map((item) => item.reason)
-                .join("; ")}
-            </>
-          )}
-        </p>
-      )
-    }
-    {
-      bulkGenerateResult?.error && (
-        <p class="notice notice-danger" role="alert">
-          {bulkGenerateResult.error.message}
-        </p>
-      )
-    }
-    {
-      bulkPrepareResult?.data && (
-        <p class="notice" role="status">
-          {bulkPrepareResult.data.prepared.length} {t("invoices prepared")}.
-          {bulkPrepareResult.data.skipped.length > 0 && (
-            <>
-              {" "}
-              {bulkPrepareResult.data.skipped.length} {t("skipped")}:{" "}
-              {bulkPrepareResult.data.skipped
-                .map((item) => item.reason)
-                .join("; ")}
-            </>
-          )}
-        </p>
-      )
-    }
-    {
-      bulkPrepareResult?.error && (
-        <p class="notice notice-danger" role="alert">
-          {bulkPrepareResult.error.message}
-        </p>
-      )
-    }
-    {
-      bulkSendResult?.data && (
-        <p class="notice" role="status">
-          {bulkSendResult.data.sent.length} {t("invoices sent")}.
-          {bulkSendResult.data.skipped.length > 0 && (
-            <>
-              {" "}
-              {bulkSendResult.data.skipped.length} {t("skipped")}:{" "}
-              {bulkSendResult.data.skipped
-                .map((item) => item.reason)
-                .join("; ")}
-            </>
-          )}
-        </p>
-      )
-    }
-    {
-      bulkSendResult?.error && (
-        <p class="notice notice-danger" role="alert">
-          {bulkSendResult.error.message}
-        </p>
-      )
-    }
+    {(lockResult?.error || generateResult?.error || sendResult?.error) && (
+      <p class="notice notice-danger" role="alert">
+        {lockResult?.error?.message ??
+          generateResult?.error?.message ??
+          sendResult?.error?.message}
+      </p>
+    )}
+    {sendResult && !sendResult.error && (
+      <p class="notice" role="status">
+        {sendResult.data?.sentAt
+          ? t("Invoice sent.")
+          : t("Sending has not finished yet. Check the delivery status.")}
+      </p>
+    )}
+    {bulkGenerateResult?.data && (
+      <p class="notice" role="status">
+        {bulkGenerateResult.data.generated.length} {t("invoices generated")}.
+        {bulkGenerateResult.data.skipped.length > 0 && (
+          <>
+            {" "}
+            {bulkGenerateResult.data.skipped.length} {t("skipped")}:{" "}
+            {bulkGenerateResult.data.skipped
+              .map((item) => item.reason)
+              .join("; ")}
+          </>
+        )}
+      </p>
+    )}
+    {bulkGenerateResult?.error && (
+      <p class="notice notice-danger" role="alert">
+        {bulkGenerateResult.error.message}
+      </p>
+    )}
+    {bulkPrepareResult?.data && (
+      <p class="notice" role="status">
+        {bulkPrepareResult.data.prepared.length} {t("invoices prepared")}.
+        {bulkPrepareResult.data.skipped.length > 0 && (
+          <>
+            {" "}
+            {bulkPrepareResult.data.skipped.length} {t("skipped")}:{" "}
+            {bulkPrepareResult.data.skipped
+              .map((item) => item.reason)
+              .join("; ")}
+          </>
+        )}
+      </p>
+    )}
+    {bulkPrepareResult?.error && (
+      <p class="notice notice-danger" role="alert">
+        {bulkPrepareResult.error.message}
+      </p>
+    )}
+    {bulkSendResult?.data && (
+      <p class="notice" role="status">
+        {bulkSendResult.data.sent.length} {t("invoices sent")}.
+        {bulkSendResult.data.skipped.length > 0 && (
+          <>
+            {" "}
+            {bulkSendResult.data.skipped.length} {t("skipped")}:{" "}
+            {bulkSendResult.data.skipped.map((item) => item.reason).join("; ")}
+          </>
+        )}
+      </p>
+    )}
+    {bulkSendResult?.error && (
+      <p class="notice notice-danger" role="alert">
+        {bulkSendResult.error.message}
+      </p>
+    )}
 
     <section class="case-queue" aria-labelledby="queue-heading">
       <div class="queue-heading">
@@ -605,7 +566,9 @@ function filterHref(status?: CaseStatus) {
           </p>
         </div>
         <form method="GET" class="queue-filters" data-instant-filter>
-          <label class="sr-only" for="search">{t("Search dwelling")}</label>
+          <label class="sr-only" for="search">
+            {t("Search dwelling")}
+          </label>
           <input
             id="search"
             name="search"
@@ -614,26 +577,24 @@ function filterHref(status?: CaseStatus) {
             placeholder={t("Search dwelling…")}
             autocomplete="off"
           />
-          <label class="sr-only" for="status">{t("Status")}</label>
+          <label class="sr-only" for="status">
+            {t("Status")}
+          </label>
           <select id="status" name="status">
-            <option value="" selected={!statusFilter}
-              >{t("All statuses")}</option
-            >
-            {
-              workflowFilters.slice(1).map(([status, label]) => (
-                <option value={status} selected={statusFilter === status}>
-                  {t(label)}
-                </option>
-              ))
-            }
+            <option value="" selected={!statusFilter}>
+              {t("All statuses")}
+            </option>
+            {workflowFilters.slice(1).map(([status, label]) => (
+              <option value={status} selected={statusFilter === status}>
+                {t(label)}
+              </option>
+            ))}
           </select>
-          {
-            (search || statusFilter) && (
-              <a href={workbenchPath} class="clear-filters">
-                {t("Clear filters")}
-              </a>
-            )
-          }
+          {(search || statusFilter) && (
+            <a href={workbenchPath} class="clear-filters">
+              {t("Clear filters")}
+            </a>
+          )}
         </form>
       </div>
 
@@ -648,11 +609,15 @@ function filterHref(status?: CaseStatus) {
       />
       <div id="bulk-toolbar" class="bulk-toolbar" hidden aria-live="polite">
         <div class="selection-summary">
-          <strong><span id="selected-count">0</span> {t("selected")}</strong>
-          <span
-            ><span id="prepare-count">0</span> {t("eligible to prepare")}</span
-          >
-          <span><span id="send-count">0</span> {t("eligible to send")}</span>
+          <strong>
+            <span id="selected-count">0</span> {t("selected")}
+          </strong>
+          <span>
+            <span id="prepare-count">0</span> {t("eligible to prepare")}
+          </span>
+          <span>
+            <span id="send-count">0</span> {t("eligible to send")}
+          </span>
         </div>
         <div class="bulk-actions">
           <button
@@ -699,461 +664,463 @@ function filterHref(status?: CaseStatus) {
               <th scope="col">{t("Dwelling")}</th>
               <th scope="col">{t("Billing inputs")}</th>
               <th scope="col">{t("Status")}</th>
-              <th scope="col" class="numeric-column">{t("Invoice")}</th>
+              <th scope="col" class="numeric-column">
+                {t("Invoice")}
+              </th>
               <th scope="col">{t("Next action")}</th>
               <th scope="col" aria-label={t("More actions")}></th>
             </tr>
           </thead>
           <tbody>
-            {
-              cases.map((billingCase) => {
-                const missing = billingCase.missingData as (
-                  | {
-                      label: string | null;
-                      meterType: string;
-                      reason?: "NO_READING";
-                    }
-                  | {
-                      billingRuleId: string;
-                      ruleName: string;
-                      reason?: "NO_MANUAL_INPUT";
-                    }
-                  | {
-                      billingRuleId: string;
-                      ruleName: string;
-                      meterType: string;
-                      reason: "NO_ACTIVE_METER_FOR_RULE";
-                    }
-                  | { reason: "NO_APPLICABLE_RULES" }
-                  | string
-                )[];
-                const issuer = (billingCase.invoiceIssuerSnapshot ??
-                  {}) as Snapshot;
-                const recipient = (billingCase.invoiceRecipientSnapshot ??
-                  {}) as Snapshot & {
-                  invoiceByEmail?: boolean;
-                  invoiceByPaper?: boolean;
-                };
-                const payment = (billingCase.invoicePaymentSnapshot ??
-                  {}) as Snapshot;
-                const recipientIncomplete =
-                  Boolean(billingCase.invoiceId) &&
-                  ((!recipient.billingName && !recipient.occupantName) ||
-                    !recipient.billingAddress);
-                const organizationIncomplete =
-                  Boolean(billingCase.invoiceId) &&
-                  (!issuer.name ||
-                    !issuer.addressLine1 ||
-                    !payment.iban ||
-                    !payment.bankName);
-                const billingEmail = billingCase.invoiceId
-                  ? recipient.billingEmail
-                  : billingCase.billingEmail;
-                // A snapshot taken before per-dwelling delivery preferences
-                // existed has neither key -- same email-only fallback as
-                // sending.ts's deliver().
-                const invoiceByEmail = billingCase.invoiceId
-                  ? (recipient.invoiceByEmail ?? true)
-                  : billingCase.invoiceByEmail;
-                const invoiceByPaper = billingCase.invoiceId
-                  ? (recipient.invoiceByPaper ?? false)
-                  : billingCase.invoiceByPaper;
-                const prepareEligible =
-                  billingCase.status === "DRAFT" &&
-                  !recipientIncomplete &&
-                  !organizationIncomplete;
-                const sendEligible =
-                  billingCase.status === "PREPARED" &&
-                  ((invoiceByEmail && Boolean(billingEmail)) || invoiceByPaper);
-                const invoiceHref = billingCase.invoiceId
-                  ? `${workbenchPath}/invoices/${billingCase.invoiceId}`
-                  : null;
-                const readingsHref = `${workbenchPath}/dwellings/${billingCase.dwellingId}`;
-                const dwellingHref = `/admin/o/${organizationId}/dwellings/${billingCase.dwellingId}`;
+            {cases.map((billingCase) => {
+              const missing = billingCase.missingData as (
+                | {
+                    label: string | null;
+                    meterType: string;
+                    reason?: "NO_READING";
+                  }
+                | {
+                    billingRuleId: string;
+                    ruleName: string;
+                    reason?: "NO_MANUAL_INPUT";
+                  }
+                | {
+                    billingRuleId: string;
+                    ruleName: string;
+                    meterType: string;
+                    reason: "NO_ACTIVE_METER_FOR_RULE";
+                  }
+                | { reason: "NO_APPLICABLE_RULES" }
+                | string
+              )[];
+              const issuer = (billingCase.invoiceIssuerSnapshot ??
+                {}) as Snapshot;
+              const recipient = (billingCase.invoiceRecipientSnapshot ??
+                {}) as Snapshot & {
+                invoiceByEmail?: boolean;
+                invoiceByPaper?: boolean;
+              };
+              const payment = (billingCase.invoicePaymentSnapshot ??
+                {}) as Snapshot;
+              const recipientIncomplete =
+                Boolean(billingCase.invoiceId) &&
+                ((!recipient.billingName && !recipient.occupantName) ||
+                  !recipient.billingAddress);
+              const organizationIncomplete =
+                Boolean(billingCase.invoiceId) &&
+                (!issuer.name ||
+                  !issuer.addressLine1 ||
+                  !payment.iban ||
+                  !payment.bankName);
+              const billingEmail = billingCase.invoiceId
+                ? recipient.billingEmail
+                : billingCase.billingEmail;
+              // A snapshot taken before per-dwelling delivery preferences
+              // existed has neither key -- same email-only fallback as
+              // sending.ts's deliver().
+              const invoiceByEmail = billingCase.invoiceId
+                ? (recipient.invoiceByEmail ?? true)
+                : billingCase.invoiceByEmail;
+              const invoiceByPaper = billingCase.invoiceId
+                ? (recipient.invoiceByPaper ?? false)
+                : billingCase.invoiceByPaper;
+              const prepareEligible =
+                billingCase.status === "DRAFT" &&
+                !recipientIncomplete &&
+                !organizationIncomplete;
+              const sendEligible =
+                billingCase.status === "PREPARED" &&
+                ((invoiceByEmail && Boolean(billingEmail)) || invoiceByPaper);
+              const invoiceHref = billingCase.invoiceId
+                ? `${workbenchPath}/invoices/${billingCase.invoiceId}`
+                : null;
+              const readingsHref = `${workbenchPath}/dwellings/${billingCase.dwellingId}`;
+              const dwellingHref = `/admin/o/${organizationId}/dwellings/${billingCase.dwellingId}`;
 
-                return (
-                  <tr data-status={billingCase.status}>
-                    <td class="select-column">
-                      {billingCase.invoiceId &&
-                        (billingCase.status === "DRAFT" ||
-                          billingCase.status === "PREPARED") && (
-                          <input
-                            type="checkbox"
-                            name="invoiceIds"
-                            data-prepare-eligible={
-                              prepareEligible ? "true" : "false"
-                            }
-                            data-send-eligible={sendEligible ? "true" : "false"}
-                            aria-label={`${t("Select invoice")} ${billingCase.invoiceNumber}`}
-                            value={billingCase.invoiceId}
-                            form="bulk-select-form"
-                          />
-                        )}
-                    </td>
-                    <td class="dwelling-cell">
-                      <a href={readingsHref}>{billingCase.dwellingNumber}</a>
-                      {billingCase.occupantName && (
-                        <span>{billingCase.occupantName}</span>
+              return (
+                <tr data-status={billingCase.status}>
+                  <td class="select-column">
+                    {billingCase.invoiceId &&
+                      (billingCase.status === "DRAFT" ||
+                        billingCase.status === "PREPARED") && (
+                        <input
+                          type="checkbox"
+                          name="invoiceIds"
+                          data-prepare-eligible={
+                            prepareEligible ? "true" : "false"
+                          }
+                          data-send-eligible={sendEligible ? "true" : "false"}
+                          aria-label={`${t("Select invoice")} ${billingCase.invoiceNumber}`}
+                          value={billingCase.invoiceId}
+                          form="bulk-select-form"
+                        />
                       )}
-                    </td>
-                    <td>
-                      <div class="readiness-list">
-                        {missing.length > 0 ? (
-                          missing.map((item) =>
-                            // missingData is a JSONB column with no schema
-                            // enforcement: cases whose readiness was last
-                            // computed by an older app version can still
-                            // carry the legacy plain-string shape instead of
-                            // today's {meterType, label, reason} object, so
-                            // render those as a non-actionable badge instead
-                            // of crashing on a missing meterType.
-                            item &&
+                  </td>
+                  <td class="dwelling-cell">
+                    <a href={readingsHref}>{billingCase.dwellingNumber}</a>
+                    {billingCase.occupantName && (
+                      <span>{billingCase.occupantName}</span>
+                    )}
+                  </td>
+                  <td>
+                    <div class="readiness-list">
+                      {missing.length > 0 ? (
+                        missing.map((item) =>
+                          // missingData is a JSONB column with no schema
+                          // enforcement: cases whose readiness was last
+                          // computed by an older app version can still
+                          // carry the legacy plain-string shape instead of
+                          // today's {meterType, label, reason} object, so
+                          // render those as a non-actionable badge instead
+                          // of crashing on a missing meterType.
+                          item &&
+                          typeof item === "object" &&
+                          item.reason === "NO_APPLICABLE_RULES" ? (
+                            <a
+                              class="readiness-item"
+                              data-tone="danger"
+                              href="#period-tariffs"
+                            >
+                              <Icon name="alert-triangle" size="xs" />{" "}
+                              {t("No billing rule applies")}
+                            </a>
+                          ) : item &&
                             typeof item === "object" &&
-                            item.reason === "NO_APPLICABLE_RULES" ? (
-                              <a
-                                class="readiness-item"
-                                data-tone="danger"
-                                href="#period-tariffs"
-                              >
-                                <Icon name="alert-triangle" size="xs" />{" "}
-                                {t("No billing rule applies")}
-                              </a>
-                            ) : item &&
-                              typeof item === "object" &&
-                              item.reason === "NO_ACTIVE_METER_FOR_RULE" ? (
-                              <a
-                                class="readiness-item"
-                                data-tone="danger"
-                                href={dwellingHref}
-                              >
-                                <Icon name="alert-triangle" size="xs" />{" "}
-                                {item.ruleName} — {t("no active meter")}
-                              </a>
-                            ) : item &&
-                              typeof item === "object" &&
-                              "meterType" in item ? (
-                              <button
-                                type="button"
-                                class="readiness-item"
-                                data-tone="danger"
-                                data-open-drawer="readings"
-                                data-dwelling-id={billingCase.dwellingId}
-                                data-focus={item.meterType
-                                  .toLowerCase()
-                                  .replace(/_/g, "-")}
-                              >
-                                <Icon name="alert-triangle" size="xs" />
-                                {item.label ??
-                                  entityLabel(item.meterType, locale)}{" "}
-                                — {t("missing")}
-                              </button>
-                            ) : item &&
-                              typeof item === "object" &&
-                              "billingRuleId" in item ? (
-                              <button
-                                type="button"
-                                class="readiness-item"
-                                data-tone="danger"
-                                data-open-drawer="readings"
-                                data-dwelling-id={billingCase.dwellingId}
-                                data-focus={`rule-${item.billingRuleId}`}
-                              >
-                                <Icon name="alert-triangle" size="xs" />
-                                {item.ruleName} — {t("missing")}
-                              </button>
-                            ) : (
-                              <span class="readiness-item" data-tone="danger">
-                                <Icon name="alert-triangle" size="xs" />{" "}
-                                {typeof item === "string"
-                                  ? item
-                                  : t("Missing data")}
-                              </span>
-                            )
-                          )
-                        ) : (
-                          <span class="readiness-item" data-tone="success">
-                            <Icon name="check" size="xs" />
-                            {t("Required readings complete")}
-                          </span>
-                        )}
-                        {invoiceByEmail &&
-                          (billingEmail ? (
-                            <span class="readiness-item">
-                              <Icon name="check" size="xs" />{" "}
-                              {t("Billing email ready")}
-                            </span>
-                          ) : (
+                            item.reason === "NO_ACTIVE_METER_FOR_RULE" ? (
+                            <a
+                              class="readiness-item"
+                              data-tone="danger"
+                              href={dwellingHref}
+                            >
+                              <Icon name="alert-triangle" size="xs" />{" "}
+                              {item.ruleName} — {t("no active meter")}
+                            </a>
+                          ) : item &&
+                            typeof item === "object" &&
+                            "meterType" in item ? (
                             <button
                               type="button"
                               class="readiness-item"
-                              data-tone="warning"
-                              data-open-drawer="billing-details"
+                              data-tone="danger"
+                              data-open-drawer="readings"
                               data-dwelling-id={billingCase.dwellingId}
-                              data-focus="billing-email"
+                              data-focus={item.meterType
+                                .toLowerCase()
+                                .replace(/_/g, "-")}
                             >
-                              <Icon name="alert-triangle" size="xs" />{" "}
-                              {t("Billing email missing")}
+                              <Icon name="alert-triangle" size="xs" />
+                              {item.label ??
+                                entityLabel(item.meterType, locale)}{" "}
+                              — {t("missing")}
                             </button>
-                          ))}
-                        {invoiceByPaper && (
-                          <span class="readiness-item" data-tone="neutral">
-                            <Icon name="file-description" size="xs" />{" "}
-                            {t("Paper delivery")}
+                          ) : item &&
+                            typeof item === "object" &&
+                            "billingRuleId" in item ? (
+                            <button
+                              type="button"
+                              class="readiness-item"
+                              data-tone="danger"
+                              data-open-drawer="readings"
+                              data-dwelling-id={billingCase.dwellingId}
+                              data-focus={`rule-${item.billingRuleId}`}
+                            >
+                              <Icon name="alert-triangle" size="xs" />
+                              {item.ruleName} — {t("missing")}
+                            </button>
+                          ) : (
+                            <span class="readiness-item" data-tone="danger">
+                              <Icon name="alert-triangle" size="xs" />{" "}
+                              {typeof item === "string"
+                                ? item.replace(
+                                    /^Missing current-period meter reading for dwelling (.+?)\.?$/,
+                                    (_match, number) =>
+                                      fill(
+                                        t(
+                                          "Missing current-period meter reading for dwelling {number}"
+                                        ),
+                                        { number }
+                                      )
+                                  )
+                                : t("Missing data")}
+                            </span>
+                          )
+                        )
+                      ) : (
+                        <span class="readiness-item" data-tone="success">
+                          <Icon name="check" size="xs" />
+                          {t("Required readings complete")}
+                        </span>
+                      )}
+                      {invoiceByEmail &&
+                        (billingEmail ? (
+                          <span class="readiness-item">
+                            <Icon name="check" size="xs" />{" "}
+                            {t("Billing email ready")}
                           </span>
-                        )}
-                        {recipientIncomplete && (
+                        ) : (
                           <button
                             type="button"
                             class="readiness-item"
-                            data-tone="danger"
+                            data-tone="warning"
                             data-open-drawer="billing-details"
                             data-dwelling-id={billingCase.dwellingId}
-                            data-focus="recipient"
+                            data-focus="billing-email"
                           >
                             <Icon name="alert-triangle" size="xs" />{" "}
-                            {t("Recipient details incomplete")}
+                            {t("Billing email missing")}
                           </button>
-                        )}
-                        {organizationIncomplete && (
-                          <span class="readiness-item" data-tone="danger">
-                            <Icon name="alert-triangle" size="xs" />{" "}
-                            {t("Issuer or payment details incomplete")}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td>
-                      <StatusBadge status={billingCase.status} />
-                    </td>
-                    <td class="invoice-cell numeric-column">
-                      {invoiceHref ? (
-                        <a href={invoiceHref}>
-                          <span>{billingCase.invoiceNumber}</span>
-                          <strong>
-                            {billingCase.invoiceAmountDue &&
-                              formatMoney(
-                                billingCase.invoiceAmountDue,
+                        ))}
+                      {invoiceByPaper && (
+                        <span class="readiness-item" data-tone="neutral">
+                          <Icon name="file-description" size="xs" />{" "}
+                          {t("Paper delivery")}
+                        </span>
+                      )}
+                      {recipientIncomplete && (
+                        <button
+                          type="button"
+                          class="readiness-item"
+                          data-tone="danger"
+                          data-open-drawer="billing-details"
+                          data-dwelling-id={billingCase.dwellingId}
+                          data-focus="recipient"
+                        >
+                          <Icon name="alert-triangle" size="xs" />{" "}
+                          {t("Recipient details incomplete")}
+                        </button>
+                      )}
+                      {organizationIncomplete && (
+                        <span class="readiness-item" data-tone="danger">
+                          <Icon name="alert-triangle" size="xs" />{" "}
+                          {t("Issuer or payment details incomplete")}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td>
+                    <StatusBadge status={billingCase.status} />
+                  </td>
+                  <td class="invoice-cell numeric-column">
+                    {invoiceHref ? (
+                      <a href={invoiceHref}>
+                        <span>{billingCase.invoiceNumber}</span>
+                        <strong>
+                          {billingCase.invoiceAmountDue &&
+                            formatMoney(
+                              billingCase.invoiceAmountDue,
+                              organization.currency,
+                              locale
+                            )}
+                        </strong>
+                        {billingCase.invoiceCurrentCharges &&
+                          billingCase.invoiceCurrentCharges !==
+                            billingCase.invoiceAmountDue && (
+                            <small>
+                              {t("Current charges")}:{" "}
+                              {formatMoney(
+                                billingCase.invoiceCurrentCharges,
                                 organization.currency,
                                 locale
                               )}
-                          </strong>
-                          {billingCase.invoiceCurrentCharges &&
-                            billingCase.invoiceCurrentCharges !==
-                              billingCase.invoiceAmountDue && (
-                              <small>
-                                {t("Current charges")}:{" "}
-                                {formatMoney(
-                                  billingCase.invoiceCurrentCharges,
-                                  organization.currency,
-                                  locale
-                                )}
-                              </small>
-                            )}
-                          {billingCase.invoicePreviousOutstanding &&
-                            billingCase.invoicePreviousOutstanding !==
-                              "0.00" && (
-                              <small>
-                                +{" "}
-                                {formatMoney(
-                                  billingCase.invoicePreviousOutstanding,
-                                  organization.currency,
-                                  locale
-                                )}{" "}
-                                {t("carried balance")}
-                              </small>
-                            )}
-                          {billingCase.invoicePreviousCreditApplied &&
-                            billingCase.invoicePreviousCreditApplied !==
-                              "0.00" && (
-                              <small>
-                                −{" "}
-                                {formatMoney(
-                                  billingCase.invoicePreviousCreditApplied,
-                                  organization.currency,
-                                  locale
-                                )}{" "}
-                                {t("credit applied")}
-                              </small>
-                            )}
-                        </a>
-                      ) : (
-                        <span aria-label={t("No invoice")}>—</span>
-                      )}
-                    </td>
-                    <td class="next-action">
-                      {period.status === "LOCKED" ? (
-                        <a
-                          class="btn-secondary btn-sm"
-                          href={invoiceHref ?? readingsHref}
-                        >
-                          {t(invoiceHref ? "View invoice" : "View readings")}
-                        </a>
-                      ) : missing.length > 0 ? (
-                        <button
-                          type="button"
-                          class="btn-secondary btn-sm"
-                          data-open-drawer="readings"
-                          data-dwelling-id={billingCase.dwellingId}
-                        >
-                          {t("Enter readings")}
-                        </button>
-                      ) : !billingCase.invoiceId ||
-                        billingCase.status === "MISSING_DATA" ||
-                        billingCase.status === "READY" ? (
-                        <form method="POST" action={actions.billing.generate}>
-                          <input
-                            type="hidden"
-                            name="organizationId"
-                            value={organizationId}
-                          />
-                          <input
-                            type="hidden"
-                            name="periodId"
-                            value={periodId}
-                          />
-                          <input
-                            type="hidden"
-                            name="dwellingId"
-                            value={billingCase.dwellingId}
-                          />
-                          <button type="submit" class="btn-primary btn-sm">
-                            {t("Generate invoice")}
-                          </button>
-                        </form>
-                      ) : billingCase.status === "DRAFT" &&
-                        recipientIncomplete ? (
-                        <button
-                          type="button"
-                          class="btn-secondary btn-sm"
-                          data-open-drawer="billing-details"
-                          data-dwelling-id={billingCase.dwellingId}
-                        >
-                          {t("Fix dwelling details")}
-                        </button>
-                      ) : billingCase.status === "DRAFT" &&
-                        organizationIncomplete ? (
-                        <a
-                          class="btn-secondary btn-sm"
-                          href={`/admin/o/${organizationId}/settings/organization`}
-                        >
-                          {t("Fix organization details")}
-                        </a>
-                      ) : billingCase.status === "DRAFT" ? (
-                        <a class="btn-secondary btn-sm" href={invoiceHref!}>
-                          {t("Review invoice")}
-                        </a>
-                      ) : billingCase.status === "PREPARED" && !sendEligible ? (
-                        <button
-                          type="button"
-                          class="btn-secondary btn-sm"
-                          data-open-drawer="billing-details"
-                          data-dwelling-id={billingCase.dwellingId}
-                          data-focus="billing-email"
-                        >
-                          {t("Add billing email")}
-                        </button>
-                      ) : billingCase.status === "PREPARED" ? (
-                        <form method="POST" action={actions.invoices.send}>
-                          <input
-                            type="hidden"
-                            name="organizationId"
-                            value={organizationId}
-                          />
-                          <input
-                            type="hidden"
-                            name="invoiceId"
-                            value={billingCase.invoiceId!}
-                          />
-                          <button
-                            type="submit"
-                            class="btn-primary btn-sm"
-                            data-confirm={t(
-                              "Send this invoice to the resident by email now? Sent invoices cannot be edited."
-                            )}
-                          >
-                            {t("Send invoice")}
-                          </button>
-                        </form>
-                      ) : (
-                        <a class="btn-secondary btn-sm" href={invoiceHref!}>
-                          {t(
-                            billingCase.status === "OVERDUE"
-                              ? "Review invoice"
-                              : "View invoice"
+                            </small>
                           )}
-                        </a>
-                      )}
-                    </td>
-                    <td class="menu-cell">
-                      <details class="case-menu">
-                        <summary
-                          aria-label={`${t("More actions")}: ${billingCase.dwellingNumber}`}
-                        >
-                          •••
-                        </summary>
-                        <div>
-                          <a href={readingsHref}>{t("View readings")}</a>
-                          <a href={dwellingHref}>{t("View dwelling")}</a>
-                          {invoiceHref && (
-                            <a href={invoiceHref}>{t("View invoice")}</a>
+                        {billingCase.invoicePreviousOutstanding &&
+                          billingCase.invoicePreviousOutstanding !== "0.00" && (
+                            <small>
+                              +{" "}
+                              {formatMoney(
+                                billingCase.invoicePreviousOutstanding,
+                                organization.currency,
+                                locale
+                              )}{" "}
+                              {t("carried balance")}
+                            </small>
                           )}
-                          {period.status === "OPEN" &&
-                            missing.length === 0 &&
-                            billingCase.status === "DRAFT" && (
-                              <form
-                                method="POST"
-                                action={actions.billing.generate}
-                              >
-                                <input
-                                  type="hidden"
-                                  name="organizationId"
-                                  value={organizationId}
-                                />
-                                <input
-                                  type="hidden"
-                                  name="periodId"
-                                  value={periodId}
-                                />
-                                <input
-                                  type="hidden"
-                                  name="dwellingId"
-                                  value={billingCase.dwellingId}
-                                />
-                                <button type="submit">
-                                  {t("Regenerate invoice")}
-                                </button>
-                              </form>
-                            )}
-                        </div>
-                      </details>
-                    </td>
-                  </tr>
-                );
-              })
-            }
-            {
-              cases.length === 0 && (
-                <tr>
-                  <td colspan="7" class="empty-queue">
-                    <strong>
-                      {t(
-                        statusFilter === "MISSING_DATA"
-                          ? "No dwellings are missing required billing data."
-                          : search || statusFilter
-                            ? "No billing cases match these filters."
-                            : "No billing cases for this period."
-                      )}
-                    </strong>
-                    <span>{periodName}</span>
-                    {(search || statusFilter) && (
-                      <a class="btn-secondary" href={workbenchPath}>
-                        {t("Clear filters")}
+                        {billingCase.invoicePreviousCreditApplied &&
+                          billingCase.invoicePreviousCreditApplied !==
+                            "0.00" && (
+                            <small>
+                              −{" "}
+                              {formatMoney(
+                                billingCase.invoicePreviousCreditApplied,
+                                organization.currency,
+                                locale
+                              )}{" "}
+                              {t("credit applied")}
+                            </small>
+                          )}
+                      </a>
+                    ) : (
+                      <span aria-label={t("No invoice")}>—</span>
+                    )}
+                  </td>
+                  <td class="next-action">
+                    {period.status === "LOCKED" ? (
+                      <a
+                        class="btn-secondary btn-sm"
+                        href={invoiceHref ?? readingsHref}
+                      >
+                        {t(invoiceHref ? "View invoice" : "View readings")}
+                      </a>
+                    ) : missing.length > 0 ? (
+                      <button
+                        type="button"
+                        class="btn-secondary btn-sm"
+                        data-open-drawer="readings"
+                        data-dwelling-id={billingCase.dwellingId}
+                      >
+                        {t("Enter readings")}
+                      </button>
+                    ) : !billingCase.invoiceId ||
+                      billingCase.status === "MISSING_DATA" ||
+                      billingCase.status === "READY" ? (
+                      <form method="POST" action={actions.billing.generate}>
+                        <input
+                          type="hidden"
+                          name="organizationId"
+                          value={organizationId}
+                        />
+                        <input type="hidden" name="periodId" value={periodId} />
+                        <input
+                          type="hidden"
+                          name="dwellingId"
+                          value={billingCase.dwellingId}
+                        />
+                        <button type="submit" class="btn-primary btn-sm">
+                          {t("Generate invoice")}
+                        </button>
+                      </form>
+                    ) : billingCase.status === "DRAFT" &&
+                      recipientIncomplete ? (
+                      <button
+                        type="button"
+                        class="btn-secondary btn-sm"
+                        data-open-drawer="billing-details"
+                        data-dwelling-id={billingCase.dwellingId}
+                      >
+                        {t("Fix dwelling details")}
+                      </button>
+                    ) : billingCase.status === "DRAFT" &&
+                      organizationIncomplete ? (
+                      <a
+                        class="btn-secondary btn-sm"
+                        href={`/admin/o/${organizationId}/settings/organization`}
+                      >
+                        {t("Fix organization details")}
+                      </a>
+                    ) : billingCase.status === "DRAFT" ? (
+                      <a class="btn-secondary btn-sm" href={invoiceHref!}>
+                        {t("Review invoice")}
+                      </a>
+                    ) : billingCase.status === "PREPARED" && !sendEligible ? (
+                      <button
+                        type="button"
+                        class="btn-secondary btn-sm"
+                        data-open-drawer="billing-details"
+                        data-dwelling-id={billingCase.dwellingId}
+                        data-focus="billing-email"
+                      >
+                        {t("Add billing email")}
+                      </button>
+                    ) : billingCase.status === "PREPARED" ? (
+                      <form method="POST" action={actions.invoices.send}>
+                        <input
+                          type="hidden"
+                          name="organizationId"
+                          value={organizationId}
+                        />
+                        <input
+                          type="hidden"
+                          name="invoiceId"
+                          value={billingCase.invoiceId!}
+                        />
+                        <button
+                          type="submit"
+                          class="btn-primary btn-sm"
+                          data-confirm={t(
+                            "Send this invoice to the resident by email now? Sent invoices cannot be edited."
+                          )}
+                        >
+                          {t("Send invoice")}
+                        </button>
+                      </form>
+                    ) : (
+                      <a class="btn-secondary btn-sm" href={invoiceHref!}>
+                        {t(
+                          billingCase.status === "OVERDUE"
+                            ? "Review invoice"
+                            : "View invoice"
+                        )}
                       </a>
                     )}
                   </td>
+                  <td class="menu-cell">
+                    <details class="case-menu">
+                      <summary
+                        aria-label={`${t("More actions")}: ${billingCase.dwellingNumber}`}
+                      >
+                        •••
+                      </summary>
+                      <div>
+                        <a href={readingsHref}>{t("View readings")}</a>
+                        <a href={dwellingHref}>{t("View dwelling")}</a>
+                        {invoiceHref && (
+                          <a href={invoiceHref}>{t("View invoice")}</a>
+                        )}
+                        {period.status === "OPEN" &&
+                          missing.length === 0 &&
+                          billingCase.status === "DRAFT" && (
+                            <form
+                              method="POST"
+                              action={actions.billing.generate}
+                            >
+                              <input
+                                type="hidden"
+                                name="organizationId"
+                                value={organizationId}
+                              />
+                              <input
+                                type="hidden"
+                                name="periodId"
+                                value={periodId}
+                              />
+                              <input
+                                type="hidden"
+                                name="dwellingId"
+                                value={billingCase.dwellingId}
+                              />
+                              <button type="submit">
+                                {t("Regenerate invoice")}
+                              </button>
+                            </form>
+                          )}
+                      </div>
+                    </details>
+                  </td>
                 </tr>
-              )
-            }
+              );
+            })}
+            {cases.length === 0 && (
+              <tr>
+                <td colspan="7" class="empty-queue">
+                  <strong>
+                    {t(
+                      statusFilter === "MISSING_DATA"
+                        ? "No dwellings are missing required billing data."
+                        : search || statusFilter
+                          ? "No billing cases match these filters."
+                          : "No billing cases for this period."
+                    )}
+                  </strong>
+                  <span>{periodName}</span>
+                  {(search || statusFilter) && (
+                    <a class="btn-secondary" href={workbenchPath}>
+                      {t("Clear filters")}
+                    </a>
+                  )}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -1521,7 +1488,6 @@ function filterHref(status?: CaseStatus) {
   }
   .workflow-filter[aria-current="page"] {
     background: var(--color-nav-active-bg);
-    box-shadow: inset 0 3px 0 var(--color-primary);
   }
   .workflow-label {
     display: flex;
@@ -1592,7 +1558,7 @@ function filterHref(status?: CaseStatus) {
     justify-content: space-between;
     gap: 1rem;
     padding: 0.75rem 1rem;
-    border: 1px solid var(--color-primary);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
     background: var(--color-nav-active-bg);
   }
@@ -1639,25 +1605,6 @@ function filterHref(status?: CaseStatus) {
   }
   .case-table tbody tr:hover {
     background: var(--color-surface-hover);
-  }
-  .case-table tr[data-status="MISSING_DATA"] td:first-child {
-    box-shadow: inset 3px 0 0 var(--color-destructive);
-  }
-  .case-table tr[data-status="READY"] td:first-child {
-    box-shadow: inset 3px 0 0 var(--color-warning);
-  }
-  .case-table tr[data-status="DRAFT"] td:first-child {
-    box-shadow: inset 3px 0 0 var(--color-muted);
-  }
-  .case-table tr[data-status="PREPARED"] td:first-child,
-  .case-table tr[data-status="SENT"] td:first-child {
-    box-shadow: inset 3px 0 0 var(--color-info);
-  }
-  .case-table tr[data-status="OVERDUE"] td:first-child {
-    box-shadow: inset 3px 0 0 var(--color-warning);
-  }
-  .case-table tr[data-status="PAID"] td:first-child {
-    box-shadow: inset 3px 0 0 var(--color-success);
   }
   .select-column {
     width: 2.75rem;

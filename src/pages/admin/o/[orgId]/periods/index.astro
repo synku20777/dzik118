@@ -74,22 +74,27 @@ const pageHref = (p: number) => {
         "Review past periods or open a monthly billing workbench."
       )}
       display
-      ><a
+    >
+      <a
         href="#create-period"
         class="btn-primary"
-        data-open-details="create-period">{t("Create period")} →</a
-      ></PageHeader
-    >
+        data-open-details="create-period"
+      >
+        {t("Create period")} →
+      </a>
+    </PageHeader>
     <div class="grid gap-4 sm:grid-cols-3">
       <KpiCard
         icon="invoice"
         label={t("Total periods")}
         value={billingPeriods.length}
-      /><KpiCard
+      />
+      <KpiCard
         icon="open"
         label={t("Open")}
         value={billingPeriods.filter((p) => p.status === "OPEN").length}
-      /><KpiCard
+      />
+      <KpiCard
         icon="lock"
         label={t("Locked")}
         value={billingPeriods.filter((p) => p.status === "LOCKED").length}
@@ -101,97 +106,100 @@ const pageHref = (p: number) => {
         <caption class="sr-only">{t("Billing periods")}</caption>
         <thead class="border-b border-border bg-surface-hover text-muted">
           <tr>
-            <th scope="col" class="px-4 py-2">{t("Period")}</th>
-            <th scope="col" class="px-4 py-2">{t("Dates")}</th>
-            <th scope="col" class="px-4 py-2">{t("Reading deadline")}</th>
-            <th scope="col" class="px-4 py-2">{t("Issue date")}</th><th
-              scope="col"
-              class="px-4 py-2">{t("Due date")}</th
-            ><th scope="col" class="px-4 py-2">{t("Status")}</th>
+            <th scope="col" class="px-4 py-2">
+              {t("Period")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Dates")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Reading deadline")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Issue date")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Due date")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Status")}
+            </th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border">
-          {
-            pagedPeriods.map((p) => (
-              <tr class="row-link">
-                <td class="px-4 py-2 font-medium">
-                  <a
-                    href={`/admin/o/${organizationId}/periods/${p.id}`}
-                    class="row-link-target hover:underline"
-                  >
-                    {formatPeriod(p.year, p.month, locale)}
-                  </a>
+          {pagedPeriods.map((p) => (
+            <tr class="row-link">
+              <td class="px-4 py-2 font-medium">
+                <a
+                  href={`/admin/o/${organizationId}/periods/${p.id}`}
+                  class="row-link-target hover:underline"
+                >
+                  {formatPeriod(p.year, p.month, locale)}
+                </a>
+              </td>
+              <td class="px-4 py-2">
+                {formatDate(p.startsOn, locale)} →{" "}
+                {formatDate(p.endsOn, locale)}
+              </td>
+              <td class="px-4 py-2">{formatDate(p.readingDeadline, locale)}</td>
+              {p.openingReadings ? (
+                <td colspan="3" class="px-4 py-2" data-label={t("Status")}>
+                  <span class="font-medium text-foreground">
+                    {t("Starting readings")}
+                  </span>
+                  <span class="block text-caption text-muted">
+                    {t(
+                      "Meter positions before the first billing month. Not billed."
+                    )}
+                  </span>
                 </td>
-                <td class="px-4 py-2">
-                  {formatDate(p.startsOn, locale)} →{" "}
-                  {formatDate(p.endsOn, locale)}
-                </td>
-                <td class="px-4 py-2">
-                  {formatDate(p.readingDeadline, locale)}
-                </td>
-                {p.openingReadings ? (
-                  <td colspan="3" class="px-4 py-2" data-label={t("Status")}>
-                    <span class="font-medium text-foreground">
-                      {t("Starting readings")}
-                    </span>
-                    <span class="block text-caption text-muted">
-                      {t(
-                        "Meter positions before the first billing month. Not billed."
-                      )}
-                    </span>
+              ) : (
+                <>
+                  <td class="px-4 py-2">
+                    {formatDate(p.invoiceIssueDate, locale)}
                   </td>
-                ) : (
-                  <>
-                    <td class="px-4 py-2">
-                      {formatDate(p.invoiceIssueDate, locale)}
-                    </td>
-                    <td class="px-4 py-2">
-                      {formatDate(p.invoiceDueDate, locale)}
-                    </td>
-                    <td class="px-4 py-2">
-                      <StatusBadge status={p.status} />
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))
-          }
-          {
-            periods.length === 0 && (
-              <tr>
-                <td colspan="6" class="px-4 py-8 text-center text-muted">
-                  {t("No billing periods yet.")}
-                </td>
-              </tr>
-            )
-          }
+                  <td class="px-4 py-2">
+                    {formatDate(p.invoiceDueDate, locale)}
+                  </td>
+                  <td class="px-4 py-2">
+                    <StatusBadge status={p.status} />
+                  </td>
+                </>
+              )}
+            </tr>
+          ))}
+          {periods.length === 0 && (
+            <tr>
+              <td colspan="6" class="px-4 py-8 text-center text-muted">
+                {t("No billing periods yet.")}
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
 
-    {
-      totalPages > 1 && (
-        <div class="flex justify-between text-sm text-muted">
-          <a
-            href={pageHref(Math.max(1, page - 1))}
-            class:list={{ "pointer-events-none opacity-40": page <= 1 }}
-          >
-            ← {t("Previous")}
-          </a>
-          <span>
-            {t("Page")} {page} {t("of")} {totalPages}
-          </span>
-          <a
-            href={pageHref(page + 1)}
-            class:list={{
-              "pointer-events-none opacity-40": page >= totalPages,
-            }}
-          >
-            {t("Next")} →
-          </a>
-        </div>
-      )
-    }
+    {totalPages > 1 && (
+      <div class="flex justify-between text-sm text-muted">
+        <a
+          href={pageHref(Math.max(1, page - 1))}
+          class:list={{ "pointer-events-none opacity-40": page <= 1 }}
+        >
+          ← {t("Previous")}
+        </a>
+        <span>
+          {t("Page")} {page} {t("of")} {totalPages}
+        </span>
+        <a
+          href={pageHref(page + 1)}
+          class:list={{
+            "pointer-events-none opacity-40": page >= totalPages,
+          }}
+        >
+          {t("Next")} →
+        </a>
+      </div>
+    )}
 
     <details
       id="create-period"
@@ -199,13 +207,11 @@ const pageHref = (p: number) => {
       open={!!createResult?.error}
     >
       <summary>{t("Create period")}</summary>
-      {
-        createResult?.error && (
-          <p class="mt-3 rounded-control bg-danger-surface p-3 text-sm text-destructive">
-            {t(createResult.error.message)}
-          </p>
-        )
-      }
+      {createResult?.error && (
+        <p class="mt-3 rounded-control bg-danger-surface p-3 text-sm text-destructive">
+          {t(createResult.error.message)}
+        </p>
+      )}
       <form
         method="POST"
         action={actions.periods.create}
@@ -213,9 +219,9 @@ const pageHref = (p: number) => {
       >
         <input type="hidden" name="organizationId" value={organizationId} />
         <div>
-          <label class="block text-sm font-medium text-foreground" for="year"
-            >{t("Year")}</label
-          >
+          <label class="block text-sm font-medium text-foreground" for="year">
+            {t("Year")}
+          </label>
           <input
             id="year"
             name="year"
@@ -223,12 +229,13 @@ const pageHref = (p: number) => {
             type="number"
             required
             class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
-          /><FieldError name="year" error={createResult?.error} />
+          />
+          <FieldError name="year" error={createResult?.error} />
         </div>
         <div>
-          <label class="block text-sm font-medium text-foreground" for="month"
-            >{t("Month")}</label
-          >
+          <label class="block text-sm font-medium text-foreground" for="month">
+            {t("Month")}
+          </label>
           <input
             id="month"
             name="month"
@@ -238,7 +245,8 @@ const pageHref = (p: number) => {
             max="12"
             required
             class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
-          /><FieldError name="month" error={createResult?.error} />
+          />
+          <FieldError name="month" error={createResult?.error} />
         </div>
         <h3 class="col-span-2 mt-3 font-semibold text-sm">
           {t("Billing window")}
@@ -246,8 +254,10 @@ const pageHref = (p: number) => {
         <div>
           <label
             class="block text-sm font-medium text-foreground"
-            for="startsOn">{t("Starts on")}</label
+            for="startsOn"
           >
+            {t("Starts on")}
+          </label>
           <input
             id="startsOn"
             name="startsOn"
@@ -255,12 +265,13 @@ const pageHref = (p: number) => {
             type="date"
             required
             class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
-          /><FieldError name="startsOn" error={createResult?.error} />
+          />
+          <FieldError name="startsOn" error={createResult?.error} />
         </div>
         <div>
-          <label class="block text-sm font-medium text-foreground" for="endsOn"
-            >{t("Ends on")}</label
-          >
+          <label class="block text-sm font-medium text-foreground" for="endsOn">
+            {t("Ends on")}
+          </label>
           <input
             id="endsOn"
             name="endsOn"
@@ -268,29 +279,36 @@ const pageHref = (p: number) => {
             type="date"
             required
             class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
-          /><FieldError name="endsOn" error={createResult?.error} />
+          />
+          <FieldError name="endsOn" error={createResult?.error} />
         </div>
         <div>
           <label
             class="block text-sm font-medium text-foreground"
-            for="readingDeadline">{t("Reading deadline")}</label
+            for="readingDeadline"
           >
+            {t("Reading deadline")}
+          </label>
           <input
             id="readingDeadline"
             name="readingDeadline"
             aria-describedby="readingDeadline-error"
             type="date"
             class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
-          /><FieldError name="readingDeadline" error={createResult?.error} />
+          />
+          <FieldError name="readingDeadline" error={createResult?.error} />
         </div>
-        <div></div><h3 class="col-span-2 mt-3 font-semibold text-sm">
+        <div></div>
+        <h3 class="col-span-2 mt-3 font-semibold text-sm">
           {t("Invoice dates")}
         </h3>
         <div>
           <label
             class="block text-sm font-medium text-foreground"
-            for="invoiceIssueDate">{t("Invoice issue date")}</label
+            for="invoiceIssueDate"
           >
+            {t("Invoice issue date")}
+          </label>
           <input
             id="invoiceIssueDate"
             name="invoiceIssueDate"
@@ -298,13 +316,16 @@ const pageHref = (p: number) => {
             type="date"
             required
             class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
-          /><FieldError name="invoiceIssueDate" error={createResult?.error} />
+          />
+          <FieldError name="invoiceIssueDate" error={createResult?.error} />
         </div>
         <div>
           <label
             class="block text-sm font-medium text-foreground"
-            for="invoiceDueDate">{t("Invoice due date")}</label
+            for="invoiceDueDate"
           >
+            {t("Invoice due date")}
+          </label>
           <input
             id="invoiceDueDate"
             name="invoiceDueDate"
@@ -312,7 +333,8 @@ const pageHref = (p: number) => {
             type="date"
             required
             class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
-          /><FieldError name="invoiceDueDate" error={createResult?.error} />
+          />
+          <FieldError name="invoiceDueDate" error={createResult?.error} />
         </div>
         <div class="col-span-2">
           <button type="submit" class="btn-primary">

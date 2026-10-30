@@ -1,0 +1,1528 @@
+IMPORTANT ENVIRONMENT NOTE: your shell is blocked (read-only sandbox, process creation denied), and the GitHub connector only sees the committed HEAD, which DIFFERS from the working tree (dashboard/index.astro has uncommitted changes). Therefore the authoritative working-tree source is EMBEDDED BELOW with line numbers. Cite ONLY these embedded line numbers (format path:line). For the docs under docs/product and docs/research (unchanged), you may still fetch them via the GitHub connector and cite their lines. Do not cite GitHub-HEAD line numbers for code files.
+
+You are an independent senior product/UX reviewer. Repo root (your cwd or: C:\Users\nesto\orca\projects\dzik118): "Namkopa", an Astro + Cloudflare + Supabase billing app for Latvian housing co-ops (dzivokla biedriba / apsaimniekosana). Today is 2026-10-28.
+
+Persona: the admin of a Latvian house co-op, ~50 years old, not tech-savvy, used to doing the monthly work in Excel. She/he wants to see a summary of the CURRENT MONTH.
+
+Task (PASS 1 - CONTENT): Read these files: src/pages/admin/o/[orgId]/dashboard/index.astro, src/domain/periods/dashboard.ts, src/domain/periods/cases.ts, src/domain/periods/case-readiness.ts, src/lib/ui/invoice-status.ts, src/components/ui/KpiCard.astro, src/layouts/AdminLayout.astro (nav only), and docs: docs/product/UI_SPECIFICATION.md, docs/product/USER_JOURNEYS.md, docs/product/SERVICE_DESIGN_BLUEPRINT.md, docs/research/EASYBILLY_REVIEW_2026-10-05.md. Do not modify anything.
+
+Answer:
+1. What MUST a monthly dashboard show for this persona (the questions she asks every month: have all readings come in, can I issue invoices, were they sent, who has paid, who owes and how much, what is overdue, anything unusual)?
+2. What does the dashboard show today? Be exact (KPIs, needs-attention list, case status list, consumption box, period navigation).
+3. What is missing or misleading? Check especially: what "Total invoiced" really sums (domain/periods/dashboard.ts), whether "Outstanding" includes carried-over debt and how it relates to "Paid" and "Total invoiced" (do the three KPIs add up?), whether dashboard numbers can disagree with other pages, whether consumption (cold/hot water m3 totals) is useful for this persona, whether the 7 status rows are meaningful, whether "OVERDUE" cases are listed with amounts, whether there is any progress/"next step" cue, due date, missing-readings count, delivery failures, unmatched payments etc.
+4. A priority matrix with four buckets: must-see-now / should-see / one-click-away / never-on-dashboard, each item with a one-line justification.
+Ground EVERY claim in file:line of the current code (format path:line). Write concretely. Keep the answer under 1200 words. Output the answer as plain markdown.
+
+===== FILE: src/pages/admin/o/[orgId]/dashboard/index.astro (lines 1-761; line numbers prefixed) =====
+1: ---
+2: import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+3: import {
+4:   ForbiddenError,
+5:   requireOrganizationAccess,
+6: } from "../../../../../domain/authorization/guards";
+7: import { getOrganization } from "../../../../../domain/organizations/organizations";
+8: import {
+9:   getCurrentOpenPeriod,
+10:   listPeriods,
+11: } from "../../../../../domain/periods/periods";
+12: import {
+13:   getDashboardSummary,
+14:   type DashboardSummary,
+15: } from "../../../../../domain/periods/dashboard";
+16: import {
+17:   getSetupStatus,
+18:   type SetupProgress,
+19: } from "../../../../../domain/onboarding/progress";
+20: import { withRequestDb } from "../../../../../lib/db-request";
+21: 
+22: const organizationId = Astro.params.orgId!;
+23: try {
+24:   requireOrganizationAccess(Astro.locals.auth, organizationId);
+25: } catch (err) {
+26:   if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+27:   throw err;
+28: }
+29: 
+30: const requestedPeriodId = Astro.url.searchParams.get("periodId");
+31: 
+32: let organization: Awaited<ReturnType<typeof getOrganization>>;
+33: let allPeriods: Awaited<ReturnType<typeof listPeriods>>;
+34: let summary: DashboardSummary | null = null;
+35: let attentionCases: Awaited<ReturnType<typeof listCasesForPeriod>> = [];
+36: let setupComplete = true;
+37: let setupProgress: SetupProgress | null = null;
+38: try {
+39:   ({ organization, allPeriods, summary, setupComplete, setupProgress } =
+40:     await withRequestDb(async (db) => {
+41:       const org = await getOrganization(db, organizationId);
+42:       // The starting-readings month is not a billing month to compare with.
+43:       const periods = (await listPeriods(db, organizationId)).filter(
+44:         (p) => !p.openingReadings
+45:       );
+46:       // Progress is calculated once, and only while setup is open.
+47:       const { complete, progress } = await getSetupStatus(
+48:         db,
+49:         organizationId,
+50:         org
+51:       );
+52: 
+53:       let periodId: string | undefined = requestedPeriodId || undefined;
+54:       if (!periodId) {
+55:         const openPeriod = await getCurrentOpenPeriod(db, organizationId);
+56:         if (openPeriod) {
+57:           periodId = openPeriod.id;
+58:         } else if (periods.length > 0) {
+59:           periodId = periods[0].id;
+60:         }
+61:       }
+62: 
+63:       const summary = periodId
+64:         ? await getDashboardSummary(db, organizationId, periodId)
+65:         : null;
+66: 
+67:       if (periodId)
+68:         attentionCases = await listCasesForPeriod(db, organizationId, periodId);
+69:       return {
+70:         organization: org,
+71:         allPeriods: periods,
+72:         summary,
+73:         setupComplete: complete,
+74:         setupProgress: progress,
+75:       };
+76:     }));
+77: } catch {
+78:   return Astro.redirect(`/admin/o/${organizationId}/periods`);
+79: }
+80: 
+81: const currentIndex = summary
+82:   ? allPeriods.findIndex((p) => p.id === summary.period.id)
+83:   : -1;
+84: const previousPeriod =
+85:   currentIndex >= 0 && currentIndex < allPeriods.length - 1
+86:     ? allPeriods[currentIndex + 1]
+87:     : null;
+88: const nextPeriod = currentIndex > 0 ? allPeriods[currentIndex - 1] : null;
+89: 
+90: import PageHeader from "../../../../../components/ui/PageHeader.astro";
+91: import FacadeAccent from "../../../../../components/ui/FacadeAccent.astro";
+92: import KpiCard from "../../../../../components/ui/KpiCard.astro";
+93: import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
+94: import EmptyState from "../../../../../components/ui/EmptyState.astro";
+95: import AdminContextDrawer from "../../../../../components/ui/AdminContextDrawer.astro";
+96: import Icon from "../../../../../components/ui/Icon.astro";
+97: import { listCasesForPeriod } from "../../../../../domain/periods/cases";
+98: import {
+99:   translate,
+100:   uiLocale,
+101:   formatMoney,
+102:   formatNumber,
+103:   formatPeriod,
+104:   entityLabel,
+105: } from "../../../../../lib/ui/i18n";
+106: const locale = uiLocale(Astro.cookies, Astro.url);
+107: const t = (text: string) => translate(locale, text);
+108: const base = "/admin/o/" + organizationId;
+109: const statuses = [
+110:   "MISSING_DATA",
+111:   "READY",
+112:   "DRAFT",
+113:   "PREPARED",
+114:   "OVERDUE",
+115:   "SENT",
+116:   "PAID",
+117: ] as const;
+118: 
+119: const setupSteps = setupProgress
+120:   ? [
+121:       {
+122:         title: t("Organization details"),
+123:         done: setupProgress.steps.organization,
+124:         href: `${base}/setup/organization`,
+125:       },
+126:       {
+127:         title: t("Dwellings"),
+128:         done: setupProgress.steps.dwellings,
+129:         href: `${base}/setup/dwellings`,
+130:       },
+131:       {
+132:         title: t("First billing period"),
+133:         done: setupProgress.steps.period,
+134:         href: `${base}/setup/period`,
+135:       },
+136:       {
+137:         title: t("Charges"),
+138:         done: setupProgress.steps.charges,
+139:         href: `${base}/setup/charges`,
+140:       },
+141:       {
+142:         title: t("Meters and starting readings"),
+143:         done: setupProgress.steps.meters,
+144:         href: `${base}/setup/meters`,
+145:       },
+146:     ]
+147:   : [];
+148: const completedSetupSteps = setupSteps.filter((step) => step.done).length;
+149: const nextSetupStep = setupSteps.find((step) => !step.done);
+150: ---
+151: 
+152: <AdminLayout
+153:   title={t("Dashboard") + " - " + organization.name}
+154:   organizationId={organizationId}
+155:   organizationName={organization.name}
+156: >
+157:   {
+158:     !setupComplete && setupProgress && (
+159:       <section
+160:         class="dashboard-setup panel"
+161:         aria-labelledby="dashboard-setup-title"
+162:       >
+163:         <div class="setup-banner-intro">
+164:           <div class="setup-banner-title">
+165:             <h2 id="dashboard-setup-title">{t("Finish setting up")}</h2>
+166:             <span class="setup-banner-count">
+167:               {completedSetupSteps} / {setupSteps.length}{" "}
+168:               {t("Done").toLocaleLowerCase(locale)}
+169:             </span>
+170:           </div>
+171:           {nextSetupStep && (
+172:             <p class="setup-banner-next">
+173:               {t("Next step")}: <strong>{nextSetupStep.title}</strong>
+174:             </p>
+175:           )}
+176:         </div>
+177:         <ol class="setup-banner-steps" aria-label={t("Setup steps")}>
+178:           {setupSteps.map((step, index) => (
+179:             <li>
+180:               <a
+181:                 href={step.href}
+182:                 class:list={[
+183:                   "setup-banner-step",
+184:                   { "is-done": step.done, "is-next": step === nextSetupStep },
+185:                 ]}
+186:               >
+187:                 <span class="setup-banner-symbol" aria-hidden="true">
+188:                   {step.done ? <Icon name="check" size="xs" /> : index + 1}
+189:                 </span>
+190:                 <span>
+191:                   {step.title}
+192:                   <span class="sr-only">
+193:                     : {t(step.done ? "Done" : "To do")}
+194:                   </span>
+195:                 </span>
+196:               </a>
+197:             </li>
+198:           ))}
+199:         </ol>
+200:         <a
+201:           class="setup-banner-continue btn-primary"
+202:           href={nextSetupStep?.href ?? `${base}/setup`}
+203:         >
+204:           {t("Continue setup")}
+205:         </a>
+206:       </section>
+207:     )
+208:   }
+209:   {
+210:     !summary ? (
+211:       <div class="space-y-6">
+212:         <PageHeader
+213:           title={t("Dashboard")}
+214:           eyebrow={organization.name}
+215:           description={t(
+216:             "Monitor billing, payments and work requiring attention."
+217:           )}
+218:           display
+219:         />
+220:         {setupComplete && (
+221:           <EmptyState
+222:             ornament
+223:             title={t("No billing periods yet.")}
+224:             description={t(
+225:               "Create a period to start the monthly billing workflow."
+226:             )}
+227:           >
+228:             <a class="btn-primary" href={base + "/periods"}>
+229:               {t("Create period")}
+230:             </a>
+231:           </EmptyState>
+232:         )}
+233:       </div>
+234:     ) : (
+235:       <div class="space-y-6">
+236:         <AdminContextDrawer
+237:           organizationId={organizationId}
+238:           periodId={summary.period.id}
+239:           periodStatus={summary.period.status}
+240:           periodName={formatPeriod(
+241:             summary.period.year,
+242:             summary.period.month,
+243:             locale
+244:           )}
+245:           workbenchPath={base + "/periods/" + summary.period.id}
+246:           refreshSelectors={[".dashboard-attention", ".dashboard-case-status"]}
+247:         />
+248:         <header class="page-header">
+249:           <div>
+250:             <p class="eyebrow">{organization.name}</p>
+251:             <div class="flex flex-wrap items-center gap-3">
+252:               <h1 class="font-display">
+253:                 {formatPeriod(
+254:                   summary.period.year,
+255:                   summary.period.month,
+256:                   locale
+257:                 )}
+258:               </h1>
+259:               <StatusBadge status={summary.period.status} />
+260:             </div>
+261:             <FacadeAccent />
+262:           </div>
+263:           <div class="page-actions">
+264:             <a
+265:               class="btn-primary"
+266:               href={base + "/periods/" + summary.period.id}
+267:             >
+268:               {t("Open workbench")}
+269:               <Icon name="arrow-right" size="sm" />
+270:             </a>
+271:           </div>
+272:         </header>
+273:         <nav
+274:           class="dashboard-period-nav text-body-sm text-muted"
+275:           aria-label={t("Period navigation")}
+276:         >
+277:           {previousPeriod ? (
+278:             <a
+279:               href={base + "/dashboard?periodId=" + previousPeriod.id}
+280:               class="flex items-center gap-1 hover:text-foreground hover:underline"
+281:             >
+282:               <Icon name="arrow-left" size="xs" />
+283:               {formatPeriod(previousPeriod.year, previousPeriod.month, locale)}
+284:             </a>
+285:           ) : (
+286:             <span class="flex items-center gap-1" aria-disabled="true">
+287:               <Icon name="arrow-left" size="xs" />
+288:               {t("Previous period")}
+289:             </span>
+290:           )}
+291:           {nextPeriod ? (
+292:             <a
+293:               href={base + "/dashboard?periodId=" + nextPeriod.id}
+294:               class="flex items-center gap-1 hover:text-foreground hover:underline"
+295:             >
+296:               {formatPeriod(nextPeriod.year, nextPeriod.month, locale)}
+297:               <Icon name="arrow-right" size="xs" />
+298:             </a>
+299:           ) : (
+300:             <span class="flex items-center gap-1" aria-disabled="true">
+301:               {t("Next period")}
+302:               <Icon name="arrow-right" size="xs" />
+303:             </span>
+304:           )}
+305:         </nav>
+306:         <div class="grid gap-4 sm:grid-cols-3">
+307:           <>
+308:             <KpiCard
+309:               icon="invoice"
+310:               label={t("Total invoiced")}
+311:               value={formatMoney(
+312:                 summary.totalInvoiced,
+313:                 organization.currency,
+314:                 locale
+315:               )}
+316:             />
+317:             <KpiCard
+318:               icon="coins"
+319:               label={t("Paid")}
+320:               tone="success"
+321:               value={formatMoney(
+322:                 summary.totalPaid,
+323:                 organization.currency,
+324:                 locale
+325:               )}
+326:             />
+327:             <KpiCard
+328:               icon="clock"
+329:               label={t("Outstanding")}
+330:               tone="warning"
+331:               value={formatMoney(
+332:                 summary.totalOutstanding,
+333:                 organization.currency,
+334:                 locale
+335:               )}
+336:             />
+337:           </>
+338:         </div>
+339:         <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+340:           <section class="dashboard-attention">
+341:             <div class="mb-4 flex items-center justify-between">
+342:               <>
+343:                 <h2 class="font-semibold">{t("Needs attention")}</h2>
+344:                 <span class="text-body-sm text-muted">
+345:                   {summary.needsAttention.length}
+346:                 </span>
+347:               </>
+348:             </div>
+349:             {summary.needsAttention.length === 0 ? (
+350:               <EmptyState title={t("Nothing needs attention right now.")} />
+351:             ) : (
+352:               <div class="panel divide-y divide-border">
+353:                 {attentionCases
+354:                   .filter(
+355:                     (c) => c.status === "MISSING_DATA" || c.status === "OVERDUE"
+356:                   )
+357:                   .map((c) => {
+358:                     // missingData is a JSONB column with no schema
+359:                     // enforcement: cases whose readiness was last computed by
+360:                     // an older app version can still carry a legacy
+361:                     // plain-string shape instead of today's {meterType,
+362:                     // label, reason} object (see the same fix in
+363:                     // periods/[periodId]/index.astro).
+364:                     const missing = c.missingData as (
+365:                       | {
+366:                           label: string | null;
+367:                           meterType: string;
+368:                           reason?: "NO_READING";
+369:                         }
+370:                       | {
+371:                           billingRuleId: string;
+372:                           ruleName: string;
+373:                           reason?: "NO_MANUAL_INPUT";
+374:                         }
+375:                       | {
+376:                           billingRuleId: string;
+377:                           ruleName: string;
+378:                           meterType: string;
+379:                           reason: "NO_ACTIVE_METER_FOR_RULE";
+380:                         }
+381:                       | { reason: "NO_APPLICABLE_RULES" }
+382:                       | string
+383:                     )[];
+384:                     const overdue = c.status === "OVERDUE";
+385:                     const href = overdue
+386:                       ? base + "/payments"
+387:                       : base + "/periods/" + summary.period.id;
+388:                     const readingsUrl = new URL(Astro.url);
+389:                     readingsUrl.searchParams.set("drawer", "readings");
+390:                     readingsUrl.searchParams.set("dwelling", c.dwellingId);
+391:                     readingsUrl.searchParams.delete("focus");
+392:                     return (
+393:                       <div class="dashboard-attention-row">
+394:                         <div class="dashboard-attention-content">
+395:                           <div class="dashboard-attention-heading">
+396:                             <a
+397:                               class="dashboard-dwelling-link"
+398:                               href={base + "/dwellings/" + c.dwellingId}
+399:                             >
+400:                               {t("Dwelling")} {c.dwellingNumber}
+401:                             </a>
+402:                             <StatusBadge status={c.status} />
+403:                           </div>
+404:                           <p class="text-body-sm text-muted">
+405:                             {overdue
+406:                               ? t(
+407:                                   "Payment is past its due date. Review reconciliation."
+408:                                 )
+409:                               : missing.length
+410:                                 ? missing
+411:                                     .map((m) =>
+412:                                       typeof m === "object" &&
+413:                                       m &&
+414:                                       m.reason === "NO_APPLICABLE_RULES"
+415:                                         ? t("No billing rule applies")
+416:                                         : typeof m === "object" &&
+417:                                             m &&
+418:                                             m.reason ===
+419:                                               "NO_ACTIVE_METER_FOR_RULE"
+420:                                           ? `${m.ruleName} — ${t("no active meter")}`
+421:                                           : typeof m === "string"
+422:                                             ? m
+423:                                             : "billingRuleId" in m
+424:                                               ? m.ruleName
+425:                                               : (m.label ??
+426:                                                 entityLabel(
+427:                                                   m.meterType,
+428:                                                   locale
+429:                                                 ))
+430:                                     )
+431:                                     .join(", ")
+432:                                 : t(
+433:                                     "All readings are present. Generate the invoice in the workbench."
+434:                                   )}
+435:                           </p>
+436:                           {missing.length > 0 && (
+437:                             <p class="mt-1 text-caption text-muted">
+438:                               {t(
+439:                                 "Readings are required before generating an invoice."
+440:                               )}
+441:                             </p>
+442:                           )}
+443:                         </div>
+444:                         {missing.length > 0 &&
+445:                         !overdue &&
+446:                         summary.period.status !== "LOCKED" ? (
+447:                           <a
+448:                             class="dashboard-attention-action"
+449:                             href={readingsUrl.pathname + readingsUrl.search}
+450:                             data-open-drawer="readings"
+451:                             data-dwelling-id={c.dwellingId}
+452:                             aria-haspopup="dialog"
+453:                             aria-controls="admin-context-drawer"
+454:                           >
+455:                             {t("Add readings")}
+456:                             <Icon name="arrow-right" size="xs" />
+457:                           </a>
+458:                         ) : (
+459:                           <a class="dashboard-attention-action" href={href}>
+460:                             {t(overdue ? "Review payments" : "Open workbench")}
+461:                             <Icon name="arrow-right" size="xs" />
+462:                           </a>
+463:                         )}
+464:                       </div>
+465:                     );
+466:                   })}
+467:               </div>
+468:             )}
+469:           </section>
+470:           <div class="space-y-6">
+471:             <>
+472:               <section class="dashboard-case-status panel p-5">
+473:                 <>
+474:                   <h2 class="section-title">{t("Case status")}</h2>
+475:                   <div class="space-y-1">
+476:                     {statuses.map((status) => (
+477:                       <a
+478:                         class="dashboard-status-link text-body-sm"
+479:                         href={
+480:                           base +
+481:                           "/periods/" +
+482:                           summary.period.id +
+483:                           "?status=" +
+484:                           status
+485:                         }
+486:                       >
+487:                         <StatusBadge status={status} />
+488:                         <span class="dashboard-status-count font-semibold tabular-nums">
+489:                           {summary.caseStatusCounts[status]}
+490:                           <Icon name="arrow-right" size="xs" />
+491:                         </span>
+492:                       </a>
+493:                     ))}
+494:                   </div>
+495:                 </>
+496:               </section>
+497:               <section class="panel p-5">
+498:                 <>
+499:                   <h2 class="section-title flex items-center gap-2">
+500:                     <Icon name="droplet" size="sm" class="text-muted" />
+501:                     {t("Consumption")}
+502:                   </h2>
+503:                   <dl class="space-y-3 text-body-sm">
+504:                     <>
+505:                       <div class="flex justify-between gap-3">
+506:                         <>
+507:                           <dt class="text-muted">{t("Cold water")}</dt>
+508:                           <dd class="font-semibold tabular-nums">
+509:                             {formatNumber(summary.coldWaterConsumption, locale)}{" "}
+510:                             m³
+511:                           </dd>
+512:                         </>
+513:                       </div>
+514:                       <div class="flex justify-between gap-3">
+515:                         <>
+516:                           <dt class="text-muted">{t("Hot water")}</dt>
+517:                           <dd class="font-semibold tabular-nums">
+518:                             {formatNumber(summary.hotWaterConsumption, locale)}{" "}
+519:                             m³
+520:                           </dd>
+521:                         </>
+522:                       </div>
+523:                     </>
+524:                   </dl>
+525:                 </>
+526:               </section>
+527:             </>
+528:           </div>
+529:         </div>
+530:       </div>
+531:     )
+532:   }
+533: </AdminLayout>
+534: 
+535: <style>
+536:   .dashboard-setup {
+537:     display: grid;
+538:     grid-template-columns: minmax(0, 1fr) auto;
+539:     align-items: center;
+540:     gap: 1.5rem;
+541:     padding: 1.5rem;
+542:     margin-bottom: 2rem;
+543:   }
+544:   .setup-banner-title {
+545:     display: flex;
+546:     flex-wrap: wrap;
+547:     align-items: baseline;
+548:     gap: 0.5rem 1rem;
+549:   }
+550:   .setup-banner-title h2 {
+551:     font-size: 1.25rem;
+552:     line-height: 1.3;
+553:     font-weight: 600;
+554:     color: var(--color-foreground);
+555:   }
+556:   .setup-banner-count {
+557:     color: var(--color-muted);
+558:     font-size: 0.8125rem;
+559:     font-variant-numeric: tabular-nums;
+560:   }
+561:   .setup-banner-next {
+562:     margin-top: 0.375rem;
+563:     font-size: 0.875rem;
+564:     color: var(--color-muted);
+565:   }
+566:   .setup-banner-next strong {
+567:     color: var(--color-foreground);
+568:     font-weight: 500;
+569:   }
+570:   .setup-banner-continue {
+571:     grid-area: 1 / 2;
+572:   }
+573:   .setup-banner-steps {
+574:     grid-column: 1 / -1;
+575:     display: grid;
+576:     grid-template-columns: repeat(5, minmax(0, 1fr));
+577:     gap: 0.75rem;
+578:     list-style: none;
+579:     padding: 0;
+580:     margin: 0;
+581:   }
+582:   .setup-banner-step {
+583:     display: flex;
+584:     align-items: flex-start;
+585:     gap: 0.5rem;
+586:     position: relative;
+587:     min-height: 3.5rem;
+588:     padding: 1rem 0.25rem 0.25rem;
+589:     border-radius: 0 0 var(--radius-control) var(--radius-control);
+590:     color: var(--color-muted);
+591:     font-size: 0.8125rem;
+592:     line-height: 1.4;
+593:     text-decoration: none;
+594:   }
+595:   .setup-banner-step::before {
+596:     content: "";
+597:     position: absolute;
+598:     inset: 0 0 auto;
+599:     height: 3px;
+600:     border-radius: 1rem;
+601:     background: var(--color-border);
+602:   }
+603:   .setup-banner-step.is-done::before {
+604:     background: var(--color-success);
+605:   }
+606:   .setup-banner-step.is-next {
+607:     color: var(--color-primary);
+608:     font-weight: 600;
+609:   }
+610:   .setup-banner-step.is-next::before {
+611:     background: var(--color-primary);
+612:   }
+613:   .setup-banner-step:hover {
+614:     background: var(--color-surface-hover);
+615:     color: var(--color-foreground);
+616:   }
+617:   .setup-banner-symbol {
+618:     display: grid;
+619:     place-items: center;
+620:     flex: 0 0 1.375rem;
+621:     height: 1.375rem;
+622:     border-radius: 50%;
+623:     background: var(--color-badge-neutral-bg);
+624:     color: var(--color-badge-neutral-text);
+625:     font-size: 0.6875rem;
+626:     font-weight: 600;
+627:     line-height: 1;
+628:   }
+629:   .setup-banner-step.is-done .setup-banner-symbol {
+630:     background: var(--color-badge-success-bg);
+631:     color: var(--color-badge-success-text);
+632:   }
+633:   .setup-banner-step.is-next .setup-banner-symbol {
+634:     background: var(--color-primary);
+635:     color: var(--color-on-primary);
+636:   }
+637:   @media (max-width: 45rem) {
+638:     .dashboard-setup {
+639:       grid-template-columns: minmax(0, 1fr);
+640:       padding: 1.25rem;
+641:       gap: 1.25rem;
+642:     }
+643:     .setup-banner-steps {
+644:       grid-template-columns: repeat(2, minmax(0, 1fr));
+645:       gap: 0.75rem 1rem;
+646:     }
+647:     .setup-banner-continue {
+648:       grid-area: 3 / 1;
+649:       width: 100%;
+650:     }
+651:   }
+652: 
+653:   .dashboard-period-nav {
+654:     display: grid;
+655:     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+656:     align-items: center;
+657:     gap: 0.5rem;
+658:     padding-block: 0.25rem;
+659:   }
+660:   .dashboard-period-nav > a,
+661:   .dashboard-period-nav > span {
+662:     display: flex;
+663:     align-items: center;
+664:     gap: 0.375rem;
+665:     min-height: 2.75rem;
+666:     border-radius: var(--radius-control);
+667:   }
+668:   .dashboard-period-nav > :last-child {
+669:     justify-content: flex-end;
+670:     text-align: end;
+671:   }
+672:   .dashboard-period-nav > a:hover {
+673:     color: var(--color-primary);
+674:     background: var(--color-surface-hover);
+675:   }
+676:   .dashboard-period-list {
+677:     padding-inline: 0.75rem;
+678:     font-weight: 600;
+679:   }
+680: 
+681:   .dashboard-totals :global(.kpi[data-tone="success"] .kpi-icon) {
+682:     color: var(--color-success);
+683:     background: var(--color-badge-success-bg);
+684:   }
+685:   .dashboard-totals :global(.kpi[data-tone="warning"] .kpi-icon) {
+686:     color: var(--color-warning);
+687:     background: var(--color-badge-warning-bg);
+688:   }
+689: 
+690:   .dashboard-attention-row {
+691:     display: grid;
+692:     grid-template-columns: minmax(0, 1fr) auto;
+693:     align-items: start;
+694:     gap: 0.5rem 1.5rem;
+695:     padding: 1rem 1.25rem;
+696:   }
+697:   .dashboard-attention-content {
+698:     min-width: 0;
+699:     overflow-wrap: anywhere;
+700:   }
+701:   .dashboard-attention-heading {
+702:     display: flex;
+703:     flex-wrap: wrap;
+704:     align-items: center;
+705:     gap: 0.25rem 0.75rem;
+706:     margin-bottom: 0.25rem;
+707:   }
+708:   .dashboard-dwelling-link,
+709:   .dashboard-attention-action {
+710:     display: inline-flex;
+711:     align-items: center;
+712:     gap: 0.375rem;
+713:     min-height: 2.75rem;
+714:     font-size: 0.875rem;
+715:     font-weight: 600;
+716:     text-decoration: underline;
+717:     text-decoration-color: var(--color-border);
+718:     text-underline-offset: 0.25em;
+719:     text-decoration-thickness: 1px;
+720:   }
+721:   .dashboard-dwelling-link {
+722:     color: var(--color-foreground);
+723:   }
+724:   .dashboard-attention-action {
+725:     color: var(--color-primary);
+726:     white-space: nowrap;
+727:   }
+728:   .dashboard-dwelling-link:hover,
+729:   .dashboard-attention-action:hover {
+730:     color: var(--color-primary-hover);
+731:     text-decoration-color: currentColor;
+732:   }
+733:   @media (max-width: 45rem) {
+734:     .dashboard-attention-row {
+735:       grid-template-columns: minmax(0, 1fr);
+736:       gap: 0.25rem;
+737:       padding: 1rem;
+738:     }
+739:     .dashboard-attention-action {
+740:       justify-self: start;
+741:     }
+742:   }
+743:   .dashboard-status-link {
+744:     display: flex;
+745:     align-items: center;
+746:     justify-content: space-between;
+747:     gap: 0.75rem;
+748:     min-height: 2.75rem;
+749:     padding-inline: 0.5rem;
+750:     border-radius: var(--radius-control);
+751:   }
+752: 
+753:   .dashboard-status-count {
+754:     display: flex;
+755:     align-items: center;
+756:     gap: 0.75rem;
+757:   }
+758:   .dashboard-status-count :global(svg) {
+759:     color: var(--color-muted);
+760:   }
+761: </style>
+
+===== FILE: src/domain/periods/dashboard.ts (lines 1-235; line numbers prefixed) =====
+1: // Phase H (Admin UX) - dashboard summary (spec Section 27 "Dashboard",
+2: // route /admin/o/[orgId]/dashboard).
+3: import { and, eq } from "drizzle-orm";
+4: import type { Db } from "../../db/client";
+5: import {
+6:   billingCaseStatusEnum,
+7:   billingCases,
+8:   meterReadings,
+9: } from "../../db/schema/billing";
+10: import { dwellings, meters } from "../../db/schema/dwellings";
+11: import { invoices } from "../../db/schema/invoices";
+12: import { paymentAllocations, paymentReversals } from "../../db/schema/accounts";
+13: import { organizations } from "../../db/schema/organizations";
+14: import { maxExact, subtractExact, sumExact } from "../../lib/decimal2";
+15: import { getPeriod } from "./periods";
+16: 
+17: export type CaseStatusCounts = Record<
+18:   (typeof billingCaseStatusEnum.enumValues)[number],
+19:   number
+20: >;
+21: 
+22: export interface AttentionItem {
+23:   caseId: string;
+24:   dwellingId: string;
+25:   dwellingNumber: string;
+26:   status: (typeof billingCaseStatusEnum.enumValues)[number];
+27: }
+28: 
+29: export interface DashboardSummary {
+30:   period: Awaited<ReturnType<typeof getPeriod>>;
+31:   totalInvoiced: string;
+32:   currentCharges: string;
+33:   carriedOutstanding: string;
+34:   creditsApplied: string;
+35:   lateFees: string;
+36:   amountDue: string;
+37:   totalPaid: string;
+38:   totalOutstanding: string;
+39:   coldWaterConsumption: string;
+40:   hotWaterConsumption: string;
+41:   caseStatusCounts: CaseStatusCounts;
+42:   needsAttention: AttentionItem[];
+43: }
+44: 
+45: // "Work requiring attention" (spec Section 27): a dwelling with no reading
+46: // yet (MISSING_DATA) or a sent invoice already past its due date (OVERDUE)
+47: // -- both need an admin to do something, unlike DRAFT/PREPARED which are
+48: // just normal steps in the monthly workflow still in progress.
+49: const ATTENTION_STATUSES = new Set(["MISSING_DATA", "OVERDUE"]);
+50: 
+51: export async function getDashboardSummary(
+52:   db: Db,
+53:   organizationId: string,
+54:   periodId: string
+55: ): Promise<DashboardSummary> {
+56:   const period = await getPeriod(db, organizationId, periodId);
+57:   const [org] = await db
+58:     .select({ currency: organizations.currency })
+59:     .from(organizations)
+60:     .where(eq(organizations.id, organizationId))
+61:     .limit(1);
+62: 
+63:   const allPeriodInvoices = await db
+64:     .select({
+65:       id: invoices.id,
+66:       currentCharges: invoices.currentCharges,
+67:       previousOutstanding: invoices.previousOutstanding,
+68:       previousCreditApplied: invoices.previousCreditApplied,
+69:       lateFeeApplied: invoices.lateFeeApplied,
+70:       amountDue: invoices.amountDue,
+71:       paidAt: invoices.paidAt,
+72:       currency: invoices.currency,
+73:     })
+74:     .from(invoices)
+75:     .where(
+76:       and(
+77:         eq(invoices.organizationId, organizationId),
+78:         eq(invoices.periodId, periodId)
+79:       )
+80:     );
+81:   // An invoice's currency is snapshotted from the organization's setting at
+82:   // generation time (spec Section 21) and never changes afterward, but the
+83:   // organization's own currency setting can change later (ORG-002). Summing
+84:   // every invoice regardless would silently add incompatible currencies
+85:   // together under whatever label the org happens to have today -- only
+86:   // invoices still matching today's currency are counted.
+87:   const periodInvoices = allPeriodInvoices.filter(
+88:     (i) => i.currency === org.currency
+89:   );
+90:   const allocations = await db
+91:     .select({
+92:       invoiceId: paymentAllocations.invoiceId,
+93:       amount: paymentAllocations.allocatedAmount,
+94:     })
+95:     .from(paymentAllocations)
+96:     .where(eq(paymentAllocations.organizationId, organizationId));
+97:   const reversals = await db
+98:     .select({
+99:       invoiceId: paymentReversals.invoiceId,
+100:       amount: paymentReversals.reversedAllocationAmount,
+101:     })
+102:     .from(paymentReversals)
+103:     .where(eq(paymentReversals.organizationId, organizationId));
+104:   const allocatedByInvoice = new Map<string, string>();
+105:   for (const allocation of allocations) {
+106:     allocatedByInvoice.set(
+107:       allocation.invoiceId,
+108:       sumExact([
+109:         allocatedByInvoice.get(allocation.invoiceId) ?? "0.00",
+110:         allocation.amount,
+111:       ])
+112:     );
+113:   }
+114:   for (const reversal of reversals) {
+115:     allocatedByInvoice.set(
+116:       reversal.invoiceId,
+117:       maxExact(
+118:         subtractExact(
+119:           allocatedByInvoice.get(reversal.invoiceId) ?? "0.00",
+120:           reversal.amount
+121:         ),
+122:         "0.00"
+123:       )
+124:     );
+125:   }
+126:   const currentCharges = sumExact(periodInvoices.map((i) => i.currentCharges));
+127:   const carriedOutstanding = sumExact(
+128:     periodInvoices.map((i) => i.previousOutstanding)
+129:   );
+130:   const creditsApplied = sumExact(
+131:     periodInvoices.map((i) => i.previousCreditApplied)
+132:   );
+133:   const lateFees = sumExact(periodInvoices.map((i) => i.lateFeeApplied));
+134:   const amountDue = sumExact(periodInvoices.map((i) => i.amountDue));
+135:   const totalPaid = sumExact(
+136:     periodInvoices.map((invoice) => {
+137:       const allocated = allocatedByInvoice.get(invoice.id) ?? "0.00";
+138:       return invoice.paidAt && allocated === "0.00"
+139:         ? invoice.amountDue
+140:         : allocated;
+141:     })
+142:   );
+143:   const totalOutstanding = sumExact(
+144:     periodInvoices.map((invoice) =>
+145:       maxExact(
+146:         subtractExact(
+147:           invoice.amountDue,
+148:           invoice.paidAt && !allocatedByInvoice.has(invoice.id)
+149:             ? invoice.amountDue
+150:             : (allocatedByInvoice.get(invoice.id) ?? "0.00")
+151:         ),
+152:         "0.00"
+153:       )
+154:     )
+155:   );
+156:   const totalInvoiced = currentCharges;
+157: 
+158:   const readings = await db
+159:     .select({
+160:       type: meters.type,
+161:       unit: meters.unit,
+162:       consumption: meterReadings.consumption,
+163:     })
+164:     .from(meterReadings)
+165:     .innerJoin(meters, eq(meters.id, meterReadings.meterId))
+166:     .where(
+167:       and(
+168:         eq(meterReadings.organizationId, organizationId),
+169:         eq(meterReadings.periodId, periodId)
+170:       )
+171:     );
+172:   // meters.unit is free text, not an enum -- summing consumption across
+173:   // meters with different units (e.g. m3 and litres) would silently add
+174:   // incompatible quantities. This dashboard KPI only ever labels the result
+175:   // "m3" (the unit this app's water meters are always configured with), so
+176:   // only readings actually in that unit are counted.
+177:   const WATER_UNIT = "m3";
+178:   const coldWaterConsumption = sumExact(
+179:     readings
+180:       .filter((r) => r.type === "COLD_WATER" && r.unit === WATER_UNIT)
+181:       .map((r) => r.consumption)
+182:   );
+183:   const hotWaterConsumption = sumExact(
+184:     readings
+185:       .filter((r) => r.type === "HOT_WATER" && r.unit === WATER_UNIT)
+186:       .map((r) => r.consumption)
+187:   );
+188: 
+189:   const cases = await db
+190:     .select({
+191:       id: billingCases.id,
+192:       dwellingId: billingCases.dwellingId,
+193:       dwellingNumber: dwellings.number,
+194:       status: billingCases.status,
+195:     })
+196:     .from(billingCases)
+197:     .innerJoin(dwellings, eq(dwellings.id, billingCases.dwellingId))
+198:     .where(
+199:       and(
+200:         eq(billingCases.organizationId, organizationId),
+201:         eq(billingCases.periodId, periodId)
+202:       )
+203:     );
+204:   const caseStatusCounts = Object.fromEntries(
+205:     billingCaseStatusEnum.enumValues.map((status) => [status, 0])
+206:   ) as CaseStatusCounts;
+207:   const needsAttention: AttentionItem[] = [];
+208:   for (const c of cases) {
+209:     caseStatusCounts[c.status]++;
+210:     if (ATTENTION_STATUSES.has(c.status)) {
+211:       needsAttention.push({
+212:         caseId: c.id,
+213:         dwellingId: c.dwellingId,
+214:         dwellingNumber: c.dwellingNumber,
+215:         status: c.status,
+216:       });
+217:     }
+218:   }
+219: 
+220:   return {
+221:     period,
+222:     totalInvoiced,
+223:     currentCharges,
+224:     carriedOutstanding,
+225:     creditsApplied,
+226:     lateFees,
+227:     amountDue,
+228:     totalPaid,
+229:     totalOutstanding,
+230:     coldWaterConsumption,
+231:     hotWaterConsumption,
+232:     caseStatusCounts,
+233:     needsAttention,
+234:   };
+235: }
+
+===== FILE: src/domain/periods/cases.ts (lines 1-130; line numbers prefixed) =====
+1: // Phase E (Periods/meters/readings) - billing_case read model for the
+2: // admin period workbench (spec Section 27, route
+3: // /admin/o/[orgId]/periods/[periodId]).
+4: import { and, desc, eq, sql } from "drizzle-orm";
+5: import type { Db } from "../../db/client";
+6: import {
+7:   billingCaseStatusEnum,
+8:   billingCases,
+9:   billingPeriods,
+10:   manualRuleInputs,
+11:   meterReadings,
+12: } from "../../db/schema/billing";
+13: import { dwellings, meters } from "../../db/schema/dwellings";
+14: import { invoices } from "../../db/schema/invoices";
+15: import { getApplicableRulesForDwelling } from "../billing/rules";
+16: import { wasMeterActiveDuringPeriod } from "./case-readiness";
+17: import { findPreviousValue } from "./readings";
+18: 
+19: // Spec Section 27's required default sort: status priority first, then
+20: // natural dwelling number. Sorted client-side (post-fetch) rather than with
+21: // a SQL CASE expression -- this list is at most one organization's worth of
+22: // dwellings per period, never large enough to need it done in the database.
+23: const STATUS_PRIORITY: Record<
+24:   (typeof billingCaseStatusEnum.enumValues)[number],
+25:   number
+26: > = {
+27:   MISSING_DATA: 0,
+28:   READY: 1,
+29:   DRAFT: 2,
+30:   PREPARED: 3,
+31:   OVERDUE: 4,
+32:   SENT: 5,
+33:   PAID: 6,
+34: };
+35: 
+36: function compareDwellingNumbers(a: string, b: string): number {
+37:   const na = Number(a);
+38:   const nb = Number(b);
+39:   if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+40:   return a.localeCompare(b, undefined, { numeric: true });
+41: }
+42: 
+43: export interface ListCasesForPeriodOptions {
+44:   search?: string;
+45:   statusFilter?: (typeof billingCaseStatusEnum.enumValues)[number];
+46: }
+47: 
+48: export async function listCasesForPeriod(
+49:   db: Db,
+50:   organizationId: string,
+51:   periodId: string,
+52:   options: ListCasesForPeriodOptions = {}
+53: ) {
+54:   const rows = await db
+55:     .select({
+56:       id: billingCases.id,
+57:       dwellingId: billingCases.dwellingId,
+58:       dwellingNumber: dwellings.number,
+59:       occupantName: dwellings.occupantName,
+60:       billingEmail: dwellings.billingEmail,
+61:       invoiceByEmail: dwellings.invoiceByEmail,
+62:       invoiceByPaper: dwellings.invoiceByPaper,
+63:       status: billingCases.status,
+64:       missingData: billingCases.missingData,
+65:       invoiceId: invoices.id,
+66:       invoiceNumber: invoices.invoiceNumber,
+67:       invoiceTotal: invoices.total,
+68:       invoiceCurrentCharges: invoices.currentCharges,
+69:       invoiceAmountDue: invoices.amountDue,
+70:       invoicePreviousOutstanding: invoices.previousOutstanding,
+71:       invoicePreviousCreditApplied: invoices.previousCreditApplied,
+72:       invoiceLateFeeApplied: invoices.lateFeeApplied,
+73:       invoiceIssuerSnapshot: invoices.issuerSnapshot,
+74:       invoiceRecipientSnapshot: invoices.recipientSnapshot,
+75:       invoicePaymentSnapshot: invoices.paymentSnapshot,
+76:     })
+77:     .from(billingCases)
+78:     .innerJoin(dwellings, eq(dwellings.id, billingCases.dwellingId))
+79:     .leftJoin(invoices, eq(invoices.billingCaseId, billingCases.id))
+80:     .where(
+81:       and(
+82:         eq(billingCases.periodId, periodId),
+83:         eq(billingCases.organizationId, organizationId)
+84:       )
+85:     );
+86: 
+87:   const search = options.search?.trim().toLowerCase();
+88:   const filtered = rows.filter((row) => {
+89:     if (options.statusFilter && row.status !== options.statusFilter) {
+90:       return false;
+91:     }
+92:     if (search && !row.dwellingNumber.toLowerCase().includes(search)) {
+93:       return false;
+94:     }
+95:     return true;
+96:   });
+97: 
+98:   return filtered.sort((a, b) => {
+99:     const byStatus = STATUS_PRIORITY[a.status] - STATUS_PRIORITY[b.status];
+100:     if (byStatus !== 0) return byStatus;
+101:     return compareDwellingNumbers(a.dwellingNumber, b.dwellingNumber);
+102:   });
+103: }
+104: 
+105: // Phase D (Organizations/dwellings) - the dwelling-detail page's "Period
+106: // history" tab: this dwelling's billing case in every period it's existed
+107: // for, newest period first (the inverse of listCasesForPeriod, which lists
+108: // every dwelling within one period).
+109: export async function listCasesForDwelling(
+110:   db: Db,
+111:   organizationId: string,
+112:   dwellingId: string
+113: ) {
+114:   return db
+115:     .select({
+116:       id: billingCases.id,
+117:       periodId: billingCases.periodId,
+118:       periodYear: billingPeriods.year,
+119:       periodMonth: billingPeriods.month,
+120:       status: billingCases.status,
+121:       invoiceId: invoices.id,
+122:       invoiceNumber: invoices.invoiceNumber,
+123:       invoiceAmountDue: invoices.amountDue,
+124:     })
+125:     .from(billingCases)
+126:     .innerJoin(billingPeriods, eq(billingPeriods.id, billingCases.periodId))
+127:     .leftJoin(invoices, eq(invoices.billingCaseId, billingCases.id))
+128:     .where(
+129:       and(
+130:         eq(billingCases.dwellingId, dwellingId),
+
+===== FILE: src/domain/periods/case-readiness.ts (lines 1-90; line numbers prefixed) =====
+1: // Phase E (Periods/meters/readings) - billing_case.missing_data upkeep
+2: // (spec Section 16 step 4/5, Section 13.10). Status tracks readiness up to
+3: // the point an invoice exists: MISSING_DATA while required readings are
+4: // outstanding, READY once they're all in but no invoice has been generated
+5: // yet. The DRAFT transition (and everything after it) only happens when
+6: // Phase F actually generates an invoice -- recalculateCaseReadiness never
+7: // touches a case that has already reached DRAFT or later, since at that
+8: // point "Regenerate invoice" is the mechanism for re-syncing it.
+9: import { and, eq, inArray, sql } from "drizzle-orm";
+10: import type { DbOrTx } from "../../db/client";
+11: import {
+12:   billingCases,
+13:   billingPeriods,
+14:   billingRuleAssignments,
+15:   manualRuleInputs,
+16:   meterReadings,
+17: } from "../../db/schema/billing";
+18: import { meters } from "../../db/schema/dwellings";
+19: import { getEffectiveRules } from "../billing/rules";
+20: 
+21: export interface MissingMeterReadingItem {
+22:   meterId: string;
+23:   meterType: string;
+24:   label: string | null;
+25:   reason: "NO_READING";
+26: }
+27: 
+28: // MANUAL_QUANTITY/MANUAL_AMOUNT rules (spec Section 18) need a per-case
+29: // admin-supplied value the same way METER_CONSUMPTION needs a reading --
+30: // tracked as missing data until manual_rule_inputs has a row for this
+31: // (period, dwelling, rule).
+32: export interface MissingManualRuleInputItem {
+33:   billingRuleId: string;
+34:   ruleName: string;
+35:   unit: string;
+36:   reason: "NO_MANUAL_INPUT";
+37: }
+38: 
+39: // A METER_CONSUMPTION rule assigned to this dwelling by name (ONE_TO_ONE /
+40: // ONE_TO_MANY) that has no meter of its type active in the period. The rule
+41: // cannot produce an invoice line, and the assignment says it must. An
+42: // org-wide (ONE_TO_ALL) meter rule on a dwelling without that meter type is
+43: // not a blocker: the rule does not apply there.
+44: export interface NoActiveMeterForRuleItem {
+45:   billingRuleId: string;
+46:   ruleName: string;
+47:   meterType: string;
+48:   reason: "NO_ACTIVE_METER_FOR_RULE";
+49: }
+50: 
+51: // No rule can produce an invoice line for this dwelling in this period, so
+52: // there is nothing to invoice.
+53: export interface NoApplicableRulesItem {
+54:   reason: "NO_APPLICABLE_RULES";
+55: }
+56: 
+57: // billing_cases.missing_data holds every blocker, not only missing inputs:
+58: // READY means "the invoice can be generated".
+59: export type MissingDataItem =
+60:   | MissingMeterReadingItem
+61:   | MissingManualRuleInputItem
+62:   | NoActiveMeterForRuleItem
+63:   | NoApplicableRulesItem;
+64: 
+65: // The one message for a blocked case. generateInvoice and bulk generation
+66: // both use it, so the single and the bulk path give the same reason. Items
+67: // are `unknown` because an old row can hold a legacy plain string.
+68: export function invoiceBlockerMessage(items: unknown[]): string {
+69:   const reasons = new Set(
+70:     items.map((i) =>
+71:       i && typeof i === "object" ? (i as { reason?: string }).reason : undefined
+72:     )
+73:   );
+74:   if (reasons.has("NO_APPLICABLE_RULES")) {
+75:     return "No billing rules apply to this dwelling for this period";
+76:   }
+77:   if (reasons.has("NO_ACTIVE_METER_FOR_RULE") && reasons.size === 1) {
+78:     return "A billing rule assigned to this dwelling has no active meter for this period";
+79:   }
+80:   return "This dwelling has missing data for this period and cannot be invoiced yet";
+81: }
+82: 
+83: interface PeriodDateRange {
+84:   startsOn: string;
+85:   endsOn: string;
+86: }
+87: 
+88: interface MeterActiveWindow {
+89:   installedAt: string | null;
+90:   archivedAt: Date | null;
+
+===== FILE: src/lib/ui/invoice-status.ts (lines 1-38; line numbers prefixed) =====
+1: import type { IconName } from "./icons";
+2: 
+3: // Strict status -> icon mapping (Tabler Icons, Outline). Never invent a new
+4: // icon per state -- the icon reinforces the text label, it never replaces
+5: // it, so states that share a meaning share an icon.
+6: const statuses: Record<string, [string, string, IconName]> = {
+7:   MISSING_DATA: ["Missing data", "danger", "alert-triangle"],
+8:   READY: ["Ready to invoice", "warning", "check"],
+9:   DRAFT: ["Draft", "neutral", "file-description"],
+10:   PREPARED: ["Prepared", "info", "check"],
+11:   SENT: ["Sent", "info", "send"],
+12:   PAID: ["Paid", "success", "circle-check"],
+13:   OVERDUE: ["Overdue", "warning", "clock-exclamation"],
+14:   // "OPEN" is shared by two unrelated domains (billing period + message
+15:   // thread) -- "lock-open" reads sensibly for both ("not yet locked" /
+16:   // "not yet resolved") without inventing a per-domain variant.
+17:   OPEN: ["Open", "info", "lock-open"],
+18:   LOCKED: ["Locked", "neutral", "lock"],
+19:   ACTIVE: ["Active", "success", "check"],
+20:   ARCHIVED: ["Archived", "neutral", "archive"],
+21:   NEW: ["Awaiting reply", "warning", "clock-exclamation"],
+22:   RESOLVED: ["Resolved", "success", "circle-check"],
+23:   PROPOSED: ["Proposed", "info", "clock"],
+24:   CONFIRMED: ["Confirmed", "success", "check"],
+25:   REJECTED: ["Rejected", "neutral", "x"],
+26:   REVERSED: ["Reversed", "neutral", "x"],
+27:   UNMATCHED: ["Unmatched", "warning", "alert-triangle"],
+28:   FAILED: ["Failed", "danger", "alert-triangle"],
+29: };
+30: 
+31: export function invoiceStatusBadge(status: string) {
+32:   const [label, tone, icon] = statuses[status] ?? [
+33:     status,
+34:     "neutral",
+35:     "info-circle",
+36:   ];
+37:   return { label, tone, icon, className: "status-badge" };
+38: }
+
+===== FILE: src/components/ui/KpiCard.astro (lines 1-38; line numbers prefixed) =====
+1: ---
+2: import Icon from "./Icon.astro";
+3: interface Props {
+4:   label: string;
+5:   value: string | number;
+6:   tone?: "neutral" | "success" | "warning";
+7:   icon?: "invoice" | "coins" | "clock" | "open" | "lock";
+8:   hint?: string;
+9: }
+10: const { label, value, tone = "neutral", icon, hint } = Astro.props;
+11: 
+12: // Summary/KPI cards keep their icon-container badge treatment (Tabler
+13: // Icons system) -- unlike table rows, buttons, and status chips, which
+14: // use bare icons with no background.
+15: const ICON_NAMES = {
+16:   invoice: "receipt-euro",
+17:   coins: "coin",
+18:   clock: "clock",
+19:   open: "lock-open",
+20:   lock: "lock",
+21: } as const;
+22: ---
+23: 
+24: <section class="kpi" data-tone={tone}>
+25:   {
+26:     icon && (
+27:       <span class="kpi-icon" aria-hidden="true">
+28:         <Icon name={ICON_NAMES[icon]} size="lg" />
+29:       </span>
+30:     )
+31:   }
+32:   <div class="kpi-text">
+33:     <h2>{label}</h2>
+34:     <p>{value}</p>
+35:     {hint && <small class="text-muted">{hint}</small>}
+36:   </div>
+37:   <slot />
+38: </section>
+
+===== FILE: src/layouts/AdminLayout.astro (lines 1-207; line numbers prefixed) =====
+1: ---
+2: import "../styles/global.css";
+3: import AppNavigation from "../components/ui/AppNavigation.astro";
+4: import OrganizationSwitcher from "../components/ui/OrganizationSwitcher.astro";
+5: import { listOrganizations } from "../domain/organizations/organizations";
+6: import BrandMark from "../components/ui/BrandMark.astro";
+7: import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
+8: import ThemeToggle from "../components/ui/ThemeToggle.astro";
+9: import Icon from "../components/ui/Icon.astro";
+10: import MutationStatus from "../components/ui/MutationStatus.astro";
+11: import DevFontPreview from "../components/ui/DevFontPreview.astro";
+12: import { ClientRouter } from "astro:transitions";
+13: import { translate, uiLocale } from "../lib/ui/i18n";
+14: import { countUnreadConversationsForOrganization } from "../domain/messaging/conversations";
+15: import { withRequestDb } from "../lib/db-request";
+16: interface Props {
+17:   title?: string;
+18:   organizationId?: string;
+19:   organizationName?: string;
+20:   // A page that just archived or restored the organization passes the fresh
+21:   // state. Astro.locals.auth was loaded before the action ran.
+22:   archived?: boolean;
+23: }
+24: const {
+25:   title = "Admin - Namkopa",
+26:   organizationId,
+27:   organizationName,
+28:   archived = organizationId
+29:     ? (Astro.locals.auth?.archivedOrganizationIds?.includes(organizationId) ??
+30:       false)
+31:     : false,
+32: } = Astro.props;
+33: const locale = uiLocale(Astro.cookies, Astro.url);
+34: const t = (text: string) => translate(locale, text);
+35: const previewFontUrl = import.meta.env.DEV
+36:   ? "/src/fonts/MedeoSansVariable.woff2"
+37:   : undefined;
+38: const residentAccess = (Astro.locals.auth?.dwellingIds.length ?? 0) > 0;
+39: const { unreadMessages, switcherOrganizations } = organizationId
+40:   ? await withRequestDb(async (db) => {
+41:       const [unreadMessages, switcherOrganizations] = await Promise.all([
+42:         countUnreadConversationsForOrganization(db, organizationId),
+43:         listOrganizations(db, Astro.locals.auth?.organizationIds ?? []),
+44:       ]);
+45:       return { unreadMessages, switcherOrganizations };
+46:     })
+47:   : { unreadMessages: 0, switcherOrganizations: [] };
+48: ---
+49: 
+50: <!doctype html>
+51: <html lang={locale} transition:name="root" transition:animate="none">
+52:   <head>
+53:     <meta charset="UTF-8" />
+54:     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+55:     <meta name="color-scheme" content="light dark" />
+56:     <ClientRouter fallback="swap" />
+57:     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+58:     <script is:inline>
+59:       (function () {
+60:         try {
+61:           const stored = localStorage.getItem("color-scheme");
+62:           if (stored === "dark" || stored === "light") {
+63:             document.documentElement.setAttribute("data-theme", stored);
+64:             const meta = document.querySelector('meta[name="color-scheme"]');
+65:             if (meta) meta.content = stored;
+66:           }
+67:         } catch (e) {
+68:           void e;
+69:         }
+70:       })();
+71:     </script>
+72:     <title>{title}</title>
+73:   </head>
+74:   <body data-working-label={t("Working…")}>
+75:     <a class="skip-link" href="#main-content">{t("Skip to content")}</a>
+76:     <aside class="admin-sidebar">
+77:       <a class="brand" href="/admin/organizations"
+78:         ><BrandMark />{t("Namkopa")}</a
+79:       >
+80:       <OrganizationSwitcher
+81:         organizationId={organizationId}
+82:         organizationName={organizationName}
+83:         organizations={switcherOrganizations}
+84:         residentAccess={residentAccess}
+85:       />
+86:       {
+87:         organizationId && (
+88:           <AppNavigation
+89:             organizationId={organizationId}
+90:             unreadMessages={unreadMessages}
+91:           />
+92:         )
+93:       }
+94:       <div class="sidebar-account">
+95:         <p class="mb-2 truncate text-muted">{Astro.locals.auth?.email}</p><div
+96:           class="flex flex-col items-start gap-2"
+97:         >
+98:           <form method="POST" action="/logout">
+99:             <button type="submit">{t("Sign out")}</button>
+100:           </form><div class="flex items-center gap-2">
+101:             <ThemeToggle /><LanguageSwitch />
+102:           </div>
+103:         </div>
+104:       </div>
+105:     </aside>
+106:     <header class="admin-mobile">
+107:       <span class="brand"><BrandMark />{t("Namkopa")}</span>
+108:       <button type="button" class="btn-secondary btn-sm" data-open-mobile-nav>
+109:         {t("Menu")} ☰
+110:       </button>
+111:     </header>
+112:     <dialog
+113:       id="mobile-nav-drawer"
+114:       class="context-drawer mobile-nav-drawer"
+115:       aria-labelledby="mobile-nav-drawer-title"
+116:     >
+117:       <header class="context-drawer-header">
+118:         <span class="brand" id="mobile-nav-drawer-title"
+119:           ><BrandMark />{t("Namkopa")}</span
+120:         >
+121:         <button
+122:           type="button"
+123:           class="context-drawer-close"
+124:           data-close-mobile-nav
+125:           aria-label={t("Close menu")}
+126:         >
+127:           <Icon name="x" size="sm" />
+128:         </button>
+129:       </header>
+130:       <div class="context-drawer-body">
+131:         <OrganizationSwitcher
+132:           organizationId={organizationId}
+133:           organizationName={organizationName}
+134:           organizations={switcherOrganizations}
+135:           residentAccess={residentAccess}
+136:         />
+137:         {
+138:           organizationId && (
+139:             <AppNavigation
+140:               organizationId={organizationId}
+141:               unreadMessages={unreadMessages}
+142:             />
+143:           )
+144:         }
+145:         <div
+146:           class="mt-4 flex flex-wrap items-center gap-5 border-t border-border pt-4 text-sm"
+147:         >
+148:           <form method="POST" action="/logout">
+149:             <button type="submit">{t("Sign out")}</button>
+150:           </form><div class="ml-auto flex items-center gap-2">
+151:             <ThemeToggle /><LanguageSwitch />
+152:           </div>
+153:         </div>
+154:       </div>
+155:     </dialog>
+156:     <main id="main-content" tabindex="-1" class="admin-content app-content">
+157:       {
+158:         archived && (
+159:           <p class="notice notice-danger mb-4" role="status">
+160:             {t(
+161:               "This organization is archived. You can read it but not change it. Residents cannot sign in. Restore it in Settings > Organization."
+162:             )}
+163:           </p>
+164:         )
+165:       }
+166:       <slot />
+167:     </main>
+168:     <MutationStatus />
+169:     {
+170:       previewFontUrl && (
+171:         <DevFontPreview
+172:           fontUrl={previewFontUrl}
+173:           italicFontUrl="/src/fonts/MedeoSansVariable-Italic.woff2"
+174:         />
+175:       )
+176:     }
+177:     <script>
+178:       import "../lib/ui/forms";
+179:       import { onPageLoad } from "../lib/ui/page-lifecycle";
+180:       import { labelStackTables } from "../lib/ui/stack-tables";
+181: 
+182:       onPageLoad(() => {
+183:         labelStackTables();
+184:         const mobileNavDialog =
+185:           document.querySelector<HTMLDialogElement>("#mobile-nav-drawer");
+186:         if (!mobileNavDialog) return;
+187:         document
+188:           .querySelector("[data-open-mobile-nav]")
+189:           ?.addEventListener("click", () => mobileNavDialog.showModal());
+190:         document
+191:           .querySelector("[data-close-mobile-nav]")
+192:           ?.addEventListener("click", () => mobileNavDialog.close());
+193:         mobileNavDialog.addEventListener("click", (event) => {
+194:           if (event.target === mobileNavDialog) mobileNavDialog.close();
+195:         });
+196:         // Navigating to a link inside the drawer should close it -- without
+197:         // this, a slow page load leaves the previous page's drawer open
+198:         // and dimmed behind whatever loads next.
+199:         mobileNavDialog
+200:           .querySelectorAll("a")
+201:           .forEach((link) =>
+202:             link.addEventListener("click", () => mobileNavDialog.close())
+203:           );
+204:       });
+205:     </script>
+206:   </body>
+207: </html>
+

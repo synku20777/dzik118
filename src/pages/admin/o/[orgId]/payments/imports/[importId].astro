@@ -68,9 +68,9 @@ try {
         {bankImport.originalFilename}
       </h1>
       <p class="text-sm text-muted">
-        Imported {
-          formatDate(bankImport.importedAt, locale, organization.timezone)
-        } -- {bankImport.rowCount} row(s)
+        Imported{" "}
+        {formatDate(bankImport.importedAt, locale, organization.timezone)} --{" "}
+        {bankImport.rowCount} row(s)
       </p>
     </div>
 
@@ -79,46 +79,54 @@ try {
         <caption class="sr-only">{t("Imported payments")}</caption>
         <thead class="border-b border-border bg-surface-hover text-muted">
           <tr>
-            <th scope="col" class="px-4 py-2">{t("Row")}</th>
-            <th scope="col" class="px-4 py-2">{t("Booking date")}</th>
-            <th scope="col" class="px-4 py-2 text-right">{t("Amount")}</th>
-            <th scope="col" class="px-4 py-2">{t("Currency")}</th>
-            <th scope="col" class="px-4 py-2">{t("Payer")}</th>
-            <th scope="col" class="px-4 py-2">{t("Reference")}</th>
-            <th scope="col" class="px-4 py-2">{t("Match status")}</th>
+            <th scope="col" class="px-4 py-2">
+              {t("Row")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Booking date")}
+            </th>
+            <th scope="col" class="px-4 py-2 text-right">
+              {t("Amount")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Currency")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Payer")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Reference")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Match status")}
+            </th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border">
-          {
-            transactions.map((tx) => {
-              return (
-                <tr>
-                  <td class="px-4 py-2">{tx.rowNumber}</td>
-                  <td class="px-4 py-2">
-                    {formatDate(tx.bookingDate, locale)}
-                  </td>
-                  <td class="px-4 py-2">
-                    {formatMoney(tx.amount, tx.currency, locale)}
-                  </td>
-                  <td class="px-4 py-2">{tx.currency}</td>
-                  <td class="px-4 py-2">{tx.payerName ?? "—"}</td>
-                  <td class="px-4 py-2">{tx.reference ?? "—"}</td>
-                  <td class="px-4 py-2">
-                    <StatusBadge status={tx.matchStatus ?? "UNMATCHED"} />
-                  </td>
-                </tr>
-              );
-            })
-          }
-          {
-            transactions.length === 0 && (
+          {transactions.map((tx) => {
+            return (
               <tr>
-                <td colspan="7" class="px-4 py-8 text-center text-muted">
-                  {t("No transactions in this import.")}
+                <td class="px-4 py-2">{tx.rowNumber}</td>
+                <td class="px-4 py-2">{formatDate(tx.bookingDate, locale)}</td>
+                <td class="px-4 py-2">
+                  {formatMoney(tx.amount, tx.currency, locale)}
+                </td>
+                <td class="px-4 py-2">{tx.currency}</td>
+                <td class="px-4 py-2">{tx.payerName ?? "—"}</td>
+                <td class="px-4 py-2">{tx.reference ?? "—"}</td>
+                <td class="px-4 py-2">
+                  <StatusBadge status={tx.matchStatus ?? "UNMATCHED"} />
                 </td>
               </tr>
-            )
-          }
+            );
+          })}
+          {transactions.length === 0 && (
+            <tr>
+              <td colspan="7" class="px-4 py-8 text-center text-muted">
+                {t("No transactions in this import.")}
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

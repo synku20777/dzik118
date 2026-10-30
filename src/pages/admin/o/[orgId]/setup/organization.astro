@@ -5,8 +5,7 @@ const t = (text: string) => translate(locale, text);
 
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import FieldError from "../../../../../components/ui/FieldError.astro";
-import SetupSteps from "../../../../../components/ui/SetupSteps.astro";
-import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import SetupLayout from "../../../../../components/ui/SetupLayout.astro";
 import { actions } from "astro:actions";
 import {
   ForbiddenError,
@@ -47,25 +46,20 @@ const { organization, progress } = await withRequestDb(async (db) => {
   organizationId={organizationId}
   organizationName={organization.name}
 >
-  <div class="setup-page space-y-6">
-    <PageHeader title={t("Organization details")}>
-      <a href={`/admin/o/${organizationId}/setup`} class="back-link"
-        >{t("Back to review")}</a
-      >
-    </PageHeader>
-    <SetupSteps
-      organizationId={organizationId}
-      current="organization"
-      steps={progress.steps}
-    />
-
-    {
-      result?.error && (
-        <p class="notice notice-danger" role="alert">
-          {friendlyActionErrorMessage(result.error, locale)}
-        </p>
-      )
-    }
+  <SetupLayout
+    title={t("Organization details")}
+    description={t(
+      "Start with your organization’s name and address. Add payment details now or before preparing invoices."
+    )}
+    organizationId={organizationId}
+    current="organization"
+    steps={progress.steps}
+  >
+    {result?.error && (
+      <p class="notice notice-danger" role="alert">
+        {friendlyActionErrorMessage(result.error, locale)}
+      </p>
+    )}
 
     <form
       method="POST"
@@ -73,17 +67,15 @@ const { organization, progress } = await withRequestDb(async (db) => {
       class="rounded-panel border border-border bg-surface p-6 space-y-6 max-w-3xl"
     >
       <input type="hidden" name="organizationId" value={organizationId} />
-      {
-        (
-          [
-            "autoGenerateEnabled",
-            "autoSendEnabled",
-            "carryForwardReadingsEnabled",
-          ] as const
-        ).map((name) => (
-          <input type="hidden" name={name} value={String(organization[name])} />
-        ))
-      }
+      {(
+        [
+          "autoGenerateEnabled",
+          "autoSendEnabled",
+          "carryForwardReadingsEnabled",
+        ] as const
+      ).map((name) => (
+        <input type="hidden" name={name} value={String(organization[name])} />
+      ))}
 
       <fieldset class="space-y-4">
         <legend class="text-base font-semibold text-foreground">
@@ -222,11 +214,9 @@ const { organization, progress } = await withRequestDb(async (db) => {
           {t("Needed before invoices are prepared")}
         </legend>
         <p class="text-muted text-body-sm">
-          {
-            t(
-              "Invoices show these details. You can add them later, but you cannot prepare an invoice without the bank name and IBAN."
-            )
-          }
+          {t(
+            "Invoices show these details. You can add them later, but you cannot prepare an invoice without the bank name and IBAN."
+          )}
         </p>
 
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -335,5 +325,5 @@ const { organization, progress } = await withRequestDb(async (db) => {
         </div>
       </div>
     </form>
-  </div>
+  </SetupLayout>
 </AdminLayout>

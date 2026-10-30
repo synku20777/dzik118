@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, lte } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
 import type { DbOrTx } from "../../db/client";
 import {
   accountEntries,
@@ -11,11 +11,25 @@ import { invoices } from "../../db/schema/invoices";
 import { maxExact, subtractExact, sumExact } from "../../lib/decimal2";
 import { NotFoundError } from "../errors";
 
+// An opening balance posted by the Migration Center (ADR 0013). The older
+// OPENING_BALANCE rows (one per unpaid v1 invoice) do not carry this key.
+export const isMigratedOpening = sql`${accountEntries.type} = 'OPENING_BALANCE' and ${accountEntries.metadata} ? 'migrationImportId'`;
+
+// With `asOf` (an invoice's issue date), a migrated opening balance dated after
+// it is left out: a balance as of July 1 must not appear on a June invoice.
+// Every other entry counts whatever its date, as before.
+function notMigratedAfter(asOf: string | undefined) {
+  return asOf
+    ? sql`not (${isMigratedOpening} and ${accountEntries.effectiveDate} > ${asOf})`
+    : undefined;
+}
+
 export async function getDwellingAccountBalance(
   db: DbOrTx,
   organizationId: string,
   dwellingId: string,
-  currency: string
+  currency: string,
+  asOf?: string
 ): Promise<string> {
   const rows = await db
     .select({ debit: accountEntries.debit, credit: accountEntries.credit })
@@ -24,10 +38,64 @@ export async function getDwellingAccountBalance(
       and(
         eq(accountEntries.organizationId, organizationId),
         eq(accountEntries.dwellingId, dwellingId),
-        eq(accountEntries.currency, currency)
+        eq(accountEntries.currency, currency),
+        notMigratedAfter(asOf)
       )
     );
   return sumExact(rows.map((row) => subtractExact(row.debit, row.credit)));
+}
+
+// The part of the balance that is migrated opening debt not yet paid. It is
+// debt whose due date and penalty basis are unknown, so it is not late-fee
+// principal (ADR 0013). Payments settle it first: protected = migrated debt
+// minus net payments, never below zero. A migrated credit protects nothing.
+// Manual credits and write-offs do not reduce it, so the result can only lower
+// a late fee, never raise it.
+export async function getProtectedOpeningDebt(
+  db: DbOrTx,
+  organizationId: string,
+  dwellingId: string,
+  currency: string,
+  asOf?: string
+): Promise<string> {
+  const rows = await db
+    .select({
+      type: accountEntries.type,
+      debit: accountEntries.debit,
+      credit: accountEntries.credit,
+      migrated: sql<boolean>`${isMigratedOpening}`,
+    })
+    .from(accountEntries)
+    .where(
+      and(
+        eq(accountEntries.organizationId, organizationId),
+        eq(accountEntries.dwellingId, dwellingId),
+        eq(accountEntries.currency, currency),
+        inArray(accountEntries.type, [
+          "OPENING_BALANCE",
+          "PAYMENT",
+          "PAYMENT_REVERSAL",
+        ]),
+        notMigratedAfter(asOf)
+      )
+    );
+  const migratedDebt = maxExact(
+    sumExact(
+      rows
+        .filter((r) => r.migrated)
+        .map((r) => subtractExact(r.debit, r.credit))
+    ),
+    "0.00"
+  );
+  const netPayments = maxExact(
+    sumExact(
+      rows
+        .filter((r) => r.type === "PAYMENT" || r.type === "PAYMENT_REVERSAL")
+        .map((r) => subtractExact(r.credit, r.debit))
+    ),
+    "0.00"
+  );
+  return maxExact(subtractExact(migratedDebt, netPayments), "0.00");
 }
 
 export async function listDwellingAccountActivity(

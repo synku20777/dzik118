@@ -3,7 +3,7 @@
 // happen at the page/action level via src/domain/authorization/guards.ts,
 // per Section 15.3's "avoid database-heavy authorization globally".
 import { defineMiddleware } from "astro:middleware";
-import { env } from "cloudflare:workers";
+import { env, tracing } from "cloudflare:workers";
 import {
   ADMIN_REQUIRE_AAL2,
   APP_BASE_URL,
@@ -90,12 +90,16 @@ const handle = defineMiddleware(async (context, next) => {
   // which trusts the cookie's claims -- required since this decides identity.
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await tracing.enterSpan("auth.getUser", () => supabase.auth.getUser());
 
   if (user) {
-    const db = await createDb(env.HYPERDRIVE.connectionString);
+    const db = await tracing.enterSpan("auth.db.connect", () =>
+      createDb(env.HYPERDRIVE.connectionString)
+    );
     try {
-      locals.auth = await loadAuthContext(db, user.id, user.email ?? "");
+      locals.auth = await tracing.enterSpan("auth.context", () =>
+        loadAuthContext(db, user.id, user.email ?? "")
+      );
     } finally {
       locals.cfContext.waitUntil(db.$client.end());
     }
@@ -157,7 +161,7 @@ const handle = defineMiddleware(async (context, next) => {
   // protected paths). Public paths remain reachable, matching Section 15.3's
   // instruction to reject disabled users only where it matters.
 
-  return respond(await next());
+  return respond(await tracing.enterSpan("route.render", () => next()));
 });
 
 // Every audit row written while this request runs carries its request ID and

@@ -1,0 +1,12 @@
+You are an independent senior product/UX reviewer. Repo root (your cwd or: C:\Users\nesto\orca\projects\dzik118): "Namkopa", an Astro + Cloudflare + Supabase billing app for Latvian housing co-ops (dzivokla biedriba / apsaimniekosana). Today is 2026-10-28.
+
+Persona: the admin of a Latvian house co-op, ~50 years old, not tech-savvy, used to doing the monthly work in Excel. She/he wants to see a summary of the CURRENT MONTH.
+
+Task (PASS 1 - CONTENT): Read these files: src/pages/admin/o/[orgId]/dashboard/index.astro, src/domain/periods/dashboard.ts, src/domain/periods/cases.ts, src/domain/periods/case-readiness.ts, src/lib/ui/invoice-status.ts, src/components/ui/KpiCard.astro, src/layouts/AdminLayout.astro (nav only), and docs: docs/product/UI_SPECIFICATION.md, docs/product/USER_JOURNEYS.md, docs/product/SERVICE_DESIGN_BLUEPRINT.md, docs/research/EASYBILLY_REVIEW_2026-10-05.md. Do not modify anything.
+
+Answer:
+1. What MUST a monthly dashboard show for this persona (the questions she asks every month: have all readings come in, can I issue invoices, were they sent, who has paid, who owes and how much, what is overdue, anything unusual)?
+2. What does the dashboard show today? Be exact (KPIs, needs-attention list, case status list, consumption box, period navigation).
+3. What is missing or misleading? Check especially: what "Total invoiced" really sums (domain/periods/dashboard.ts), whether "Outstanding" includes carried-over debt and how it relates to "Paid" and "Total invoiced" (do the three KPIs add up?), whether dashboard numbers can disagree with other pages, whether consumption (cold/hot water m3 totals) is useful for this persona, whether the 7 status rows are meaningful, whether "OVERDUE" cases are listed with amounts, whether there is any progress/"next step" cue, due date, missing-readings count, delivery failures, unmatched payments etc.
+4. A priority matrix with four buckets: must-see-now / should-see / one-click-away / never-on-dashboard, each item with a one-line justification.
+Ground EVERY claim in file:line of the current code (format path:line). Write concretely. Keep the answer under 1200 words. Output the answer as plain markdown.

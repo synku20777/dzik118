@@ -133,7 +133,31 @@ Run these steps in order.
    npm run dev
    ```
 
-   Open [http://localhost:4321](http://localhost:4321).
+   Open [http://localhost:4321](http://localhost:4321). This starts the Astro dev server with fast hot reloading for standard UI work.
+
+### Local preview with Wrangler (Cloudflare Workers runtime)
+
+To test the application inside the real Cloudflare Workers (`workerd`) runtime rather than the Vite/Astro dev server—such as when verifying Cloudflare bindings (Hyperdrive, rate limiters) or Astro Action form submissions:
+
+1. **Comment out the `browser` binding**: In this local environment, the Cloudflare Browser Rendering binding causes every request to `wrangler dev` to hang indefinitely due to a DevTools protocol timeout (see [Known limitations](docs/KNOWN_LIMITATIONS.md#browser-rendering-binding-hangs-local-wrangler-dev)). Comment out the `browser` block in `wrangler.jsonc`:
+
+   ```jsonc
+   // "browser": {
+   //   "binding": "BROWSER",
+   // },
+   ```
+
+   _(Restore this block before committing or deploying)._
+
+2. **Build the application and start Wrangler**:
+
+   ```bash
+   npm run build && npx wrangler dev --port 4321
+   ```
+
+   Open [http://localhost:4321](http://localhost:4321). Wrangler reads bindings from `wrangler.jsonc` and local secrets from `.dev.vars`.
+
+> **Note on cron triggers**: Wrangler's local `/__scheduled` endpoint does not invoke Astro's scheduled handler in this setup. To test scheduled jobs locally, send a `POST` request directly to `/api/v1/internal/scheduled-jobs` with the `x-internal-cron-secret` header matching `INTERNAL_CRON_SECRET` in `.dev.vars`.
 
 ## Logging in
 

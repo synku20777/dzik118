@@ -110,7 +110,7 @@ export async function revokeInvoiceAccessTokens(
   const dwellingId =
     scopeDwellingId !== undefined
       ? scopeDwellingId
-      : (
+      : ((
           await db
             .select({ dwellingId: invoices.dwellingId })
             .from(invoices)
@@ -121,7 +121,7 @@ export async function revokeInvoiceAccessTokens(
               )
             )
             .limit(1)
-        )[0]?.dwellingId ?? null;
+        )[0]?.dwellingId ?? null);
 
   await db
     .update(invoiceAccessTokens)

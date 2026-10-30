@@ -2,6 +2,7 @@ import { and, eq, gt, gte, ne } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import { paymentReversals } from "../../db/schema/accounts";
 import { billingCases } from "../../db/schema/billing";
+import { dwellings } from "../../db/schema/dwellings";
 import { invoices } from "../../db/schema/invoices";
 import { organizations } from "../../db/schema/organizations";
 import { bankTransactions, paymentMatches } from "../../db/schema/payments";
@@ -78,6 +79,14 @@ export async function reversePayment(
       .for("update")
       .limit(1);
     if (!org) throw new NotFoundError("Organization not found");
+    // A payment posted straight to a dwelling checks for open invoices under
+    // this lock. Without it, this reversal could reopen the invoice just after
+    // that check passed, and the money would count twice.
+    await tx
+      .select({ id: dwellings.id })
+      .from(dwellings)
+      .where(eq(dwellings.id, invoice.dwellingId))
+      .for("no key update");
     const allocation = match.proposedAllocationAmount;
     const credit = maxExact(
       subtractExact(transaction.amount, allocation),
@@ -119,7 +128,7 @@ export async function reversePayment(
       invoiceId: invoice.id,
       bankTransactionId: transaction.id,
       reason: cleanReason,
-      description: `Reversal of bank payment ${transaction.reference ?? transaction.id}`,
+      description: `Reversal of ${transaction.paymentMethod === "CASH" ? "cash" : "bank"} payment ${transaction.reference ?? transaction.id}`,
       actorUserId,
       metadata: {
         paymentMatchId: matchId,

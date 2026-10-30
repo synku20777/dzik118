@@ -1,0 +1,14 @@
+You are an independent senior UI/UX and accessibility reviewer. Repo root (your cwd or: C:\Users\nesto\orca\projects\dzik118): "Namkopa", an Astro + Cloudflare + Supabase billing app for Latvian housing co-ops. Today is 2026-10-28.
+
+Persona: the admin of a Latvian house co-op, ~50 years old, not tech-savvy, used to Excel, wants a summary of the CURRENT MONTH.
+
+Task (PASS 2 - UI): Read src/pages/admin/o/[orgId]/dashboard/index.astro (template + scoped <style>), src/styles/global.css (.kpi, .status-badge, .page-header, .eyebrow, .btn-primary, type scale, color tokens), src/components/ui/KpiCard.astro, StatusBadge.astro, EmptyState.astro, src/layouts/AdminLayout.astro, src/lib/ui/i18n.ts (the Latvian strings for the dashboard, approx. lines 370-430 and the status labels), src/lib/ui/invoice-status.ts. Do not modify anything.
+
+Critique, for this persona:
+1. Visual hierarchy: what does the eye hit first, second, third? Is the period heading + status badge + single primary button right? Is the order KPIs -> attention list -> case status -> consumption right?
+2. Wording in Latvian: judge each dashboard string (e.g. "Rekinu kopsumma", "Neapmaksata summa", "Nepieciesama uzmaniba", "Norekinu statuss", "Atvert norekinu darbvietu", "Kavets", "Gatavs rekina izrakstisanai", "Pievienot radijumus", "Paterins"). Which are jargon / unnatural / ambiguous for a non-technical Latvian reader? Give better Latvian alternatives with correct diacritics. Also note any English-only or untranslated strings that leak to the UI (e.g. status codes inside help text, enum names).
+3. Density and size: font sizes (13px/14px/12px), tap target sizes, spacing, what can be removed.
+4. Status encoding: color+icon+text? Contrast of muted text (--color-muted) and warning/info badge pairs in light mode - estimate contrast ratios from the hex values and say whether they pass WCAG AA (4.5:1 for small text). Is the "warning" tone used for both READY and OVERDUE (invoice-status.ts) a problem? Is the Outstanding KPI shown in warning color correct semantically?
+5. Accessibility for 50+/low-tech: text size, link affordance (e.g. dashboard-attention-action underline/color), aria usage, heading structure (KpiCard renders h2 for each KPI), disabled period-nav items, dead CSS (e.g. .dashboard-totals or .dashboard-period-list selectors that match nothing - verify in the template), focus states.
+6. Concrete improvement proposals: specific layout (what goes in the top band, what in a second band), specific CSS (sizes, weights, grid), and specific Latvian wording, in order of impact. Include a rough text wireframe.
+Ground every claim in file:line of the current code (format path:line). Write concretely. Keep the answer under 1200 words. Output plain markdown.

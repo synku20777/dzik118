@@ -18,5 +18,7 @@ const { title, description, ornament = false, class: className } = Astro.props;
     {title}
   </p>
   {description && <p class="mt-2 text-sm text-muted">{description}</p>}
-  <div class="mt-4"><slot /></div>
+  <div class="mt-4">
+    <slot />
+  </div>
 </div>

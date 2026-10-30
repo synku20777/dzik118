@@ -162,6 +162,27 @@
       "when": 1791217237590,
       "tag": "0022_one_opening_period",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791391332694,
+      "tag": "0023_migration_center",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791393923219,
+      "tag": "0024_migrated_opening_balance_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793191403885,
+      "tag": "0025_direct_payments_and_cash",
+      "breakpoints": true
     }
   ]
 }

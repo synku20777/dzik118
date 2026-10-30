@@ -1,0 +1,95 @@
+---
+import PageHeader from "./PageHeader.astro";
+import SetupSteps, { type Props as StepProps } from "./SetupSteps.astro";
+
+interface Props extends StepProps {
+  title: string;
+  description?: string;
+}
+const { title, description, ...steps } = Astro.props;
+---
+
+<div class="setup-page">
+  <PageHeader title={title} description={description} />
+  <div class="setup-workspace">
+    <SetupSteps {...steps} />
+    <div class="setup-content space-y-6">
+      <slot />
+    </div>
+  </div>
+</div>
+
+<style is:global>
+  .setup-page {
+    max-width: 76rem;
+  }
+  .setup-page .page-header {
+    margin-bottom: 2rem;
+  }
+  .setup-page .page-actions:empty {
+    display: none;
+  }
+  .setup-page .page-description {
+    max-width: 65ch;
+  }
+  .setup-workspace {
+    display: grid;
+    grid-template-columns: 13.5rem minmax(0, 1fr);
+    align-items: start;
+    gap: 2rem;
+  }
+  .setup-content {
+    min-width: 0;
+  }
+  .setup-page .setup-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    border-top: 1px solid var(--color-border);
+    padding-top: 1.25rem;
+  }
+  .setup-page .setup-actions > div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .setup-page .setup-preset {
+    min-width: 0;
+  }
+  .setup-page .setup-preset:has(input[type="checkbox"]:checked) {
+    background: var(--color-nav-active-bg);
+  }
+  .setup-page .setup-preset input[type="checkbox"] {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+  .setup-page .setup-preset-fields:disabled {
+    opacity: 0.5;
+  }
+  .setup-page .setup-preset-fields {
+    border: 0;
+    padding: 0;
+    margin: 0;
+  }
+  @media (max-width: 70rem) {
+    .setup-workspace {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1.5rem;
+    }
+  }
+  @media (max-width: 40rem) {
+    .setup-page .panel,
+    .setup-page .rounded-panel.border {
+      padding: 1rem;
+    }
+    .setup-page .setup-actions > div {
+      display: contents;
+    }
+    .setup-page .setup-actions .btn-primary {
+      order: 1;
+      flex: 1 0 100%;
+    }
+  }
+</style>

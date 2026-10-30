@@ -10,6 +10,7 @@ const locale = uiLocale(Astro.cookies, Astro.url);
 const { label, tone, icon } = invoiceStatusBadge(status);
 ---
 
-<span class="status-badge" data-tone={tone}
-  ><Icon name={icon} size="xs" />{translate(locale, label)}</span
->
+<span class="status-badge" data-tone={tone}>
+  <Icon name={icon} size="xs" />
+  {translate(locale, label)}
+</span>

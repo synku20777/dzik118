@@ -100,22 +100,28 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
       <a
         class="btn-secondary"
         href={"/api/v1/admin/o/" + organizationId + "/dwellings/export"}
-        >{t("Export CSV")}</a
-      ><a
+      >
+        {t("Export CSV")}
+      </a>
+      <a
         class="btn-secondary"
         href={"/admin/o/" + organizationId + "/dwellings/import"}
-        >{t("Import CSV")}</a
-      ><a
+      >
+        {t("Import CSV")}
+      </a>
+      <a
         class="btn-primary"
         href="#create-dwelling"
-        data-open-details="create-dwelling">{t("Create dwelling")}</a
-      ></PageHeader
-    >
+        data-open-details="create-dwelling"
+      >
+        {t("Create dwelling")}
+      </a>
+    </PageHeader>
     <form method="GET" class="filter-bar" data-instant-filter>
       <div>
-        <label class="block text-label text-foreground" for="search"
-          >{t("Search")}</label
-        >
+        <label class="block text-label text-foreground" for="search">
+          {t("Search")}
+        </label>
         <input
           id="search"
           name="search"
@@ -126,23 +132,26 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
         />
       </div>
       <div>
-        <label class="block text-label" for="type-filter">{t("Type")}</label
-        ><select
+        <label class="block text-label" for="type-filter">
+          {t("Type")}
+        </label>
+        <select
           id="type-filter"
           name="type"
           class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
-          ><option value="">{t("All types")}</option>{
-            types.map((type) => (
-              <option value={type} selected={type === typeFilter}>
-                {entityLabel(type, locale)}
-              </option>
-            ))
-          }</select
         >
+          <option value="">{t("All types")}</option>
+          {types.map((type) => (
+            <option value={type} selected={type === typeFilter}>
+              {entityLabel(type, locale)}
+            </option>
+          ))}
+        </select>
       </div>
       <div>
-        <label class="block text-label" for="status-filter">{t("Status")}</label
-        >
+        <label class="block text-label" for="status-filter">
+          {t("Status")}
+        </label>
         <select
           id="status-filter"
           name="status"
@@ -166,22 +175,18 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
         />
         {t("Show archived")}
       </label>
-      {
-        (search || typeFilter || statusFilter || includeArchived) && (
-          <a href={listPath} class="clear-filters">
-            {t("Clear filters")}
-          </a>
-        )
-      }
+      {(search || typeFilter || statusFilter || includeArchived) && (
+        <a href={listPath} class="clear-filters">
+          {t("Clear filters")}
+        </a>
+      )}
     </form>
 
-    {
-      (createResult?.error || archiveResult?.error) && (
-        <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
-          {createResult?.error?.message ?? archiveResult?.error?.message}
-        </p>
-      )
-    }
+    {(createResult?.error || archiveResult?.error) && (
+      <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
+        {createResult?.error?.message ?? archiveResult?.error?.message}
+      </p>
+    )}
 
     <div class="table-wrap stack-table">
       <table class="w-full text-left text-body-sm">
@@ -192,13 +197,27 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
               {t("Number")}
               <span aria-hidden="true">↑</span>
             </th>
-            <th scope="col" class="px-4 py-2">{t("Type")}</th>
-            <th scope="col" class="px-4 py-2">{t("Occupant")}</th>
-            <th scope="col" class="px-4 py-2">{t("Address")}</th>
-            <th scope="col" class="px-4 py-2 text-right">{t("Area (m²)")}</th>
-            <th scope="col" class="px-4 py-2 text-right">{t("Residents")}</th>
-            <th scope="col" class="px-4 py-2">{t("Status")}</th>
-            <th scope="col" class="px-4 py-2 text-right">{t("Actions")}</th>
+            <th scope="col" class="px-4 py-2">
+              {t("Type")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Occupant")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Address")}
+            </th>
+            <th scope="col" class="px-4 py-2 text-right">
+              {t("Area (m²)")}
+            </th>
+            <th scope="col" class="px-4 py-2 text-right">
+              {t("Residents")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Status")}
+            </th>
+            <th scope="col" class="px-4 py-2 text-right">
+              {t("Actions")}
+            </th>
           </tr>
         </thead>
         <tbody
@@ -208,76 +227,72 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
           data-active-label={t("Active")}
           data-saving-label={t("Saving…")}
         >
-          {
-            dwellings.map((d) => (
-              <tr class="row-link">
-                <td class="px-4 py-2 font-medium">
-                  <a
-                    class="row-link-target hover:underline"
-                    href={"/admin/o/" + organizationId + "/dwellings/" + d.id}
-                  >
-                    {d.number}
-                  </a>
-                </td>
-                <td class="px-4 py-2">
-                  <span class="dwelling-type">
-                    <Icon
-                      name={DWELLING_TYPE_ICONS[d.type] ?? "building"}
-                      class="dwelling-type-icon"
-                    />
-                    {entityLabel(d.type, locale)}
-                  </span>
-                </td>
-                <td class="px-4 py-2">{d.occupantName ?? "—"}</td>
-                <td class="px-4 py-2">
-                  {d.type === "APARTMENT" || d.type === "COMMERCIAL_UNIT"
-                    ? `${organization.addressLine1} – ${d.number}`
-                    : organization.addressLine1}
-                </td>
-                <td class="px-4 py-2 text-right">
-                  {formatNumber(d.areaM2, locale, 2)}
-                </td>
-                <td class="px-4 py-2 text-right">{d.residentCount}</td>
-                <td class="px-4 py-2">
-                  <StatusBadge status={d.archivedAt ? "ARCHIVED" : "ACTIVE"} />
-                </td>
-                <td class="row-link-above px-4 py-2 text-right">
-                  {!d.archivedAt && (
-                    <details class="row-menu">
-                      <summary aria-label={`${t("More actions")}: ${d.number}`}>
-                        •••
-                      </summary>
-                      <div>
-                        <form method="POST" action={actions.dwellings.archive}>
-                          <input
-                            type="hidden"
-                            name="organizationId"
-                            value={organizationId}
-                          />
-                          <input type="hidden" name="dwellingId" value={d.id} />
-                          <button
-                            type="submit"
-                            data-confirm={`${t("Archive dwelling")} ${d.number}?`}
-                          >
-                            {t("Archive")}
-                          </button>
-                        </form>
-                      </div>
-                    </details>
-                  )}
-                </td>
-              </tr>
-            ))
-          }
-          {
-            dwellings.length === 0 && (
-              <tr data-empty-row>
-                <td colspan="8" class="px-4 py-8 text-center text-muted">
-                  {t("No dwellings match this filter.")}
-                </td>
-              </tr>
-            )
-          }
+          {dwellings.map((d) => (
+            <tr class="row-link">
+              <td class="px-4 py-2 font-medium">
+                <a
+                  class="row-link-target hover:underline"
+                  href={"/admin/o/" + organizationId + "/dwellings/" + d.id}
+                >
+                  {d.number}
+                </a>
+              </td>
+              <td class="px-4 py-2">
+                <span class="dwelling-type">
+                  <Icon
+                    name={DWELLING_TYPE_ICONS[d.type] ?? "building"}
+                    class="dwelling-type-icon"
+                  />
+                  {entityLabel(d.type, locale)}
+                </span>
+              </td>
+              <td class="px-4 py-2">{d.occupantName ?? "—"}</td>
+              <td class="px-4 py-2">
+                {d.type === "APARTMENT" || d.type === "COMMERCIAL_UNIT"
+                  ? `${organization.addressLine1} – ${d.number}`
+                  : organization.addressLine1}
+              </td>
+              <td class="px-4 py-2 text-right">
+                {formatNumber(d.areaM2, locale, 2)}
+              </td>
+              <td class="px-4 py-2 text-right">{d.residentCount}</td>
+              <td class="px-4 py-2">
+                <StatusBadge status={d.archivedAt ? "ARCHIVED" : "ACTIVE"} />
+              </td>
+              <td class="row-link-above px-4 py-2 text-right">
+                {!d.archivedAt && (
+                  <details class="row-menu">
+                    <summary aria-label={`${t("More actions")}: ${d.number}`}>
+                      •••
+                    </summary>
+                    <div>
+                      <form method="POST" action={actions.dwellings.archive}>
+                        <input
+                          type="hidden"
+                          name="organizationId"
+                          value={organizationId}
+                        />
+                        <input type="hidden" name="dwellingId" value={d.id} />
+                        <button
+                          type="submit"
+                          data-confirm={`${t("Archive dwelling")} ${d.number}?`}
+                        >
+                          {t("Archive")}
+                        </button>
+                      </form>
+                    </div>
+                  </details>
+                )}
+              </td>
+            </tr>
+          ))}
+          {dwellings.length === 0 && (
+            <tr data-empty-row>
+              <td colspan="8" class="px-4 py-8 text-center text-muted">
+                {t("No dwellings match this filter.")}
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
@@ -292,7 +307,9 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
         <Icon name="arrow-left" size="sm" />
         {t("Previous")}
       </a>
-      <span class="pagination-page">{t("Page")} {page}</span>
+      <span class="pagination-page">
+        {t("Page")} {page}
+      </span>
       <a
         href={`?search=${encodeURIComponent(search)}&includeArchived=${includeArchived ? "1" : "0"}&type=${encodeURIComponent(typeFilter)}&status=${encodeURIComponent(statusFilter)}&page=${page + 1}`}
         class="btn-secondary btn-sm"
@@ -311,12 +328,11 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
       class="disclosure max-w-2xl"
       open={!!createResult?.error}
     >
-      <summary>{t("Add dwelling")}</summary><p class="text-sm text-muted">
-        {
-          t(
-            "New dwellings are included in every currently open billing period. Archive historically billed dwellings to preserve their invoices."
-          )
-        }
+      <summary>{t("Add dwelling")}</summary>
+      <p class="text-sm text-muted">
+        {t(
+          "New dwellings are included in every currently open billing period. Archive historically billed dwellings to preserve their invoices."
+        )}
       </p>
       <form
         method="POST"
@@ -337,21 +353,22 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
       >
         <input type="hidden" name="organizationId" value={organizationId} />
         <div class="col-span-2">
-          <label class="block text-sm font-medium text-foreground" for="number"
-            >{t("Number")}</label
-          >
+          <label class="block text-sm font-medium text-foreground" for="number">
+            {t("Number")}
+          </label>
           <input
             id="number"
             name="number"
             aria-describedby="number-error"
             required
             class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
-          /><FieldError name="number" error={createResult?.error} />
+          />
+          <FieldError name="number" error={createResult?.error} />
         </div>
         <div>
-          <label class="block text-sm font-medium text-foreground" for="type"
-            >{t("Type")}</label
-          >
+          <label class="block text-sm font-medium text-foreground" for="type">
+            {t("Type")}
+          </label>
           <select
             id="type"
             name="type"
@@ -363,12 +380,13 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
             <option value="PARKING">{t("Parking")}</option>
             <option value="STORAGE">{t("Storage")}</option>
             <option value="OTHER">{t("Other")}</option>
-          </select><FieldError name="type" error={createResult?.error} />
+          </select>
+          <FieldError name="type" error={createResult?.error} />
         </div>
         <div>
-          <label class="block text-sm font-medium text-foreground" for="areaM2"
-            >{t("Area (m²)")}</label
-          >
+          <label class="block text-sm font-medium text-foreground" for="areaM2">
+            {t("Area (m²)")}
+          </label>
           <input
             id="areaM2"
             name="areaM2"
@@ -377,7 +395,8 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
             step="0.01"
             min="0"
             class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
-          /><FieldError name="areaM2" error={createResult?.error} />
+          />
+          <FieldError name="areaM2" error={createResult?.error} />
         </div>
         <div class="col-span-2">
           <button type="submit" class="btn-primary">

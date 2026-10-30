@@ -59,35 +59,33 @@ const invoiceList = [...rawInvoices].sort((a, b) =>
         {dwelling.number}
       </h1>
 
-      {
-        invoiceList.length === 0 ? (
-          <p class="text-sm text-muted">{t("No invoices yet.")}</p>
-        ) : (
-          <div class="invoice-list">
-            {invoiceList.map((invoice) => (
-              <a
-                href={`/portal/invoices/${invoice.id}?dwellingId=${dwellingId}`}
-                class="block rounded-panel border border-border bg-surface p-4 hover:border-muted hover:bg-surface-hover"
-              >
-                <div class="flex items-center justify-between">
-                  <span class="font-medium text-foreground">
-                    {invoice.invoiceNumber}
-                  </span>
-                  <StatusBadge status={invoice.caseStatus} />
-                </div>
-                <div class="mt-2 flex items-center justify-between text-sm text-muted">
-                  <span>
-                    {t("Due date")}: {formatDate(invoice.dueDate, locale)}
-                  </span>
-                  <span class="font-semibold text-foreground">
-                    {formatMoney(invoice.amountDue, invoice.currency, locale)}
-                  </span>
-                </div>
-              </a>
-            ))}
-          </div>
-        )
-      }
+      {invoiceList.length === 0 ? (
+        <p class="text-sm text-muted">{t("No invoices yet.")}</p>
+      ) : (
+        <div class="invoice-list">
+          {invoiceList.map((invoice) => (
+            <a
+              href={`/portal/invoices/${invoice.id}?dwellingId=${dwellingId}`}
+              class="block rounded-panel border border-border bg-surface p-4 hover:border-muted hover:bg-surface-hover"
+            >
+              <div class="flex items-center justify-between">
+                <span class="font-medium text-foreground">
+                  {invoice.invoiceNumber}
+                </span>
+                <StatusBadge status={invoice.caseStatus} />
+              </div>
+              <div class="mt-2 flex items-center justify-between text-sm text-muted">
+                <span>
+                  {t("Due date")}: {formatDate(invoice.dueDate, locale)}
+                </span>
+                <span class="font-semibold text-foreground">
+                  {formatMoney(invoice.amountDue, invoice.currency, locale)}
+                </span>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   </div>
 </ResidentLayout>

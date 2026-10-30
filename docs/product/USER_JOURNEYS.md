@@ -8,6 +8,8 @@ These journeys describe the existing v1 product. They preserve the current roles
 
 Complete the monthly billing cycle accurately: collect readings, create and approve invoices, deliver them, reconcile payments, and preserve the history.
 
+Assumed persona (inferred, not user-tested): a Latvian house-association or cooperative administrator, about 50, with low confidence in software and an Excel and paper background. Details and evidence are in [DASHBOARD_GUIDELINES.md](DASHBOARD_GUIDELINES.md).
+
 ```mermaid
 flowchart TD
   A[Sign in] --> B{One organization?}
@@ -15,13 +17,13 @@ flowchart TD
   B -- Multiple --> D[Choose organization]
   D --> C
   C --> E{What needs attention?}
-  E -- Missing readings --> F[Open readings drawer from workbench row]
+  E -- Missing readings --> F[Open readings drawer from the dashboard row]
   F --> G[Enter or correct readings]
   G --> G2{All required readings in?}
   G2 -- Yes --> G3[Case becomes Ready to invoice]
   G2 -- No --> H
   G3 --> H[Monthly workbench]
-  E -- Ready to bill --> H
+  E -- Readings complete, not flagged on the dashboard yet --> H
   E -- Overdue payment --> N[Payments]
   H --> I[Generate eligible invoices]
   I --> J[Review invoice]
@@ -55,7 +57,7 @@ flowchart TD
 |---|---|---|---|---|
 | Sign in | Can I access my organization? | `/login` | Sign in | Incorrect credentials, rate limited, MFA policy |
 | Select context | Which building am I managing? | `/admin/organizations` | Open organization | One or multiple organizations |
-| Monitor | What needs attention now? | `/admin/o/:orgId/dashboard` | Open workbench or resolve attention item | Missing data, overdue, open/locked period |
+| Monitor | What needs attention now? | `/admin/o/:orgId/dashboard` | Open workbench or resolve attention item | Setup unfinished (banner with a next step), missing data, overdue, open/locked period. After setup the dashboard shows no next step; see [DASHBOARD_GUIDELINES.md](DASHBOARD_GUIDELINES.md) |
 | Start period | Which month am I billing? | `/admin/o/:orgId/periods` | Create or open period | Open, locked, duplicate month |
 | Collect data | Which dwellings lack readings? | `/admin/o/:orgId/periods/:periodId` (readings drawer, opened per row) | Enter readings | Missing, submitted, invalid, ready, period locked |
 | Generate | Which cases are eligible? | Monthly workbench | Generate invoice | Eligible (missing data resolved or ready), blocked by missing data, locked |

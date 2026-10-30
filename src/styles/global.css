@@ -76,6 +76,7 @@
   /* Letter-spacing for all sans text (Switzer and its Overused Grotesk
      fallback). One value to tune: see the base layer rule below. */
   --tracking-sans: 0.03em;
+  --font-regular-weight: 400;
 
   --color-surface-hover: light-dark(#eee8de, #1e2b2e);
   --color-primary-hover: light-dark(#35677a, #a9c2cb);
@@ -129,7 +130,6 @@
   --color-table-th-bg: light-dark(#f1ede4, #1a2528);
   --color-org-context-bg: light-dark(#f1ede4, #1a2528);
   --color-nav-active-bg: light-dark(#e4ecee, rgba(191, 209, 215, 0.16));
-  --color-current-invoice-border: light-dark(#c9d3d6, #2c3a3d);
 
   /* Tabler Icons (Outline) system -- see src/components/ui/Icon.astro.
      Sizes keep the original 24x24 viewBox even when displayed smaller. */
@@ -195,7 +195,6 @@
   --color-table-th-bg: #1a2528;
   --color-org-context-bg: #1a2528;
   --color-nav-active-bg: rgba(191, 209, 215, 0.16);
-  --color-current-invoice-border: #2c3a3d;
 }
 
 :root[data-theme="light"],
@@ -243,7 +242,6 @@
   --color-table-th-bg: #f1ede4;
   --color-org-context-bg: #f1ede4;
   --color-nav-active-bg: #e4ecee;
-  --color-current-invoice-border: #c9d3d6;
 }
 
 @theme {
@@ -288,6 +286,7 @@
     background: var(--color-canvas);
     color: var(--color-foreground);
     font-family: var(--font-sans);
+    font-weight: var(--font-regular-weight);
   }
   /* Set on every element, not on body: an em value inherits as a fixed length
      (16px x 0.03 = 0.48px), so each element has to resolve 0.03em against its
@@ -321,6 +320,7 @@
   }
   html {
     scroll-padding-top: 1.5rem;
+    scroll-padding-bottom: 6rem;
   }
   button,
   summary,
@@ -415,12 +415,12 @@
   .text-body-sm {
     font-size: 0.875rem; /* 14px */
     line-height: 1.25rem; /* 20px */
-    font-weight: 400;
+    font-weight: var(--font-regular-weight);
   }
   .text-body {
     font-size: 1rem; /* 16px */
     line-height: 1.5rem; /* 24px */
-    font-weight: 400;
+    font-weight: var(--font-regular-weight);
   }
   .text-ui-strong {
     font-size: 1rem; /* 16px */
@@ -509,10 +509,10 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    min-height: 2.625rem;
+    min-height: 2.75rem;
     border-radius: var(--radius-control);
     padding: 0.75rem 1rem;
-    font-size: 0.875rem;
+    font-size: 1rem;
     font-weight: 600;
     line-height: 1.4;
     text-decoration: none;
@@ -588,7 +588,6 @@
     flex-shrink: 0;
   }
   .icon-btn-danger:hover {
-    border-color: var(--color-destructive);
     background: var(--color-destructive-hover-bg);
     color: var(--color-destructive);
   }
@@ -663,9 +662,8 @@
   }
   .eyebrow {
     color: var(--color-muted);
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+    font-size: 0.875rem;
+    letter-spacing: 0.02em;
     font-weight: 600;
     margin-bottom: 0.75rem;
   }
@@ -688,7 +686,8 @@
   }
   .page-description {
     color: var(--color-muted);
-    font-size: 0.875rem;
+    font-size: 1rem;
+    line-height: 1.5;
     margin-top: 0.75rem;
     max-width: 42rem;
   }
@@ -700,7 +699,7 @@
   }
   .kpi {
     display: flex;
-    align-items: stretch;
+    align-items: flex-start;
     gap: 0.75rem;
     padding: 1rem;
     background: var(--color-surface);
@@ -712,9 +711,10 @@
   .kpi-icon {
     display: grid;
     place-items: center;
-    aspect-ratio: 1;
-    min-width: 2.75rem;
-    flex: 0 0 auto;
+    align-self: flex-start;
+    flex: 0 0 2.75rem;
+    width: 2.75rem;
+    height: 2.75rem;
     border-radius: var(--radius-panel);
     background: var(--color-badge-neutral-bg);
     color: var(--color-muted);
@@ -725,27 +725,46 @@
     flex-shrink: 0;
   }
   .kpi-text {
+    flex: 1 1 auto;
     min-width: 0;
   }
-  .kpi-text h2 {
+  .kpi-label {
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: 1rem;
+    line-height: 1.5;
     font-weight: 500;
+    overflow-wrap: normal;
+    word-break: normal;
   }
-  .kpi-text > p {
+  .kpi-value {
     margin-top: 0.5rem;
-    font-size: clamp(1.25rem, 2vw, 1.85rem);
+    font-size: clamp(1.5rem, 2.5vw, 2rem);
     letter-spacing: -0.025em;
     line-height: 1.25;
     font-weight: 650;
     font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
   }
-  .kpi[data-tone="success"] .kpi-text > p {
+  .kpi[data-tone="success"] .kpi-value {
     color: var(--color-success);
   }
-  .kpi[data-tone="warning"] .kpi-text > p {
+  .kpi[data-tone="success"] .kpi-icon {
+    color: var(--color-badge-success-text);
+    background: var(--color-badge-success-bg);
+  }
+  .kpi[data-tone="warning"] .kpi-value {
     color: var(--color-warning);
+  }
+  .kpi[data-tone="warning"] .kpi-icon {
+    color: var(--color-badge-warning-text);
+    background: var(--color-badge-warning-bg);
+  }
+  .kpi[data-tone="danger"] .kpi-value {
+    color: var(--color-destructive);
+  }
+  .kpi[data-tone="danger"] .kpi-icon {
+    color: var(--color-badge-danger-text);
+    background: var(--color-badge-danger-bg);
   }
   .status-badge {
     display: inline-flex;
@@ -753,8 +772,8 @@
     gap: 0.25rem;
     white-space: nowrap;
     border-radius: var(--radius-badge);
-    padding: 0.1875rem 0.4375rem;
-    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.9375rem;
     font-weight: 600;
     line-height: 1.4;
     background: var(--color-badge-neutral-bg);
@@ -825,11 +844,11 @@
     padding: 0.75rem 1rem;
     font-size: 0.875rem;
     color: var(--color-muted);
-    border-bottom: 2px solid transparent;
+    border-radius: var(--radius-control);
   }
   .tabs a[aria-current="page"] {
     color: var(--color-primary);
-    border-color: var(--color-primary);
+    background: var(--color-nav-active-bg);
     font-weight: 600;
   }
   .skip-link {
@@ -883,14 +902,6 @@
     flex-direction: column;
     z-index: 20;
   }
-  .org-context {
-    padding: 1rem 0.75rem;
-    margin: 1.75rem 0 1rem;
-    background: var(--color-org-context-bg);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    overflow-wrap: anywhere;
-  }
   .app-nav {
     display: grid;
     gap: 0.25rem;
@@ -927,19 +938,6 @@
     color: var(--color-primary);
     font-weight: 650;
   }
-  /* A small gable marks the selected navigation item without moving its label. */
-  .app-nav a[aria-current="page"]::before {
-    content: "";
-    position: absolute;
-    inset-inline-start: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 3px;
-    height: 22px;
-    background: currentColor;
-    clip-path: polygon(50% 0, 100% 4px, 100% 100%, 0 100%, 0 4px);
-    pointer-events: none;
-  }
   .nav-icon {
     width: 1.125rem;
     height: 1.125rem;
@@ -956,6 +954,7 @@
     margin-left: 15rem;
     min-width: 0;
     padding: 2rem clamp(1.25rem, 3vw, 3rem);
+    padding-bottom: 6rem;
     max-width: 110rem;
   }
   .admin-mobile {
@@ -993,27 +992,8 @@
     margin-bottom: 1.5rem;
   }
   .resident-nav a[aria-current="page"] {
-    position: relative;
     color: var(--color-primary);
     font-weight: 650;
-  }
-  .resident-nav a[aria-current="page"]::after {
-    content: "";
-    position: absolute;
-    inset-inline: 0;
-    bottom: -0.8125rem;
-    height: 5px;
-    background: currentColor;
-    clip-path: polygon(
-      0 80%,
-      44% 80%,
-      50% 0,
-      56% 80%,
-      100% 80%,
-      100% 100%,
-      0 100%
-    );
-    pointer-events: none;
   }
   .invoice-document {
     background: var(--color-surface);
@@ -1058,12 +1038,9 @@
   }
   .current-invoice {
     padding: 1.5rem;
-    border: 1px solid var(--color-current-invoice-border);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
     background: var(--color-surface);
-  }
-  .current-invoice[data-paid="true"] {
-    border-color: var(--color-border);
   }
   .current-invoice .amount {
     font-size: clamp(1.8rem, 6vw, 2.4rem);
@@ -1353,6 +1330,7 @@
   .admin-content {
     margin-left: 0;
     padding: 1.5rem;
+    padding-bottom: 6rem;
   }
   .admin-mobile {
     display: flex;
@@ -1378,6 +1356,7 @@
 @media (max-width: 639px) {
   .admin-content {
     padding: 1.25rem 1rem;
+    padding-bottom: 6rem;
   }
   .admin-mobile {
     padding: 1rem;

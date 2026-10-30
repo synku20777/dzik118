@@ -13,6 +13,7 @@ import {
   computeMissingData,
   deriveReadinessStatus,
   recalculateCaseReadiness,
+  resolveInvoiceEligibilityForDwellings,
 } from "./case-readiness";
 
 export { ConflictError, NotFoundError, ValidationError };
@@ -180,6 +181,64 @@ export async function syncCasesForDwelling(
     createdCount += inserted.length;
   }
   return createdCount;
+}
+
+// syncCasesForDwelling for many dwellings at once (imports): the readiness of
+// all of them is resolved in one batch of queries and the cases are inserted
+// in chunks, instead of several queries per dwelling.
+export async function syncCasesForDwellings(
+  tx: DbOrTx,
+  organizationId: string,
+  dwellingIds: string[]
+): Promise<number> {
+  if (dwellingIds.length === 0) return 0;
+  const current = await getCurrentOpenPeriod(tx, organizationId);
+  if (!current) return 0;
+  // A case needs its dwelling in the same organization; ids from elsewhere
+  // are dropped, not trusted.
+  const own = new Set<string>();
+  for (let i = 0; i < dwellingIds.length; i += 500) {
+    const rows = await tx
+      .select({ id: dwellings.id })
+      .from(dwellings)
+      .where(
+        and(
+          eq(dwellings.organizationId, organizationId),
+          inArray(dwellings.id, dwellingIds.slice(i, i + 500))
+        )
+      );
+    for (const r of rows) own.add(r.id);
+  }
+  dwellingIds = dwellingIds.filter((id) => own.has(id));
+  if (dwellingIds.length === 0) return 0;
+  const eligibility = await resolveInvoiceEligibilityForDwellings(
+    tx,
+    organizationId,
+    dwellingIds,
+    current.id,
+    current
+  );
+  let created = 0;
+  for (let i = 0; i < dwellingIds.length; i += 500) {
+    const inserted = await tx
+      .insert(billingCases)
+      .values(
+        dwellingIds.slice(i, i + 500).map((dwellingId) => {
+          const missingData = eligibility.get(dwellingId)!.blockers;
+          return {
+            organizationId,
+            periodId: current.id,
+            dwellingId,
+            missingData,
+            status: deriveReadinessStatus(missingData),
+          };
+        })
+      )
+      .onConflictDoNothing()
+      .returning({ id: billingCases.id });
+    created += inserted.length;
+  }
+  return created;
 }
 
 export async function getPeriod(

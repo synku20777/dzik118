@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "account_entries_one_migrated_opening" ON "account_entries" USING btree ("organization_id","dwelling_id") WHERE "account_entries"."type" = 'OPENING_BALANCE' and "account_entries"."metadata" ? 'migrationImportId';

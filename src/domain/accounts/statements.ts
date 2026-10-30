@@ -2,10 +2,14 @@ import { and, asc, eq, inArray, isNull, lt } from "drizzle-orm";
 import type { DbOrTx } from "../../db/client";
 import { billingCases } from "../../db/schema/billing";
 import { invoices } from "../../db/schema/invoices";
-import { addExact, maxExact } from "../../lib/decimal2";
+import { addExact, maxExact, subtractExact } from "../../lib/decimal2";
 import { calculateStatementBalance } from "./balance";
 import { calculateLateFee } from "./late-fees";
-import { getDwellingAccountBalance, getEffectiveLateFeePolicy } from "./ledger";
+import {
+  getDwellingAccountBalance,
+  getEffectiveLateFeePolicy,
+  getProtectedOpeningDebt,
+} from "./ledger";
 
 export async function resolveStatementFinancials(
   db: DbOrTx,
@@ -23,7 +27,17 @@ export async function resolveStatementFinancials(
     db,
     input.organizationId,
     input.dwellingId,
-    input.currency
+    input.currency,
+    input.issueDate
+  );
+  // Migrated opening debt has no known due date, so it is not late-fee
+  // principal until paid (ADR 0013).
+  const excludedOpeningDebt = await getProtectedOpeningDebt(
+    db,
+    input.organizationId,
+    input.dwellingId,
+    input.currency,
+    input.issueDate
   );
   const policy = await getEffectiveLateFeePolicy(
     db,
@@ -53,7 +67,10 @@ export async function resolveStatementFinancials(
     policy && oldestUnpaid
       ? calculateLateFee({
           enabled: policy.enabled,
-          principal: maxExact(accountBalance, "0.00"),
+          principal: maxExact(
+            subtractExact(accountBalance, excludedOpeningDebt),
+            "0.00"
+          ),
           dailyRate: policy.dailyRate,
           dueDate: oldestUnpaid.dueDate,
           asOfDate: input.issueDate,
@@ -84,7 +101,14 @@ export async function resolveStatementFinancials(
     lateFee: appliedWithAdjustment,
     manualAdjustment: input.manualAdjustment,
   });
-  return { accountBalance, policy, lateFee, balance, oldestUnpaid };
+  return {
+    accountBalance,
+    excludedOpeningDebt,
+    policy,
+    lateFee,
+    balance,
+    oldestUnpaid,
+  };
 }
 
 export type StatementFinancials = Awaited<
@@ -115,6 +139,7 @@ export function buildPenaltySnapshot(financials: StatementFinancials) {
     maxPenaltyPercent: financials.lateFee.maxPenaltyPercent,
     stopsAtCap: financials.lateFee.stopsAtCap,
     eligiblePrincipal: financials.lateFee.eligiblePrincipal,
+    excludedOpeningDebt: financials.excludedOpeningDebt,
     firstPenaltyDate: financials.lateFee.firstPenaltyDate,
     overdueDays: financials.lateFee.overdueDays,
     rawAmount: financials.lateFee.rawAmount,

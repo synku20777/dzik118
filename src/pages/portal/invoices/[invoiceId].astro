@@ -73,48 +73,45 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
             <StatusBadge status={caseStatus} />
           </span>
         </h1>
-        <button type="button" class="btn-secondary no-print" id="print-invoice"
-          >{t("Print")}</button
-        >
-        {
-          invoice.pdfObjectKey && (
-            <a
-              href={pdfHref}
-              target="_blank"
-              class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
-            >
-              {t("Download PDF")}
-            </a>
-          )
-        }
+        <button type="button" class="btn-secondary no-print" id="print-invoice">
+          {t("Print")}
+        </button>
+        {invoice.pdfObjectKey && (
+          <a
+            href={pdfHref}
+            target="_blank"
+            class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
+          >
+            {t("Download PDF")}
+          </a>
+        )}
       </div>
 
       <section class="panel p-4" aria-labelledby="invoice-balance">
-        <h2 id="invoice-balance" class="section-title">{t("Balance")}</h2>
+        <h2 id="invoice-balance" class="section-title">
+          {t("Balance")}
+        </h2>
         <dl class="mt-2 grid grid-cols-2 gap-2 text-sm">
-          <dt class="text-muted">{t("Invoice total due")}</dt><dd>
-            {formatMoney(invoice.amountDue, invoice.currency, locale)}
-          </dd>
-          <dt class="text-muted">{t("Paid so far")}</dt><dd>
-            {formatMoney(paidAmount, invoice.currency, locale)}
-          </dd>
+          <dt class="text-muted">{t("Invoice total due")}</dt>
+          <dd>{formatMoney(invoice.amountDue, invoice.currency, locale)}</dd>
+          <dt class="text-muted">{t("Paid so far")}</dt>
+          <dd>{formatMoney(paidAmount, invoice.currency, locale)}</dd>
           <dt class="text-muted">
             <strong>{t("Amount still due")}</strong>
-          </dt><dd>
-            <strong
-              >{formatMoney(remainingAmount, invoice.currency, locale)}</strong
-            >
+          </dt>
+          <dd>
+            <strong>
+              {formatMoney(remainingAmount, invoice.currency, locale)}
+            </strong>
           </dd>
         </dl>
       </section>
 
       <div class="invoice-doc-locale-bar">
         <p class="text-sm text-muted">
-          {
-            t(
-              "Latvian is the canonical invoice document. English and Russian are optional translated copies of the same invoice — not separate invoices."
-            )
-          }
+          {t(
+            "Latvian is the canonical invoice document. English and Russian are optional translated copies of the same invoice — not separate invoices."
+          )}
         </p>
         <form method="GET" class="invoice-doc-locale-form">
           <input type="hidden" name="dwellingId" value={dwellingId} />
@@ -126,13 +123,11 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
             name="docLocale"
             class="invoice-doc-locale-select"
           >
-            {
-              INVOICE_LOCALES.map((l) => (
-                <option value={l} selected={l === docLocale}>
-                  {localeNames[l]}
-                </option>
-              ))
-            }
+            {INVOICE_LOCALES.map((l) => (
+              <option value={l} selected={l === docLocale}>
+                {localeNames[l]}
+              </option>
+            ))}
           </select>
           <button type="submit" class="btn-secondary btn-sm">
             {t("Preview")}
@@ -145,7 +140,8 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
           id="invoice-preview-frame"
           class="invoice-preview-frame"
           title={t("Invoice")}
-          srcdoc={invoiceHtml}></iframe>
+          srcdoc={invoiceHtml}
+        ></iframe>
       </div>
     </div>
   </div>

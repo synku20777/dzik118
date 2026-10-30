@@ -144,7 +144,6 @@ const sourceTokens = [
   "--color-table-th-bg",
   "--color-org-context-bg",
   "--color-nav-active-bg",
-  "--color-current-invoice-border",
   "--color-danger-surface",
   "--color-success-surface",
   "--color-info-surface",
@@ -201,12 +200,20 @@ function rgb(hex: string) {
     <title>Riga Design System · Namkopa</title>
   </head>
   <body>
-    <a class="skip-link" href="#main-content">Skip to content</a>
+    <a class="skip-link" href="#main-content">
+      Skip to content
+    </a>
     <header class="ds-topbar">
-      <a class="brand" href="#overview"><BrandMark />Riga system</a>
+      <a class="brand" href="#overview">
+        <BrandMark />
+        Riga system
+      </a>
       <div class="ds-top-actions">
-        <span class="status-badge" data-tone="success">Internal artifact</span
-        ><LanguageSwitch /><ThemeToggle />
+        <span class="status-badge" data-tone="success">
+          Internal artifact
+        </span>
+        <LanguageSwitch />
+        <ThemeToggle />
       </div>
     </header>
 
@@ -214,10 +221,14 @@ function rgb(hex: string) {
       <aside class="ds-sidebar" aria-label="Design system sections">
         <p class="eyebrow">Reference</p>
         <nav>
-          <a href="#overview">Overview</a><a href="#colors">Colors</a>
-          <a href="#typography">Typography</a><a href="#geometry">Geometry</a>
-          <a href="#elevation">Elevation</a><a href="#components">Components</a>
-          <a href="#shells">Shell patterns</a><a href="#audit">Audit</a>
+          <a href="#overview">Overview</a>
+          <a href="#colors">Colors</a>
+          <a href="#typography">Typography</a>
+          <a href="#geometry">Geometry</a>
+          <a href="#elevation">Elevation</a>
+          <a href="#components">Components</a>
+          <a href="#shells">Shell patterns</a>
+          <a href="#audit">Audit</a>
         </nav>
         <p class="ds-side-note">
           Generated from 34 page routes, 12 UI components, and the runtime CSS
@@ -237,90 +248,104 @@ function rgb(hex: string) {
             </p>
           </div>
           <dl class="ds-stats">
-            <div><dt>Page routes</dt><dd>34</dd></div>
-            <div><dt>Source tokens</dt><dd>{sourceTokens.length}</dd></div>
-            <div><dt>UI components</dt><dd>12</dd></div>
-            <div><dt>External UI deps</dt><dd>0</dd></div>
+            <div>
+              <dt>Page routes</dt>
+              <dd>34</dd>
+            </div>
+            <div>
+              <dt>Source tokens</dt>
+              <dd>{sourceTokens.length}</dd>
+            </div>
+            <div>
+              <dt>UI components</dt>
+              <dd>12</dd>
+            </div>
+            <div>
+              <dt>External UI deps</dt>
+              <dd>0</dd>
+            </div>
           </dl>
         </section>
 
         <section id="colors" class="ds-section">
           <header>
-            <p class="eyebrow">Foundation</p><h2>Color ledger</h2><p>
+            <p class="eyebrow">Foundation</p>
+            <h2>Color ledger</h2>
+            <p>
               Light-theme raw values. Theme-aware swatches resolve the same CSS
               variables live.
             </p>
           </header>
           <div class="color-grid">
-            {
-              colors.map(([name, variable, value]) => (
-                <article class="swatch">
-                  <div
-                    class="swatch-color"
-                    style={`background:var(${variable})`}
-                    aria-label={`${name} color swatch`}
-                  />
-                  <div class="swatch-copy">
+            {colors.map(([name, variable, value]) => (
+              <article class="swatch">
+                <div
+                  class="swatch-color"
+                  style={`background:var(${variable})`}
+                  aria-label={`${name} color swatch`}
+                />
+                <div class="swatch-copy">
+                  <>
+                    <h3>{name}</h3>
+                    <code>{variable}</code>
+                    <p>
+                      {value} · rgb({rgb(value)})
+                    </p>
+                  </>
+                  <div class="contrast-row">
                     <>
-                      <h3>{name}</h3>
-                      <code>{variable}</code>
-                      <p>
-                        {value} · rgb({rgb(value)})
-                      </p>
+                      <span title="Contrast against canvas">
+                        C {contrast(value, "#F7F4EE")}:1
+                      </span>
+                      <span title="Contrast against surface">
+                        S {contrast(value, "#FFFCF7")}:1
+                      </span>
                     </>
-                    <div class="contrast-row">
-                      <>
-                        <span title="Contrast against canvas">
-                          C {contrast(value, "#F7F4EE")}:1
-                        </span>
-                        <span title="Contrast against surface">
-                          S {contrast(value, "#FFFCF7")}:1
-                        </span>
-                      </>
-                    </div>
                   </div>
-                </article>
-              ))
-            }
+                </div>
+              </article>
+            ))}
           </div>
         </section>
 
         <section id="typography" class="ds-section">
           <header>
-            <p class="eyebrow">Voice</p><h2>Typography ladder</h2><p>
+            <p class="eyebrow">Voice</p>
+            <h2>Typography ladder</h2>
+            <p>
               Edit any specimen. Switzer handles UI; Fraunces is reserved for
               selected display moments.
             </p>
           </header>
           <div class="type-stack">
-            {
-              typeScale.map(([name, className, size, lineHeight, weight]) => (
-                <article class="type-row">
-                  <>
-                    <div>
-                      <>
-                        <strong>{name}</strong>
-                        <code>
-                          {size} / {lineHeight} · {weight}
-                        </code>
-                      </>
-                    </div>
-                    <p
-                      class={className}
-                      contenteditable="true"
-                      spellcheck="true"
-                      aria-label={`Editable ${name} specimen`}
-                    >
-                      Residents can review clear, accurate monthly charges.
-                    </p>
-                  </>
-                </article>
-              ))
-            }
+            {typeScale.map(([name, className, size, lineHeight, weight]) => (
+              <article class="type-row">
+                <>
+                  <div>
+                    <>
+                      <strong>{name}</strong>
+                      <code>
+                        {size} / {lineHeight} · {weight}
+                      </code>
+                    </>
+                  </div>
+                  <p
+                    class={className}
+                    contenteditable="true"
+                    spellcheck="true"
+                    aria-label={`Editable ${name} specimen`}
+                  >
+                    Residents can review clear, accurate monthly charges.
+                  </p>
+                </>
+              </article>
+            ))}
             <article class="type-row type-display">
               <div>
-                <strong>Display</strong><code>40px / 46px · 600</code>
-              </div><p
+                <strong>Display</strong>
+                <code>40px / 46px · 600</code>
+              </div>
+              <p
                 class="font-display"
                 contenteditable="true"
                 spellcheck="true"
@@ -334,42 +359,42 @@ function rgb(hex: string) {
 
         <section id="geometry" class="ds-section">
           <header>
-            <p class="eyebrow">Rhythm</p><h2>Metrics & geometry</h2><p>
+            <p class="eyebrow">Rhythm</p>
+            <h2>Metrics & geometry</h2>
+            <p>
               The system uses an 8px base rhythm, with 4px and 12px intermediate
               steps for compact UI.
             </p>
           </header>
           <div class="geometry-grid">
             <article class="ds-panel">
-              <h3>Spacing</h3><div class="space-scale">
-                {
-                  spacing.map((value) => (
-                    <div>
-                      <>
-                        <span
-                          style={`width:${Math.max(value, 1)}px;height:${Math.max(value, 1)}px`}
-                        />
-                        <code>{value}px</code>
-                      </>
-                    </div>
-                  ))
-                }
+              <h3>Spacing</h3>
+              <div class="space-scale">
+                {spacing.map((value) => (
+                  <div>
+                    <>
+                      <span
+                        style={`width:${Math.max(value, 1)}px;height:${Math.max(value, 1)}px`}
+                      />
+                      <code>{value}px</code>
+                    </>
+                  </div>
+                ))}
               </div>
             </article>
             <article class="ds-panel">
-              <h3>Radius</h3><div class="radius-scale">
-                {
-                  radii.map(([name, value]) => (
-                    <div>
-                      <>
-                        <span style={`border-radius:${value}`} />
-                        <code>
-                          {name} · {value}
-                        </code>
-                      </>
-                    </div>
-                  ))
-                }
+              <h3>Radius</h3>
+              <div class="radius-scale">
+                {radii.map(([name, value]) => (
+                  <div>
+                    <>
+                      <span style={`border-radius:${value}`} />
+                      <code>
+                        {name} · {value}
+                      </code>
+                    </>
+                  </div>
+                ))}
               </div>
             </article>
           </div>
@@ -377,28 +402,30 @@ function rgb(hex: string) {
 
         <section id="elevation" class="ds-section">
           <header>
-            <p class="eyebrow">Depth</p><h2>Elevation</h2><p>
+            <p class="eyebrow">Depth</p>
+            <h2>Elevation</h2>
+            <p>
               Ordinary panels remain flat. Shadow appears only when hierarchy or
               overlap requires it.
             </p>
           </header>
           <div class="elevation-grid">
-            {
-              elevations.map(([name, variable, value]) => (
-                <article style={`box-shadow:${value}`}>
-                  <>
-                    <strong>{name}</strong>
-                    <code>{variable}</code>
-                  </>
-                </article>
-              ))
-            }
+            {elevations.map(([name, variable, value]) => (
+              <article style={`box-shadow:${value}`}>
+                <>
+                  <strong>{name}</strong>
+                  <code>{variable}</code>
+                </>
+              </article>
+            ))}
           </div>
         </section>
 
         <section id="components" class="ds-section">
           <header>
-            <p class="eyebrow">Living inventory</p><h2>Component matrix</h2><p>
+            <p class="eyebrow">Living inventory</p>
+            <h2>Component matrix</h2>
+            <p>
               Specimens use repository classes and imported Astro components.
               Hover and focus columns are also checked with real browser input.
             </p>
@@ -407,113 +434,125 @@ function rgb(hex: string) {
           <article class="component-block" data-component="buttons">
             <div class="component-heading">
               <div>
-                <h3>Button</h3><p>
-                  Primary, secondary, and destructive actions.
-                </p>
-              </div><button
+                <h3>Button</h3>
+                <p>Primary, secondary, and destructive actions.</p>
+              </div>
+              <button
                 class="copy-button"
                 type="button"
                 data-copy={`<button class="btn-primary">Save changes</button>`}
-                >Copy snippet</button
               >
+                Copy snippet
+              </button>
             </div>
             <div class="state-grid">
-              {
-                states.map((state) => (
-                  <div class="state-cell">
-                    <>
-                      <span>{state}</span>
-                      <button
-                        type="button"
-                        class="btn-primary"
-                        data-preview-state={state.toLowerCase()}
-                        disabled={state === "Disabled"}
-                        aria-busy={state === "Loading"}
-                      >
-                        {state === "Loading" ? "Saving…" : "Save changes"}
-                      </button>
-                    </>
-                  </div>
-                ))
-              }
+              {states.map((state) => (
+                <div class="state-cell">
+                  <>
+                    <span>{state}</span>
+                    <button
+                      type="button"
+                      class="btn-primary"
+                      data-preview-state={state.toLowerCase()}
+                      disabled={state === "Disabled"}
+                      aria-busy={state === "Loading"}
+                    >
+                      {state === "Loading" ? "Saving…" : "Save changes"}
+                    </button>
+                  </>
+                </div>
+              ))}
             </div>
           </article>
 
           <article class="component-block" data-component="inputs">
             <div class="component-heading">
               <div>
-                <h3>Input</h3><p>
-                  Labeled controls, select, checkbox, and error treatment.
-                </p>
-              </div><button
+                <h3>Input</h3>
+                <p>Labeled controls, select, checkbox, and error treatment.</p>
+              </div>
+              <button
                 class="copy-button"
                 type="button"
                 data-copy={`<label for="email">Billing email</label>\n<input id="email" name="email" type="email" autocomplete="email" />`}
-                >Copy snippet</button
               >
+                Copy snippet
+              </button>
             </div>
             <div class="form-grid">
-              <label
-                >Billing email<input
+              <label>
+                Billing email
+                <input
                   id="specimen-email"
                   name="specimen-email"
                   type="email"
                   autocomplete="email"
                   placeholder="name@example.com"
-                /></label
-              ><label
-                >Billing cycle<select name="cycle"
-                  ><option>Monthly</option><option>Quarterly</option></select
-                ></label
-              ><label class="check-row"
-                ><input type="checkbox" name="reminders" checked /> Send reminders</label
-              ><label
-                >Invalid reference<input
+                />
+              </label>
+              <label>
+                Billing cycle
+                <select name="cycle">
+                  <option>Monthly</option>
+                  <option>Quarterly</option>
+                </select>
+              </label>
+              <label class="check-row">
+                <input type="checkbox" name="reminders" checked /> Send
+                reminders
+              </label>
+              <label>
+                Invalid reference
+                <input
                   name="reference"
                   aria-invalid="true"
                   aria-describedby="reference-error"
                   value="PB-"
-                /><span id="reference-error" class="field-error"
-                  >Use a complete invoice reference.</span
-                ></label
-              >
+                />
+                <span id="reference-error" class="field-error">
+                  Use a complete invoice reference.
+                </span>
+              </label>
             </div>
           </article>
 
           <article class="component-block" data-component="status-badges">
             <div class="component-heading">
               <div>
-                <h3>StatusBadge</h3><p>
-                  Actual repository status mapping and icon renderer.
-                </p>
-              </div><button
+                <h3>StatusBadge</h3>
+                <p>Actual repository status mapping and icon renderer.</p>
+              </div>
+              <button
                 class="copy-button"
                 type="button"
-                data-copy={`<StatusBadge status="PAID" />`}>Copy snippet</button
+                data-copy={`<StatusBadge status="PAID" />`}
               >
+                Copy snippet
+              </button>
             </div>
             <div class="component-row">
-              <StatusBadge status="MISSING_DATA" /><StatusBadge
-                status="DRAFT"
-              /><StatusBadge status="SENT" /><StatusBadge
-                status="PAID"
-              /><StatusBadge status="OVERDUE" />
+              <StatusBadge status="MISSING_DATA" />
+              <StatusBadge status="DRAFT" />
+              <StatusBadge status="SENT" />
+              <StatusBadge status="PAID" />
+              <StatusBadge status="OVERDUE" />
             </div>
           </article>
 
           <div class="component-pair">
             <article class="component-block">
               <div class="component-heading">
-                <h3>KpiCard</h3><code
-                  >&lt;KpiCard label="Collected" value="€48,920" /&gt;</code
-                >
-              </div><div class="kpi-grid">
+                <h3>KpiCard</h3>
+                <code>&lt;KpiCard label="Collected" value="€48,920" /&gt;</code>
+              </div>
+              <div class="kpi-grid">
                 <KpiCard
                   label="Collected"
                   value="€48,920"
                   tone="success"
                   icon="coins"
-                /><KpiCard
+                />
+                <KpiCard
                   label="Due soon"
                   value="14"
                   tone="warning"
@@ -523,13 +562,15 @@ function rgb(hex: string) {
             </article>
             <article class="component-block">
               <div class="component-heading">
-                <h3>Notices</h3><code>class="notice notice-warning"</code>
-              </div><div class="notice-stack">
-                <p class="notice">Invoices are ready for review.</p><p
-                  class="notice notice-warning"
-                >
+                <h3>Notices</h3>
+                <code>class="notice notice-warning"</code>
+              </div>
+              <div class="notice-stack">
+                <p class="notice">Invoices are ready for review.</p>
+                <p class="notice notice-warning">
                   3 readings still need attention.
-                </p><p class="notice notice-danger">
+                </p>
+                <p class="notice notice-danger">
                   Payment import failed. Check the CSV columns.
                 </p>
               </div>
@@ -539,38 +580,44 @@ function rgb(hex: string) {
           <article class="component-block">
             <div class="component-heading">
               <div>
-                <h3>PageHeader, EmptyState & Icon</h3><p>
-                  Composed from the actual repository components.
-                </p>
-              </div><code>src/components/ui</code>
-            </div><div class="embedded-panel">
+                <h3>PageHeader, EmptyState & Icon</h3>
+                <p>Composed from the actual repository components.</p>
+              </div>
+              <code>src/components/ui</code>
+            </div>
+            <div class="embedded-panel">
               <PageHeader
                 accent
                 title="Billing periods"
                 description="Prepare, issue, and reconcile monthly invoices."
                 eyebrow="September 2026"
-                ><button class="btn-primary"
-                  ><Icon name="plus" size="sm" />New period</button
-                ></PageHeader
-              ><EmptyState
+              >
+                <button class="btn-primary">
+                  <Icon name="plus" size="sm" />
+                  New period
+                </button>
+              </PageHeader>
+              <EmptyState
                 title="No billing periods yet"
                 description="Create the first period to start collecting readings."
                 ornament
-                ><button class="btn-secondary">Create period</button
-                ></EmptyState
               >
+                <button class="btn-secondary">Create period</button>
+              </EmptyState>
             </div>
           </article>
 
           <article class="component-block">
             <div class="component-heading">
               <div>
-                <h3>Disclosure</h3><p>Native details/summary behavior.</p>
-              </div><code>&lt;details class="disclosure"&gt;</code>
-            </div><details class="disclosure">
-              <summary>Why is this invoice blocked?</summary><p
-                class="text-body-sm text-muted"
-              >
+                <h3>Disclosure</h3>
+                <p>Native details/summary behavior.</p>
+              </div>
+              <code>&lt;details class="disclosure"&gt;</code>
+            </div>
+            <details class="disclosure">
+              <summary>Why is this invoice blocked?</summary>
+              <p class="text-body-sm text-muted">
                 The billing email is missing. Add it to the dwelling record,
                 then prepare the invoice again.
               </p>
@@ -580,29 +627,53 @@ function rgb(hex: string) {
 
         <section id="shells" class="ds-section">
           <header>
-            <p class="eyebrow">Structure</p><h2>Shell patterns</h2><p>
+            <p class="eyebrow">Structure</p>
+            <h2>Shell patterns</h2>
+            <p>
               Scaled maps of the 2 recurring authenticated layouts and the
               authentication card.
             </p>
           </header>
           <div class="shell-grid">
             <article>
-              <h3>Admin workspace</h3><div class="wireframe admin-wire">
+              <h3>Admin workspace</h3>
+              <div class="wireframe admin-wire">
                 <aside>
-                  <span></span><AppNavigation organizationId="specimen" />
-                </aside><main><i></i><i></i><i></i><b></b></main>
-              </div>
-            </article>
-            <article>
-              <h3>Resident portal</h3><div class="wireframe resident-wire">
-                <header><span></span><span></span></header><nav></nav><main>
-                  <i></i><b></b><b></b>
+                  <span></span>
+                  <AppNavigation organizationId="specimen" />
+                </aside>
+                <main>
+                  <i></i>
+                  <i></i>
+                  <i></i>
+                  <b></b>
                 </main>
               </div>
             </article>
             <article>
-              <h3>Authentication</h3><div class="wireframe auth-wire">
-                <div><Ornament /><i></i><i></i><b></b></div>
+              <h3>Resident portal</h3>
+              <div class="wireframe resident-wire">
+                <header>
+                  <span></span>
+                  <span></span>
+                </header>
+                <nav></nav>
+                <main>
+                  <i></i>
+                  <b></b>
+                  <b></b>
+                </main>
+              </div>
+            </article>
+            <article>
+              <h3>Authentication</h3>
+              <div class="wireframe auth-wire">
+                <div>
+                  <Ornament />
+                  <i></i>
+                  <i></i>
+                  <b></b>
+                </div>
               </div>
             </article>
           </div>
@@ -610,85 +681,88 @@ function rgb(hex: string) {
 
         <section id="audit" class="ds-section">
           <header>
-            <p class="eyebrow">Audit record</p><h2>Coverage & drift</h2><p>
-              Source cross-reference and runtime verification targets.
-            </p>
+            <p class="eyebrow">Audit record</p>
+            <h2>Coverage & drift</h2>
+            <p>Source cross-reference and runtime verification targets.</p>
           </header>
           <div class="audit-grid">
             <article>
-              <strong>Token completeness</strong><span
-                >{sourceTokens.length}/{sourceTokens.length}</span
-              ><p>
+              <strong>Token completeness</strong>
+              <span>
+                {sourceTokens.length}/{sourceTokens.length}
+              </span>
+              <p>
                 All source-level color, type, geometry, elevation, chart, and
                 icon tokens are represented here or in the registry below.
               </p>
             </article>
             <article>
-              <strong>Component coverage</strong><span>10/12</span><p>
+              <strong>Component coverage</strong>
+              <span>10/12</span>
+              <p>
                 10 reusable components render directly. AdminContextDrawer
                 remains data-bound; its patterns are covered without booting
                 action clients.
               </p>
             </article>
             <article>
-              <strong>Layout fidelity</strong><span data-audit-layout
-                >Pending runtime</span
-              ><p>
+              <strong>Layout fidelity</strong>
+              <span data-audit-layout>Pending runtime</span>
+              <p>
                 Desktop, tablet, and 390px overflow plus sticky navigation are
                 checked by Playwright.
               </p>
             </article>
             <article>
-              <strong>Leakage prevention</strong><span>Tag + header</span><p>
-                <code>robots=noindex,nofollow</code> and <code
-                  >X-Robots-Tag</code
-                > are both emitted.
+              <strong>Leakage prevention</strong>
+              <span>Tag + header</span>
+              <p>
+                <code>robots=noindex,nofollow</code> and{" "}
+                <code>X-Robots-Tag</code> are both emitted.
               </p>
             </article>
           </div>
           <details class="disclosure">
-            <summary>Route inventory ({routes.length})</summary><ul
-              class="route-list"
-            >
-              {
-                routes.map((route) => (
-                  <li>
-                    <code>{route}</code>
-                  </li>
-                ))
-              }
+            <summary>Route inventory ({routes.length})</summary>
+            <ul class="route-list">
+              {routes.map((route) => (
+                <li>
+                  <code>{route}</code>
+                </li>
+              ))}
             </ul>
           </details>
           <details class="disclosure">
-            <summary>Source token registry ({sourceTokens.length})</summary><ul
-              class="token-list"
-            >
-              {
-                sourceTokens.map((token) => (
-                  <li>
-                    <>
-                      <code>{token}</code>
-                      <span data-token-value={token} />
-                    </>
-                  </li>
-                ))
-              }
+            <summary>Source token registry ({sourceTokens.length})</summary>
+            <ul class="token-list">
+              {sourceTokens.map((token) => (
+                <li>
+                  <>
+                    <code>{token}</code>
+                    <span data-token-value={token} />
+                  </>
+                </li>
+              ))}
             </ul>
           </details>
           <div class="drift-panel">
-            <h3>Drift status</h3><ul>
+            <h3>Drift status</h3>
+            <ul>
               <li>
-                <strong>Resolved:</strong> meter categories now use shared, muted
-                Riga tokens.
-              </li><li>
-                <strong>Resolved:</strong> page templates use semantic palette utilities
-                directly.
-              </li><li>
-                <strong>Resolved:</strong> local type, spacing, and ordinary radii
-                follow named scales.
-              </li><li>
-                <strong>Expected:</strong> printable invoice/email HTML uses self-contained
-                colors because global CSS is unavailable.
+                <strong>Resolved:</strong> meter categories now use shared,
+                muted Riga tokens.
+              </li>
+              <li>
+                <strong>Resolved:</strong> page templates use semantic palette
+                utilities directly.
+              </li>
+              <li>
+                <strong>Resolved:</strong> local type, spacing, and ordinary
+                radii follow named scales.
+              </li>
+              <li>
+                <strong>Expected:</strong> printable invoice/email HTML uses
+                self-contained colors because global CSS is unavailable.
               </li>
             </ul>
           </div>
@@ -983,7 +1057,7 @@ function rgb(hex: string) {
   .radius-scale span {
     display: block;
     height: 4rem;
-    border: 1px solid var(--color-primary);
+    border: 1px solid var(--color-border);
     background: var(--color-nav-active-bg);
   }
   .elevation-grid {
@@ -1236,7 +1310,6 @@ function rgb(hex: string) {
     gap: 0.75rem;
     align-content: start;
     padding: 1.25rem;
-    border-top: 3px solid var(--color-primary);
     background: var(--color-surface);
   }
   .audit-grid article > span {
@@ -1270,7 +1343,6 @@ function rgb(hex: string) {
   .drift-panel {
     margin-top: 1rem;
     padding: 1.5rem;
-    border-left: 3px solid var(--color-warning);
     background: var(--color-notice-warning-bg);
     color: var(--color-notice-warning-text);
   }

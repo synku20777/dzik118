@@ -122,146 +122,138 @@ if (Astro.request.method === "POST") {
     </a>
     <h1 class="text-h2 text-foreground">{t("Import dwellings")}</h1>
 
-    {
-      step === "upload" && (
-        <form
-          method="POST"
-          enctype="multipart/form-data"
-          class="max-w-lg space-y-3 rounded-panel border border-border bg-surface p-6"
-        >
-          <div>
-            <label class="block text-label text-foreground" for="file">
-              {t("CSV file")}
-            </label>
-            <input
-              id="file"
-              name="file"
-              type="file"
-              accept=".csv,text/csv"
-              required
-              class="mt-1 w-full text-body-sm"
-            />
-          </div>
-          <div>
-            <label class="block text-label text-foreground" for="mode">
-              {t("Mode")}
-            </label>
-            <select
-              id="mode"
-              name="mode"
-              class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
-            >
-              <option value="create">
-                {t("Create only (default) -- existing numbers become errors")}
-              </option>
-              <option value="update">
-                {t("Update -- existing numbers are updated")}
-              </option>
-            </select>
-          </div>
-          <button type="submit" class="btn-primary ">
-            {t("Preview")}
+    {step === "upload" && (
+      <form
+        method="POST"
+        enctype="multipart/form-data"
+        class="max-w-lg space-y-3 rounded-panel border border-border bg-surface p-6"
+      >
+        <div>
+          <label class="block text-label text-foreground" for="file">
+            {t("CSV file")}
+          </label>
+          <input
+            id="file"
+            name="file"
+            type="file"
+            accept=".csv,text/csv"
+            required
+            class="mt-1 w-full text-body-sm"
+          />
+        </div>
+        <div>
+          <label class="block text-label text-foreground" for="mode">
+            {t("Mode")}
+          </label>
+          <select
+            id="mode"
+            name="mode"
+            class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+          >
+            <option value="create">
+              {t("Create only (default) -- existing numbers become errors")}
+            </option>
+            <option value="update">
+              {t("Update -- existing numbers are updated")}
+            </option>
+          </select>
+        </div>
+        <button type="submit" class="btn-primary">
+          {t("Preview")}
+        </button>
+      </form>
+    )}
+
+    {step === "preview" && headerError && (
+      <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
+        {t(headerError)}
+      </p>
+    )}
+
+    {step === "preview" && !headerError && (
+      <div class="space-y-4">
+        <div class="table-wrap stack-table">
+          <table class="w-full text-left text-body-sm">
+            <caption class="sr-only">{t("Dwellings to import")}</caption>
+            <thead class="border-b border-border bg-surface-hover text-muted">
+              <tr>
+                <th scope="col" class="px-4 py-2">
+                  {t("Row")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Number")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Status")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Errors")}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {rows.map((row) => (
+                <tr>
+                  <td class="px-4 py-2">{row.rowNumber}</td>
+                  <td class="px-4 py-2">{row.number || "—"}</td>
+                  <td class="px-4 py-2">
+                    <span
+                      class:list={{
+                        "text-success": row.status === "CREATE",
+                        "text-primary": row.status === "UPDATE",
+                        "text-destructive": row.status === "ERROR",
+                      }}
+                    >
+                      {row.status}
+                    </span>
+                  </td>
+                  <td class="px-4 py-2 text-destructive">
+                    {row.errors.join("; ")}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p class="text-body-sm text-muted">
+          {rows.filter((r) => r.status === "CREATE").length} to create,{" "}
+          {rows.filter((r) => r.status === "UPDATE").length} to update,{" "}
+          {rows.filter((r) => r.status === "ERROR").length} with errors (skipped
+          on import).
+        </p>
+        {confirmError && (
+          <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
+            {t(confirmError)}
+          </p>
+        )}
+        <form method="POST">
+          <input type="hidden" name="confirm" value="1" />
+          <input type="hidden" name="mode" value={mode} />
+          <input type="hidden" name="csvText" value={csvText} />
+          <button
+            type="submit"
+            disabled={!rows.some((row) => row.status !== "ERROR")}
+            class="btn-primary"
+          >
+            {t("Confirm import")}
           </button>
         </form>
-      )
-    }
+      </div>
+    )}
 
-    {
-      step === "preview" && headerError && (
-        <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
-          {t(headerError)}
+    {step === "result" && result && (
+      <div class="rounded-panel border border-border bg-surface p-6">
+        <p class="text-body-sm text-foreground">
+          Created {result.created}, updated {result.updated}, skipped{" "}
+          {result.errored} row(s) with errors.
         </p>
-      )
-    }
-
-    {
-      step === "preview" && !headerError && (
-        <div class="space-y-4">
-          <div class="table-wrap stack-table">
-            <table class="w-full text-left text-body-sm">
-              <caption class="sr-only">{t("Dwellings to import")}</caption>
-              <thead class="border-b border-border bg-surface-hover text-muted">
-                <tr>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Row")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Number")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Status")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Errors")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-border">
-                {rows.map((row) => (
-                  <tr>
-                    <td class="px-4 py-2">{row.rowNumber}</td>
-                    <td class="px-4 py-2">{row.number || "—"}</td>
-                    <td class="px-4 py-2">
-                      <span
-                        class:list={{
-                          "text-success": row.status === "CREATE",
-                          "text-primary": row.status === "UPDATE",
-                          "text-destructive": row.status === "ERROR",
-                        }}
-                      >
-                        {row.status}
-                      </span>
-                    </td>
-                    <td class="px-4 py-2 text-destructive">
-                      {row.errors.join("; ")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p class="text-body-sm text-muted">
-            {rows.filter((r) => r.status === "CREATE").length} to create,{" "}
-            {rows.filter((r) => r.status === "UPDATE").length} to update,{" "}
-            {rows.filter((r) => r.status === "ERROR").length} with errors
-            (skipped on import).
-          </p>
-          {confirmError && (
-            <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
-              {t(confirmError)}
-            </p>
-          )}
-          <form method="POST">
-            <input type="hidden" name="confirm" value="1" />
-            <input type="hidden" name="mode" value={mode} />
-            <input type="hidden" name="csvText" value={csvText} />
-            <button
-              type="submit"
-              disabled={!rows.some((row) => row.status !== "ERROR")}
-              class="btn-primary "
-            >
-              {t("Confirm import")}
-            </button>
-          </form>
-        </div>
-      )
-    }
-
-    {
-      step === "result" && result && (
-        <div class="rounded-panel border border-border bg-surface p-6">
-          <p class="text-body-sm text-foreground">
-            Created {result.created}, updated {result.updated}, skipped{" "}
-            {result.errored} row(s) with errors.
-          </p>
-          <a
-            href={`/admin/o/${organizationId}/dwellings`}
-            class="btn-primary mt-4"
-          >
-            {t("Back to dwellings")}
-          </a>
-        </div>
-      )
-    }
+        <a
+          href={`/admin/o/${organizationId}/dwellings`}
+          class="btn-primary mt-4"
+        >
+          {t("Back to dwellings")}
+        </a>
+      </div>
+    )}
   </div>
 </AdminLayout>

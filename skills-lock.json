@@ -2,10 +2,10 @@
   "version": 1,
   "skills": {
     "frontend-design": {
-      "source": "anthropics/skills",
+      "source": "vercel-labs/open-agents",
       "sourceType": "github",
-      "skillPath": "skills/frontend-design/SKILL.md",
-      "computedHash": "106acf230014cbb43ca34e6410371321b56ca742f9ee0442e8ec05bf02eb0384"
+      "skillPath": ".agents/skills/frontend-design/SKILL.md",
+      "computedHash": "89a54ba7fcf22ca2e394ebc0c040c23158c2e8a0acfd63a3dfaa8436135553a2"
     },
     "migrate-radix-to-base": {
       "source": "shadcn/ui",

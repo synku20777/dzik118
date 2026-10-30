@@ -60,7 +60,8 @@ See [ADR 0006](decisions/0006-payment-corrections-manual-entry-and-alerts.md).
 
 - [x] **Manual payment entry.** Done. "Record a payment" on the Payments page
   takes a bank transfer that is not in a statement. The payment applies right
-  away. The app blocks a duplicate.
+  away. The app blocks a duplicate. Cash and a payment to a dwelling with no open
+  invoice were added later (ADR 0014).
 - [x] **Reverse a confirmed payment.** Done. "Reverse" on the Confirmed tab
   posts a cancelling entry. The payment returns to Unmatched.
 - [x] **Match an unmatched payment to an invoice.** Done. This was missing. The
@@ -132,11 +133,129 @@ See [ADR 0012](decisions/0012-guided-setup-and-starting-readings.md).
   fixed number of queries (a test guards this). It was one set of queries per
   dwelling.
 
+## Manual payments (2026-10-28)
+
+See [ADR 0014](decisions/0014-payment-to-dwelling-account-cash-and-row-edit.md).
+
+- [x] **Payment to a dwelling account, cash, edit of an unmatched row.** Done.
+- [ ] **Resident payment history.** It starts from allocations, so a payment
+  posted to a dwelling account does not show there. The dwelling account page
+  does. The owner has not decided whether a resident should see advance or cash
+  payments.
+- [ ] **Move a dwelling payment.** A payment posted to the wrong dwelling is
+  reversed and typed in again. There is no "move" action.
+- [ ] **Reversal refusal is strict.** Any later invoice that applied credit
+  blocks the reversal of a dwelling payment, even if other credit covers it. Fix
+  the balance with an adjustment.
+- [ ] **Booking date has no lower bound.** Only a future date is refused.
+- [ ] **Unmatched rows that are not rent.** There is no "ignore" for a statement
+  row that is not a resident payment. It stays in Unmatched.
+- [ ] **Bank row duplicates.** Editing an imported row changes the values that
+  the repeat check compares. The original values are in `raw_data` and the audit
+  history.
+
+## Migration Center (2026-10-07)
+
+See [ADR 0013](decisions/0013-migration-center.md).
+
+- [x] **Dwellings, recipients and delivery import (phase 1).** Done. Column
+  mapping, Latvian Excel files (Windows-1257, `;`, comma decimals), saved
+  mappings, issue list download, one transaction, audit trail with before
+  values.
+- [x] **Opening debt and credit (phase 2).** Done. One audited ledger entry
+  per dwelling, a reconciliation report, and migrated debt that is not late-fee
+  principal until paid. The owner must still confirm that payments settle
+  migrated debt first (ADR 0013, item 18).
+- [ ] **Opening balance currency column.** There is none. Amounts are in the
+  organization currency, and a cell with a different currency sign or code is an
+  error. A file with mixed currencies must be split by currency.
+- [ ] **Opening balances change late fees.** A late fee on an invoice with
+  unpaid migrated debt is lower than before, because the principal excludes that
+  debt. Tell managers before they import.
+- [ ] **Balance date before the first invoice.** If no billing period exists
+  yet, the date cannot be checked. An invoice issued before the balance date
+  does not show the balance (the review warns about this).
+- [ ] **A draft invoice keeps its old balance** until it is prepared.
+  Preparing recalculates it.
+- [x] **Meters and latest readings (phase 3).** Done. Missing meters are
+  created, and the latest reading of each meter becomes its starting reading.
+- [ ] **Reading history.** Only the latest reading of a meter is kept. Older
+  readings in the file are skipped. The reading date is checked but not stored.
+- [ ] **A meter added by hand during an import** is used by the import, but a
+  meter added right after it can still repeat the same serial number. There is
+  no uniqueness rule for serial numbers.
+- [ ] **Pasted cells with three-decimal readings** ("123,456" copied from
+  Excel) stay ambiguous: the paste has no delimiter to tell a decimal comma from
+  a thousands comma. Save the sheet as CSV instead.
+- [ ] **AI column suggestions (phase 4).** Not built. Needs the subprocessor
+  list, a privacy page change (separate repo) and an offline evaluation first.
+- [ ] **XLSX (phase 5).** Not built. Save the sheet as CSV for now.
+- [ ] **Large updates.** Update mode groups rows with the same patch into one
+  statement. A file where every row changes different fields still costs one
+  statement per row (2,000 rows is the cap).
+- [ ] **Case sync loads organization-wide readiness data.** The batch loader
+  behind `syncCasesForDwellings` reads every meter and reading of the
+  organization, not only the imported dwellings. This is fine at the current
+  size. Limit the queries to the given dwelling ids when an organization has
+  tens of thousands of meters.
+- [ ] **Short Cyrillic files.** A file with very few Cyrillic letters in
+  Windows-1251 can be read as Windows-1252. The page shows the file name and
+  the encoding, and the upload form has an encoding picker.
+- [ ] **File names are stored.** The import history keeps the file name. A name
+  can contain a person's name. Cell values are never stored.
+
+## Admin dashboard (2026-10-28)
+
+See [DASHBOARD_GUIDELINES.md](product/DASHBOARD_GUIDELINES.md) for the evidence
+and the backlog status, and [ADR 0015](decisions/0015-dashboard-redesign.md) for
+the decisions. The redesign was built on 2026-10-28. These were fixed then:
+the money block (it reconciles on "Total to pay"), the next step and the
+four-step progress (also after a lock), the amount and due date on overdue rows,
+the unmatched-payment and delivery-failure counts, the deadlines line, the
+READY and OVERDUE colours, 16 px text and 44 px controls, the database error
+state, and the dead CSS.
+
+- [ ] **Stale guide screenshot.** `public/guide/dashboard.jpg` (2026-09-15)
+  shows the old "Property Billing" name and demo values near 70 million euro, and
+  the old page layout. Regenerate it.
+- [ ] **Guide step wording.** The guide step about the dashboard still describes
+  the old page. Reword it for the next-step band, the money block and the
+  attention list.
+- [ ] **Overdue rows link to plain Payments.** The Payments page has no dwelling
+  filter.
+- [ ] **Latvian wording.** No native review of the new strings.
+- [ ] **Drawer previous reading.** The readings drawer (opened from a dashboard
+  row) shows "Iepriekšējais rādījums: —" for a dwelling that does have an earlier
+  reading. `listMetersWithReadingForPeriod` in `src/domain/periods/cases.ts` uses
+  only the stored previous value of the current period's reading. Entering a
+  value lower than the earlier reading returns 409 with no hint. Fix: look up the
+  last reading before the period and show it.
+- [ ] **Drawer save feedback.** Saving in the drawer gives no `MutationStatus`
+  chip feedback beyond the idle state.
+- [ ] **Compact layout CSS not verified in a browser.** The last fixes of the
+  compact layout were not run: money panel icon and baseline, 1024 title
+  truncation, the Russian 2 by 2 progress strip, and chip clearance at 1024.
+  Codex has not reviewed the final layout (usage limit until 23:26 on
+  2026-10-28). The v5 live review (lv and ru, four widths) found no text
+  collisions before these fixes.
+- [ ] **Less-dense final pass not browser-verified (2026-10-30).** The last small
+  pass after the v7 live review was not run in a browser: the action column
+  `nowrap` at 1280, the 375 "Tagad/Сейчас" overlap fix, the shortened period
+  navigation on mobile (375 height 46 px), the "+N vēl" cue and the one-line
+  reason clamp. Also re-measure the 375 Russian progress strip and the section 10
+  table of `DASHBOARD_GUIDELINES.md` (the 1280 row has no v7 numbers). The new
+  strings ("līdz", "Tagad", the group titles) have no native Latvian review, and
+  the less-dense layout has not been user-tested.
+- [ ] **Not built.** Supplier-cost comparison, water-difference alert,
+  status badge (14 px) and eyebrow (12 px) sizes, and `getCurrentOpenPeriod`
+  can still return the starting-readings period (the dashboard skips it itself).
+
 ## Checked and not gaps
 
 - Test data in the demo database (`00-E2E-…`, "Zero price repro test", payers
   shown as IDs) comes from test runs. Run `npm run demo:reset`.
-- Meter readings are entered in the period workbench by design.
+- Meter readings are entered in the period workbench by design. The dashboard
+  also opens the same readings drawer from a `MISSING_DATA` row.
 - Admins can be removed on Settings > Users. The button is hidden for the
   signed-in admin.
 - The organizations page has no sidebar because no organization is selected.

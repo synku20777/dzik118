@@ -43,28 +43,24 @@ const [dwellings, displayName] = await withRequestDb((db) =>
         <h2 class="text-h3 text-foreground">{t("Account")}</h2>
         <p class="mt-2 text-body-sm text-foreground">{auth.email}</p>
         <p class="mt-1 text-body-sm text-muted">{t("Resident")}</p>
-        {
-          nameResult?.error && (
-            <p class="notice notice-danger mt-3" role="alert">
-              {friendlyActionErrorMessage(nameResult.error, locale)}
-            </p>
-          )
-        }
-        {
-          nameResult?.data && (
-            <p class="notice mt-3" role="status">
-              {t("Saved successfully.")}
-            </p>
-          )
-        }
+        {nameResult?.error && (
+          <p class="notice notice-danger mt-3" role="alert">
+            {friendlyActionErrorMessage(nameResult.error, locale)}
+          </p>
+        )}
+        {nameResult?.data && (
+          <p class="notice mt-3" role="status">
+            {t("Saved successfully.")}
+          </p>
+        )}
         <form
           method="POST"
           action={actions.profile.updateDisplayName}
           class="mt-4"
         >
-          <label class="block text-sm font-medium" for="displayName"
-            >{t("Display name")}</label
-          >
+          <label class="block text-sm font-medium" for="displayName">
+            {t("Display name")}
+          </label>
           <div class="mt-2 flex flex-col gap-3 sm:flex-row">
             <input
               id="displayName"
@@ -74,51 +70,47 @@ const [dwellings, displayName] = await withRequestDb((db) =>
               value={nameResult?.data?.displayName ?? displayName ?? ""}
               class="w-full rounded-control border border-border px-3 py-2 sm:w-72"
             />
-            <button type="submit" class="btn-primary">{t("Save")}</button>
+            <button type="submit" class="btn-primary">
+              {t("Save")}
+            </button>
           </div>
         </form>
       </section>
 
       <section class="rounded-panel border border-border bg-surface p-4">
-        <h2 class="text-h3 text-foreground">
-          {t("Dwelling access")}
-        </h2>
-        {
-          dwellings.length === 0 ? (
-            <p class="mt-2 text-body-sm text-muted">
-              {t("No dwellings assigned.")}
-            </p>
-          ) : (
-            <ul class="mt-4 divide-y divide-border rounded-control border border-border bg-surface">
-              {dwellings.map((dwelling) => (
-                <li>
-                  <a
-                    href={`/portal/dwellings/${dwelling.id}`}
-                    class="flex items-center justify-between px-4 py-3 hover:bg-surface-hover"
-                  >
-                    <span class="font-medium text-foreground">
-                      {dwelling.number}
+        <h2 class="text-h3 text-foreground">{t("Dwelling access")}</h2>
+        {dwellings.length === 0 ? (
+          <p class="mt-2 text-body-sm text-muted">
+            {t("No dwellings assigned.")}
+          </p>
+        ) : (
+          <ul class="mt-4 divide-y divide-border rounded-control border border-border bg-surface">
+            {dwellings.map((dwelling) => (
+              <li>
+                <a
+                  href={`/portal/dwellings/${dwelling.id}`}
+                  class="flex items-center justify-between px-4 py-3 hover:bg-surface-hover"
+                >
+                  <span class="font-medium text-foreground">
+                    {dwelling.number}
+                  </span>
+                  {dwelling.displayName && (
+                    <span class="text-body-sm text-muted">
+                      {dwelling.displayName}
                     </span>
-                    {dwelling.displayName && (
-                      <span class="text-body-sm text-muted">
-                        {dwelling.displayName}
-                      </span>
-                    )}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )
-        }
+                  )}
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
       <section class="rounded-panel border border-border bg-surface p-4">
         <h2 class="text-h3 text-foreground">{t("Your data")}</h2>
         <p class="mt-2 text-body-sm text-muted">
-          {
-            t(
-              "Download a copy of the data this service holds about you, as a JSON file."
-            )
-          }
+          {t(
+            "Download a copy of the data this service holds about you, as a JSON file."
+          )}
         </p>
         <a
           href="/api/v1/portal/me/export"
@@ -129,7 +121,9 @@ const [dwellings, displayName] = await withRequestDb((db) =>
         </a>
       </section>
       <form method="POST" action="/logout">
-        <button type="submit" class="btn-secondary">{t("Sign out")}</button>
+        <button type="submit" class="btn-secondary">
+          {t("Sign out")}
+        </button>
       </form>
     </div>
   </div>

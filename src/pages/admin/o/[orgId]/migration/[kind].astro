@@ -1,0 +1,989 @@
+---
+import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+// Migration Center, dwellings flow (ADR 0013). Four steps on one page, each a
+// POST: upload -> map -> review -> import, then a redirect to the history.
+// The hidden fields are untrusted: every step re-parses the raw text and
+// re-checks the mapping, and the import validates everything again inside its
+// own transaction. Nothing is stored until the last step.
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireActiveOrganization,
+} from "../../../../../domain/authorization/guards";
+import { ConflictError, ValidationError } from "../../../../../domain/errors";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import {
+  SUPPORTED_ENCODINGS,
+  parseTable,
+  type MigrationEncoding,
+} from "../../../../../domain/migration/files";
+import {
+  readUpload,
+  type ReadUpload,
+} from "../../../../../domain/migration/flow";
+import {
+  applySavedMapping,
+  proposeMapping,
+  validateMapping,
+  type ColumnProposal,
+  type MappingSource,
+} from "../../../../../domain/migration/mapping";
+import {
+  findSavedMapping,
+  importDwellings,
+  validateDwellings,
+  type DwellingImportMode,
+  type DwellingValidation,
+} from "../../../../../domain/migration/dwellings";
+import {
+  IMPORT_BALANCE_MAPPING_ERROR,
+  hasValidAmountMapping,
+  importBalances,
+  parseBalanceDate,
+  validateBalances,
+  type BalanceOptions,
+  type BalanceSign,
+  type BalanceValidation,
+} from "../../../../../domain/migration/balances";
+import {
+  IMPORT_METER_MAPPING_ERROR,
+  importMeters,
+  validateMeters,
+  type MeterValidation,
+} from "../../../../../domain/migration/meters";
+import { getFirstBillingPeriod } from "../../../../../domain/periods/periods";
+import { MIGRATION_MAX_BYTES } from "../../../../../domain/migration/limits";
+import { columnShape } from "../../../../../domain/migration/shapes";
+import { TARGETS } from "../../../../../domain/migration/targets";
+import { orgLocalDateString } from "../../../../../lib/org-time";
+import { withRequestDb } from "../../../../../lib/db-request";
+import { isSameOriginRequest } from "../../../../../lib/http/same-origin";
+
+const organizationId = Astro.params.orgId!;
+// /migration/dwellings, /balances and /meters share this page.
+const kindParam = Astro.params.kind;
+if (
+  kindParam !== "dwellings" &&
+  kindParam !== "balances" &&
+  kindParam !== "meters"
+) {
+  return new Response(null, { status: 404 });
+}
+const balances = kindParam === "balances";
+const metersKind = kindParam === "meters";
+const kind = balances ? "BALANCES" : metersKind ? "METERS" : "DWELLINGS";
+const targetFields = TARGETS[kind];
+try {
+  requireActiveOrganization(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  // An archived organization is read-only (ADR 0009).
+  if (err instanceof ConflictError)
+    return Astro.redirect(`/admin/o/${organizationId}/migration`);
+  throw err;
+}
+
+const { organization, firstPeriod } = await withRequestDb(async (db) => ({
+  organization: await getOrganization(db, organizationId),
+  firstPeriod: metersKind
+    ? await getFirstBillingPeriod(db, organizationId)
+    : null,
+}));
+// A starting reading belongs to the month before the first billing period, so
+// the meters import waits for that period (setup step 3).
+const needsPeriod = metersKind && !firstPeriod;
+
+const SOURCES: MappingSource[] = ["DICTIONARY", "JEV", "USER", "SAVED"];
+const MAX_SHOWN_ROWS = 100;
+const SAMPLE_VALUES = 3;
+
+let step: "upload" | "map" | "review" = "upload";
+let error: string | null = null;
+let text = "";
+let filename = "";
+let encoding = "";
+let mode: DwellingImportMode = "create";
+let headers: string[] = [];
+let proposals: ColumnProposal[] = [];
+let sampleRows: string[][] = [];
+let savedApplied = false;
+let skippedTitleRows = 0;
+let droppedTotalRows = 0;
+let fields: (string | null)[] = [];
+let sources: MappingSource[] = [];
+// Assigned inside closures below; the casts stop TypeScript narrowing them to
+// null in the template.
+let validation = null as DwellingValidation | null;
+let balanceValidation = null as BalanceValidation | null;
+let meterValidation = null as MeterValidation | null;
+let balanceDate = "";
+let sign: BalanceSign = "POSITIVE_OWES";
+
+function startMapping(
+  upload: ReadUpload,
+  saved: Record<string, string | null> | null
+) {
+  const { table } = upload;
+  headers = table.headers;
+  sampleRows = table.rows;
+  skippedTitleRows = table.skippedTitleRows;
+  droppedTotalRows = table.droppedTotalRows;
+  proposals = proposeMapping(kind, table.headers, table.rows, table.delimiter);
+  if (saved) {
+    proposals = applySavedMapping(proposals, saved);
+    savedApplied = true;
+  }
+}
+
+function readMappingForm(form: FormData) {
+  const count = headers.length;
+  fields = Array.from({ length: count }, (_, i) => {
+    const value = String(form.get(`field_${i}`) ?? "");
+    return value === "" ? null : value;
+  });
+  sources = Array.from({ length: count }, (_, i) => {
+    const proposed = String(form.get(`proposed_${i}`) ?? "");
+    const source = String(form.get(`source_${i}`) ?? "") as MappingSource;
+    // A column the admin did not touch keeps the proposer's label.
+    return (fields[i] ?? "") === proposed && SOURCES.includes(source)
+      ? source
+      : "USER";
+  });
+}
+
+if (Astro.request.method === "POST" && !needsPeriod) {
+  if (!isSameOriginRequest(Astro.request, Astro.url)) {
+    return new Response("Cross-site submission forbidden", { status: 403 });
+  }
+  const form = await Astro.request.formData();
+  const posted = String(form.get("step") ?? "upload");
+  mode = form.get("mode") === "update" ? "update" : "create";
+  sign =
+    form.get("sign") === "POSITIVE_CREDIT"
+      ? "POSITIVE_CREDIT"
+      : "POSITIVE_OWES";
+  balanceDate = String(form.get("balanceDate") ?? "").slice(0, 10);
+
+  try {
+    if (posted === "upload") {
+      const file = form.get("file");
+      const pasted = String(form.get("pasted") ?? "");
+      const picked = String(form.get("encoding") ?? "auto");
+      const chosen = (SUPPORTED_ENCODINGS as readonly string[]).includes(picked)
+        ? (picked as MigrationEncoding)
+        : "auto";
+      let upload: ReadUpload;
+      if (file instanceof File && file.size > 0) {
+        if (file.size > MIGRATION_MAX_BYTES) {
+          throw new ValidationError("The file is too large (up to 1 MB)");
+        }
+        filename = file.name.slice(0, 200);
+        upload = readUpload({
+          bytes: new Uint8Array(await file.arrayBuffer()),
+          encoding: chosen,
+        });
+      } else if (pasted.trim() !== "") {
+        filename = "pasted";
+        upload = readUpload({ pasted });
+      } else {
+        throw new ValidationError("Choose a file or paste the cells");
+      }
+      text = upload.text;
+      encoding = upload.encoding;
+      const saved = await withRequestDb((db) =>
+        findSavedMapping(db, organizationId, kind, upload.table.headers)
+      );
+      startMapping(upload, saved);
+      step = "map";
+    } else {
+      text = String(form.get("text") ?? "");
+      filename = String(form.get("filename") ?? "").slice(0, 200);
+      encoding = String(form.get("encoding") ?? "");
+      if (new TextEncoder().encode(text).length > MIGRATION_MAX_BYTES) {
+        throw new ValidationError("The file is too large (up to 1 MB)");
+      }
+      const table = parseTable(text);
+      headers = table.headers;
+      sampleRows = table.rows;
+      skippedTitleRows = table.skippedTitleRows;
+      droppedTotalRows = table.droppedTotalRows;
+      readMappingForm(form);
+      proposals = headers.map((header, index) => ({
+        index,
+        header,
+        field: fields[index],
+        score: 1,
+        source: sources[index],
+        shape: columnShape([]),
+        candidates: [],
+      }));
+      // Back to the mapping step with the admin's choices kept, unless the
+      // admin asked to review or import a valid mapping.
+      step = "map";
+
+      const mappingOk =
+        validateMapping(kind, headers.length, fields).length === 0 &&
+        (!balances || hasValidAmountMapping(fields));
+      const mappingError = balances
+        ? IMPORT_BALANCE_MAPPING_ERROR
+        : metersKind
+          ? IMPORT_METER_MAPPING_ERROR
+          : "Map the dwelling number column, and use each field once";
+      const options = (): BalanceOptions => ({
+        balanceDate: parseBalanceDate(balanceDate),
+        sign,
+      });
+      const validate = () =>
+        withRequestDb(async (db) => {
+          if (balances) {
+            balanceValidation = await validateBalances(
+              db,
+              organizationId,
+              table,
+              fields,
+              options()
+            );
+          } else if (metersKind) {
+            meterValidation = await validateMeters(
+              db,
+              organizationId,
+              table,
+              fields
+            );
+          } else {
+            validation = await validateDwellings(
+              db,
+              organizationId,
+              table,
+              fields,
+              mode
+            );
+          }
+        });
+
+      if (!mappingOk) {
+        if (posted !== "map") error = mappingError;
+      } else if (posted === "review") {
+        await validate();
+        step = "review";
+      } else if (posted === "import") {
+        try {
+          const userId = Astro.locals.auth!.userId;
+          const done = await withRequestDb(async (db) => {
+            if (balances) {
+              const r = await importBalances(
+                db,
+                organizationId,
+                {
+                  text,
+                  filename: filename || "upload",
+                  fields,
+                  mappingSources: sources,
+                  options: options(),
+                },
+                userId
+              );
+              return { importId: r.importId, report: true };
+            }
+            if (metersKind) {
+              const r = await importMeters(
+                db,
+                organizationId,
+                {
+                  text,
+                  filename: filename || "upload",
+                  fields,
+                  mappingSources: sources,
+                },
+                userId
+              );
+              return { importId: r.importId, report: false };
+            }
+            const r = await importDwellings(
+              db,
+              organizationId,
+              {
+                text,
+                filename: filename || "upload",
+                fields,
+                mappingSources: sources,
+                mode,
+              },
+              userId
+            );
+            return { importId: r.importId, report: false };
+          });
+          return Astro.redirect(
+            done.importId && done.report
+              ? `/admin/o/${organizationId}/migration/report/${done.importId}`
+              : `/admin/o/${organizationId}/migration?imported=${done.importId ?? "none"}`
+          );
+        } catch (err) {
+          if (!(err instanceof ValidationError || err instanceof ConflictError))
+            throw err;
+          error = err.message;
+          await validate();
+          step = "review";
+        }
+      }
+    }
+  } catch (err) {
+    if (!(err instanceof ValidationError)) throw err;
+    error = err.message;
+    step = text === "" ? "upload" : "map";
+  }
+}
+
+const base = `/admin/o/${organizationId}/migration`;
+const fieldOf = (i: number) =>
+  step === "map" ? proposals[i]?.field : fields[i];
+const issueRows =
+  validation?.rows.filter(
+    (r) => r.errors.length > 0 || r.warnings.length > 0 || r.skipReason
+  ) ?? [];
+const canImport = balances
+  ? balanceValidation !== null &&
+    balanceValidation.counts.error === 0 &&
+    balanceValidation.counts.post > 0
+  : metersKind
+    ? meterValidation !== null &&
+      meterValidation.counts.error === 0 &&
+      meterValidation.counts.post > 0
+    : validation !== null &&
+      validation.counts.error === 0 &&
+      validation.counts.create + validation.counts.update > 0;
+const errorCount =
+  (balances
+    ? balanceValidation?.counts.error
+    : metersKind
+      ? meterValidation?.counts.error
+      : validation?.counts.error) ?? 0;
+// Balances and meters show every row, since the amounts are what the admin
+// checks.
+const balanceRows = balanceValidation?.rows ?? [];
+const meterRows = meterValidation?.rows ?? [];
+const hasIssues =
+  issueRows.length > 0 ||
+  balanceRows.some((r) => r.errors.length > 0 || r.skipReason) ||
+  meterRows.some(
+    (r) => r.errors.length > 0 || r.warnings.length > 0 || r.skipReason
+  );
+const METER_TYPE_LABELS: Record<string, string> = {
+  COLD_WATER: t("Cold water"),
+  HOT_WATER: t("Hot water"),
+  ELECTRICITY: t("Electricity"),
+  GAS: t("Gas"),
+  HEAT: t("Heat"),
+  OTHER: t("Other"),
+};
+const today = orgLocalDateString(new Date(), organization.timezone);
+const BADGES: Record<MappingSource, string> = {
+  DICTIONARY: t("Matched by name"),
+  JEV: t("AI suggestion"),
+  USER: t("Your choice"),
+  SAVED: t("Saved mapping"),
+};
+const badge = (source: MappingSource, field: string | null) =>
+  field === null ? t("Choose") : BADGES[source];
+---
+
+<AdminLayout
+  title={`${balances ? "Import opening balances" : metersKind ? "Import meter readings" : "Import dwellings"} - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="space-y-6">
+    <a href={base} class="back-link">
+      ← {t("Migration Center")}
+    </a>
+    <h1 class="font-display text-h2 text-foreground">
+      {balances
+        ? t("Import opening balances")
+        : metersKind
+          ? t("Import meter readings")
+          : t("Import dwellings")}
+    </h1>
+
+    {needsPeriod && (
+      <div class="notice max-w-2xl space-y-2">
+        <p>
+          {t(
+            "Create the first billing period before you import meter readings. A reading is stored as the meter's position at the end of the month before that period."
+          )}
+        </p>
+        <a href={`/admin/o/${organizationId}/setup/period`} class="btn-primary">
+          {t("Create the first billing period")}
+        </a>
+      </div>
+    )}
+
+    {error && (
+      <p class="notice notice-danger" role="alert">
+        {t(error)}
+      </p>
+    )}
+
+    {step === "upload" && !needsPeriod && (
+      <form
+        method="POST"
+        enctype="multipart/form-data"
+        class="max-w-2xl space-y-4 rounded-panel border border-border bg-surface p-6"
+      >
+        <input type="hidden" name="step" value="upload" />
+        <p class="text-body-sm text-muted">
+          {t(
+            "Upload a CSV file or paste the cells from Excel. You check every step before anything is saved."
+          )}
+        </p>
+        {metersKind && (
+          <p class="notice">
+            {t(
+              "Each meter keeps one reading: its position at the end of the month before your first billing month. Only the latest reading of a meter is used. Missing meters are created."
+            )}
+          </p>
+        )}
+        {balances && (
+          <p class="notice">
+            {t(
+              "An opening balance is posted once for each dwelling. After that, correct it with an adjustment on the dwelling page."
+            )}
+          </p>
+        )}
+        <div>
+          <label class="block text-label text-foreground" for="file">
+            {t("CSV file")}
+          </label>
+          <input
+            id="file"
+            name="file"
+            type="file"
+            accept=".csv,.txt,text/csv,text/plain"
+            class="mt-1 w-full text-body-sm"
+          />
+        </div>
+        <div>
+          <label class="block text-label text-foreground" for="pasted">
+            {t("Or paste the cells here")}
+          </label>
+          <textarea
+            id="pasted"
+            name="pasted"
+            rows="6"
+            class="mt-1 w-full rounded-control border border-border px-3 py-2 font-mono text-body-sm"
+          />
+        </div>
+        <div>
+          <label class="block text-label text-foreground" for="encoding">
+            {t("File encoding")}
+          </label>
+          <select
+            id="encoding"
+            name="encoding"
+            class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+          >
+            <option value="auto">{t("Detect automatically")}</option>
+            {SUPPORTED_ENCODINGS.map((e) => (
+              <option value={e}>{e}</option>
+            ))}
+          </select>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <button type="submit" class="btn-primary">
+            {t("Continue")}
+          </button>
+          <a href={`${base}/templates/${kindParam}.csv`} class="btn-secondary">
+            {t("Download the template")}
+          </a>
+        </div>
+      </form>
+    )}
+
+    {(step === "map" || step === "review") && (
+      <p class="text-body-sm text-muted">
+        {filename}
+        {encoding && encoding !== "pasted" ? ` · ${encoding}` : ""}
+        {skippedTitleRows > 0 &&
+          ` · ${t("Title rows skipped")}: ${skippedTitleRows}`}
+        {droppedTotalRows > 0 &&
+          ` · ${t("Total rows left out")}: ${droppedTotalRows}`}
+      </p>
+    )}
+
+    {step === "map" && (
+      <form method="POST" class="space-y-4">
+        <input type="hidden" name="step" value="review" />
+        <input type="hidden" name="text" value={text} />
+        <input type="hidden" name="filename" value={filename} />
+        <input type="hidden" name="encoding" value={encoding} />
+        {savedApplied && (
+          <p class="notice">
+            {t(
+              "This looks like a spreadsheet you imported before. We used the same mapping."
+            )}
+          </p>
+        )}
+        <p class="text-body-sm text-muted">
+          {t(
+            "Match each column to a Namkopa field. Wrong letters? Go back and choose the file encoding."
+          )}
+        </p>
+        <div class="table-wrap stack-table">
+          <table class="w-full text-left text-body-sm">
+            <caption class="sr-only">{t("Column mapping")}</caption>
+            <thead class="border-b border-border bg-surface-hover text-muted">
+              <tr>
+                <th scope="col" class="px-4 py-2">
+                  {t("Column")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("First values")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Namkopa field")}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {headers.map((header, i) => (
+                <tr>
+                  <td class="px-4 py-2" data-label={t("Column")}>
+                    {header || "—"}
+                  </td>
+                  <td
+                    class="px-4 py-2 text-muted"
+                    data-label={t("First values")}
+                  >
+                    {sampleRows
+                      .map((r) => r[i] ?? "")
+                      .filter((v) => v !== "")
+                      .slice(0, SAMPLE_VALUES)
+                      .join(" · ") || "—"}
+                  </td>
+                  <td class="px-4 py-2" data-label={t("Namkopa field")}>
+                    <input
+                      type="hidden"
+                      name={`proposed_${i}`}
+                      value={proposals[i]?.field ?? ""}
+                    />
+                    <input
+                      type="hidden"
+                      name={`source_${i}`}
+                      value={proposals[i]?.source ?? "USER"}
+                    />
+                    <label class="sr-only" for={`field_${i}`}>
+                      {t("Namkopa field")}: {header}
+                    </label>
+                    <select
+                      id={`field_${i}`}
+                      name={`field_${i}`}
+                      class="rounded-control border border-border px-3 py-2 text-body-sm"
+                    >
+                      <option value="" selected={fieldOf(i) == null}>
+                        {t("Ignore this column")}
+                      </option>
+                      {targetFields.map((f) => (
+                        <option value={f.key} selected={fieldOf(i) === f.key}>
+                          {t(f.label)}
+                          {f.required ? " *" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <span class="mt-1 block text-label text-muted">
+                      {badge(
+                        proposals[i]?.source ?? "USER",
+                        proposals[i]?.field ?? null
+                      )}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!balances && (
+          <div>
+            <label class="block text-label text-foreground" for="mode">
+              {t("Mode")}
+            </label>
+            <select
+              id="mode"
+              name="mode"
+              class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+            >
+              <option value="create" selected={mode === "create"}>
+                {t("Create only. Existing numbers stay unchanged.")}
+              </option>
+              <option value="update" selected={mode === "update"}>
+                {t(
+                  "Update. Existing numbers change only in the mapped columns."
+                )}
+              </option>
+            </select>
+          </div>
+        )}
+        {balances && (
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label class="block text-label text-foreground" for="balanceDate">
+                {t("Balance date")}
+              </label>
+              <input
+                id="balanceDate"
+                name="balanceDate"
+                type="date"
+                required
+                max={today}
+                value={balanceDate}
+                class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+              />
+              <p class="mt-1 text-body-sm text-muted">
+                {t(
+                  "The day the old system struck these balances. It cannot be after your first invoice date."
+                )}
+              </p>
+            </div>
+            <div>
+              <label class="block text-label text-foreground" for="sign">
+                {t("Positive amounts mean")}
+              </label>
+              <select
+                id="sign"
+                name="sign"
+                class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+              >
+                <option
+                  value="POSITIVE_OWES"
+                  selected={sign === "POSITIVE_OWES"}
+                >
+                  {t("The resident owes money")}
+                </option>
+                <option
+                  value="POSITIVE_CREDIT"
+                  selected={sign === "POSITIVE_CREDIT"}
+                >
+                  {t("The resident has overpaid")}
+                </option>
+              </select>
+              <p class="mt-1 text-body-sm text-muted">
+                {t("This applies to a single balance column only.")}
+              </p>
+            </div>
+          </div>
+        )}
+        <div class="flex flex-wrap gap-3">
+          <a href={`${base}/${kindParam}`} class="btn-secondary">
+            {t("Back")}
+          </a>
+          <button type="submit" class="btn-primary">
+            {t("Check the file")}
+          </button>
+        </div>
+      </form>
+    )}
+
+    {step === "review" &&
+      (validation || balanceValidation || meterValidation) && (
+        <div class="space-y-4">
+          {meterValidation && (
+            <div class="space-y-4">
+              <p class="text-body-sm text-foreground">
+                {t("To write")}: {meterValidation.counts.post} ·{" "}
+                {t("New meters")}: {meterValidation.counts.newMeters} ·{" "}
+                {t("Left unchanged")}: {meterValidation.counts.skip} ·{" "}
+                {t("Errors")}: {meterValidation.counts.error}
+              </p>
+              <div class="table-wrap stack-table">
+                <table class="w-full text-left text-body-sm">
+                  <caption class="sr-only">{t("Readings to write")}</caption>
+                  <thead class="border-b border-border bg-surface-hover text-muted">
+                    <tr>
+                      <th scope="col" class="px-4 py-2">
+                        {t("Row")}
+                      </th>
+                      <th scope="col" class="px-4 py-2">
+                        {t("Dwelling number")}
+                      </th>
+                      <th scope="col" class="px-4 py-2">
+                        {t("Meter")}
+                      </th>
+                      <th scope="col" class="px-4 py-2">
+                        {t("Latest reading")}
+                      </th>
+                      <th scope="col" class="px-4 py-2">
+                        {t("Message")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-border">
+                    {meterRows.slice(0, MAX_SHOWN_ROWS).map((row) => (
+                      <tr>
+                        <td class="px-4 py-2" data-label={t("Row")}>
+                          {row.rowNumber}
+                        </td>
+                        <td class="px-4 py-2" data-label={t("Dwelling number")}>
+                          {row.number || "—"}
+                        </td>
+                        <td class="px-4 py-2" data-label={t("Meter")}>
+                          {row.meterType
+                            ? METER_TYPE_LABELS[row.meterType]
+                            : "—"}
+                          {row.serialNumber ? ` ${row.serialNumber}` : ""}
+                          {row.status === "POST" && !row.meterId
+                            ? ` (${t("New meter")})`
+                            : ""}
+                        </td>
+                        <td class="px-4 py-2" data-label={t("Latest reading")}>
+                          {row.reading || "—"}
+                          {row.previousValue
+                            ? ` (${t("Saved before")}: ${row.previousValue})`
+                            : ""}
+                        </td>
+                        <td
+                          class:list={[
+                            "px-4 py-2",
+                            row.errors.length > 0
+                              ? "text-destructive"
+                              : "text-muted",
+                          ]}
+                          data-label={t("Message")}
+                        >
+                          {[
+                            ...row.errors,
+                            ...row.warnings,
+                            ...(row.skipReason ? [row.skipReason] : []),
+                          ]
+                            .map(t)
+                            .join("; ")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {meterRows.length > MAX_SHOWN_ROWS && (
+                <p class="text-body-sm text-muted">
+                  {t(
+                    "The list shows the first 100 rows. Download the full list."
+                  )}
+                </p>
+              )}
+            </div>
+          )}
+          {validation && (
+            <p class="text-body-sm text-foreground">
+              {t("To create")}: {validation.counts.create} · {t("To update")}:{" "}
+              {validation.counts.update} · {t("Left unchanged")}:{" "}
+              {validation.counts.skip} · {t("Errors")}:{" "}
+              {validation.counts.error}
+            </p>
+          )}
+          {balanceValidation && (
+            <div class="space-y-4">
+              {balanceValidation.notices.map((notice) => (
+                <p class="notice">{t(notice)}</p>
+              ))}
+              <p class="text-body-sm text-foreground">
+                {t("To post")}: {balanceValidation.counts.post} ·{" "}
+                {t("Left unchanged")}: {balanceValidation.counts.skip} ·{" "}
+                {t("Errors")}: {balanceValidation.counts.error}
+              </p>
+              <p class="text-body-sm text-foreground">
+                {t("Total debt")}: {balanceValidation.totals.debit} ·{" "}
+                {t("Total credit")}: {balanceValidation.totals.credit} ·{" "}
+                {t("Balance date")}: {balanceDate}
+              </p>
+              <div class="table-wrap stack-table">
+                <table class="w-full text-left text-body-sm">
+                  <caption class="sr-only">{t("Balances to post")}</caption>
+                  <thead class="border-b border-border bg-surface-hover text-muted">
+                    <tr>
+                      <th scope="col" class="px-4 py-2">
+                        {t("Row")}
+                      </th>
+                      <th scope="col" class="px-4 py-2">
+                        {t("Dwelling number")}
+                      </th>
+                      <th scope="col" class="px-4 py-2">
+                        {t("Amount")}
+                      </th>
+                      <th scope="col" class="px-4 py-2">
+                        {t("Message")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-border">
+                    {balanceRows.slice(0, MAX_SHOWN_ROWS).map((row) => (
+                      <tr>
+                        <td class="px-4 py-2" data-label={t("Row")}>
+                          {row.rowNumber}
+                        </td>
+                        <td class="px-4 py-2" data-label={t("Dwelling number")}>
+                          {row.number || "—"}
+                        </td>
+                        <td class="px-4 py-2" data-label={t("Amount")}>
+                          {row.direction === "DEBIT"
+                            ? `${t("Debt")} ${row.amount}`
+                            : row.direction === "CREDIT"
+                              ? `${t("Credit")} ${row.amount}`
+                              : "—"}
+                        </td>
+                        <td
+                          class:list={[
+                            "px-4 py-2",
+                            row.errors.length > 0
+                              ? "text-destructive"
+                              : "text-muted",
+                          ]}
+                          data-label={t("Message")}
+                        >
+                          {[
+                            ...row.errors,
+                            ...(row.skipReason ? [row.skipReason] : []),
+                          ]
+                            .map(t)
+                            .join("; ")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {balanceRows.length > MAX_SHOWN_ROWS && (
+                <p class="text-body-sm text-muted">
+                  {t(
+                    "The list shows the first 100 rows. Download the full list."
+                  )}
+                </p>
+              )}
+            </div>
+          )}
+          {issueRows.length > 0 && (
+            <div class="table-wrap stack-table">
+              <table class="w-full text-left text-body-sm">
+                <caption class="sr-only">
+                  {t("Rows that need attention")}
+                </caption>
+                <thead class="border-b border-border bg-surface-hover text-muted">
+                  <tr>
+                    <th scope="col" class="px-4 py-2">
+                      {t("Row")}
+                    </th>
+                    <th scope="col" class="px-4 py-2">
+                      {t("Dwelling number")}
+                    </th>
+                    <th scope="col" class="px-4 py-2">
+                      {t("Message")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-border">
+                  {issueRows.slice(0, MAX_SHOWN_ROWS).map((row) => (
+                    <tr>
+                      <td class="px-4 py-2" data-label={t("Row")}>
+                        {row.rowNumber}
+                      </td>
+                      <td class="px-4 py-2" data-label={t("Dwelling number")}>
+                        {row.number || "—"}
+                      </td>
+                      <td
+                        class:list={[
+                          "px-4 py-2",
+                          row.errors.length > 0
+                            ? "text-destructive"
+                            : "text-muted",
+                        ]}
+                        data-label={t("Message")}
+                      >
+                        {[
+                          ...row.errors,
+                          ...row.warnings,
+                          ...(row.skipReason ? [row.skipReason] : []),
+                        ]
+                          .map(t)
+                          .join("; ")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {issueRows.length > MAX_SHOWN_ROWS && (
+            <p class="text-body-sm text-muted">
+              {t("The list shows the first 100 rows. Download the full list.")}
+            </p>
+          )}
+          <div class="flex flex-wrap gap-3">
+            <form method="POST" class="contents">
+              <input type="hidden" name="step" value="map" />
+              <input type="hidden" name="text" value={text} />
+              <input type="hidden" name="filename" value={filename} />
+              <input type="hidden" name="encoding" value={encoding} />
+              <input type="hidden" name="mode" value={mode} />
+              <input type="hidden" name="balanceDate" value={balanceDate} />
+              <input type="hidden" name="sign" value={sign} />
+              {fields.map((f, i) => (
+                <>
+                  <input type="hidden" name={`field_${i}`} value={f ?? ""} />
+                  <input type="hidden" name={`proposed_${i}`} value={f ?? ""} />
+                  <input
+                    type="hidden"
+                    name={`source_${i}`}
+                    value={sources[i]}
+                  />
+                </>
+              ))}
+              <button type="submit" class="btn-secondary">
+                {t("Change the mapping")}
+              </button>
+            </form>
+            {hasIssues && (
+              <form method="POST" action={`${base}/issues`} class="contents">
+                <input type="hidden" name="kind" value={kindParam} />
+                <input type="hidden" name="text" value={text} />
+                <input type="hidden" name="mode" value={mode} />
+                <input type="hidden" name="balanceDate" value={balanceDate} />
+                <input type="hidden" name="sign" value={sign} />
+                {fields.map((f) => (
+                  <input type="hidden" name="field" value={f ?? ""} />
+                ))}
+                <button type="submit" class="btn-secondary">
+                  {t("Download the list of issues")}
+                </button>
+              </form>
+            )}
+            <form method="POST" class="contents">
+              <input type="hidden" name="step" value="import" />
+              <input type="hidden" name="text" value={text} />
+              <input type="hidden" name="filename" value={filename} />
+              <input type="hidden" name="encoding" value={encoding} />
+              <input type="hidden" name="mode" value={mode} />
+              <input type="hidden" name="balanceDate" value={balanceDate} />
+              <input type="hidden" name="sign" value={sign} />
+              {fields.map((f, i) => (
+                <>
+                  <input type="hidden" name={`field_${i}`} value={f ?? ""} />
+                  <input type="hidden" name={`proposed_${i}`} value={f ?? ""} />
+                  <input
+                    type="hidden"
+                    name={`source_${i}`}
+                    value={sources[i]}
+                  />
+                </>
+              ))}
+              <button type="submit" class="btn-primary" disabled={!canImport}>
+                {t("Import")}
+              </button>
+            </form>
+          </div>
+          {errorCount > 0 && (
+            <p class="text-body-sm text-muted">
+              {t("Fix the rows with errors, then import again")}
+            </p>
+          )}
+        </div>
+      )}
+  </div>
+</AdminLayout>

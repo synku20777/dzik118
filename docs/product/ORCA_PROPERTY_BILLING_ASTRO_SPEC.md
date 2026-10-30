@@ -2227,6 +2227,8 @@ Show:
 - case status counts;
 - work requiring attention.
 
+See [DASHBOARD_GUIDELINES.md](DASHBOARD_GUIDELINES.md) for non-normative guidance (2026-10-28).
+
 ## Monthly workbench
 
 `/admin/o/[orgId]/periods/[periodId]`

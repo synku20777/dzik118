@@ -5,3 +5,9 @@ node_modules/
 package-lock.json
 drizzle/migrations/
 docs/
+# Agent tooling and generated research output
+.agents/
+.codex/
+AGENTS.md
+reports/
+research_notes/

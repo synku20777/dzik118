@@ -17,6 +17,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { appUsers } from "./auth";
+import { dwellings } from "./dwellings";
 import { invoices } from "./invoices";
 import { organizations } from "./organizations";
 
@@ -38,6 +39,8 @@ export const paymentResultTypeEnum = pgEnum("payment_result_type", [
   "PARTIAL",
   "OVERPAYMENT",
 ]);
+
+export const paymentMethodEnum = pgEnum("payment_method", ["BANK", "CASH"]);
 
 export const bankImports = pgTable(
   "bank_imports",
@@ -84,6 +87,16 @@ export const bankTransactions = pgTable(
     reference: text("reference"),
     rawData: jsonb("raw_data").notNull(),
     rowNumber: integer("row_number").notNull(),
+    // Cash is typed in by an admin; it never comes from a statement.
+    paymentMethod: paymentMethodEnum("payment_method")
+      .notNull()
+      .default("BANK"),
+    // Set when an admin posted the payment straight to a dwelling account (no
+    // invoice, so no payment_matches row). Such a row is already applied: it is
+    // not unmatched and cannot be matched or edited (ADR 0014).
+    appliedDwellingId: uuid("applied_dwelling_id").references(
+      () => dwellings.id
+    ),
   },
   (table) => [
     index("bank_transactions_organization_id_idx").on(table.organizationId),

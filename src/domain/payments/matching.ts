@@ -186,6 +186,13 @@ export async function confirmMatch(
       .for("update")
       .limit(1);
     if (!transaction) throw new NotFoundError("Bank transaction not found");
+    // Already posted to a dwelling account: applying it again would credit the
+    // money twice.
+    if (transaction.appliedDwellingId) {
+      throw new ConflictError(
+        "This payment is already posted to a dwelling account"
+      );
+    }
     // Rows stored before the import rule can be zero or negative. They would
     // post an invalid ledger entry.
     if (compareExact(transaction.amount, "0.00") <= 0) {
@@ -254,7 +261,7 @@ export async function confirmMatch(
       currency: transaction.currency,
       invoiceId: invoice.id,
       bankTransactionId: transaction.id,
-      description: `Bank payment ${transaction.reference ?? transaction.id}`,
+      description: `${transaction.paymentMethod === "CASH" ? "Cash" : "Bank"} payment ${transaction.reference ?? transaction.id}`,
       metadata: { allocatedAmount, resultType },
       idempotencyKey: `bank-transaction:${transaction.id}:payment:${matchId}`,
     });
@@ -447,6 +454,7 @@ export async function listUnmatchedTransactions(
       payerName: bankTransactions.payerName,
       reference: bankTransactions.reference,
       bankImportId: bankTransactions.bankImportId,
+      paymentMethod: bankTransactions.paymentMethod,
     })
     .from(bankTransactions)
     .leftJoin(
@@ -459,7 +467,9 @@ export async function listUnmatchedTransactions(
     .where(
       and(
         eq(bankTransactions.organizationId, organizationId),
-        isNull(paymentMatches.id)
+        isNull(paymentMatches.id),
+        // A payment posted straight to a dwelling account is already applied.
+        isNull(bankTransactions.appliedDwellingId)
       )
     )
     .orderBy(desc(bankTransactions.bookingDate));

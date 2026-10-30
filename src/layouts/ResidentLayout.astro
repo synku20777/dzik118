@@ -40,50 +40,52 @@ const base = "/portal/dwellings/" + dwellingId;
     <title>{title}</title>
   </head>
   <body data-working-label={t("Working…")}>
-    <a class="skip-link" href="#main-content">{t("Skip to content")}</a>
+    <a class="skip-link" href="#main-content">
+      {t("Skip to content")}
+    </a>
     <header class="resident-header">
       <div>
-        <a class="brand" href="/portal"><BrandMark />{t("Namkopa")}</a><div
-          class="flex flex-wrap items-center gap-x-3 gap-y-1"
-        >
+        <a class="brand" href="/portal">
+          <BrandMark />
+          {t("Namkopa")}
+        </a>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
           <ThemeToggle />
-          <LanguageSwitch />{
-            (auth?.organizationIds.length ?? 0) > 0 && (
-              <a href="/admin" class="text-sm text-muted hover:underline">
-                {t("Switch to admin view")}
-              </a>
-            )
-          }<a href="/portal/profile" class="text-sm text-muted"
-            >{t("Profile")}</a
-          >
+          <LanguageSwitch />
+          {(auth?.organizationIds.length ?? 0) > 0 && (
+            <a href="/admin" class="text-sm text-muted hover:underline">
+              {t("Switch to admin view")}
+            </a>
+          )}
+          <a href="/portal/profile" class="text-sm text-muted">
+            {t("Profile")}
+          </a>
         </div>
       </div>
     </header>
     <main id="main-content" tabindex="-1" class="resident-content app-content">
-      {
-        dwellingId && (
-          <nav class="resident-nav" aria-label={t("Navigation")}>
-            {[
-              [base, "Overview"],
-              [base + "/invoices", "Invoices"],
-              [base + "/messages", "Messages"],
-            ].map(([href, label]) => (
-              <a
-                href={href}
-                aria-current={
-                  Astro.url.pathname === href ||
-                  (label === "Invoices" &&
-                    Astro.url.pathname.startsWith("/portal/invoices/"))
-                    ? "page"
-                    : undefined
-                }
-              >
-                {t(label)}
-              </a>
-            ))}
-          </nav>
-        )
-      }
+      {dwellingId && (
+        <nav class="resident-nav" aria-label={t("Navigation")}>
+          {[
+            [base, "Overview"],
+            [base + "/invoices", "Invoices"],
+            [base + "/messages", "Messages"],
+          ].map(([href, label]) => (
+            <a
+              href={href}
+              aria-current={
+                Astro.url.pathname === href ||
+                (label === "Invoices" &&
+                  Astro.url.pathname.startsWith("/portal/invoices/"))
+                  ? "page"
+                  : undefined
+              }
+            >
+              {t(label)}
+            </a>
+          ))}
+        </nav>
+      )}
       <slot />
     </main>
     <script>

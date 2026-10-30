@@ -53,51 +53,45 @@ const currentUserId = Astro.locals.auth!.userId;
     </a>
     <h1 class="text-h2 text-foreground">{t("Admin users")}</h1>
     <p class="text-body-sm text-muted">
-      {
-        t(
-          "Resident access is assigned per dwelling, from each dwelling's detail page."
-        )
-      }
+      {t(
+        "Resident access is assigned per dwelling, from each dwelling's detail page."
+      )}
     </p>
-    {
-      (addResult?.error || removeResult?.error) && (
-        <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
-          {addResult?.error?.message ?? removeResult?.error?.message}
-        </p>
-      )
-    }
+    {(addResult?.error || removeResult?.error) && (
+      <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
+        {addResult?.error?.message ?? removeResult?.error?.message}
+      </p>
+    )}
     <div class="rounded-panel border border-border bg-surface p-6">
       <ul class="divide-y divide-border">
-        {
-          members.map((m) => (
-            <li class="flex items-center justify-between py-2 text-body-sm">
-              <span>
-                {m.displayName ?? m.email}{" "}
-                <span class="text-muted">({m.email})</span>
-              </span>
-              {m.userId !== currentUserId && (
-                <form
-                  method="POST"
-                  action={actions.organizations.removeAdminMember}
+        {members.map((m) => (
+          <li class="flex items-center justify-between py-2 text-body-sm">
+            <span>
+              {m.displayName ?? m.email}{" "}
+              <span class="text-muted">({m.email})</span>
+            </span>
+            {m.userId !== currentUserId && (
+              <form
+                method="POST"
+                action={actions.organizations.removeAdminMember}
+              >
+                <input
+                  type="hidden"
+                  name="organizationId"
+                  value={organizationId}
+                />
+                <input type="hidden" name="userId" value={m.userId} />
+                <button
+                  type="submit"
+                  data-confirm={`${t("Remove")} ${m.email}?`}
+                  class="text-destructive hover:underline"
                 >
-                  <input
-                    type="hidden"
-                    name="organizationId"
-                    value={organizationId}
-                  />
-                  <input type="hidden" name="userId" value={m.userId} />
-                  <button
-                    type="submit"
-                    data-confirm={`${t("Remove")} ${m.email}?`}
-                    class="text-destructive hover:underline"
-                  >
-                    {t("Remove")}
-                  </button>
-                </form>
-              )}
-            </li>
-          ))
-        }
+                  {t("Remove")}
+                </button>
+              </form>
+            )}
+          </li>
+        ))}
       </ul>
       <form
         method="POST"

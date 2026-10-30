@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
-import type { Db } from "../../db/client";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import type { Db, DbOrTx } from "../../db/client";
+import { accountEntries } from "../../db/schema/accounts";
 import { billingCases } from "../../db/schema/billing";
 import { dwellings } from "../../db/schema/dwellings";
 import { invoices } from "../../db/schema/invoices";
@@ -11,6 +12,7 @@ import {
   paymentMatches,
 } from "../../db/schema/payments";
 import { parseDateInput } from "../../lib/date-input";
+import { isUniqueViolation } from "../../lib/db-errors";
 import {
   addExact,
   compareExact,
@@ -59,6 +61,14 @@ export async function matchTransactionToInvoice(
           eq(paymentMatches.organizationId, organizationId)
         )
       );
+
+    // Posted straight to a dwelling account: it is already applied. Matching it
+    // would credit the money a second time.
+    if (transaction.appliedDwellingId) {
+      throw new ConflictError(
+        "This payment is already posted to a dwelling account"
+      );
+    }
 
     const nonReversed = existingMatches.find((m) => m.status !== "REVERSED");
     if (nonReversed) {
@@ -159,13 +169,214 @@ export async function matchTransactionToInvoice(
   });
 }
 
+export type PaymentMethod = "BANK" | "CASH";
+
+export interface PaymentFieldsInput {
+  amount: string;
+  bookingDate: string;
+  payerName?: string;
+  reference?: string;
+  reason: string;
+}
+
+// Shared by the invoice payment, the dwelling payment and the edit of an
+// unmatched row. A bank transfer needs its bank reference; cash may have none
+// (or a receipt number).
+export function cleanPaymentFields(
+  input: PaymentFieldsInput,
+  requireReference = true
+) {
+  // At most 12 whole digits: the column is numeric(14,2).
+  if (!input.amount || !/^\d{1,12}(\.\d{1,2})?$/.test(input.amount)) {
+    throw new ValidationError(
+      "Enter a valid amount, for example 12.50. Use up to 2 decimal places."
+    );
+  }
+  const amount = addExact(input.amount, "0.00");
+  if (compareExact(amount, "0.00") <= 0) {
+    throw new ValidationError("Amount must be greater than 0");
+  }
+
+  const bookingDate = parseDateInput(input.bookingDate);
+  if (!bookingDate) {
+    throw new ValidationError("Enter a valid booking date (YYYY-MM-DD)");
+  }
+
+  const reference = input.reference?.trim() ?? "";
+  if (reference.length > 140 || (requireReference && reference.length < 1)) {
+    throw new ValidationError("Reference must be between 1 and 140 characters");
+  }
+
+  const payerName =
+    input.payerName !== undefined && input.payerName !== null
+      ? input.payerName.trim()
+      : undefined;
+  if (payerName !== undefined && payerName.length > 140) {
+    throw new ValidationError("Payer name must be up to 140 characters");
+  }
+
+  const reason = input.reason?.trim() ?? "";
+  if (reason.length < 1 || reason.length > 500) {
+    throw new ValidationError("A reason is required (up to 500 characters)");
+  }
+
+  return { amount, bookingDate, reference, payerName, reason };
+}
+
+export async function assertBookingDateNotFuture(
+  tx: DbOrTx,
+  organizationId: string,
+  bookingDate: string
+) {
+  const [org] = await tx
+    .select({
+      timezone: organizations.timezone,
+      currency: organizations.currency,
+    })
+    .from(organizations)
+    .where(eq(organizations.id, organizationId))
+    .limit(1);
+  if (!org) throw new NotFoundError("Organization not found");
+  if (bookingDate > orgLocalDateString(new Date(), org.timezone)) {
+    throw new ValidationError("Booking date cannot be in the future");
+  }
+  return org;
+}
+
 export interface RecordManualPaymentInput {
   invoiceId: string;
   amount: string;
   bookingDate: string;
   payerName?: string;
-  reference: string;
+  reference?: string;
   reason: string;
+  method?: PaymentMethod;
+  // One per rendered form. A second submit of the same form (double click,
+  // reload after POST) carries the same id and is refused.
+  submissionId?: string;
+}
+
+// Stops a repeat of the same form. The id lives in the unique file hash of the
+// synthetic "Manual entry" import.
+export function manualImportHash(submissionId: string | undefined) {
+  return `manual:${submissionId ?? randomUUID()}`;
+}
+
+export const PAYMENT_ALREADY_RECORDED_MESSAGE =
+  "This payment was already recorded";
+
+// BANK only: the same bank reference, amount and date is almost surely a repeat.
+// Two cash payments of the same amount on one day are normal, so cash relies on
+// the submission id alone.
+export async function assertNoDuplicateBankPayment(
+  tx: DbOrTx,
+  organizationId: string,
+  fields: {
+    currency: string;
+    amount: string;
+    bookingDate: string;
+    reference: string;
+    // The row being edited does not count as its own duplicate.
+    excludeId?: string;
+  }
+) {
+  // Serialize identical submissions: the check below reads, then the caller
+  // inserts, so two concurrent requests could both pass it. The lock lasts
+  // until this transaction ends. Callers take it before any dwelling or
+  // invoice lock, so the lock order is the same everywhere.
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`manual-payment:${organizationId}:${fields.currency}:${fields.amount}:${fields.bookingDate}:${fields.reference.toLowerCase()}`}))`
+  );
+  const [existing] = await tx
+    .select({ id: bankTransactions.id })
+    .from(bankTransactions)
+    .where(
+      and(
+        eq(bankTransactions.organizationId, organizationId),
+        eq(bankTransactions.currency, fields.currency),
+        eq(bankTransactions.amount, fields.amount),
+        eq(bankTransactions.bookingDate, fields.bookingDate),
+        sql`lower(trim(${bankTransactions.reference})) = ${fields.reference.toLowerCase()}`,
+        fields.excludeId
+          ? ne(bankTransactions.id, fields.excludeId)
+          : undefined,
+        // A payment reversed off a dwelling account is gone: typing it in again
+        // for the right dwelling must not look like a repeat.
+        sql`not exists (
+          select 1 from ${accountEntries}
+          where ${accountEntries.bankTransactionId} = ${bankTransactions.id}
+            and ${accountEntries.type} = 'PAYMENT_REVERSAL'
+            and ${accountEntries.invoiceId} is null
+        )`
+      )
+    )
+    .limit(1);
+  if (existing) {
+    throw new ConflictError(
+      "A payment with this reference, amount, and date already exists"
+    );
+  }
+}
+
+// Inserts the synthetic import and the transaction row of a typed-in payment.
+export async function insertManualTransaction(
+  tx: DbOrTx,
+  input: {
+    organizationId: string;
+    actorUserId: string;
+    submissionId: string | undefined;
+    method: PaymentMethod;
+    currency: string;
+    amount: string;
+    bookingDate: string;
+    payerName: string | undefined;
+    reference: string;
+    reason: string;
+    appliedDwellingId?: string;
+  }
+) {
+  let bankImport;
+  try {
+    // The caller's transaction rolls back when this throws.
+    [bankImport] = await tx
+      .insert(bankImports)
+      .values({
+        organizationId: input.organizationId,
+        originalFilename: "Manual entry",
+        fileSha256: manualImportHash(input.submissionId),
+        importedByUserId: input.actorUserId,
+        rowCount: 1,
+      })
+      .returning();
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      throw new ConflictError(PAYMENT_ALREADY_RECORDED_MESSAGE);
+    }
+    throw err;
+  }
+
+  const [transaction] = await tx
+    .insert(bankTransactions)
+    .values({
+      organizationId: input.organizationId,
+      bankImportId: bankImport.id,
+      bookingDate: input.bookingDate,
+      amount: input.amount,
+      currency: input.currency,
+      payerName: input.payerName ? input.payerName : null,
+      reference: input.reference ? input.reference : null,
+      paymentMethod: input.method,
+      appliedDwellingId: input.appliedDwellingId ?? null,
+      rawData: {
+        source: "manual",
+        method: input.method,
+        reason: input.reason,
+        enteredByUserId: input.actorUserId,
+      },
+      rowNumber: 1,
+    })
+    .returning();
+  return transaction;
 }
 
 export async function recordManualPayment(
@@ -174,51 +385,18 @@ export async function recordManualPayment(
   input: RecordManualPaymentInput,
   actorUserId: string
 ) {
-  if (!input.amount || !/^\d+(\.\d{1,2})?$/.test(input.amount)) {
-    throw new ValidationError(
-      "Enter a valid amount, for example 12.50. Use up to 2 decimal places."
-    );
-  }
-  const normalizedAmount = addExact(input.amount, "0.00");
-  if (compareExact(normalizedAmount, "0.00") <= 0) {
-    throw new ValidationError("Amount must be greater than 0");
-  }
-
-  const parsedBookingDate = parseDateInput(input.bookingDate);
-  if (!parsedBookingDate) {
-    throw new ValidationError("Enter a valid booking date (YYYY-MM-DD)");
-  }
-
-  const cleanReference = input.reference?.trim() ?? "";
-  if (cleanReference.length < 1 || cleanReference.length > 140) {
-    throw new ValidationError("Reference must be between 1 and 140 characters");
-  }
-
-  const cleanPayerName =
-    input.payerName !== undefined && input.payerName !== null
-      ? input.payerName.trim()
-      : undefined;
-  if (cleanPayerName !== undefined && cleanPayerName.length > 140) {
-    throw new ValidationError("Payer name must be up to 140 characters");
-  }
-
-  const cleanReason = input.reason?.trim() ?? "";
-  if (cleanReason.length < 1 || cleanReason.length > 500) {
-    throw new ValidationError("A reason is required (up to 500 characters)");
-  }
+  const method = input.method ?? "BANK";
+  const fields = cleanPaymentFields(input, method === "BANK");
+  const {
+    amount: normalizedAmount,
+    bookingDate: parsedBookingDate,
+    reference: cleanReference,
+    payerName: cleanPayerName,
+    reason: cleanReason,
+  } = fields;
 
   return db.transaction(async (tx) => {
-    const [org] = await tx
-      .select({ timezone: organizations.timezone })
-      .from(organizations)
-      .where(eq(organizations.id, organizationId))
-      .limit(1);
-    if (!org) throw new NotFoundError("Organization not found");
-
-    const today = orgLocalDateString(new Date(), org.timezone);
-    if (parsedBookingDate > today) {
-      throw new ValidationError("Booking date cannot be in the future");
-    }
+    await assertBookingDateNotFuture(tx, organizationId, parsedBookingDate);
 
     const [invoice] = await tx
       .select({
@@ -236,61 +414,27 @@ export async function recordManualPayment(
       .limit(1);
     if (!invoice) throw new NotFoundError("Invoice not found");
 
-    // Serialize identical submissions: the duplicate check below reads, then
-    // inserts, so two concurrent requests could both pass it. The lock lasts
-    // until this transaction ends.
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtext(${`manual-payment:${organizationId}:${invoice.currency}:${normalizedAmount}:${parsedBookingDate}:${cleanReference.toLowerCase()}`}))`
-    );
-
-    const [existing] = await tx
-      .select({ id: bankTransactions.id })
-      .from(bankTransactions)
-      .where(
-        and(
-          eq(bankTransactions.organizationId, organizationId),
-          eq(bankTransactions.currency, invoice.currency),
-          eq(bankTransactions.amount, normalizedAmount),
-          eq(bankTransactions.bookingDate, parsedBookingDate),
-          sql`lower(trim(${bankTransactions.reference})) = ${cleanReference.toLowerCase()}`
-        )
-      )
-      .limit(1);
-    if (existing) {
-      throw new ConflictError(
-        "A payment with this reference, amount, and date already exists"
-      );
+    if (method === "BANK") {
+      await assertNoDuplicateBankPayment(tx, organizationId, {
+        currency: invoice.currency,
+        amount: normalizedAmount,
+        bookingDate: parsedBookingDate,
+        reference: cleanReference,
+      });
     }
 
-    const [bankImport] = await tx
-      .insert(bankImports)
-      .values({
-        organizationId,
-        originalFilename: "Manual entry",
-        fileSha256: `manual:${randomUUID()}`,
-        importedByUserId: actorUserId,
-        rowCount: 1,
-      })
-      .returning();
-
-    const [transaction] = await tx
-      .insert(bankTransactions)
-      .values({
-        organizationId,
-        bankImportId: bankImport.id,
-        bookingDate: parsedBookingDate,
-        amount: normalizedAmount,
-        currency: invoice.currency,
-        payerName: cleanPayerName ? cleanPayerName : null,
-        reference: cleanReference,
-        rawData: {
-          source: "manual",
-          reason: cleanReason,
-          enteredByUserId: actorUserId,
-        },
-        rowNumber: 1,
-      })
-      .returning();
+    const transaction = await insertManualTransaction(tx, {
+      organizationId,
+      actorUserId,
+      submissionId: input.submissionId,
+      method,
+      currency: invoice.currency,
+      amount: normalizedAmount,
+      bookingDate: parsedBookingDate,
+      payerName: cleanPayerName,
+      reference: cleanReference,
+      reason: cleanReason,
+    });
 
     await recordAuditEvent(tx, {
       organizationId,
@@ -301,6 +445,7 @@ export async function recordManualPayment(
       entityId: transaction.id,
       afterData: {
         invoiceId: input.invoiceId,
+        method,
         amount: normalizedAmount,
         bookingDate: parsedBookingDate,
         reference: cleanReference,
@@ -318,13 +463,130 @@ export async function recordManualPayment(
   });
 }
 
+export interface EditUnmatchedInput {
+  amount: string;
+  bookingDate: string;
+  payerName?: string;
+  reference?: string;
+  reason: string;
+}
+
+// Fixes a statement row the parser read wrongly, before it is matched. A row
+// with a match (or posted to a dwelling account) has moved money: reverse that
+// first. The currency and the imported raw data never change; the audit event
+// keeps the old values.
+export async function updateUnmatchedTransaction(
+  db: Db,
+  organizationId: string,
+  transactionId: string,
+  input: EditUnmatchedInput,
+  actorUserId: string
+) {
+  const fields = cleanPaymentFields(input, false);
+
+  return db.transaction(async (tx) => {
+    await assertBookingDateNotFuture(tx, organizationId, fields.bookingDate);
+
+    const [before] = await tx
+      .select()
+      .from(bankTransactions)
+      .where(
+        and(
+          eq(bankTransactions.id, transactionId),
+          eq(bankTransactions.organizationId, organizationId)
+        )
+      )
+      .for("update")
+      .limit(1);
+    if (!before) throw new NotFoundError("Bank transaction not found");
+
+    const [activeMatch] = await tx
+      .select({ id: paymentMatches.id })
+      .from(paymentMatches)
+      .where(
+        and(
+          eq(paymentMatches.bankTransactionId, transactionId),
+          eq(paymentMatches.organizationId, organizationId),
+          ne(paymentMatches.status, "REVERSED")
+        )
+      )
+      .limit(1);
+    if (activeMatch || before.appliedDwellingId) {
+      throw new ConflictError("Only an unmatched payment can be edited");
+    }
+
+    // A reference the statement gave cannot be erased. Rows that came without
+    // one stay editable.
+    if (before.reference && !fields.reference) {
+      throw new ValidationError(
+        "Reference must be between 1 and 140 characters"
+      );
+    }
+    // Same refusal as typing in a repeat of a bank payment. Only when the
+    // identity changes: a statement can hold two identical rows.
+    const identityChanged =
+      before.amount !== fields.amount ||
+      before.bookingDate !== fields.bookingDate ||
+      (before.reference ?? "").trim().toLowerCase() !==
+        fields.reference.toLowerCase();
+    if (
+      before.paymentMethod === "BANK" &&
+      fields.reference &&
+      identityChanged
+    ) {
+      await assertNoDuplicateBankPayment(tx, organizationId, {
+        currency: before.currency,
+        amount: fields.amount,
+        bookingDate: fields.bookingDate,
+        reference: fields.reference,
+        excludeId: before.id,
+      });
+    }
+
+    const [after] = await tx
+      .update(bankTransactions)
+      .set({
+        amount: fields.amount,
+        bookingDate: fields.bookingDate,
+        payerName: fields.payerName ? fields.payerName : null,
+        reference: fields.reference ? fields.reference : null,
+      })
+      .where(eq(bankTransactions.id, transactionId))
+      .returning();
+
+    await recordAuditEvent(tx, {
+      organizationId,
+      actorUserId,
+      action: "BANK_TRANSACTION_EDITED",
+      entityType: "bank_transaction",
+      entityId: transactionId,
+      beforeData: {
+        amount: before.amount,
+        bookingDate: before.bookingDate,
+        payerName: before.payerName,
+        reference: before.reference,
+      },
+      afterData: {
+        amount: after.amount,
+        bookingDate: after.bookingDate,
+        payerName: after.payerName,
+        reference: after.reference,
+        reason: fields.reason,
+      },
+    });
+    return after;
+  });
+}
+
 export async function listOpenInvoicesForPayment(
   db: Db,
-  organizationId: string
+  organizationId: string,
+  dwellingId?: string
 ) {
   const rows = await db
     .select({
       id: invoices.id,
+      dwellingId: invoices.dwellingId,
       invoiceNumber: invoices.invoiceNumber,
       dwellingNumber: dwellings.number,
       currency: invoices.currency,
@@ -336,6 +598,7 @@ export async function listOpenInvoicesForPayment(
     .where(
       and(
         eq(invoices.organizationId, organizationId),
+        dwellingId ? eq(invoices.dwellingId, dwellingId) : undefined,
         isNull(invoices.paidAt),
         inArray(billingCases.status, ["PREPARED", "SENT", "OVERDUE"])
       )
@@ -344,6 +607,7 @@ export async function listOpenInvoicesForPayment(
 
   const result: Array<{
     id: string;
+    dwellingId: string;
     invoiceNumber: string;
     dwellingNumber: string;
     currency: string;
@@ -361,6 +625,7 @@ export async function listOpenInvoicesForPayment(
     if (compareExact(remaining, "0.00") > 0) {
       result.push({
         id: row.id,
+        dwellingId: row.dwellingId,
         invoiceNumber: row.invoiceNumber,
         dwellingNumber: row.dwellingNumber,
         currency: row.currency,

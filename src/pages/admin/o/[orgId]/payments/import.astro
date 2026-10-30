@@ -112,152 +112,142 @@ if (Astro.request.method === "POST") {
     >
       ← {t("Payments")}
     </a>
-    <h1 class="text-h2 text-foreground">
-      {t("Import bank statement")}
-    </h1>
+    <h1 class="text-h2 text-foreground">{t("Import bank statement")}</h1>
 
-    {
-      step === "upload" && (
-        <form
-          method="POST"
-          enctype="multipart/form-data"
-          class="max-w-lg space-y-3 rounded-panel border border-border bg-surface p-6"
-        >
-          <div>
-            <label class="block text-label text-foreground" for="file">
-              {t("Bank statement CSV file")}
-            </label>
-            <input
-              id="file"
-              name="file"
-              type="file"
-              accept=".csv,text/csv"
-              required
-              class="mt-1 w-full text-body-sm"
-            />
-          </div>
-          <button type="submit" class="btn-primary ">
-            {t("Preview")}
+    {step === "upload" && (
+      <form
+        method="POST"
+        enctype="multipart/form-data"
+        class="max-w-lg space-y-3 rounded-panel border border-border bg-surface p-6"
+      >
+        <div>
+          <label class="block text-label text-foreground" for="file">
+            {t("Bank statement CSV file")}
+          </label>
+          <input
+            id="file"
+            name="file"
+            type="file"
+            accept=".csv,text/csv"
+            required
+            class="mt-1 w-full text-body-sm"
+          />
+        </div>
+        <button type="submit" class="btn-primary">
+          {t("Preview")}
+        </button>
+      </form>
+    )}
+
+    {step === "preview" && headerError && (
+      <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
+        {headerError}
+      </p>
+    )}
+
+    {step === "preview" && !headerError && (
+      <div class="space-y-4">
+        {isDuplicateFile && (
+          <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
+            {t(
+              "This exact file has already been imported for this organization. Importing it again will be blocked."
+            )}
+          </p>
+        )}
+        <div class="table-wrap stack-table">
+          <table class="w-full text-left text-body-sm">
+            <caption class="sr-only">{t("Payments to import")}</caption>
+            <thead class="border-b border-border bg-surface-hover text-muted">
+              <tr>
+                <th scope="col" class="px-4 py-2">
+                  {t("Row")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Booking date")}
+                </th>
+                <th scope="col" class="px-4 py-2 text-right">
+                  {t("Amount")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Currency")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Status")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Reference")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Errors")}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {rows.map((row) => (
+                <tr>
+                  <td class="px-4 py-2">{row.rowNumber}</td>
+                  <td class="px-4 py-2">{row.bookingDate || "—"}</td>
+                  <td class="px-4 py-2">{row.amount || "—"}</td>
+                  <td class="px-4 py-2">{row.currency || "—"}</td>
+                  <td class="px-4 py-2">
+                    <span
+                      class:list={{
+                        "text-success": row.status === "OK",
+                        "text-destructive": row.status === "ERROR",
+                      }}
+                    >
+                      {row.status}
+                    </span>
+                  </td>
+                  <td class="px-4 py-2">{row.reference || "—"}</td>
+                  <td class="px-4 py-2 text-destructive">
+                    {row.errors.join("; ")}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p class="text-sm text-muted">
+          {rows.filter((r) => r.status === "OK").length} to import,{" "}
+          {rows.filter((r) => r.status === "ERROR").length} with errors
+          (skipped).
+        </p>
+        {confirmError && (
+          <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
+            {confirmError}
+          </p>
+        )}
+        <form method="POST">
+          <input type="hidden" name="confirm" value="1" />
+          <input type="hidden" name="filename" value={filename} />
+          <input type="hidden" name="csvText" value={csvText} />
+          <button
+            type="submit"
+            disabled={
+              isDuplicateFile || !rows.some((row) => row.status === "OK")
+            }
+            class="btn-primary"
+          >
+            {t("Confirm import")}
           </button>
         </form>
-      )
-    }
+      </div>
+    )}
 
-    {
-      step === "preview" && headerError && (
-        <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
-          {headerError}
+    {step === "result" && result && (
+      <div class="rounded-panel border border-border bg-surface p-6">
+        <p class="text-sm text-foreground">
+          Imported {result.imported} transaction(s), skipped {result.errored}{" "}
+          row(s) with errors, proposed {result.proposed} exact match(es).
         </p>
-      )
-    }
-
-    {
-      step === "preview" && !headerError && (
-        <div class="space-y-4">
-          {isDuplicateFile && (
-            <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
-              {t(
-                "This exact file has already been imported for this organization. Importing it again will be blocked."
-              )}
-            </p>
-          )}
-          <div class="table-wrap stack-table">
-            <table class="w-full text-left text-body-sm">
-              <caption class="sr-only">{t("Payments to import")}</caption>
-              <thead class="border-b border-border bg-surface-hover text-muted">
-                <tr>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Row")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Booking date")}
-                  </th>
-                  <th scope="col" class="px-4 py-2 text-right">
-                    {t("Amount")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Currency")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Status")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Reference")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Errors")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-border">
-                {rows.map((row) => (
-                  <tr>
-                    <td class="px-4 py-2">{row.rowNumber}</td>
-                    <td class="px-4 py-2">{row.bookingDate || "—"}</td>
-                    <td class="px-4 py-2">{row.amount || "—"}</td>
-                    <td class="px-4 py-2">{row.currency || "—"}</td>
-                    <td class="px-4 py-2">
-                      <span
-                        class:list={{
-                          "text-success": row.status === "OK",
-                          "text-destructive": row.status === "ERROR",
-                        }}
-                      >
-                        {row.status}
-                      </span>
-                    </td>
-                    <td class="px-4 py-2">{row.reference || "—"}</td>
-                    <td class="px-4 py-2 text-destructive">
-                      {row.errors.join("; ")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p class="text-sm text-muted">
-            {rows.filter((r) => r.status === "OK").length} to import,{" "}
-            {rows.filter((r) => r.status === "ERROR").length} with errors
-            (skipped).
-          </p>
-          {confirmError && (
-            <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
-              {confirmError}
-            </p>
-          )}
-          <form method="POST">
-            <input type="hidden" name="confirm" value="1" />
-            <input type="hidden" name="filename" value={filename} />
-            <input type="hidden" name="csvText" value={csvText} />
-            <button
-              type="submit"
-              disabled={
-                isDuplicateFile || !rows.some((row) => row.status === "OK")
-              }
-              class="btn-primary "
-            >
-              {t("Confirm import")}
-            </button>
-          </form>
-        </div>
-      )
-    }
-
-    {
-      step === "result" && result && (
-        <div class="rounded-panel border border-border bg-surface p-6">
-          <p class="text-sm text-foreground">
-            Imported {result.imported} transaction(s), skipped {result.errored}{" "}
-            row(s) with errors, proposed {result.proposed} exact match(es).
-          </p>
-          <a
-            href={`/admin/o/${organizationId}/payments`}
-            class="btn-primary mt-4"
-          >
-            {t("Back to payments")}
-          </a>
-        </div>
-      )
-    }
+        <a
+          href={`/admin/o/${organizationId}/payments`}
+          class="btn-primary mt-4"
+        >
+          {t("Back to payments")}
+        </a>
+      </div>
+    )}
   </div>
 </AdminLayout>

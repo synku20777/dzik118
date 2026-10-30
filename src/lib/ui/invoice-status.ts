@@ -4,13 +4,13 @@ import type { IconName } from "./icons";
 // icon per state -- the icon reinforces the text label, it never replaces
 // it, so states that share a meaning share an icon.
 const statuses: Record<string, [string, string, IconName]> = {
-  MISSING_DATA: ["Missing data", "danger", "alert-triangle"],
-  READY: ["Ready to invoice", "warning", "check"],
+  MISSING_DATA: ["Missing data", "warning", "alert-triangle"],
+  READY: ["Ready to invoice", "info", "check"],
   DRAFT: ["Draft", "neutral", "file-description"],
   PREPARED: ["Prepared", "info", "check"],
   SENT: ["Sent", "info", "send"],
   PAID: ["Paid", "success", "circle-check"],
-  OVERDUE: ["Overdue", "warning", "clock-exclamation"],
+  OVERDUE: ["Overdue", "danger", "clock-exclamation"],
   // "OPEN" is shared by two unrelated domains (billing period + message
   // thread) -- "lock-open" reads sensibly for both ("not yet locked" /
   // "not yet resolved") without inventing a per-domain variant.

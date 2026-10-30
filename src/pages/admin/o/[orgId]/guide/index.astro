@@ -180,7 +180,15 @@ const faqs = [
   ],
   [
     "How do I record a payment that is not in a bank statement?",
-    "Click Record a payment on the Payments page. Choose the invoice. Enter the amount, date, payer, bank reference, and a reason. The payment applies right away. The app blocks a second entry with the same reference, amount, and date. You can record bank transfers only.",
+    "Click Record a payment on the Payments page, or on the dwelling page. Choose an open invoice, or a dwelling that has no open invoice. Choose bank transfer or cash. Enter the amount, date, payer, reference, and a reason. The payment applies right away. A bank transfer needs a reference, and the app blocks a second one with the same reference, amount, and date. A payment to a dwelling with no open invoice goes to the dwelling account, and the next invoice uses it. If the dwelling has an open invoice, choose that invoice.",
+  ],
+  [
+    "How do I fix a payment that the statement reader got wrong?",
+    "Open the Unmatched tab on the Payments page. Click Edit next to the payment. Change the amount, date, payer, or reference, and enter a reason. The old values stay in the audit history. You cannot edit a payment after it is matched.",
+  ],
+  [
+    "How do I undo a payment that I recorded to a dwelling account?",
+    "Open the Confirmed tab on the Payments page. Find the payment under Payments to an account. Click Reverse and enter a reason. The dwelling account goes back to its balance before the payment. The payment does not return to the Unmatched tab. Record it again for the correct dwelling. You cannot reverse a payment if a later invoice already used its credit.",
   ],
   [
     "How do I undo a payment that I matched to the wrong invoice?",
@@ -289,11 +297,9 @@ const statuses = [
           <p class="eyebrow">{t("First-time setup")}</p>
           <h2>{t("Initial setup")}</h2>
           <p>
-            {
-              t(
-                "Follow these steps in order for your first billing run. After setup, repeat the monthly cycle every month."
-              )
-            }
+            {t(
+              "Follow these steps in order for your first billing run. After setup, repeat the monthly cycle every month."
+            )}
           </p>
           <p class="mt-3">
             {t("The guided setup walks you through these steps.")}{" "}
@@ -306,32 +312,30 @@ const statuses = [
           </p>
         </div>
         <ol class="guide-steps">
-          {
-            setupSteps.map((step, index) => (
-              <li id={`setup-step-${index + 1}`} class="guide-step">
-                <p class="guide-number">{String(index + 1).padStart(2, "0")}</p>
-                <div class="guide-copy">
-                  <h3>{t(step.title)}</h3>
-                  <p>{t(step.description)}</p>
-                  <p class="guide-ready">
-                    <Icon name="check" size="xs" /> {t(step.ready)}
-                  </p>
-                  <a href={step.href}>{t(step.action)} →</a>
-                </div>
-                {step.image && (
-                  <figure class="guide-shot">
-                    <img
-                      src={step.image}
-                      alt={t(step.imageAlt)}
-                      width="1440"
-                      height="900"
-                      loading="lazy"
-                    />
-                  </figure>
-                )}
-              </li>
-            ))
-          }
+          {setupSteps.map((step, index) => (
+            <li id={`setup-step-${index + 1}`} class="guide-step">
+              <p class="guide-number">{String(index + 1).padStart(2, "0")}</p>
+              <div class="guide-copy">
+                <h3>{t(step.title)}</h3>
+                <p>{t(step.description)}</p>
+                <p class="guide-ready">
+                  <Icon name="check" size="xs" /> {t(step.ready)}
+                </p>
+                <a href={step.href}>{t(step.action)} →</a>
+              </div>
+              {step.image && (
+                <figure class="guide-shot">
+                  <img
+                    src={step.image}
+                    alt={t(step.imageAlt)}
+                    width="1440"
+                    height="900"
+                    loading="lazy"
+                  />
+                </figure>
+              )}
+            </li>
+          ))}
         </ol>
       </section>
 
@@ -340,40 +344,36 @@ const statuses = [
           <p class="eyebrow">{t("Repeat every month")}</p>
           <h2>{t("Monthly billing cycle")}</h2>
           <p>
-            {
-              t(
-                "Each month, open the current period. Resolve missing inputs, prepare invoices, send them, and reconcile payments."
-              )
-            }
+            {t(
+              "Each month, open the current period. Resolve missing inputs, prepare invoices, send them, and reconcile payments."
+            )}
           </p>
         </div>
         <ol class="guide-steps">
-          {
-            monthlySteps.map((step, index) => (
-              <li id={`monthly-step-${index + 1}`} class="guide-step">
-                <p class="guide-number">{String(index + 1).padStart(2, "0")}</p>
-                <div class="guide-copy">
-                  <h3>{t(step.title)}</h3>
-                  <p>{t(step.description)}</p>
-                  <p class="guide-ready">
-                    <Icon name="check" size="xs" /> {t(step.ready)}
-                  </p>
-                  <a href={step.href}>{t(step.action)} →</a>
-                </div>
-                {step.image && (
-                  <figure class="guide-shot">
-                    <img
-                      src={step.image}
-                      alt={t(step.imageAlt)}
-                      width="1440"
-                      height="900"
-                      loading="lazy"
-                    />
-                  </figure>
-                )}
-              </li>
-            ))
-          }
+          {monthlySteps.map((step, index) => (
+            <li id={`monthly-step-${index + 1}`} class="guide-step">
+              <p class="guide-number">{String(index + 1).padStart(2, "0")}</p>
+              <div class="guide-copy">
+                <h3>{t(step.title)}</h3>
+                <p>{t(step.description)}</p>
+                <p class="guide-ready">
+                  <Icon name="check" size="xs" /> {t(step.ready)}
+                </p>
+                <a href={step.href}>{t(step.action)} →</a>
+              </div>
+              {step.image && (
+                <figure class="guide-shot">
+                  <img
+                    src={step.image}
+                    alt={t(step.imageAlt)}
+                    width="1440"
+                    height="900"
+                    loading="lazy"
+                  />
+                </figure>
+              )}
+            </li>
+          ))}
         </ol>
       </section>
 
@@ -384,16 +384,14 @@ const statuses = [
           <p>{t("Use the status to see what you can do next.")}</p>
         </div>
         <dl class="status-guide">
-          {
-            statuses.map(([status, description]) => (
-              <div>
-                <dt>
-                  <StatusBadge status={status} />
-                </dt>
-                <dd>{t(description)}</dd>
-              </div>
-            ))
-          }
+          {statuses.map(([status, description]) => (
+            <div>
+              <dt>
+                <StatusBadge status={status} />
+              </dt>
+              <dd>{t(description)}</dd>
+            </div>
+          ))}
         </dl>
       </section>
 
@@ -403,14 +401,12 @@ const statuses = [
           <h2>{t("Frequently asked questions")}</h2>
         </div>
         <div class="space-y-3">
-          {
-            faqs.map(([question, answer]) => (
-              <details class="disclosure">
-                <summary>{t(question)}</summary>
-                <p class="text-body-sm text-muted">{t(answer)}</p>
-              </details>
-            ))
-          }
+          {faqs.map(([question, answer]) => (
+            <details class="disclosure">
+              <summary>{t(question)}</summary>
+              <p class="text-body-sm text-muted">{t(answer)}</p>
+            </details>
+          ))}
         </div>
       </section>
     </article>
@@ -418,21 +414,17 @@ const statuses = [
     <nav class="guide-toc" aria-label={t("On this page")}>
       <p class="eyebrow">{t("On this page")}</p>
       <a href="#setup">{t("Initial setup")}</a>
-      {
-        setupSteps.map((step, index) => (
-          <a class="guide-toc-child" href={`#setup-step-${index + 1}`}>
-            {t(step.title)}
-          </a>
-        ))
-      }
+      {setupSteps.map((step, index) => (
+        <a class="guide-toc-child" href={`#setup-step-${index + 1}`}>
+          {t(step.title)}
+        </a>
+      ))}
       <a href="#monthly">{t("Monthly billing cycle")}</a>
-      {
-        monthlySteps.map((step, index) => (
-          <a class="guide-toc-child" href={`#monthly-step-${index + 1}`}>
-            {t(step.title)}
-          </a>
-        ))
-      }
+      {monthlySteps.map((step, index) => (
+        <a class="guide-toc-child" href={`#monthly-step-${index + 1}`}>
+          {t(step.title)}
+        </a>
+      ))}
       <a href="#statuses">{t("Invoice status guide")}</a>
       <a href="#faq">{t("Frequently asked questions")}</a>
     </nav>

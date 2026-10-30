@@ -6,21 +6,19 @@ const t = (text: string) => translate(locale, text);
 ---
 
 <AuthLayout title={t("Namkopa")}>
-  <div
-    class="max-w-md w-full rounded-panel bg-surface p-8 border border-border text-center"
-  >
+  <div class="max-w-md w-full rounded-panel bg-surface p-8 border border-border text-center">
     <h1 class="font-display text-2xl tracking-tight text-foreground">
       {t("Namkopa")}
     </h1>
     <p class="mt-2 text-sm text-muted">
-      {
-        t(
-          "Sign in as a resident with an email link, or as an administrator with a password."
-        )
-      }
+      {t(
+        "Sign in as a resident with an email link, or as an administrator with a password."
+      )}
     </p>
     <div class="mt-6 flex flex-col gap-3">
-      <a href="/login" class="btn-primary justify-center">{t("Sign in")}</a>
+      <a href="/login" class="btn-primary justify-center">
+        {t("Sign in")}
+      </a>
     </div>
   </div>
 </AuthLayout>

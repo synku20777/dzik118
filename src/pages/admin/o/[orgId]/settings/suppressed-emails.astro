@@ -50,90 +50,82 @@ const reasonLabel = { BOUNCE: "Bounce", COMPLAINT: "Complaint" } as const;
     {t("Suppressed email addresses")}
   </h1>
   <p class="mt-2 max-w-2xl text-body-sm text-muted">
-    {
-      t(
-        "Invoices are not sent to these addresses. The email provider reported a permanent bounce or a complaint. Remove an address after you fix the problem."
-      )
-    }
+    {t(
+      "Invoices are not sent to these addresses. The email provider reported a permanent bounce or a complaint. Remove an address after you fix the problem."
+    )}
   </p>
 
-  {
-    removeResult?.error && (
-      <p class="notice notice-danger mt-4" role="alert">
-        {friendlyActionErrorMessage(removeResult.error, locale)}
-      </p>
-    )
-  }
-  {
-    removeResult?.data && (
-      <p class="notice mt-4" role="status">
-        {t("Address removed.")}
-      </p>
-    )
-  }
+  {removeResult?.error && (
+    <p class="notice notice-danger mt-4" role="alert">
+      {friendlyActionErrorMessage(removeResult.error, locale)}
+    </p>
+  )}
+  {removeResult?.data && (
+    <p class="notice mt-4" role="status">
+      {t("Address removed.")}
+    </p>
+  )}
 
-  {
-    suppressed.length === 0 ? (
-      <div class="mt-6">
-        <EmptyState title={t("No suppressed email addresses.")} />
-      </div>
-    ) : (
-      <div class="table-wrap stack-table mt-6">
-        <table class="w-full text-left text-body-sm">
-          <caption class="sr-only">{t("Suppressed email addresses")}</caption>
-          <thead class="border-b border-border bg-surface-hover text-muted">
+  {suppressed.length === 0 ? (
+    <div class="mt-6">
+      <EmptyState title={t("No suppressed email addresses.")} />
+    </div>
+  ) : (
+    <div class="table-wrap stack-table mt-6">
+      <table class="w-full text-left text-body-sm">
+        <caption class="sr-only">{t("Suppressed email addresses")}</caption>
+        <thead class="border-b border-border bg-surface-hover text-muted">
+          <tr>
+            <th scope="col" class="px-4 py-2">
+              {t("Email address")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Reason")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Added")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              <span class="sr-only">{t("Actions")}</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          {suppressed.map((row) => (
             <tr>
-              <th scope="col" class="px-4 py-2">
-                {t("Email address")}
-              </th>
-              <th scope="col" class="px-4 py-2">
-                {t("Reason")}
-              </th>
-              <th scope="col" class="px-4 py-2">
-                {t("Added")}
-              </th>
-              <th scope="col" class="px-4 py-2">
-                <span class="sr-only">{t("Actions")}</span>
-              </th>
+              <td class="px-4 py-2">{row.email}</td>
+              <td class="px-4 py-2">
+                {t(reasonLabel[row.reason])}
+                {row.detail && (
+                  <div class="text-xs text-muted">{row.detail}</div>
+                )}
+              </td>
+              <td class="px-4 py-2">
+                {formatDate(row.createdAt, locale, organization.timezone)}
+              </td>
+              <td class="px-4 py-2">
+                <form method="POST" action={actions.emailSuppression.remove}>
+                  <input
+                    type="hidden"
+                    name="organizationId"
+                    value={organizationId}
+                  />
+                  <input type="hidden" name="suppressionId" value={row.id} />
+                  <button
+                    type="submit"
+                    class="btn-secondary"
+                    data-confirm={t(
+                      "Remove this address from the suppressed list? Invoices can be sent to it again."
+                    )}
+                  >
+                    {t("Remove from list")}
+                  </button>
+                </form>
+              </td>
             </tr>
-          </thead>
-          <tbody class="divide-y divide-border">
-            {suppressed.map((row) => (
-              <tr>
-                <td class="px-4 py-2">{row.email}</td>
-                <td class="px-4 py-2">
-                  {t(reasonLabel[row.reason])}
-                  {row.detail && (
-                    <div class="text-xs text-muted">{row.detail}</div>
-                  )}
-                </td>
-                <td class="px-4 py-2">
-                  {formatDate(row.createdAt, locale, organization.timezone)}
-                </td>
-                <td class="px-4 py-2">
-                  <form method="POST" action={actions.emailSuppression.remove}>
-                    <input
-                      type="hidden"
-                      name="organizationId"
-                      value={organizationId}
-                    />
-                    <input type="hidden" name="suppressionId" value={row.id} />
-                    <button
-                      type="submit"
-                      class="btn-secondary"
-                      data-confirm={t(
-                        "Remove this address from the suppressed list? Invoices can be sent to it again."
-                      )}
-                    >
-                      {t("Remove from list")}
-                    </button>
-                  </form>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )
-  }
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
 </AdminLayout>

@@ -14,6 +14,20 @@ export default defineConfig({
   prefetch: false,
   vite: {
     plugins: [tailwindcss()],
+    // Discovered lazily on the first authed render; mid-request re-optimization
+    // leaves workerd with a stale dep hash (500). The Cloudflare adapter merges
+    // this list into the ssr/astro/prerender environments; Vite applies it to client.
+    optimizeDeps: {
+      include: [
+        "@cloudflare/puppeteer",
+        "aws4fetch",
+        "astro/virtual-modules/transitions-events.js",
+        "astro/virtual-modules/transitions-router.js",
+        "astro/virtual-modules/transitions-swap-functions.js",
+        "astro/virtual-modules/transitions-types.js",
+        "astro/actions/runtime/entrypoints/client.js",
+      ],
+    },
   },
   env: {
     schema: {

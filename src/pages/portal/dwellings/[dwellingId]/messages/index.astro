@@ -61,32 +61,27 @@ const conversations = await withRequestDb((db) =>
         href={`/portal/dwellings/${dwellingId}`}
         class="text-sm text-muted hover:underline"
       >
-        ← {t("Dwelling")}{" "}
-        {dwelling.number}
+        ← {t("Dwelling")} {dwelling.number}
       </a>
 
       <h1 class="text-xl font-bold text-foreground">{t("Messages")}</h1>
 
-      {
-        createResult?.error && (
-          <p
-            class="rounded-control bg-danger-surface p-3 text-sm text-destructive"
-            role="alert"
-          >
-            {friendlyActionErrorMessage(createResult.error, locale)}
-          </p>
-        )
-      }
-      {
-        replyResult?.error && (
-          <p
-            class="rounded-control bg-danger-surface p-3 text-sm text-destructive"
-            role="alert"
-          >
-            {friendlyActionErrorMessage(replyResult.error, locale)}
-          </p>
-        )
-      }
+      {createResult?.error && (
+        <p
+          class="rounded-control bg-danger-surface p-3 text-sm text-destructive"
+          role="alert"
+        >
+          {friendlyActionErrorMessage(createResult.error, locale)}
+        </p>
+      )}
+      {replyResult?.error && (
+        <p
+          class="rounded-control bg-danger-surface p-3 text-sm text-destructive"
+          role="alert"
+        >
+          {friendlyActionErrorMessage(replyResult.error, locale)}
+        </p>
+      )}
 
       <section class="rounded-panel border border-border bg-surface p-4">
         <h2 class="text-base font-semibold text-foreground">
@@ -132,64 +127,62 @@ const conversations = await withRequestDb((db) =>
         </form>
       </section>
 
-      {
-        conversations.length === 0 ? (
-          <p class="text-sm text-muted">{t("No conversations yet.")}</p>
-        ) : (
-          conversations.map(({ conversation, messages }) => (
-            <section class="rounded-panel border border-border bg-surface p-4">
-              <div class="flex items-center justify-between">
-                <h3 class="font-medium text-foreground">
-                  {conversation.subject}
-                </h3>
-                <StatusBadge status={conversation.status} />
-              </div>
+      {conversations.length === 0 ? (
+        <p class="text-sm text-muted">{t("No conversations yet.")}</p>
+      ) : (
+        conversations.map(({ conversation, messages }) => (
+          <section class="rounded-panel border border-border bg-surface p-4">
+            <div class="flex items-center justify-between">
+              <h3 class="font-medium text-foreground">
+                {conversation.subject}
+              </h3>
+              <StatusBadge status={conversation.status} />
+            </div>
 
-              <div class="mt-3 space-y-2">
-                {messages.map((message) => (
-                  <div class="rounded-control bg-surface-hover p-3">
-                    <p class="whitespace-pre-wrap break-words text-sm text-foreground">
-                      {message.body}
-                    </p>
-                    <p class="mt-1 text-xs text-muted">
-                      {formatDate(message.createdAt, locale)}
-                    </p>
-                  </div>
-                ))}
-              </div>
+            <div class="mt-3 space-y-2">
+              {messages.map((message) => (
+                <div class="rounded-control bg-surface-hover p-3">
+                  <p class="whitespace-pre-wrap break-words text-sm text-foreground">
+                    {message.body}
+                  </p>
+                  <p class="mt-1 text-xs text-muted">
+                    {formatDate(message.createdAt, locale)}
+                  </p>
+                </div>
+              ))}
+            </div>
 
-              {conversation.status !== "RESOLVED" ? (
-                <form
-                  method="POST"
-                  action={actions.messages.reply}
-                  class="mt-3 space-y-2"
-                >
-                  <input
-                    type="hidden"
-                    name="conversationId"
-                    value={conversation.id}
-                  />
-                  <input type="hidden" name="sentAs" value="RESIDENT" />
-                  <textarea
-                    aria-label={t("Reply")}
-                    name="body"
-                    required
-                    rows="2"
-                    class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
-                  />
-                  <button type="submit" class="btn-primary w-full sm:w-auto">
-                    {t("Reply")}
-                  </button>
-                </form>
-              ) : (
-                <p class="mt-2 text-xs text-muted">
-                  {t("This conversation is resolved.")}
-                </p>
-              )}
-            </section>
-          ))
-        )
-      }
+            {conversation.status !== "RESOLVED" ? (
+              <form
+                method="POST"
+                action={actions.messages.reply}
+                class="mt-3 space-y-2"
+              >
+                <input
+                  type="hidden"
+                  name="conversationId"
+                  value={conversation.id}
+                />
+                <input type="hidden" name="sentAs" value="RESIDENT" />
+                <textarea
+                  aria-label={t("Reply")}
+                  name="body"
+                  required
+                  rows="2"
+                  class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
+                />
+                <button type="submit" class="btn-primary w-full sm:w-auto">
+                  {t("Reply")}
+                </button>
+              </form>
+            ) : (
+              <p class="mt-2 text-xs text-muted">
+                {t("This conversation is resolved.")}
+              </p>
+            )}
+          </section>
+        ))
+      )}
     </div>
   </div>
 </ResidentLayout>

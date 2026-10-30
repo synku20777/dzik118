@@ -59,25 +59,23 @@ const cityLine = [organization.city, organization.postalCode]
         </p>
       </div>
       <a href={`${base}/guide`} class="btn-secondary settings-help">
-        <span class="settings-help-icon" aria-hidden="true">?</span>
+        <span class="settings-help-icon" aria-hidden="true">
+          ?
+        </span>
         {t("Need help?")}
       </a>
     </header>
 
-    {
-      updateResult?.error && (
-        <p class="notice notice-danger" role="alert">
-          {friendlyActionErrorMessage(updateResult.error, locale)}
-        </p>
-      )
-    }
-    {
-      updateResult?.data && (
-        <p class="notice" role="status">
-          {t("Saved successfully.")}
-        </p>
-      )
-    }
+    {updateResult?.error && (
+      <p class="notice notice-danger" role="alert">
+        {friendlyActionErrorMessage(updateResult.error, locale)}
+      </p>
+    )}
+    {updateResult?.data && (
+      <p class="notice" role="status">
+        {t("Saved successfully.")}
+      </p>
+    )}
 
     <div class="org-settings-split">
       <form
@@ -106,24 +104,22 @@ const cityLine = [organization.city, organization.postalCode]
         }
 
         <div class="org-info-banner">
-          <span class="org-info-icon" aria-hidden="true">i</span>
+          <span class="org-info-icon" aria-hidden="true">
+            i
+          </span>
           <p>
-            {
-              t(
-                "Keep your organization details up to date to ensure correct invoicing and communication."
-              )
-            }
+            {t(
+              "Keep your organization details up to date to ensure correct invoicing and communication."
+            )}
           </p>
         </div>
 
         <div class="org-settings-section">
           <h2>{t("Legal and contact details")}</h2>
           <p class="org-settings-section-desc">
-            {
-              t(
-                "This information is used on invoices and for official communication."
-              )
-            }
+            {t(
+              "This information is used on invoices and for official communication."
+            )}
           </p>
 
           <div class="org-field">
@@ -265,7 +261,9 @@ const cityLine = [organization.city, organization.postalCode]
         </div>
 
         <div class="org-settings-actions">
-          <a href={settingsHref} class="btn-secondary">{t("Cancel")}</a>
+          <a href={settingsHref} class="btn-secondary">
+            {t("Cancel")}
+          </a>
           <button type="submit" class="btn-primary">
             {t("Save changes")}
           </button>
@@ -294,14 +292,12 @@ const cityLine = [organization.city, organization.postalCode]
               <dt>{t("Address")}</dt>
               <dd>
                 {organization.addressLine1}
-                {
-                  cityLine && (
-                    <>
-                      <br />
-                      {cityLine}
-                    </>
-                  )
-                }
+                {cityLine && (
+                  <>
+                    <br />
+                    {cityLine}
+                  </>
+                )}
               </dd>
             </div>
             <div>
@@ -325,75 +321,71 @@ const cityLine = [organization.city, organization.postalCode]
 
         <div class="org-summary-card">
           <h2>{t("Archive organization")}</h2>
-          {
-            archiveResult?.error && (
-              <p class="notice notice-danger mt-3" role="alert">
-                {friendlyActionErrorMessage(archiveResult.error, locale)}
+          {archiveResult?.error && (
+            <p class="notice notice-danger mt-3" role="alert">
+              {friendlyActionErrorMessage(archiveResult.error, locale)}
+            </p>
+          )}
+          {organization.archivedAt ? (
+            <>
+              <p class="mt-2 text-sm text-muted">
+                {t(
+                  "This organization is archived. Restore it to make changes and to let residents sign in again."
+                )}
               </p>
-            )
-          }
-          {
-            organization.archivedAt ? (
-              <>
-                <p class="mt-2 text-sm text-muted">
-                  {t(
-                    "This organization is archived. Restore it to make changes and to let residents sign in again."
-                  )}
-                </p>
-                <form
-                  method="POST"
-                  action={actions.organizations.restore}
-                  class="mt-4"
-                >
+              <form
+                method="POST"
+                action={actions.organizations.restore}
+                class="mt-4"
+              >
+                <input
+                  type="hidden"
+                  name="organizationId"
+                  value={organizationId}
+                />
+                <button type="submit" class="btn-primary">
+                  {t("Restore organization")}
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <p class="mt-2 text-sm text-muted">
+                {t(
+                  "Archiving makes this organization read-only. Residents cannot sign in and their invoice links stop working. You can restore it later."
+                )}
+              </p>
+              <form
+                method="POST"
+                action={actions.organizations.archive}
+                class="mt-4 grid gap-3"
+              >
+                <input
+                  type="hidden"
+                  name="organizationId"
+                  value={organizationId}
+                />
+                <div class="org-field">
+                  <label for="archive-reason">{t("Reason")}</label>
                   <input
-                    type="hidden"
-                    name="organizationId"
-                    value={organizationId}
+                    id="archive-reason"
+                    name="reason"
+                    maxlength="500"
+                    required
                   />
-                  <button type="submit" class="btn-primary">
-                    {t("Restore organization")}
-                  </button>
-                </form>
-              </>
-            ) : (
-              <>
-                <p class="mt-2 text-sm text-muted">
-                  {t(
-                    "Archiving makes this organization read-only. Residents cannot sign in and their invoice links stop working. You can restore it later."
+                </div>
+                <button
+                  type="submit"
+                  class="btn-danger"
+                  data-confirm={t(
+                    "Archive this organization? Residents cannot sign in until you restore it."
                   )}
-                </p>
-                <form
-                  method="POST"
-                  action={actions.organizations.archive}
-                  class="mt-4 grid gap-3"
                 >
-                  <input
-                    type="hidden"
-                    name="organizationId"
-                    value={organizationId}
-                  />
-                  <div class="org-field">
-                    <label for="archive-reason">{t("Reason")}</label>
-                    <input
-                      id="archive-reason"
-                      name="reason"
-                      maxlength="500"
-                      required
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    class="btn-danger"
-                    data-confirm={t(
-                      "Archive this organization? Residents cannot sign in until you restore it."
-                    )}
-                  >
-                    {t("Archive organization")}
-                  </button>
-                </form>
-              </>
-            )
-          }
+                  {t("Archive organization")}
+                </button>
+              </form>
+            </>
+          )}
         </div>
 
         <div class="org-tip-card">
@@ -403,11 +395,9 @@ const cityLine = [organization.city, organization.postalCode]
           <div>
             <h3>{t("Good to know")}</h3>
             <p>
-              {
-                t(
-                  "Keep your details current so that invoices, payments, and official communication are processed without delays."
-                )
-              }
+              {t(
+                "Keep your details current so that invoices, payments, and official communication are processed without delays."
+              )}
             </p>
           </div>
         </div>

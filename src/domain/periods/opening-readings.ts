@@ -8,17 +8,16 @@
 //
 // Callers must call requireActiveOrganization() first.
 import Papa from "papaparse";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import type { Db, DbOrTx, Tx } from "../../db/client";
 import { billingPeriods, meterReadings } from "../../db/schema/billing";
 import { dwellings, meterTypeEnum, meters } from "../../db/schema/dwellings";
 import { DECIMAL3_PATTERN } from "../../lib/decimal3";
-import { recordAuditEvent } from "../../lib/logging/audit";
+import { recordAuditEvent, recordAuditEvents } from "../../lib/logging/audit";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import { ImportHeaderError } from "../organizations/csv-import";
-import { recalculateCaseReadinessForOpenPeriods } from "./case-readiness";
+import { recalculateCaseReadinessForDwellings } from "./case-readiness";
 import { getFirstBillingPeriod } from "./periods";
-import { hasLaterReading } from "./readings";
 
 export const OPENING_READING_NOTE = "Starting reading";
 export const NO_FIRST_PERIOD_MESSAGE =
@@ -30,7 +29,7 @@ const MAX_ROWS = 5_000;
 const MAX_CSV_BYTES = 2_000_000;
 const METER_TYPES = new Set<string>(meterTypeEnum.enumValues);
 
-function monthBefore(year: number, month: number) {
+export function monthBefore(year: number, month: number) {
   return month === 1
     ? { year: year - 1, month: 12 }
     : { year, month: month - 1 };
@@ -45,7 +44,7 @@ function monthBounds(year: number, month: number) {
 
 // The opening period for the first billing month, made on first use. Locked
 // FOR UPDATE so concurrent writers serialize like recordReading's writers.
-async function lockOpeningPeriod(
+export async function lockOpeningPeriod(
   tx: Tx,
   organizationId: string,
   actorUserId: string
@@ -141,83 +140,208 @@ function validateRows(rows: OpeningReadingInput[]) {
   }
 }
 
-// Inside the caller's transaction, so the CSV import can create meters and
-// write their starting readings atomically.
-async function writeOpeningReadings(
+export const OPENING_LATER_READING_MESSAGE =
+  "This meter already has a later reading, so its starting reading cannot change";
+
+// Inside the caller's transaction, so an import can create meters and write
+// their starting readings atomically. A few statements for any number of
+// meters: lock, check, upsert and audit are all bulk (a building can have a
+// few thousand meters, and a round trip to the database costs milliseconds).
+// `rows` must not repeat a meter (validateRows).
+export async function writeOpeningReadings(
   tx: Tx,
   organizationId: string,
   rows: OpeningReadingInput[],
   actorUserId: string
 ) {
   const period = await lockOpeningPeriod(tx, organizationId, actorUserId);
-  for (const row of rows) {
-    const [meter] = await tx
-      .select()
-      .from(meters)
-      .where(
-        and(
-          eq(meters.id, row.meterId),
-          eq(meters.organizationId, organizationId)
+  if (rows.length === 0) return period;
+
+  const meterRows: (typeof meters.$inferSelect)[] = [];
+  for (let i = 0; i < rows.length; i += 500) {
+    // Ordered locks, so two imports cannot wait on each other in a circle.
+    meterRows.push(
+      ...(await tx
+        .select()
+        .from(meters)
+        .where(
+          and(
+            inArray(
+              meters.id,
+              rows.slice(i, i + 500).map((r) => r.meterId)
+            ),
+            eq(meters.organizationId, organizationId)
+          )
         )
-      )
-      .for("update")
-      .limit(1);
+        .orderBy(asc(meters.id))
+        .for("update"))
+    );
+  }
+  // Ownership first: a meter of another organization (or none) must not be
+  // told apart by what readings it has.
+  const byId = new Map(meterRows.map((m) => [m.id, m]));
+  for (const row of rows) {
+    const meter = byId.get(row.meterId);
     if (!meter) throw new NotFoundError("Meter not found");
     if (meter.archivedAt) {
       throw new ConflictError("Cannot record a reading for an archived meter");
     }
-    // A later reading computed its consumption from the old start, so the
-    // start can no longer change without making that reading wrong.
-    if (await hasLaterReading(tx, meter.id, period)) {
-      throw new ConflictError(
-        "This meter already has a later reading, so its starting reading cannot change"
-      );
-    }
-    const [before] = await tx
+  }
+
+  const before = new Map<string, typeof meterReadings.$inferSelect>();
+  for (let i = 0; i < rows.length; i += 500) {
+    const ids = rows.slice(i, i + 500).map((r) => r.meterId);
+    for (const reading of await tx
       .select()
       .from(meterReadings)
       .where(
         and(
           eq(meterReadings.periodId, period.id),
-          eq(meterReadings.meterId, meter.id)
+          inArray(meterReadings.meterId, ids)
+        )
+      )) {
+      before.set(reading.meterId, reading);
+    }
+    // A later reading computed its consumption from the old start, so the
+    // start can no longer change without making that reading wrong.
+    const [later] = await tx
+      .select({ id: meterReadings.id })
+      .from(meterReadings)
+      .innerJoin(billingPeriods, eq(billingPeriods.id, meterReadings.periodId))
+      .where(
+        and(
+          inArray(meterReadings.meterId, ids),
+          or(
+            gt(billingPeriods.year, period.year),
+            and(
+              eq(billingPeriods.year, period.year),
+              gt(billingPeriods.month, period.month)
+            )
+          )
         )
       )
       .limit(1);
-    const values = {
-      previousValue: null,
-      currentValue: row.value,
-      // Required column; the opening period is left out of consumption views.
-      consumption: "0.000",
-      source: "IMPORT" as const,
-      submittedByUserId: actorUserId,
-      submittedAt: new Date(),
-      note: OPENING_READING_NOTE,
-    };
-    const [reading] = await tx
-      .insert(meterReadings)
-      .values({
-        organizationId,
-        periodId: period.id,
-        meterId: meter.id,
-        ...values,
-      })
-      .onConflictDoUpdate({
-        target: [meterReadings.periodId, meterReadings.meterId],
-        set: values,
-      })
-      .returning();
-    await recordAuditEvent(tx, {
+    if (later) throw new ConflictError(OPENING_LATER_READING_MESSAGE);
+  }
+
+  const written: (typeof meterReadings.$inferSelect)[] = [];
+  for (let i = 0; i < rows.length; i += 500) {
+    written.push(
+      ...(await tx
+        .insert(meterReadings)
+        .values(
+          rows.slice(i, i + 500).map((row) => ({
+            organizationId,
+            periodId: period.id,
+            meterId: row.meterId,
+            previousValue: null,
+            currentValue: row.value,
+            // Required column; the opening period is left out of consumption
+            // views.
+            consumption: "0.000",
+            source: "IMPORT" as const,
+            submittedByUserId: actorUserId,
+            submittedAt: new Date(),
+            note: OPENING_READING_NOTE,
+          }))
+        )
+        .onConflictDoUpdate({
+          target: [meterReadings.periodId, meterReadings.meterId],
+          set: {
+            previousValue: null,
+            currentValue: sql`excluded.current_value`,
+            consumption: "0.000",
+            source: "IMPORT" as const,
+            submittedByUserId: actorUserId,
+            submittedAt: new Date(),
+            note: OPENING_READING_NOTE,
+          },
+        })
+        .returning())
+    );
+  }
+  await recordAuditEvents(
+    tx,
+    written.map((reading) => ({
       organizationId,
-      scopeDwellingId: meter.dwellingId,
+      scopeDwellingId: byId.get(reading.meterId)!.dwellingId,
       actorUserId,
       action: "METER_OPENING_READING_RECORDED",
       entityType: "meter_reading",
       entityId: reading.id,
-      beforeData: before,
+      beforeData: before.get(reading.meterId) ?? null,
       afterData: reading,
-    });
-  }
+    }))
+  );
   return period;
+}
+
+// New meters for imports, with their audit events and a single recalculation
+// of the open cases of the dwellings they belong to (a new meter can add a
+// blocker, as in createMeter).
+export async function createMetersBulk(
+  tx: Tx,
+  organizationId: string,
+  rows: {
+    dwellingId: string;
+    type: (typeof meterTypeEnum.enumValues)[number];
+    serialNumber: string | null;
+    unit: string;
+  }[],
+  actorUserId: string
+) {
+  const created: (typeof meters.$inferSelect)[] = [];
+  for (let i = 0; i < rows.length; i += 500) {
+    created.push(
+      ...(await tx
+        .insert(meters)
+        .values(rows.slice(i, i + 500).map((r) => ({ organizationId, ...r })))
+        .returning())
+    );
+  }
+  await recordAuditEvents(
+    tx,
+    created.map((meter) => ({
+      organizationId,
+      scopeDwellingId: meter.dwellingId,
+      actorUserId,
+      action: "METER_CREATED",
+      entityType: "meter",
+      entityId: meter.id,
+      afterData: meter,
+    }))
+  );
+  await recalculateCaseReadinessForDwellings(tx, organizationId, [
+    ...new Set(created.map((m) => m.dwellingId)),
+  ]);
+  return created;
+}
+
+// The meter a spreadsheet row means: by serial number when given, else the one
+// active meter of that type in the dwelling. `ambiguous` when several fit.
+export function matchMeter<
+  M extends {
+    dwellingId: string;
+    type: string;
+    serialNumber: string | null;
+    id: string;
+  },
+>(
+  orgMeters: M[],
+  dwellingId: string,
+  type: string,
+  serialNumber: string
+): { meter: M | null; ambiguous: boolean } {
+  const candidates = orgMeters.filter(
+    (m) =>
+      m.dwellingId === dwellingId &&
+      m.type === type &&
+      (!serialNumber || m.serialNumber === serialNumber)
+  );
+  return {
+    meter: candidates.length === 1 ? candidates[0] : null,
+    ambiguous: candidates.length > 1,
+  };
 }
 
 export async function recordOpeningReadings(
@@ -239,7 +363,7 @@ export async function recordOpeningReadings(
 }
 
 // The starting reading of each meter of the organization, if any.
-export async function listOpeningReadings(db: Db, organizationId: string) {
+export async function listOpeningReadings(db: DbOrTx, organizationId: string) {
   return db
     .select({
       meterId: meterReadings.meterId,
@@ -406,18 +530,13 @@ export async function validateOpeningReadingsCsv(
     // type in the dwelling. None: the import creates it.
     let meterId: string | null = null;
     if (dwellingId && errors.length === 0) {
-      const candidates = orgMeters.filter(
-        (m) =>
-          m.dwellingId === dwellingId &&
-          m.type === meterType &&
-          (!serialNumber || m.serialNumber === serialNumber)
-      );
-      if (candidates.length > 1) {
+      const match = matchMeter(orgMeters, dwellingId, meterType, serialNumber);
+      if (match.ambiguous) {
         errors.push(
           "the dwelling has more than one meter of this type; add serial_number"
         );
-      } else if (candidates.length === 1) {
-        meterId = candidates[0].id;
+      } else if (match.meter) {
+        meterId = match.meter.id;
         if (seenMeters.has(meterId)) {
           errors.push("this meter appears more than once in the file");
         }
@@ -478,43 +597,26 @@ export async function importOpeningReadingsCsv(
       throw new ValidationError("Fix the rows with errors, then import again");
     }
 
-    let createdMeters = 0;
-    const inputs: OpeningReadingInput[] = [];
-    for (const row of rows) {
-      let meterId = row.meterId;
-      if (!meterId) {
-        const [meter] = await tx
-          .insert(meters)
-          .values({
-            organizationId,
-            dwellingId: row.dwellingId!,
-            type: row.meterType as (typeof meterTypeEnum.enumValues)[number],
-            serialNumber: row.serialNumber || null,
-            unit: row.unit,
-          })
-          .returning();
-        await recordAuditEvent(tx, {
-          organizationId,
-          scopeDwellingId: meter.dwellingId,
-          actorUserId,
-          action: "METER_CREATED",
-          entityType: "meter",
-          entityId: meter.id,
-          afterData: meter,
-        });
-        // Same as createMeter: a new meter can add a blocker to open cases.
-        await recalculateCaseReadinessForOpenPeriods(
-          tx,
-          organizationId,
-          meter.dwellingId
-        );
-        meterId = meter.id;
-        createdMeters++;
-      }
-      inputs.push({ meterId, value: row.reading });
-    }
+    const missing = rows.filter((r) => !r.meterId);
+    const created = await createMetersBulk(
+      tx,
+      organizationId,
+      missing.map((r) => ({
+        dwellingId: r.dwellingId!,
+        type: r.meterType as (typeof meterTypeEnum.enumValues)[number],
+        serialNumber: r.serialNumber || null,
+        unit: r.unit,
+      })),
+      actorUserId
+    );
+    // `created` comes back in the order of `missing`.
+    const newIds = new Map(missing.map((r, i) => [r, created[i].id]));
+    const inputs: OpeningReadingInput[] = rows.map((row) => ({
+      meterId: row.meterId ?? newIds.get(row)!,
+      value: row.reading,
+    }));
     validateRows(inputs);
     await writeOpeningReadings(tx, organizationId, inputs, actorUserId);
-    return { createdMeters, written: inputs.length };
+    return { createdMeters: created.length, written: inputs.length };
   });
 }

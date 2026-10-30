@@ -880,6 +880,15 @@ onPageLoad(() => {
         "[data-open-drawer]"
       );
       if (!trigger) return;
+      if (
+        trigger instanceof HTMLAnchorElement &&
+        (event.button !== 0 ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.shiftKey ||
+          event.altKey)
+      )
+        return;
       event.preventDefault();
       const kind = trigger.dataset.openDrawer as DrawerKind;
       const dwellingId = trigger.dataset.dwellingId!;

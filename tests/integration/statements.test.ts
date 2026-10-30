@@ -548,6 +548,7 @@ describe("statement financials and snapshots", () => {
       maxPenaltyPercent: "15.0000",
       stopsAtCap: true,
       eligiblePrincipal: "200.00",
+      excludedOpeningDebt: "0.00",
       firstPenaltyDate: "2026-02-15",
       overdueDays: 45,
       rawAmount: "9.00", // 200 * 0.1% * 45 = 9.00

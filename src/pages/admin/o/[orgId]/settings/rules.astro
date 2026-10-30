@@ -231,21 +231,21 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       display
     >
       <a href={`${base}/guide`} class="btn-secondary settings-help">
-        <span class="settings-help-icon" aria-hidden="true">?</span>
+        <span class="settings-help-icon" aria-hidden="true">
+          ?
+        </span>
         {t("Help & guidance")}
       </a>
     </PageHeader>
 
-    {
-      (createResult?.error || updateResult?.error || archiveResult?.error) && (
-        <p class="notice notice-danger" role="alert">
-          {friendlyActionErrorMessage(
-            createResult?.error ?? updateResult?.error ?? archiveResult?.error,
-            locale
-          )}
-        </p>
-      )
-    }
+    {(createResult?.error || updateResult?.error || archiveResult?.error) && (
+      <p class="notice notice-danger" role="alert">
+        {friendlyActionErrorMessage(
+          createResult?.error ?? updateResult?.error ?? archiveResult?.error,
+          locale
+        )}
+      </p>
+    )}
 
     <form method="GET" class="filter-bar rules-filter-bar" data-instant-filter>
       <div>
@@ -262,25 +262,26 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
         />
       </div>
       <div>
-        <label class="block text-label" for="type-filter">{t("Type")}</label>
+        <label class="block text-label" for="type-filter">
+          {t("Type")}
+        </label>
         <select
           id="type-filter"
           name="type"
           class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
         >
           <option value="">{t("All types")}</option>
-          {
-            calculationTypes.map((type) => (
-              <option value={type} selected={typeFilter === type}>
-                {calculationTypeLabels[type]}
-              </option>
-            ))
-          }
+          {calculationTypes.map((type) => (
+            <option value={type} selected={typeFilter === type}>
+              {calculationTypeLabels[type]}
+            </option>
+          ))}
         </select>
       </div>
       <div>
-        <label class="block text-label" for="status-filter">{t("Status")}</label
-        >
+        <label class="block text-label" for="status-filter">
+          {t("Status")}
+        </label>
         <select
           id="status-filter"
           name="status"
@@ -308,21 +309,19 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
         />
         {t("Show archived")}
       </label>
-      {
-        (search || typeFilter || statusFilter || showArchivedChecked) && (
-          <a
-            href={filterHref({
-              search: undefined,
-              type: undefined,
-              status: undefined,
-              includeArchived: undefined,
-            })}
-            class="clear-filters"
-          >
-            {t("Clear filters")}
-          </a>
-        )
-      }
+      {(search || typeFilter || statusFilter || showArchivedChecked) && (
+        <a
+          href={filterHref({
+            search: undefined,
+            type: undefined,
+            status: undefined,
+            includeArchived: undefined,
+          })}
+          class="clear-filters"
+        >
+          {t("Clear filters")}
+        </a>
+      )}
       <button
         type="button"
         class="btn-primary rules-create-link"
@@ -338,135 +337,147 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
         <caption class="sr-only">{t("Billing rules")}</caption>
         <thead class="border-b border-border bg-surface-hover text-muted">
           <tr>
-            <th scope="col" class="px-4 py-2">{t("Name")}</th>
-            <th scope="col" class="px-4 py-2">{t("Code")}</th>
-            <th scope="col" class="px-4 py-2">{t("Type")}</th>
-            <th scope="col" class="px-4 py-2">{t("Unit")}</th>
-            <th scope="col" class="px-4 py-2 text-right">{t("Unit price")}</th>
-            <th scope="col" class="px-4 py-2">{t("VAT")}</th>
-            <th scope="col" class="px-4 py-2">{t("Effective period")}</th>
-            <th scope="col" class="px-4 py-2">{t("Applies to")}</th>
-            <th scope="col" class="px-4 py-2">{t("Status")}</th>
-            <th scope="col" class="px-4 py-2 text-right">{t("Actions")}</th>
+            <th scope="col" class="px-4 py-2">
+              {t("Name")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Code")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Type")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Unit")}
+            </th>
+            <th scope="col" class="px-4 py-2 text-right">
+              {t("Unit price")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("VAT")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Effective period")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Applies to")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Status")}
+            </th>
+            <th scope="col" class="px-4 py-2 text-right">
+              {t("Actions")}
+            </th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border">
-          {
-            filtered.map((rule) => (
-              <tr>
-                <td class="px-4 py-2">
-                  <div class="rule-name-cell">
-                    <span
-                      class="rule-icon"
-                      data-icon={ruleIcon(rule)}
-                      aria-hidden="true"
-                    >
-                      <Icon name={RULE_ICON_NAMES[ruleIcon(rule)]} />
-                    </span>
-                    <div>
-                      <span class="font-medium text-foreground block">
-                        {rule.name}
-                      </span>
-                      <span class="block text-xs text-muted">{rule.code}</span>
-                    </div>
-                  </div>
-                </td>
-                <td class="px-4 py-2 font-mono text-xs text-muted">
-                  {rule.code}
-                </td>
-                <td class="px-4 py-2">
-                  {calculationTypeLabels[rule.calculationType] ??
-                    rule.calculationType}
-                </td>
-                <td class="px-4 py-2">{rule.unit}</td>
-                <td class="px-4 py-2 text-right tabular-nums">
-                  {rule.unitPrice ? formatTrimmed(rule.unitPrice, locale) : "—"}
-                </td>
-                <td class="px-4 py-2 tabular-nums">
-                  {formatTrimmed(rule.vatRate, locale, 0)}%
-                </td>
-                <td class="px-4 py-2">
-                  {rule.effectiveFrom} → {rule.effectiveUntil ?? t("ongoing")}
-                </td>
-                <td class="px-4 py-2 text-muted">{appliesToSummary(rule)}</td>
-                <td class="px-4 py-2">
+          {filtered.map((rule) => (
+            <tr>
+              <td class="px-4 py-2">
+                <div class="rule-name-cell">
                   <span
-                    class="rule-status"
-                    data-tone={
-                      rule.archivedAt
-                        ? "archived"
-                        : rule.enabled
-                          ? "active"
-                          : "disabled"
-                    }
+                    class="rule-icon"
+                    data-icon={ruleIcon(rule)}
+                    aria-hidden="true"
                   >
-                    <span class="rule-status-dot" aria-hidden="true" />
-                    {rule.archivedAt
-                      ? t("Archived")
-                      : rule.enabled
-                        ? t("Active")
-                        : t("Disabled")}
+                    <Icon name={RULE_ICON_NAMES[ruleIcon(rule)]} />
                   </span>
-                </td>
-                <td class="px-4 py-2 text-right">
-                  {!rule.archivedAt && (
-                    <div class="rule-actions">
-                      <button
-                        type="button"
-                        class="btn-secondary btn-sm"
-                        data-open-tariff-drawer="edit"
-                        data-rule={JSON.stringify(ruleToDrawerJson(rule))}
+                  <div>
+                    <span class="font-medium text-foreground block">
+                      {rule.name}
+                    </span>
+                    <span class="block text-xs text-muted">{rule.code}</span>
+                  </div>
+                </div>
+              </td>
+              <td class="px-4 py-2 font-mono text-xs text-muted">
+                {rule.code}
+              </td>
+              <td class="px-4 py-2">
+                {calculationTypeLabels[rule.calculationType] ??
+                  rule.calculationType}
+              </td>
+              <td class="px-4 py-2">{rule.unit}</td>
+              <td class="px-4 py-2 text-right tabular-nums">
+                {rule.unitPrice ? formatTrimmed(rule.unitPrice, locale) : "—"}
+              </td>
+              <td class="px-4 py-2 tabular-nums">
+                {formatTrimmed(rule.vatRate, locale, 0)}%
+              </td>
+              <td class="px-4 py-2">
+                {rule.effectiveFrom} → {rule.effectiveUntil ?? t("ongoing")}
+              </td>
+              <td class="px-4 py-2 text-muted">{appliesToSummary(rule)}</td>
+              <td class="px-4 py-2">
+                <span
+                  class="rule-status"
+                  data-tone={
+                    rule.archivedAt
+                      ? "archived"
+                      : rule.enabled
+                        ? "active"
+                        : "disabled"
+                  }
+                >
+                  <span class="rule-status-dot" aria-hidden="true" />
+                  {rule.archivedAt
+                    ? t("Archived")
+                    : rule.enabled
+                      ? t("Active")
+                      : t("Disabled")}
+                </span>
+              </td>
+              <td class="px-4 py-2 text-right">
+                {!rule.archivedAt && (
+                  <div class="rule-actions">
+                    <button
+                      type="button"
+                      class="btn-secondary btn-sm"
+                      data-open-tariff-drawer="edit"
+                      data-rule={JSON.stringify(ruleToDrawerJson(rule))}
+                    >
+                      <Icon name="pencil" size="sm" />
+                      {t("Edit")}
+                    </button>
+                    <details class="row-menu">
+                      <summary
+                        aria-label={`${t("More actions")}: ${rule.name}`}
                       >
-                        <Icon name="pencil" size="sm" />
-                        {t("Edit")}
-                      </button>
-                      <details class="row-menu">
-                        <summary
-                          aria-label={`${t("More actions")}: ${rule.name}`}
+                        •••
+                      </summary>
+                      <div>
+                        <form
+                          method="POST"
+                          action={actions.billing.archiveRule}
                         >
-                          •••
-                        </summary>
-                        <div>
-                          <form
-                            method="POST"
-                            action={actions.billing.archiveRule}
+                          <input
+                            type="hidden"
+                            name="organizationId"
+                            value={organizationId}
+                          />
+                          <input type="hidden" name="ruleId" value={rule.id} />
+                          <button
+                            type="submit"
+                            data-confirm={t(
+                              "Archive this tariff? It will no longer be used for new invoices."
+                            )}
                           >
-                            <input
-                              type="hidden"
-                              name="organizationId"
-                              value={organizationId}
-                            />
-                            <input
-                              type="hidden"
-                              name="ruleId"
-                              value={rule.id}
-                            />
-                            <button
-                              type="submit"
-                              data-confirm={t(
-                                "Archive this tariff? It will no longer be used for new invoices."
-                              )}
-                            >
-                              {t("Archive")}
-                            </button>
-                          </form>
-                        </div>
-                      </details>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))
-          }
-          {
-            filtered.length === 0 && (
-              <tr>
-                <td colspan="10" class="px-4 py-8 text-center text-muted">
-                  {t("No billing rules match this filter.")}
-                </td>
-              </tr>
-            )
-          }
+                            {t("Archive")}
+                          </button>
+                        </form>
+                      </div>
+                    </details>
+                  </div>
+                )}
+              </td>
+            </tr>
+          ))}
+          {filtered.length === 0 && (
+            <tr>
+              <td colspan="10" class="px-4 py-8 text-center text-muted">
+                {t("No billing rules match this filter.")}
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
@@ -474,21 +485,18 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     <div class="rules-tips-row">
       <aside class="rules-sidebar">
         <div class="rule-info-banner">
-          <span class="rule-info-icon" aria-hidden="true">i</span>
+          <span class="rule-info-icon" aria-hidden="true">
+            i
+          </span>
           <div>
             <p class="rule-info-title">{t("How tariffs are applied")}</p>
             <p>
-              {
-                t(
-                  "Tariffs define how charges are calculated for each billing period."
-                )
-              }
-              {" "}
-              {
-                t(
-                  "Each rule has an effective period and can be archived when no longer in use."
-                )
-              }
+              {t(
+                "Tariffs define how charges are calculated for each billing period."
+              )}{" "}
+              {t(
+                "Each rule has an effective period and can be archived when no longer in use."
+              )}
             </p>
           </div>
         </div>
@@ -506,11 +514,9 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
             <div>
               <p class="rule-tip-title">{t("Meter-based rules")}</p>
               <p>
-                {
-                  t(
-                    "Use meter consumption for utilities like water, heat, or electricity. Charges are calculated from the difference in meter readings."
-                  )
-                }
+                {t(
+                  "Use meter consumption for utilities like water, heat, or electricity. Charges are calculated from the difference in meter readings."
+                )}
               </p>
             </div>
           </div>
@@ -521,11 +527,9 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
             <div>
               <p class="rule-tip-title">{t("Fixed rules")}</p>
               <p>
-                {
-                  t(
-                    "Use fixed rules for regular charges like maintenance fees. The amount is the same each period (per unit)."
-                  )
-                }
+                {t(
+                  "Use fixed rules for regular charges like maintenance fees. The amount is the same each period (per unit)."
+                )}
               </p>
             </div>
           </div>
@@ -536,11 +540,9 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
             <div>
               <p class="rule-tip-title">{t("Effective periods")}</p>
               <p>
-                {
-                  t(
-                    "Avoid overlapping rules of the same type. When a new rate applies, create a new rule with a later effective date."
-                  )
-                }
+                {t(
+                  "Avoid overlapping rules of the same type. When a new rate applies, create a new rule with a later effective date."
+                )}
               </p>
             </div>
           </div>
@@ -553,9 +555,9 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     id="tariff-drawer"
     class="context-drawer tariff-drawer"
     aria-labelledby="tariff-drawer-title"
-    data-deep-link-rule={editRule
-      ? JSON.stringify(ruleToDrawerJson(editRule))
-      : ""}
+    data-deep-link-rule={
+      editRule ? JSON.stringify(ruleToDrawerJson(editRule)) : ""
+    }
     data-strings={JSON.stringify({
       createTitle: t("Create tariff"),
       discardConfirm: t(
@@ -614,7 +616,8 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
             class="status-badge"
             id="tariff-drawer-status"
             data-tone="neutral"
-            hidden></span>
+            hidden
+          ></span>
         </div>
       </div>
       <button
@@ -632,8 +635,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
         role="alert"
         data-tariff-drawer-error
         hidden
-      >
-      </p>
+      ></p>
       <form id="tariff-form" novalidate>
         <input type="hidden" name="organizationId" value={organizationId} />
         <input type="hidden" name="ruleId" id="tariff-ruleId" />
@@ -678,7 +680,8 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
             id="tariff-description"
             name="description"
             class="drawer-textarea-box"
-            rows="2"></textarea>
+            rows="2"
+          ></textarea>
         </div>
 
         <h3 class="drawer-section-heading">{t("Calculation")}</h3>
@@ -686,11 +689,9 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
           <div class="rule-field">
             <label for="tariff-calculationType">{t("Type")} *</label>
             <select id="tariff-calculationType" name="calculationType">
-              {
-                calculationTypes.map((type) => (
-                  <option value={type}>{calculationTypeLabels[type]}</option>
-                ))
-              }
+              {calculationTypes.map((type) => (
+                <option value={type}>{calculationTypeLabels[type]}</option>
+              ))}
             </select>
           </div>
           <div class="rule-field">
@@ -762,11 +763,9 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               <span>
                 <strong>{t("Selected dwellings")}</strong>
                 <p>
-                  {
-                    t(
-                      "Applies only to the dwellings you choose. New dwellings are not included automatically."
-                    )
-                  }{" "}
+                  {t(
+                    "Applies only to the dwellings you choose. New dwellings are not included automatically."
+                  )}{" "}
                   (1:N)
                 </p>
               </span>
@@ -781,9 +780,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
           </div>
         </div>
         <div class="rule-field" data-scope-panel="ONE_TO_MANY" hidden>
-          <label for="tariff-dwelling-search">
-            {t("Search dwellings")}
-          </label>
+          <label for="tariff-dwelling-search">{t("Search dwellings")}</label>
           <input
             id="tariff-dwelling-search"
             type="text"
@@ -808,30 +805,26 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
             <span data-dwelling-count-label>{t("0 dwellings selected")}</span>
           </div>
           <div class="tariff-dwelling-list" data-dwelling-checklist>
-            {
-              dwellingOptions.map((d) => (
-                <label
-                  class="tariff-dwelling-row"
-                  data-dwelling-number={d.number.toLowerCase()}
-                >
-                  <input type="checkbox" name="dwellingIds" value={d.id} />
-                  {t("Dwelling")} {d.number}
-                </label>
-              ))
-            }
+            {dwellingOptions.map((d) => (
+              <label
+                class="tariff-dwelling-row"
+                data-dwelling-number={d.number.toLowerCase()}
+              >
+                <input type="checkbox" name="dwellingIds" value={d.id} />
+                {t("Dwelling")} {d.number}
+              </label>
+            ))}
           </div>
         </div>
         <div class="rule-field" data-scope-panel="ONE_TO_ONE" hidden>
           <label for="tariff-dwelling-single">{t("Dwelling")} *</label>
           <select id="tariff-dwelling-single" name="dwellingIdSingle">
             <option value="">{t("-- select a dwelling --")}</option>
-            {
-              dwellingOptions.map((d) => (
-                <option value={d.id}>
-                  {t("Dwelling")} {d.number}
-                </option>
-              ))
-            }
+            {dwellingOptions.map((d) => (
+              <option value={d.id}>
+                {t("Dwelling")} {d.number}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -1710,7 +1703,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     cursor: pointer;
   }
   .tariff-scope-option:has(input:checked) {
-    border-color: var(--color-primary);
     background: var(--color-surface-hover);
   }
   .tariff-scope-option input {

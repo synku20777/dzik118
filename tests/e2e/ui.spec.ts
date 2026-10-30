@@ -1334,9 +1334,9 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
   const createdDwellingIds: string[] = [];
   const createdInvoiceIds: string[] = [];
 
-  let orgId = "";
-  let periodId = "";
-  let adminUserId = "";
+  let orgId: string;
+  let periodId: string;
+  let adminUserId: string;
 
   try {
     // Log in as seeded admin

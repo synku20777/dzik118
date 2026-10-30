@@ -37,6 +37,9 @@ import { getCurrentOpenPeriod } from "../../../../../domain/periods/periods";
 import { listAuditLogs } from "../../../../../domain/audit/audit-log";
 import { listConversationsWithMessagesForDwelling } from "../../../../../domain/messaging/conversations";
 import { listCurrentApplicableRulesForDwelling } from "../../../../../domain/billing/rules";
+import { listOpenInvoicesForPayment } from "../../../../../domain/payments/manual";
+import { orgLocalDateString } from "../../../../../lib/org-time";
+import ManualPaymentForm from "../../../../../components/ui/ManualPaymentForm.astro";
 
 const organizationId = Astro.params.orgId!;
 const dwellingId = Astro.params.dwellingId!;
@@ -65,6 +68,9 @@ const adjustmentResult = Astro.getActionResult(
   actions.accounts.createAdjustment
 );
 const archiveResult = Astro.getActionResult(actions.dwellings.archive);
+const recordPaymentResult = Astro.getActionResult(
+  actions.payments.recordManual
+);
 
 let organization: Awaited<ReturnType<typeof getOrganization>>,
   dwelling,
@@ -72,6 +78,7 @@ let organization: Awaited<ReturnType<typeof getOrganization>>,
   meterList,
   accountBalance,
   accountActivity,
+  openInvoices,
   caseHistory,
   currentOpenPeriod,
   auditEntries,
@@ -87,6 +94,7 @@ try {
     meterList,
     accountBalance,
     accountActivity,
+    openInvoices,
     caseHistory,
     currentOpenPeriod,
     auditEntries,
@@ -110,6 +118,11 @@ try {
         organizationId,
         dwellingId,
         organization.currency
+      ),
+      openInvoices: await listOpenInvoicesForPayment(
+        db,
+        organizationId,
+        dwellingId
       ),
       caseHistory: await listCasesForDwelling(db, organizationId, dwellingId),
       currentOpenPeriod: await getCurrentOpenPeriod(db, organizationId),
@@ -184,6 +197,13 @@ const meterTypeOptions = [
 ] as const;
 
 const base = `/admin/o/${organizationId}`;
+const todayInOrg = orgLocalDateString(new Date(), organization.timezone);
+// An open invoice takes the payment itself; the account takes it only when
+// there is none (ADR 0014).
+const paymentAccountTargets =
+  openInvoices.length === 0 && !dwelling.archivedAt
+    ? [{ id: dwellingId, number: dwelling.number }]
+    : [];
 const dwellingStatus = dwelling.archivedAt ? "ARCHIVED" : "ACTIVE";
 const subtitle = [organization.addressLine1, entityLabel(dwelling.type, locale)]
   .filter(Boolean)
@@ -237,7 +257,9 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     <header class="page-header">
       <div>
         <div class="dwelling-title-row">
-          <h1 class="font-display">{t("Dwelling")} {dwelling.number}</h1>
+          <h1 class="font-display">
+            {t("Dwelling")} {dwelling.number}
+          </h1>
           <StatusBadge status={dwellingStatus} />
         </div>
         {subtitle && <p class="page-description">{subtitle}</p>}
@@ -249,41 +271,35 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
             {t("More actions")}
           </summary>
           <div>
-            {
-              currentOpenPeriod ? (
-                <a href={`${base}/periods/${currentOpenPeriod.id}`}>
-                  {t("View current period")} →
-                </a>
-              ) : (
-                <span class="menu-disabled">{t("No open period")}</span>
-              )
-            }
+            {currentOpenPeriod ? (
+              <a href={`${base}/periods/${currentOpenPeriod.id}`}>
+                {t("View current period")} →
+              </a>
+            ) : (
+              <span class="menu-disabled">{t("No open period")}</span>
+            )}
             <button type="button" data-goto-panel="account-balance">
               {t("Create adjustment")} →
             </button>
-            {
-              !dwelling.archivedAt && (
-                <button
-                  type="button"
-                  data-open-archive-dialog
-                  class="menu-danger"
-                >
-                  {t("Archive dwelling")} →
-                </button>
-              )
-            }
+            {!dwelling.archivedAt && (
+              <button
+                type="button"
+                data-open-archive-dialog
+                class="menu-danger"
+              >
+                {t("Archive dwelling")} →
+              </button>
+            )}
           </div>
         </details>
       </div>
     </header>
 
-    {
-      archiveResult?.error && (
-        <p class="notice notice-danger" role="alert">
-          {archiveResult.error.message}
-        </p>
-      )
-    }
+    {archiveResult?.error && (
+      <p class="notice notice-danger" role="alert">
+        {archiveResult.error.message}
+      </p>
+    )}
 
     <div class="stat-grid">
       <div data-kpi="area">
@@ -300,9 +316,9 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
       <div data-kpi="invoice-delivery">
         <KpiCard
           label={t("Invoice delivery")}
-          value={deliveryMethods.length > 0
-            ? deliveryMethods.join(", ")
-            : t("None")}
+          value={
+            deliveryMethods.length > 0 ? deliveryMethods.join(", ") : t("None")
+          }
         />
       </div>
     </div>
@@ -386,13 +402,11 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                 {t("Edit")}
               </summary>
               <div class="edit-disclosure-panel">
-                {
-                  updateResult?.error && (
-                    <p class="notice notice-danger" role="alert">
-                      {friendlyActionErrorMessage(updateResult.error, locale)}
-                    </p>
-                  )
-                }
+                {updateResult?.error && (
+                  <p class="notice notice-danger" role="alert">
+                    {friendlyActionErrorMessage(updateResult.error, locale)}
+                  </p>
+                )}
                 <form
                   method="POST"
                   action={actions.dwellings.update}
@@ -416,9 +430,9 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                   />
                   <input type="hidden" name="dwellingId" value={dwellingId} />
                   <div class="col-span-2">
-                    <label class="block text-label" for="billingName"
-                      >{t("Billing name")}</label
-                    >
+                    <label class="block text-label" for="billingName">
+                      {t("Billing name")}
+                    </label>
                     <input
                       id="billingName"
                       name="billingName"
@@ -429,8 +443,10 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                   <div>
                     <label
                       class="block text-label text-foreground"
-                      for="occupantName">{t("Occupant name")}</label
+                      for="occupantName"
                     >
+                      {t("Occupant name")}
+                    </label>
                     <input
                       id="occupantName"
                       name="occupantName"
@@ -439,9 +455,12 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                     />
                   </div>
                   <div>
-                    <label class="block text-label text-foreground" for="areaM2"
-                      >{t("Area (m²)")}</label
+                    <label
+                      class="block text-label text-foreground"
+                      for="areaM2"
                     >
+                      {t("Area (m²)")}
+                    </label>
                     <input
                       id="areaM2"
                       name="areaM2"
@@ -455,8 +474,10 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                   <div>
                     <label
                       class="block text-label text-foreground"
-                      for="residentCount">{t("Resident count")}</label
+                      for="residentCount"
                     >
+                      {t("Resident count")}
+                    </label>
                     <input
                       id="residentCount"
                       name="residentCount"
@@ -469,8 +490,10 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                   <div>
                     <label
                       class="block text-label text-foreground"
-                      for="billingEmail">{t("Billing email")}</label
+                      for="billingEmail"
                     >
+                      {t("Billing email")}
+                    </label>
                     <input
                       id="billingEmail"
                       name="billingEmail"
@@ -482,8 +505,10 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                   <div class="col-span-2">
                     <label
                       class="block text-label text-foreground"
-                      for="billingAddress">{t("Billing address")}</label
+                      for="billingAddress"
                     >
+                      {t("Billing address")}
+                    </label>
                     <input
                       id="billingAddress"
                       name="billingAddress"
@@ -542,104 +567,140 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                 {t("All adjustments and balance history.")}
               </p>
             </div>
-            <details class="edit-disclosure" open={!!adjustmentResult?.error}>
-              <summary class="btn-secondary">
-                <Icon name="plus" size="sm" />
-                {t("Add adjustment")}
-              </summary>
-              <div class="edit-disclosure-panel">
-                {
-                  adjustmentResult?.error && (
+            <div class="flex flex-wrap gap-2">
+              <details
+                class="edit-disclosure"
+                open={!!recordPaymentResult?.error}
+              >
+                <summary class="btn-secondary">
+                  <Icon name="plus" size="sm" />
+                  {t("Record a payment")}
+                </summary>
+                <div class="edit-disclosure-panel edit-disclosure-panel-left">
+                  {recordPaymentResult?.error && (
+                    <p class="notice notice-danger" role="alert">
+                      {friendlyActionErrorMessage(
+                        recordPaymentResult.error,
+                        locale
+                      )}
+                    </p>
+                  )}
+                  <ManualPaymentForm
+                    organizationId={organizationId}
+                    invoices={openInvoices}
+                    dwellings={paymentAccountTargets}
+                    today={todayInOrg}
+                    error={recordPaymentResult?.error}
+                    idPrefix="dwelling-payment"
+                  />
+                </div>
+              </details>
+              <details class="edit-disclosure" open={!!adjustmentResult?.error}>
+                <summary class="btn-secondary">
+                  <Icon name="plus" size="sm" />
+                  {t("Add adjustment")}
+                </summary>
+                <div class="edit-disclosure-panel">
+                  {adjustmentResult?.error && (
                     <p class="notice notice-danger" role="alert">
                       {friendlyActionErrorMessage(
                         adjustmentResult.error,
                         locale
                       )}
                     </p>
-                  )
-                }
-                <form
-                  method="POST"
-                  action={actions.accounts.createAdjustment}
-                  class="mt-4 grid grid-cols-2 gap-3"
-                >
-                  <input
-                    type="hidden"
-                    name="organizationId"
-                    value={organizationId}
-                  />
-                  <input type="hidden" name="dwellingId" value={dwellingId} />
-                  <input
-                    type="hidden"
-                    name="currency"
-                    value={organization.currency}
-                  />
-                  <div>
-                    <label class="block text-label" for="adjustment-direction"
-                      >{t("Type")}</label
-                    >
-                    <select
-                      id="adjustment-direction"
-                      name="direction"
-                      class="mt-1 w-full"
-                    >
-                      <option value="CHARGE">{t("Charge adjustment")}</option>
-                      <option value="CREDIT">{t("Credit adjustment")}</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label class="block text-label" for="adjustment-amount"
-                      >{t("Amount")}</label
-                    >
+                  )}
+                  <form
+                    method="POST"
+                    action={actions.accounts.createAdjustment}
+                    class="mt-4 grid grid-cols-2 gap-3"
+                  >
                     <input
-                      id="adjustment-amount"
-                      name="amount"
-                      inputmode="decimal"
-                      required
-                      class="mt-1 w-full"
+                      type="hidden"
+                      name="organizationId"
+                      value={organizationId}
                     />
-                  </div>
-                  <div>
-                    <label class="block text-label" for="adjustment-date"
-                      >{t("Date")}</label
-                    >
+                    <input type="hidden" name="dwellingId" value={dwellingId} />
                     <input
-                      id="adjustment-date"
-                      name="effectiveDate"
-                      type="date"
-                      required
-                      class="mt-1 w-full"
+                      type="hidden"
+                      name="currency"
+                      value={organization.currency}
                     />
-                  </div>
-                  <div>
-                    <label class="block text-label" for="adjustment-reason"
-                      >{t("Reason")}</label
-                    >
-                    <input
-                      id="adjustment-reason"
-                      name="reason"
-                      required
-                      class="mt-1 w-full"
-                    />
-                  </div>
-                  <div class="col-span-2">
-                    <label class="block text-label" for="adjustment-note"
-                      >{t("Note")}</label
-                    >
-                    <textarea
-                      id="adjustment-note"
-                      name="note"
-                      class="mt-1 w-full"></textarea>
-                  </div>
-                  <div class="col-span-2">
-                    <button class="btn-secondary" type="submit"
-                      >{t("Add adjustment")}</button
-                    >
-                  </div>
-                </form>
-              </div>
-            </details>
+                    <div>
+                      <label
+                        class="block text-label"
+                        for="adjustment-direction"
+                      >
+                        {t("Type")}
+                      </label>
+                      <select
+                        id="adjustment-direction"
+                        name="direction"
+                        class="mt-1 w-full"
+                      >
+                        <option value="CHARGE">{t("Charge adjustment")}</option>
+                        <option value="CREDIT">{t("Credit adjustment")}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-label" for="adjustment-amount">
+                        {t("Amount")}
+                      </label>
+                      <input
+                        id="adjustment-amount"
+                        name="amount"
+                        inputmode="decimal"
+                        required
+                        class="mt-1 w-full"
+                      />
+                    </div>
+                    <div>
+                      <label class="block text-label" for="adjustment-date">
+                        {t("Date")}
+                      </label>
+                      <input
+                        id="adjustment-date"
+                        name="effectiveDate"
+                        type="date"
+                        required
+                        class="mt-1 w-full"
+                      />
+                    </div>
+                    <div>
+                      <label class="block text-label" for="adjustment-reason">
+                        {t("Reason")}
+                      </label>
+                      <input
+                        id="adjustment-reason"
+                        name="reason"
+                        required
+                        class="mt-1 w-full"
+                      />
+                    </div>
+                    <div class="col-span-2">
+                      <label class="block text-label" for="adjustment-note">
+                        {t("Note")}
+                      </label>
+                      <textarea
+                        id="adjustment-note"
+                        name="note"
+                        class="mt-1 w-full"
+                      ></textarea>
+                    </div>
+                    <div class="col-span-2">
+                      <button class="btn-secondary" type="submit">
+                        {t("Add adjustment")}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </details>
+            </div>
           </div>
+          {recordPaymentResult?.data && (
+            <p class="notice" role="status">
+              {t("Payment recorded.")}
+            </p>
+          )}
           <div class="balance-summary">
             <div class="balance-highlight" data-tone={balanceKpiTone}>
               <span>
@@ -652,99 +713,93 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
             <div>
               <span>{t("Total debits")}</span>
               <strong>
-                {
-                  formatMoney(
-                    String(totals.debit),
-                    organization.currency,
-                    locale
-                  )
-                }
+                {formatMoney(
+                  String(totals.debit),
+                  organization.currency,
+                  locale
+                )}
               </strong>
             </div>
             <div>
               <span>{t("Total credits")}</span>
               <strong>
-                {
-                  formatMoney(
-                    String(totals.credit),
-                    organization.currency,
-                    locale
-                  )
-                }
+                {formatMoney(
+                  String(totals.credit),
+                  organization.currency,
+                  locale
+                )}
               </strong>
             </div>
           </div>
-          {
-            accountActivity.length > 0 ? (
-              <div
-                class="table-wrap stack-table mt-4"
-                role="region"
-                aria-label={t("Account activity")}
-                tabindex="0"
-              >
-                <table class="w-full text-body-sm">
-                  <caption class="sr-only">{t("Account activity")}</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">{t("Date")}</th>
-                      <th scope="col">{t("Description")}</th>
-                      <th scope="col" class="text-right">
-                        {t("Debit")}
-                      </th>
-                      <th scope="col" class="text-right">
-                        {t("Credit")}
-                      </th>
-                      <th scope="col" class="text-right">
-                        {t("Balance")}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {accountActivity
-                      .slice(-10)
-                      .reverse()
-                      .map((entry) => (
-                        <tr>
-                          <td>{formatDate(entry.effectiveDate, locale)}</td>
-                          <td>{entry.description ?? entry.type}</td>
-                          <td class="text-right">
-                            {entry.debit === "0.00"
-                              ? "—"
-                              : formatMoney(
-                                  entry.debit,
-                                  organization.currency,
-                                  locale
-                                )}
-                          </td>
-                          <td class="text-right">
-                            {entry.credit === "0.00"
-                              ? "—"
-                              : formatMoney(
-                                  entry.credit,
-                                  organization.currency,
-                                  locale
-                                )}
-                          </td>
-                          <td class="text-right">
-                            {formatMoney(
-                              entry.balance,
-                              organization.currency,
-                              locale
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <EmptyState
-                class="mt-4"
-                title={t("No account entries yet")}
-                description={t("Adjustments will appear here.")}
-              />
-            )
-          }
+          {accountActivity.length > 0 ? (
+            <div
+              class="table-wrap stack-table mt-4"
+              role="region"
+              aria-label={t("Account activity")}
+              tabindex="0"
+            >
+              <table class="w-full text-body-sm">
+                <caption class="sr-only">{t("Account activity")}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("Date")}</th>
+                    <th scope="col">{t("Description")}</th>
+                    <th scope="col" class="text-right">
+                      {t("Debit")}
+                    </th>
+                    <th scope="col" class="text-right">
+                      {t("Credit")}
+                    </th>
+                    <th scope="col" class="text-right">
+                      {t("Balance")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {accountActivity
+                    .slice(-10)
+                    .reverse()
+                    .map((entry) => (
+                      <tr>
+                        <td>{formatDate(entry.effectiveDate, locale)}</td>
+                        <td>{entry.description ?? entry.type}</td>
+                        <td class="text-right">
+                          {entry.debit === "0.00"
+                            ? "—"
+                            : formatMoney(
+                                entry.debit,
+                                organization.currency,
+                                locale
+                              )}
+                        </td>
+                        <td class="text-right">
+                          {entry.credit === "0.00"
+                            ? "—"
+                            : formatMoney(
+                                entry.credit,
+                                organization.currency,
+                                locale
+                              )}
+                        </td>
+                        <td class="text-right">
+                          {formatMoney(
+                            entry.balance,
+                            organization.currency,
+                            locale
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState
+              class="mt-4"
+              title={t("No account entries yet")}
+              description={t("Adjustments will appear here.")}
+            />
+          )}
         </section>
 
         <section id="tariffs" class="panel p-6" data-panel="tariffs">
@@ -752,11 +807,9 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
             <div>
               <h2>{t("Recurring tariffs")}</h2>
               <p class="text-body-sm text-muted">
-                {
-                  t(
-                    "Recurring tariffs are configured and assigned from Tariffs & rules."
-                  )
-                }
+                {t(
+                  "Recurring tariffs are configured and assigned from Tariffs & rules."
+                )}
               </p>
             </div>
             <a
@@ -766,68 +819,66 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
               {t("View all tariffs")}
             </a>
           </div>
-          {
-            currentTariffs.length === 0 ? (
-              <EmptyState
-                title={t("No recurring tariffs apply to this dwelling.")}
-              />
-            ) : (
-              <Fragment>
-                {automaticTariffs.length > 0 && (
-                  <Fragment>
-                    <h3 class="tariff-group-heading">
-                      {t("Automatically applied")}
-                    </h3>
-                    <ul class="sidebar-item-list tariff-list">
-                      {automaticTariffs.map((rule) => (
-                        <li>
-                          <div class="sidebar-item-body">
-                            <strong>{rule.name}</strong>
-                            <p>{tariffPriceSummary(rule)}</p>
-                            <span class="status-badge" data-tone="neutral">
-                              {tariffScopeReason(rule.applicationScope)}
-                            </span>
-                          </div>
-                          <a
-                            href={`${base}/settings/rules?edit=${rule.id}`}
-                            class="btn-secondary btn-sm"
-                          >
-                            {t("Edit tariff")} →
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </Fragment>
-                )}
-                {assignedTariffs.length > 0 && (
-                  <Fragment>
-                    <h3 class="tariff-group-heading">
-                      {t("Assigned specifically")}
-                    </h3>
-                    <ul class="sidebar-item-list tariff-list">
-                      {assignedTariffs.map((rule) => (
-                        <li>
-                          <div class="sidebar-item-body">
-                            <strong>{rule.name}</strong>
-                            <p>{tariffPriceSummary(rule)}</p>
-                            <span class="status-badge" data-tone="neutral">
-                              {tariffScopeReason(rule.applicationScope)}
-                            </span>
-                          </div>
-                          <a
-                            href={`${base}/settings/rules?edit=${rule.id}`}
-                            class="btn-secondary btn-sm"
-                          >
-                            {t("Edit tariff")} →
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </Fragment>
-                )}
-              </Fragment>
-            )
-          }
+          {currentTariffs.length === 0 ? (
+            <EmptyState
+              title={t("No recurring tariffs apply to this dwelling.")}
+            />
+          ) : (
+            <Fragment>
+              {automaticTariffs.length > 0 && (
+                <Fragment>
+                  <h3 class="tariff-group-heading">
+                    {t("Automatically applied")}
+                  </h3>
+                  <ul class="sidebar-item-list tariff-list">
+                    {automaticTariffs.map((rule) => (
+                      <li>
+                        <div class="sidebar-item-body">
+                          <strong>{rule.name}</strong>
+                          <p>{tariffPriceSummary(rule)}</p>
+                          <span class="status-badge" data-tone="neutral">
+                            {tariffScopeReason(rule.applicationScope)}
+                          </span>
+                        </div>
+                        <a
+                          href={`${base}/settings/rules?edit=${rule.id}`}
+                          class="btn-secondary btn-sm"
+                        >
+                          {t("Edit tariff")} →
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </Fragment>
+              )}
+              {assignedTariffs.length > 0 && (
+                <Fragment>
+                  <h3 class="tariff-group-heading">
+                    {t("Assigned specifically")}
+                  </h3>
+                  <ul class="sidebar-item-list tariff-list">
+                    {assignedTariffs.map((rule) => (
+                      <li>
+                        <div class="sidebar-item-body">
+                          <strong>{rule.name}</strong>
+                          <p>{tariffPriceSummary(rule)}</p>
+                          <span class="status-badge" data-tone="neutral">
+                            {tariffScopeReason(rule.applicationScope)}
+                          </span>
+                        </div>
+                        <a
+                          href={`${base}/settings/rules?edit=${rule.id}`}
+                          class="btn-secondary btn-sm"
+                        >
+                          {t("Edit tariff")} →
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </Fragment>
+              )}
+            </Fragment>
+          )}
         </section>
 
         <section id="messages" class="panel p-6" data-panel="messages">
@@ -845,28 +896,24 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
               {t("View all")}
             </a>
           </div>
-          {
-            recentMessages.length > 0 ? (
-              <ul class="message-preview-list">
-                {recentMessages.map((m) => (
-                  <li>
-                    <p>{m.body}</p>
-                    <span>
-                      {formatDate(m.createdAt, locale, organization.timezone)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState
-                class="mt-5"
-                title={t("No messages yet")}
-                description={t(
-                  "Conversations with residents will appear here."
-                )}
-              />
-            )
-          }
+          {recentMessages.length > 0 ? (
+            <ul class="message-preview-list">
+              {recentMessages.map((m) => (
+                <li>
+                  <p>{m.body}</p>
+                  <span>
+                    {formatDate(m.createdAt, locale, organization.timezone)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <EmptyState
+              class="mt-5"
+              title={t("No messages yet")}
+              description={t("Conversations with residents will appear here.")}
+            />
+          )}
         </section>
       </div>
 
@@ -880,13 +927,11 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
               </p>
             </div>
           </div>
-          {
-            deliveryResult?.error && (
-              <p class="notice notice-danger" role="alert">
-                {friendlyActionErrorMessage(deliveryResult.error, locale)}
-              </p>
-            )
-          }
+          {deliveryResult?.error && (
+            <p class="notice notice-danger" role="alert">
+              {friendlyActionErrorMessage(deliveryResult.error, locale)}
+            </p>
+          )}
           <form
             method="POST"
             action={actions.dwellings.updateInvoiceDelivery}
@@ -920,11 +965,9 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                   <span class="delivery-option-text">
                     <strong>{t("Email")}</strong>
                     <p>
-                      {
-                        dwelling.billingEmail
-                          ? `${t("Send invoices to")} ${dwelling.billingEmail}`
-                          : t("No billing email on file")
-                      }
+                      {dwelling.billingEmail
+                        ? `${t("Send invoices to")} ${dwelling.billingEmail}`
+                        : t("No billing email on file")}
                     </p>
                   </span>
                 </label>
@@ -979,16 +1022,14 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                 {t("Add resident")}
               </summary>
               <div class="edit-disclosure-panel">
-                {
-                  (assignResult?.error || removeResult?.error) && (
-                    <p class="notice notice-danger" role="alert">
-                      {friendlyActionErrorMessage(
-                        assignResult?.error ?? removeResult?.error,
-                        locale
-                      )}
-                    </p>
-                  )
-                }
+                {(assignResult?.error || removeResult?.error) && (
+                  <p class="notice notice-danger" role="alert">
+                    {friendlyActionErrorMessage(
+                      assignResult?.error ?? removeResult?.error,
+                      locale
+                    )}
+                  </p>
+                )}
                 <form
                   method="POST"
                   action={actions.dwellings.assignResident}
@@ -1039,99 +1080,86 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
               </div>
             </details>
           </div>
-          {
-            residentDisabledResult?.error && (
-              <p class="notice notice-danger" role="alert">
-                {friendlyActionErrorMessage(
-                  residentDisabledResult.error,
-                  locale
-                )}
-              </p>
-            )
-          }
+          {residentDisabledResult?.error && (
+            <p class="notice notice-danger" role="alert">
+              {friendlyActionErrorMessage(residentDisabledResult.error, locale)}
+            </p>
+          )}
           <div
             id="residents-list-region"
             data-empty-title={t("No residents assigned.")}
           >
             <ul class="sidebar-item-list" hidden={residents.length === 0}>
-              {
-                residents.map((r) => (
-                  <li data-user-id={r.userId}>
-                    <div class="sidebar-item-avatar" aria-hidden="true">
-                      {(r.displayName ?? r.email).charAt(0).toUpperCase()}
-                    </div>
-                    <div class="sidebar-item-body">
-                      <strong>{r.displayName ?? r.email}</strong>
-                      <p>{r.email}</p>
-                      {r.disabledAt && (
-                        <p class="text-sm text-muted">
-                          {t("Account disabled")}
-                        </p>
-                      )}
-                    </div>
-                    <a
-                      href={`/api/v1/admin/o/${organizationId}/residents/${r.userId}/export`}
+              {residents.map((r) => (
+                <li data-user-id={r.userId}>
+                  <div class="sidebar-item-avatar" aria-hidden="true">
+                    {(r.displayName ?? r.email).charAt(0).toUpperCase()}
+                  </div>
+                  <div class="sidebar-item-body">
+                    <strong>{r.displayName ?? r.email}</strong>
+                    <p>{r.email}</p>
+                    {r.disabledAt && (
+                      <p class="text-sm text-muted">{t("Account disabled")}</p>
+                    )}
+                  </div>
+                  <a
+                    href={`/api/v1/admin/o/${organizationId}/residents/${r.userId}/export`}
+                    class="sidebar-item-remove"
+                    download
+                  >
+                    {t("Export data")}
+                  </a>
+                  <form
+                    method="POST"
+                    action={actions.dwellings.setResidentDisabled}
+                  >
+                    <input
+                      type="hidden"
+                      name="organizationId"
+                      value={organizationId}
+                    />
+                    <input type="hidden" name="userId" value={r.userId} />
+                    <input
+                      type="hidden"
+                      name="disabled"
+                      value={r.disabledAt ? "false" : "true"}
+                    />
+                    <button
+                      type="submit"
                       class="sidebar-item-remove"
-                      download
+                      data-confirm={
+                        r.disabledAt
+                          ? undefined
+                          : t(
+                              "Disable this account? The person cannot sign in until you enable it again."
+                            )
+                      }
                     >
-                      {t("Export data")}
-                    </a>
-                    <form
-                      method="POST"
-                      action={actions.dwellings.setResidentDisabled}
+                      {r.disabledAt ? t("Enable") : t("Disable")}
+                    </button>
+                  </form>
+                  <form
+                    method="POST"
+                    action={actions.dwellings.removeResident}
+                    data-resident-remove-form
+                  >
+                    <input
+                      type="hidden"
+                      name="organizationId"
+                      value={organizationId}
+                    />
+                    <input type="hidden" name="dwellingId" value={dwellingId} />
+                    <input type="hidden" name="userId" value={r.userId} />
+                    <button
+                      type="submit"
+                      class="sidebar-item-remove"
+                      data-confirm={`${t("Remove")} ${r.email}?`}
                     >
-                      <input
-                        type="hidden"
-                        name="organizationId"
-                        value={organizationId}
-                      />
-                      <input type="hidden" name="userId" value={r.userId} />
-                      <input
-                        type="hidden"
-                        name="disabled"
-                        value={r.disabledAt ? "false" : "true"}
-                      />
-                      <button
-                        type="submit"
-                        class="sidebar-item-remove"
-                        data-confirm={
-                          r.disabledAt
-                            ? undefined
-                            : t(
-                                "Disable this account? The person cannot sign in until you enable it again."
-                              )
-                        }
-                      >
-                        {r.disabledAt ? t("Enable") : t("Disable")}
-                      </button>
-                    </form>
-                    <form
-                      method="POST"
-                      action={actions.dwellings.removeResident}
-                      data-resident-remove-form
-                    >
-                      <input
-                        type="hidden"
-                        name="organizationId"
-                        value={organizationId}
-                      />
-                      <input
-                        type="hidden"
-                        name="dwellingId"
-                        value={dwellingId}
-                      />
-                      <input type="hidden" name="userId" value={r.userId} />
-                      <button
-                        type="submit"
-                        class="sidebar-item-remove"
-                        data-confirm={`${t("Remove")} ${r.email}?`}
-                      >
-                        {t("Remove")}
-                      </button>
-                    </form>
-                  </li>
-                ))
-              }
+                      {t("Remove")}
+                    </button>
+                  </form>
+                </li>
+              ))}
             </ul>
             <div id="residents-empty-state" hidden={residents.length > 0}>
               <EmptyState title={t("No residents assigned.")} />
@@ -1157,13 +1185,11 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                 {t("Add meter")}
               </summary>
               <div class="edit-disclosure-panel">
-                {
-                  meterResult?.error && (
-                    <p class="notice notice-danger" role="alert">
-                      {friendlyActionErrorMessage(meterResult.error, locale)}
-                    </p>
-                  )
-                }
+                {meterResult?.error && (
+                  <p class="notice notice-danger" role="alert">
+                    {friendlyActionErrorMessage(meterResult.error, locale)}
+                  </p>
+                )}
                 <form
                   method="POST"
                   action={actions.meters.create}
@@ -1197,27 +1223,25 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                   />
                   <input type="hidden" name="dwellingId" value={dwellingId} />
                   <div>
-                    <label class="block text-label text-foreground" for="type"
-                      >{t("Type")}</label
-                    >
+                    <label class="block text-label text-foreground" for="type">
+                      {t("Type")}
+                    </label>
                     <select
                       id="type"
                       name="type"
                       class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
                     >
-                      {
-                        meterTypeOptions.map((mt) => (
-                          <option value={mt} data-icon={meterTypeIcons[mt]}>
-                            {entityLabel(mt, locale)}
-                          </option>
-                        ))
-                      }
+                      {meterTypeOptions.map((mt) => (
+                        <option value={mt} data-icon={meterTypeIcons[mt]}>
+                          {entityLabel(mt, locale)}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>
-                    <label class="block text-label text-foreground" for="unit"
-                      >{t("Unit")}</label
-                    >
+                    <label class="block text-label text-foreground" for="unit">
+                      {t("Unit")}
+                    </label>
                     <input
                       id="unit"
                       name="unit"
@@ -1229,8 +1253,10 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                   <div>
                     <label
                       class="block text-label text-foreground"
-                      for="serialNumber">{t("Serial number")}</label
+                      for="serialNumber"
                     >
+                      {t("Serial number")}
+                    </label>
                     <input
                       id="serialNumber"
                       name="serialNumber"
@@ -1238,9 +1264,9 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                     />
                   </div>
                   <div>
-                    <label class="block text-label text-foreground" for="label"
-                      >{t("Label")}</label
-                    >
+                    <label class="block text-label text-foreground" for="label">
+                      {t("Label")}
+                    </label>
                     <input
                       id="label"
                       name="label"
@@ -1265,163 +1291,159 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
               type="button"
               class="btn-secondary btn-sm"
               data-meter-filter="active"
-              aria-pressed="true">{t("Active")}</button
+              aria-pressed="true"
             >
+              {t("Active")}
+            </button>
             <button
               type="button"
               class="btn-secondary btn-sm"
               data-meter-filter="archived"
-              aria-pressed="false">{t("Archived")}</button
+              aria-pressed="false"
             >
+              {t("Archived")}
+            </button>
           </div>
-          {
-            meterUpdateResult?.error && (
-              <p class="notice notice-danger" role="alert">
-                {friendlyActionErrorMessage(meterUpdateResult.error, locale)}
-              </p>
-            )
-          }
+          {meterUpdateResult?.error && (
+            <p class="notice notice-danger" role="alert">
+              {friendlyActionErrorMessage(meterUpdateResult.error, locale)}
+            </p>
+          )}
           <div
             id="meters-list-region"
             data-empty-active={t("No active meters for this dwelling.")}
             data-empty-archived={t("No archived meters for this dwelling.")}
           >
             <ul class="sidebar-item-list" hidden={activeMeterCount === 0}>
-              {
-                meterList.map((m) => (
-                  <li
-                    class="meter-row flex-wrap"
-                    data-meter-id={m.id}
-                    data-archived={m.archivedAt ? "true" : "false"}
-                    hidden={!!m.archivedAt}
+              {meterList.map((m) => (
+                <li
+                  class="meter-row flex-wrap"
+                  data-meter-id={m.id}
+                  data-archived={m.archivedAt ? "true" : "false"}
+                  hidden={!!m.archivedAt}
+                >
+                  <div
+                    class="sidebar-item-icon"
+                    data-meter-type={m.type}
+                    aria-hidden="true"
                   >
-                    <div
-                      class="sidebar-item-icon"
-                      data-meter-type={m.type}
-                      aria-hidden="true"
-                    >
-                      {meterTypeIcons[m.type] ?? "•"}
-                    </div>
-                    <div class="sidebar-item-body">
-                      <strong>
-                        {m.label ?? entityLabel(m.type, locale)}
-                        {m.archivedAt && ` (${t("archived")})`}
-                      </strong>
-                      <p>
-                        {m.serialNumber ? `${m.serialNumber} · ` : ""}
-                        {m.unit}
-                      </p>
-                    </div>
-                    {!m.archivedAt && (
-                      <>
-                        <form
-                          method="POST"
-                          action={actions.meters.archive}
-                          data-meter-archive-form
+                    {meterTypeIcons[m.type] ?? "•"}
+                  </div>
+                  <div class="sidebar-item-body">
+                    <strong>
+                      {m.label ?? entityLabel(m.type, locale)}
+                      {m.archivedAt && ` (${t("archived")})`}
+                    </strong>
+                    <p>
+                      {m.serialNumber ? `${m.serialNumber} · ` : ""}
+                      {m.unit}
+                    </p>
+                  </div>
+                  {!m.archivedAt && (
+                    <>
+                      <form
+                        method="POST"
+                        action={actions.meters.archive}
+                        data-meter-archive-form
+                      >
+                        <input
+                          type="hidden"
+                          name="organizationId"
+                          value={organizationId}
+                        />
+                        <input type="hidden" name="meterId" value={m.id} />
+                        <button
+                          type="submit"
+                          class="sidebar-item-remove"
+                          data-confirm={`${t("Archive")} ${m.label ?? entityLabel(m.type, locale)}?`}
                         >
-                          <input
-                            type="hidden"
-                            name="organizationId"
-                            value={organizationId}
-                          />
-                          <input type="hidden" name="meterId" value={m.id} />
-                          <button
-                            type="submit"
-                            class="sidebar-item-remove"
-                            data-confirm={`${t("Archive")} ${m.label ?? entityLabel(m.type, locale)}?`}
+                          {t("Archive")}
+                        </button>
+                      </form>
+                      <div class="w-full mt-2">
+                        <details class="meter-edit">
+                          <summary>{t("Edit")}</summary>
+                          <form
+                            method="POST"
+                            action={actions.meters.update}
+                            class="mt-2 grid grid-cols-2 gap-2"
                           >
-                            {t("Archive")}
-                          </button>
-                        </form>
-                        <div class="w-full mt-2">
-                          <details class="meter-edit">
-                            <summary>{t("Edit")}</summary>
-                            <form
-                              method="POST"
-                              action={actions.meters.update}
-                              class="mt-2 grid grid-cols-2 gap-2"
-                            >
+                            <input
+                              type="hidden"
+                              name="organizationId"
+                              value={organizationId}
+                            />
+                            <input type="hidden" name="meterId" value={m.id} />
+                            <div>
+                              <label
+                                class="block text-label text-foreground"
+                                for={`meter-serial-${m.id}`}
+                              >
+                                {t("Serial number")}
+                              </label>
                               <input
-                                type="hidden"
-                                name="organizationId"
-                                value={organizationId}
+                                id={`meter-serial-${m.id}`}
+                                name="serialNumber"
+                                value={m.serialNumber ?? ""}
+                                class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
                               />
+                            </div>
+                            <div>
+                              <label
+                                class="block text-label text-foreground"
+                                for={`meter-label-${m.id}`}
+                              >
+                                {t("Label")}
+                              </label>
                               <input
-                                type="hidden"
-                                name="meterId"
-                                value={m.id}
+                                id={`meter-label-${m.id}`}
+                                name="label"
+                                value={m.label ?? ""}
+                                class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
                               />
-                              <div>
-                                <label
-                                  class="block text-label text-foreground"
-                                  for={`meter-serial-${m.id}`}
-                                >
-                                  {t("Serial number")}
-                                </label>
-                                <input
-                                  id={`meter-serial-${m.id}`}
-                                  name="serialNumber"
-                                  value={m.serialNumber ?? ""}
-                                  class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
-                                />
-                              </div>
-                              <div>
-                                <label
-                                  class="block text-label text-foreground"
-                                  for={`meter-label-${m.id}`}
-                                >
-                                  {t("Label")}
-                                </label>
-                                <input
-                                  id={`meter-label-${m.id}`}
-                                  name="label"
-                                  value={m.label ?? ""}
-                                  class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
-                                />
-                              </div>
-                              <div>
-                                <label
-                                  class="block text-label text-foreground"
-                                  for={`meter-unit-${m.id}`}
-                                >
-                                  {t("Unit")}
-                                </label>
-                                <input
-                                  id={`meter-unit-${m.id}`}
-                                  name="unit"
-                                  required
-                                  value={m.unit}
-                                  class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
-                                />
-                              </div>
-                              <div>
-                                <label
-                                  class="block text-label text-foreground"
-                                  for={`meter-installed-${m.id}`}
-                                >
-                                  {t("Installed on")}
-                                </label>
-                                <input
-                                  type="date"
-                                  id={`meter-installed-${m.id}`}
-                                  name="installedAt"
-                                  value={m.installedAt ?? ""}
-                                  class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
-                                />
-                              </div>
-                              <div class="col-span-2">
-                                <button type="submit" class="btn-primary">
-                                  {t("Save changes")}
-                                </button>
-                              </div>
-                            </form>
-                          </details>
-                        </div>
-                      </>
-                    )}
-                  </li>
-                ))
-              }
+                            </div>
+                            <div>
+                              <label
+                                class="block text-label text-foreground"
+                                for={`meter-unit-${m.id}`}
+                              >
+                                {t("Unit")}
+                              </label>
+                              <input
+                                id={`meter-unit-${m.id}`}
+                                name="unit"
+                                required
+                                value={m.unit}
+                                class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                              />
+                            </div>
+                            <div>
+                              <label
+                                class="block text-label text-foreground"
+                                for={`meter-installed-${m.id}`}
+                              >
+                                {t("Installed on")}
+                              </label>
+                              <input
+                                type="date"
+                                id={`meter-installed-${m.id}`}
+                                name="installedAt"
+                                value={m.installedAt ?? ""}
+                                class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                              />
+                            </div>
+                            <div class="col-span-2">
+                              <button type="submit" class="btn-primary">
+                                {t("Save changes")}
+                              </button>
+                            </div>
+                          </form>
+                        </details>
+                      </div>
+                    </>
+                  )}
+                </li>
+              ))}
             </ul>
             <div id="meters-empty-state" hidden={activeMeterCount > 0}>
               <EmptyState title={t("No active meters for this dwelling.")} />
@@ -1436,71 +1458,69 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
       <p class="text-body-sm text-muted">
         {t("This dwelling's billing case in every period it has existed for.")}
       </p>
-      {
-        caseHistory.length > 0 ? (
-          <div class="table-wrap stack-table mt-4">
-            <table class="w-full text-left text-body-sm">
-              <caption class="sr-only">{t("Period history")}</caption>
-              <thead class="border-b border-border bg-surface-hover text-muted">
+      {caseHistory.length > 0 ? (
+        <div class="table-wrap stack-table mt-4">
+          <table class="w-full text-left text-body-sm">
+            <caption class="sr-only">{t("Period history")}</caption>
+            <thead class="border-b border-border bg-surface-hover text-muted">
+              <tr>
+                <th scope="col" class="px-4 py-2">
+                  {t("Period")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Status")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Invoice")}
+                </th>
+                <th scope="col" class="px-4 py-2 text-right">
+                  {t("Amount due")}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {caseHistory.map((c) => (
                 <tr>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Period")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Status")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Invoice")}
-                  </th>
-                  <th scope="col" class="px-4 py-2 text-right">
-                    {t("Amount due")}
-                  </th>
+                  <td class="px-4 py-2">
+                    {c.periodYear}-{String(c.periodMonth).padStart(2, "0")}
+                  </td>
+                  <td class="px-4 py-2">
+                    <StatusBadge status={c.status} />
+                  </td>
+                  <td class="px-4 py-2">
+                    {c.invoiceId ? (
+                      <a
+                        href={`${base}/periods/${c.periodId}/invoices/${c.invoiceId}`}
+                        class="text-primary hover:underline"
+                      >
+                        {c.invoiceNumber}
+                      </a>
+                    ) : (
+                      <a
+                        href={`${base}/periods/${c.periodId}`}
+                        class="text-primary hover:underline"
+                      >
+                        {t("Open workbench")}
+                      </a>
+                    )}
+                  </td>
+                  <td class="px-4 py-2 text-right">
+                    {c.invoiceAmountDue
+                      ? formatMoney(
+                          c.invoiceAmountDue,
+                          organization.currency,
+                          locale
+                        )
+                      : "—"}
+                  </td>
                 </tr>
-              </thead>
-              <tbody class="divide-y divide-border">
-                {caseHistory.map((c) => (
-                  <tr>
-                    <td class="px-4 py-2">
-                      {c.periodYear}-{String(c.periodMonth).padStart(2, "0")}
-                    </td>
-                    <td class="px-4 py-2">
-                      <StatusBadge status={c.status} />
-                    </td>
-                    <td class="px-4 py-2">
-                      {c.invoiceId ? (
-                        <a
-                          href={`${base}/periods/${c.periodId}/invoices/${c.invoiceId}`}
-                          class="text-primary hover:underline"
-                        >
-                          {c.invoiceNumber}
-                        </a>
-                      ) : (
-                        <a
-                          href={`${base}/periods/${c.periodId}`}
-                          class="text-primary hover:underline"
-                        >
-                          {t("Open workbench")}
-                        </a>
-                      )}
-                    </td>
-                    <td class="px-4 py-2 text-right">
-                      {c.invoiceAmountDue
-                        ? formatMoney(
-                            c.invoiceAmountDue,
-                            organization.currency,
-                            locale
-                          )
-                        : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <EmptyState title={t("No billing periods yet.")} />
-        )
-      }
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <EmptyState title={t("No billing periods yet.")} />
+      )}
     </section>
 
     <section id="audit-history" class="panel p-6" data-panel="history">
@@ -1508,43 +1528,41 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
       <p class="text-body-sm text-muted">
         {t("Changes recorded against this dwelling.")}
       </p>
-      {
-        auditEntries.length > 0 ? (
-          <div class="table-wrap stack-table mt-4">
-            <table class="w-full text-left text-body-sm">
-              <caption class="sr-only">{t("Audit history")}</caption>
-              <thead class="border-b border-border bg-surface-hover text-muted">
+      {auditEntries.length > 0 ? (
+        <div class="table-wrap stack-table mt-4">
+          <table class="w-full text-left text-body-sm">
+            <caption class="sr-only">{t("Audit history")}</caption>
+            <thead class="border-b border-border bg-surface-hover text-muted">
+              <tr>
+                <th scope="col" class="px-4 py-2">
+                  {t("Time")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Actor")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Action")}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {auditEntries.map((log) => (
                 <tr>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Time")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Actor")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Action")}
-                  </th>
+                  <td class="px-4 py-2">
+                    {formatDate(log.createdAt, locale, organization.timezone)}
+                  </td>
+                  <td class="px-4 py-2">
+                    {log.actorDisplayName ?? log.actorEmail ?? "—"}
+                  </td>
+                  <td class="px-4 py-2">{log.action}</td>
                 </tr>
-              </thead>
-              <tbody class="divide-y divide-border">
-                {auditEntries.map((log) => (
-                  <tr>
-                    <td class="px-4 py-2">
-                      {formatDate(log.createdAt, locale, organization.timezone)}
-                    </td>
-                    <td class="px-4 py-2">
-                      {log.actorDisplayName ?? log.actorEmail ?? "—"}
-                    </td>
-                    <td class="px-4 py-2">{log.action}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <EmptyState title={t("No audit events for this dwelling yet.")} />
-        )
-      }
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <EmptyState title={t("No audit events for this dwelling yet.")} />
+      )}
     </section>
 
     <section class="panel p-6" data-panel="overview">
@@ -1575,35 +1593,36 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
               <div>
                 <label
                   class="block text-label text-foreground"
-                  for="dwelling-type">{t("Type")}</label
+                  for="dwelling-type"
                 >
+                  {t("Type")}
+                </label>
                 <select
                   id="dwelling-type"
                   name="type"
                   class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
                 >
-                  {
-                    dwellingTypeOptions.map((dt) => (
-                      <option value={dt} selected={dwelling.type === dt}>
-                        {entityLabel(dt, locale)}
-                      </option>
-                    ))
-                  }
+                  {dwellingTypeOptions.map((dt) => (
+                    <option value={dt} selected={dwelling.type === dt}>
+                      {entityLabel(dt, locale)}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div class="col-span-2">
-                <label class="block text-label text-foreground" for="notes"
-                  >{t("Notes")}</label
-                >
+                <label class="block text-label text-foreground" for="notes">
+                  {t("Notes")}
+                </label>
                 <textarea
                   id="notes"
                   name="notes"
                   class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
-                  >{dwelling.notes ?? ""}</textarea
-                >
+                >{dwelling.notes ?? ""}</textarea>
               </div>
               <div class="col-span-2">
-                <button type="submit" class="btn-primary">{t("Save")}</button>
+                <button type="submit" class="btn-primary">
+                  {t("Save")}
+                </button>
               </div>
             </form>
           </div>
@@ -1624,7 +1643,9 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
         </div>
         <div>
           <dt>{t("Status")}</dt>
-          <dd><StatusBadge status={dwellingStatus} /></dd>
+          <dd>
+            <StatusBadge status={dwellingStatus} />
+          </dd>
         </div>
         <div>
           <dt>{t("Notes")}</dt>
@@ -1645,43 +1666,37 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
       </dl>
     </section>
 
-    {
-      !dwelling.archivedAt && (
-        <dialog class="lock-dialog" id="archive-dialog">
-          <div class="dialog-body">
-            <div class="dialog-icon" aria-hidden="true">
-              !
-            </div>
-            <div>
-              <h2>{t("Archive this dwelling?")}</h2>
-              <p>
-                {t(
-                  "Archiving hides it from new periods and active lists. Past invoices and readings remain intact."
-                )}
-              </p>
-            </div>
+    {!dwelling.archivedAt && (
+      <dialog class="lock-dialog" id="archive-dialog">
+        <div class="dialog-body">
+          <div class="dialog-icon" aria-hidden="true">
+            !
           </div>
-          <div class="dialog-actions">
-            <form method="dialog">
-              <button class="btn-secondary" value="cancel">
-                {t("Cancel")}
-              </button>
-            </form>
-            <form method="POST" action={actions.dwellings.archive}>
-              <input
-                type="hidden"
-                name="organizationId"
-                value={organizationId}
-              />
-              <input type="hidden" name="dwellingId" value={dwellingId} />
-              <button type="submit" class="btn-danger">
-                {t("Archive dwelling")}
-              </button>
-            </form>
+          <div>
+            <h2>{t("Archive this dwelling?")}</h2>
+            <p>
+              {t(
+                "Archiving hides it from new periods and active lists. Past invoices and readings remain intact."
+              )}
+            </p>
           </div>
-        </dialog>
-      )
-    }
+        </div>
+        <div class="dialog-actions">
+          <form method="dialog">
+            <button class="btn-secondary" value="cancel">
+              {t("Cancel")}
+            </button>
+          </form>
+          <form method="POST" action={actions.dwellings.archive}>
+            <input type="hidden" name="organizationId" value={organizationId} />
+            <input type="hidden" name="dwellingId" value={dwellingId} />
+            <button type="submit" class="btn-danger">
+              {t("Archive dwelling")}
+            </button>
+          </form>
+        </div>
+      </dialog>
+    )}
   </div>
 </AdminLayout>
 
@@ -2705,9 +2720,9 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     border-bottom: 1px solid var(--color-border);
   }
   .dwelling-tabs button {
-    padding: 0 0 0.75rem;
+    padding: 0.75rem;
     border: none;
-    border-bottom: 2px solid transparent;
+    border-radius: var(--radius-control);
     background: none;
     color: var(--color-muted);
     font: inherit;
@@ -2721,7 +2736,8 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
   }
   .dwelling-tabs button[aria-selected="true"] {
     color: var(--color-foreground);
-    border-bottom-color: var(--color-primary);
+    background: var(--color-nav-active-bg);
+    font-weight: 650;
   }
   .dwelling-grid {
     display: grid;
@@ -2777,6 +2793,12 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     border-radius: var(--radius-panel);
     background: var(--color-surface);
     box-shadow: var(--shadow-panel);
+  }
+  /* The first of two buttons in a row: opening to the right keeps the panel
+     off the sidebar. */
+  .edit-disclosure-panel-left {
+    right: auto;
+    left: 0;
   }
   .detail-list {
     display: grid;
@@ -2933,7 +2955,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     margin-top: 1rem;
   }
   .meter-filters button[aria-pressed="true"] {
-    border-color: var(--color-primary);
+    background: var(--color-nav-active-bg);
     color: var(--color-primary);
   }
   .sidebar-item-list[hidden],

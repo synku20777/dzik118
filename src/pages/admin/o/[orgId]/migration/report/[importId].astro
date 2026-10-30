@@ -1,0 +1,210 @@
+---
+import { translate, uiLocale } from "../../../../../../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+// Reconciliation report of an opening balance import (ADR 0013): the totals of
+// the file against the totals rebuilt from the ledger entries of this import.
+import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../../domain/authorization/guards";
+import { NotFoundError } from "../../../../../../domain/errors";
+import { getOrganization } from "../../../../../../domain/organizations/organizations";
+import { getBalanceReport } from "../../../../../../domain/migration/balances";
+import { withRequestDb } from "../../../../../../lib/db-request";
+
+const organizationId = Astro.params.orgId!;
+const importId = Astro.params.importId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+// A malformed id would be a database error, not a missing report.
+if (!/^[0-9a-f-]{36}$/i.test(importId)) {
+  return new Response(null, { status: 404 });
+}
+let loaded;
+try {
+  loaded = await withRequestDb(async (db) => ({
+    organization: await getOrganization(db, organizationId),
+    report: await getBalanceReport(db, organizationId, importId),
+  }));
+} catch (err) {
+  if (err instanceof NotFoundError) return new Response(null, { status: 404 });
+  throw err;
+}
+const { organization, report } = loaded;
+const base = `/admin/o/${organizationId}/migration`;
+// The currency of the import, not the organization's current one.
+const money = (value: string) => `${value} ${report.currency}`;
+const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
+---
+
+<AdminLayout
+  title={`Opening balance report - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+>
+  <div class="space-y-6">
+    <a href={base} class="back-link">
+      ← {t("Migration Center")}
+    </a>
+    <h1 class="font-display text-h2 text-foreground">
+      {t("Opening balance report")}
+    </h1>
+
+    <p class="text-body-sm text-muted">
+      {report.filename} · {t("Balance date")}:{" "}
+      {dateFormat.format(new Date(`${report.balanceDate}T00:00:00Z`))}
+    </p>
+
+    <p
+      class={report.matches ? "notice" : "notice notice-danger"}
+      role={report.matches ? "status" : "alert"}
+    >
+      {report.matches
+        ? t("The ledger totals match the file.")
+        : t("The ledger totals do not match the file. Contact support.")}
+    </p>
+
+    <div class="table-wrap stack-table max-w-2xl">
+      <table class="w-full text-left text-body-sm">
+        <caption class="sr-only">{t("Totals")}</caption>
+        <thead class="border-b border-border bg-surface-hover text-muted">
+          <tr>
+            <th scope="col" class="px-4 py-2">
+              {t("Totals")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("In the file")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("In the ledger")}
+            </th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          <tr>
+            <td class="px-4 py-2" data-label={t("Totals")}>
+              {t("Total debt")}
+            </td>
+            <td class="px-4 py-2" data-label={t("In the file")}>
+              {money(report.fileDebit)}
+            </td>
+            <td class="px-4 py-2" data-label={t("In the ledger")}>
+              {money(report.ledgerDebit)}
+            </td>
+          </tr>
+          <tr>
+            <td class="px-4 py-2" data-label={t("Totals")}>
+              {t("Total credit")}
+            </td>
+            <td class="px-4 py-2" data-label={t("In the file")}>
+              {money(report.fileCredit)}
+            </td>
+            <td class="px-4 py-2" data-label={t("In the ledger")}>
+              {money(report.ledgerCredit)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="text-body-sm text-muted">
+      {t("Posted")}: {report.lines.length} · {t("Left unchanged")}:{" "}
+      {report.skipped}
+    </p>
+    <p class="max-w-2xl text-body-sm text-muted">
+      {t(
+        "The first invoice shows this debt as previous outstanding. Late fees do not apply to it until it is paid. To change a balance, add an adjustment on the dwelling page."
+      )}
+    </p>
+
+    <div class="table-wrap stack-table">
+      <table class="w-full text-left text-body-sm">
+        <caption class="sr-only">{t("Posted balances")}</caption>
+        <thead class="border-b border-border bg-surface-hover text-muted">
+          <tr>
+            <th scope="col" class="px-4 py-2">
+              {t("Dwelling number")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Type")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Amount")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Balance now")}
+            </th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          {report.lines.map((line) => (
+            <tr>
+              <td class="px-4 py-2" data-label={t("Dwelling number")}>
+                {line.number}
+              </td>
+              <td class="px-4 py-2" data-label={t("Type")}>
+                {line.direction === "DEBIT" ? t("Debt") : t("Credit")}
+              </td>
+              <td class="px-4 py-2" data-label={t("Amount")}>
+                {money(line.amount)}
+              </td>
+              <td class="px-4 py-2" data-label={t("Balance now")}>
+                {money(line.balanceNow)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    {report.skippedLines.length > 0 && (
+      <div class="space-y-2">
+        <h2 class="text-h3 text-foreground">{t("Left unchanged")}</h2>
+        <div class="table-wrap stack-table">
+          <table class="w-full text-left text-body-sm">
+            <caption class="sr-only">{t("Left unchanged")}</caption>
+            <thead class="border-b border-border bg-surface-hover text-muted">
+              <tr>
+                <th scope="col" class="px-4 py-2">
+                  {t("Row")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Dwelling number")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Message")}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {report.skippedLines.map((s) => (
+                <tr>
+                  <td class="px-4 py-2" data-label={t("Row")}>
+                    {s.rowNumber}
+                  </td>
+                  <td class="px-4 py-2" data-label={t("Dwelling number")}>
+                    {s.number}
+                  </td>
+                  <td class="px-4 py-2" data-label={t("Message")}>
+                    {t(s.reason)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )}
+
+    <a href={`${base}/report/${importId}/csv`} class="btn-secondary">
+      {t("Download as CSV")}
+    </a>
+  </div>
+</AdminLayout>

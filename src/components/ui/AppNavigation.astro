@@ -20,32 +20,28 @@ const links: Array<[string, string, IconName]> = [
 ---
 
 <nav class="app-nav" aria-label={translate(locale, "Navigation")}>
-  {
-    links.map(([path, label, icon]) => {
-      const href = `/admin/o/${organizationId}/${path}`;
-      return (
-        <a
-          href={href}
-          aria-current={
-            Astro.url.pathname.startsWith(href) ? "page" : undefined
-          }
-        >
-          <Icon name={icon} class="nav-icon" />
-          {translate(locale, label)}
-          {path === "messages" && unreadMessages > 0 && (
-            <span class="nav-badge">
-              <span aria-hidden="true">
-                {unreadMessages > 99 ? "99+" : unreadMessages}
-              </span>
-              <span class="sr-only">
-                {unreadMessages} {translate(locale, "unread conversations")}
-              </span>
+  {links.map(([path, label, icon]) => {
+    const href = `/admin/o/${organizationId}/${path}`;
+    return (
+      <a
+        href={href}
+        aria-current={Astro.url.pathname.startsWith(href) ? "page" : undefined}
+      >
+        <Icon name={icon} class="nav-icon" />
+        {translate(locale, label)}
+        {path === "messages" && unreadMessages > 0 && (
+          <span class="nav-badge">
+            <span aria-hidden="true">
+              {unreadMessages > 99 ? "99+" : unreadMessages}
             </span>
-          )}
-        </a>
-      );
-    })
-  }
+            <span class="sr-only">
+              {unreadMessages} {translate(locale, "unread conversations")}
+            </span>
+          </span>
+        )}
+      </a>
+    );
+  })}
 </nav>
 
 <hr class="mt-5 border-border" />
@@ -59,9 +55,11 @@ const links: Array<[string, string, IconName]> = [
     },
   ]}
   href={`/admin/o/${organizationId}/guide`}
-  aria-current={Astro.url.pathname === `/admin/o/${organizationId}/guide`
-    ? "page"
-    : undefined}
+  aria-current={
+    Astro.url.pathname === `/admin/o/${organizationId}/guide`
+      ? "page"
+      : undefined
+  }
 >
   <Icon name="help-circle" class="nav-icon" />
   {translate(locale, "Admin guide")}

@@ -1,0 +1,1759 @@
+IMPORTANT ENVIRONMENT NOTE: your shell is blocked (read-only sandbox, process creation denied), and the GitHub connector only sees the committed HEAD, which DIFFERS from the working tree (dashboard/index.astro has uncommitted changes). Therefore the authoritative working-tree source is EMBEDDED BELOW with line numbers. Cite ONLY these embedded line numbers (format path:line). For the docs under docs/product and docs/research (unchanged), you may still fetch them via the GitHub connector and cite their lines. Do not cite GitHub-HEAD line numbers for code files.
+
+You are an independent senior UI/UX and accessibility reviewer. Repo root (your cwd or: C:\Users\nesto\orca\projects\dzik118): "Namkopa", an Astro + Cloudflare + Supabase billing app for Latvian housing co-ops. Today is 2026-10-28.
+
+Persona: the admin of a Latvian house co-op, ~50 years old, not tech-savvy, used to Excel, wants a summary of the CURRENT MONTH.
+
+Task (PASS 2 - UI): Read src/pages/admin/o/[orgId]/dashboard/index.astro (template + scoped <style>), src/styles/global.css (.kpi, .status-badge, .page-header, .eyebrow, .btn-primary, type scale, color tokens), src/components/ui/KpiCard.astro, StatusBadge.astro, EmptyState.astro, src/layouts/AdminLayout.astro, src/lib/ui/i18n.ts (the Latvian strings for the dashboard, approx. lines 370-430 and the status labels), src/lib/ui/invoice-status.ts. Do not modify anything.
+
+Critique, for this persona:
+1. Visual hierarchy: what does the eye hit first, second, third? Is the period heading + status badge + single primary button right? Is the order KPIs -> attention list -> case status -> consumption right?
+2. Wording in Latvian: judge each dashboard string (e.g. "Rekinu kopsumma", "Neapmaksata summa", "Nepieciesama uzmaniba", "Norekinu statuss", "Atvert norekinu darbvietu", "Kavets", "Gatavs rekina izrakstisanai", "Pievienot radijumus", "Paterins"). Which are jargon / unnatural / ambiguous for a non-technical Latvian reader? Give better Latvian alternatives with correct diacritics. Also note any English-only or untranslated strings that leak to the UI (e.g. status codes inside help text, enum names).
+3. Density and size: font sizes (13px/14px/12px), tap target sizes, spacing, what can be removed.
+4. Status encoding: color+icon+text? Contrast of muted text (--color-muted) and warning/info badge pairs in light mode - estimate contrast ratios from the hex values and say whether they pass WCAG AA (4.5:1 for small text). Is the "warning" tone used for both READY and OVERDUE (invoice-status.ts) a problem? Is the Outstanding KPI shown in warning color correct semantically?
+5. Accessibility for 50+/low-tech: text size, link affordance (e.g. dashboard-attention-action underline/color), aria usage, heading structure (KpiCard renders h2 for each KPI), disabled period-nav items, dead CSS (e.g. .dashboard-totals or .dashboard-period-list selectors that match nothing - verify in the template), focus states.
+6. Concrete improvement proposals: specific layout (what goes in the top band, what in a second band), specific CSS (sizes, weights, grid), and specific Latvian wording, in order of impact. Include a rough text wireframe.
+Ground every claim in file:line of the current code (format path:line). Write concretely. Keep the answer under 1200 words. Output plain markdown.
+
+===== FILE: src/pages/admin/o/[orgId]/dashboard/index.astro (lines 1-761; line numbers prefixed) =====
+1: ---
+2: import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+3: import {
+4:   ForbiddenError,
+5:   requireOrganizationAccess,
+6: } from "../../../../../domain/authorization/guards";
+7: import { getOrganization } from "../../../../../domain/organizations/organizations";
+8: import {
+9:   getCurrentOpenPeriod,
+10:   listPeriods,
+11: } from "../../../../../domain/periods/periods";
+12: import {
+13:   getDashboardSummary,
+14:   type DashboardSummary,
+15: } from "../../../../../domain/periods/dashboard";
+16: import {
+17:   getSetupStatus,
+18:   type SetupProgress,
+19: } from "../../../../../domain/onboarding/progress";
+20: import { withRequestDb } from "../../../../../lib/db-request";
+21: 
+22: const organizationId = Astro.params.orgId!;
+23: try {
+24:   requireOrganizationAccess(Astro.locals.auth, organizationId);
+25: } catch (err) {
+26:   if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+27:   throw err;
+28: }
+29: 
+30: const requestedPeriodId = Astro.url.searchParams.get("periodId");
+31: 
+32: let organization: Awaited<ReturnType<typeof getOrganization>>;
+33: let allPeriods: Awaited<ReturnType<typeof listPeriods>>;
+34: let summary: DashboardSummary | null = null;
+35: let attentionCases: Awaited<ReturnType<typeof listCasesForPeriod>> = [];
+36: let setupComplete = true;
+37: let setupProgress: SetupProgress | null = null;
+38: try {
+39:   ({ organization, allPeriods, summary, setupComplete, setupProgress } =
+40:     await withRequestDb(async (db) => {
+41:       const org = await getOrganization(db, organizationId);
+42:       // The starting-readings month is not a billing month to compare with.
+43:       const periods = (await listPeriods(db, organizationId)).filter(
+44:         (p) => !p.openingReadings
+45:       );
+46:       // Progress is calculated once, and only while setup is open.
+47:       const { complete, progress } = await getSetupStatus(
+48:         db,
+49:         organizationId,
+50:         org
+51:       );
+52: 
+53:       let periodId: string | undefined = requestedPeriodId || undefined;
+54:       if (!periodId) {
+55:         const openPeriod = await getCurrentOpenPeriod(db, organizationId);
+56:         if (openPeriod) {
+57:           periodId = openPeriod.id;
+58:         } else if (periods.length > 0) {
+59:           periodId = periods[0].id;
+60:         }
+61:       }
+62: 
+63:       const summary = periodId
+64:         ? await getDashboardSummary(db, organizationId, periodId)
+65:         : null;
+66: 
+67:       if (periodId)
+68:         attentionCases = await listCasesForPeriod(db, organizationId, periodId);
+69:       return {
+70:         organization: org,
+71:         allPeriods: periods,
+72:         summary,
+73:         setupComplete: complete,
+74:         setupProgress: progress,
+75:       };
+76:     }));
+77: } catch {
+78:   return Astro.redirect(`/admin/o/${organizationId}/periods`);
+79: }
+80: 
+81: const currentIndex = summary
+82:   ? allPeriods.findIndex((p) => p.id === summary.period.id)
+83:   : -1;
+84: const previousPeriod =
+85:   currentIndex >= 0 && currentIndex < allPeriods.length - 1
+86:     ? allPeriods[currentIndex + 1]
+87:     : null;
+88: const nextPeriod = currentIndex > 0 ? allPeriods[currentIndex - 1] : null;
+89: 
+90: import PageHeader from "../../../../../components/ui/PageHeader.astro";
+91: import FacadeAccent from "../../../../../components/ui/FacadeAccent.astro";
+92: import KpiCard from "../../../../../components/ui/KpiCard.astro";
+93: import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
+94: import EmptyState from "../../../../../components/ui/EmptyState.astro";
+95: import AdminContextDrawer from "../../../../../components/ui/AdminContextDrawer.astro";
+96: import Icon from "../../../../../components/ui/Icon.astro";
+97: import { listCasesForPeriod } from "../../../../../domain/periods/cases";
+98: import {
+99:   translate,
+100:   uiLocale,
+101:   formatMoney,
+102:   formatNumber,
+103:   formatPeriod,
+104:   entityLabel,
+105: } from "../../../../../lib/ui/i18n";
+106: const locale = uiLocale(Astro.cookies, Astro.url);
+107: const t = (text: string) => translate(locale, text);
+108: const base = "/admin/o/" + organizationId;
+109: const statuses = [
+110:   "MISSING_DATA",
+111:   "READY",
+112:   "DRAFT",
+113:   "PREPARED",
+114:   "OVERDUE",
+115:   "SENT",
+116:   "PAID",
+117: ] as const;
+118: 
+119: const setupSteps = setupProgress
+120:   ? [
+121:       {
+122:         title: t("Organization details"),
+123:         done: setupProgress.steps.organization,
+124:         href: `${base}/setup/organization`,
+125:       },
+126:       {
+127:         title: t("Dwellings"),
+128:         done: setupProgress.steps.dwellings,
+129:         href: `${base}/setup/dwellings`,
+130:       },
+131:       {
+132:         title: t("First billing period"),
+133:         done: setupProgress.steps.period,
+134:         href: `${base}/setup/period`,
+135:       },
+136:       {
+137:         title: t("Charges"),
+138:         done: setupProgress.steps.charges,
+139:         href: `${base}/setup/charges`,
+140:       },
+141:       {
+142:         title: t("Meters and starting readings"),
+143:         done: setupProgress.steps.meters,
+144:         href: `${base}/setup/meters`,
+145:       },
+146:     ]
+147:   : [];
+148: const completedSetupSteps = setupSteps.filter((step) => step.done).length;
+149: const nextSetupStep = setupSteps.find((step) => !step.done);
+150: ---
+151: 
+152: <AdminLayout
+153:   title={t("Dashboard") + " - " + organization.name}
+154:   organizationId={organizationId}
+155:   organizationName={organization.name}
+156: >
+157:   {
+158:     !setupComplete && setupProgress && (
+159:       <section
+160:         class="dashboard-setup panel"
+161:         aria-labelledby="dashboard-setup-title"
+162:       >
+163:         <div class="setup-banner-intro">
+164:           <div class="setup-banner-title">
+165:             <h2 id="dashboard-setup-title">{t("Finish setting up")}</h2>
+166:             <span class="setup-banner-count">
+167:               {completedSetupSteps} / {setupSteps.length}{" "}
+168:               {t("Done").toLocaleLowerCase(locale)}
+169:             </span>
+170:           </div>
+171:           {nextSetupStep && (
+172:             <p class="setup-banner-next">
+173:               {t("Next step")}: <strong>{nextSetupStep.title}</strong>
+174:             </p>
+175:           )}
+176:         </div>
+177:         <ol class="setup-banner-steps" aria-label={t("Setup steps")}>
+178:           {setupSteps.map((step, index) => (
+179:             <li>
+180:               <a
+181:                 href={step.href}
+182:                 class:list={[
+183:                   "setup-banner-step",
+184:                   { "is-done": step.done, "is-next": step === nextSetupStep },
+185:                 ]}
+186:               >
+187:                 <span class="setup-banner-symbol" aria-hidden="true">
+188:                   {step.done ? <Icon name="check" size="xs" /> : index + 1}
+189:                 </span>
+190:                 <span>
+191:                   {step.title}
+192:                   <span class="sr-only">
+193:                     : {t(step.done ? "Done" : "To do")}
+194:                   </span>
+195:                 </span>
+196:               </a>
+197:             </li>
+198:           ))}
+199:         </ol>
+200:         <a
+201:           class="setup-banner-continue btn-primary"
+202:           href={nextSetupStep?.href ?? `${base}/setup`}
+203:         >
+204:           {t("Continue setup")}
+205:         </a>
+206:       </section>
+207:     )
+208:   }
+209:   {
+210:     !summary ? (
+211:       <div class="space-y-6">
+212:         <PageHeader
+213:           title={t("Dashboard")}
+214:           eyebrow={organization.name}
+215:           description={t(
+216:             "Monitor billing, payments and work requiring attention."
+217:           )}
+218:           display
+219:         />
+220:         {setupComplete && (
+221:           <EmptyState
+222:             ornament
+223:             title={t("No billing periods yet.")}
+224:             description={t(
+225:               "Create a period to start the monthly billing workflow."
+226:             )}
+227:           >
+228:             <a class="btn-primary" href={base + "/periods"}>
+229:               {t("Create period")}
+230:             </a>
+231:           </EmptyState>
+232:         )}
+233:       </div>
+234:     ) : (
+235:       <div class="space-y-6">
+236:         <AdminContextDrawer
+237:           organizationId={organizationId}
+238:           periodId={summary.period.id}
+239:           periodStatus={summary.period.status}
+240:           periodName={formatPeriod(
+241:             summary.period.year,
+242:             summary.period.month,
+243:             locale
+244:           )}
+245:           workbenchPath={base + "/periods/" + summary.period.id}
+246:           refreshSelectors={[".dashboard-attention", ".dashboard-case-status"]}
+247:         />
+248:         <header class="page-header">
+249:           <div>
+250:             <p class="eyebrow">{organization.name}</p>
+251:             <div class="flex flex-wrap items-center gap-3">
+252:               <h1 class="font-display">
+253:                 {formatPeriod(
+254:                   summary.period.year,
+255:                   summary.period.month,
+256:                   locale
+257:                 )}
+258:               </h1>
+259:               <StatusBadge status={summary.period.status} />
+260:             </div>
+261:             <FacadeAccent />
+262:           </div>
+263:           <div class="page-actions">
+264:             <a
+265:               class="btn-primary"
+266:               href={base + "/periods/" + summary.period.id}
+267:             >
+268:               {t("Open workbench")}
+269:               <Icon name="arrow-right" size="sm" />
+270:             </a>
+271:           </div>
+272:         </header>
+273:         <nav
+274:           class="dashboard-period-nav text-body-sm text-muted"
+275:           aria-label={t("Period navigation")}
+276:         >
+277:           {previousPeriod ? (
+278:             <a
+279:               href={base + "/dashboard?periodId=" + previousPeriod.id}
+280:               class="flex items-center gap-1 hover:text-foreground hover:underline"
+281:             >
+282:               <Icon name="arrow-left" size="xs" />
+283:               {formatPeriod(previousPeriod.year, previousPeriod.month, locale)}
+284:             </a>
+285:           ) : (
+286:             <span class="flex items-center gap-1" aria-disabled="true">
+287:               <Icon name="arrow-left" size="xs" />
+288:               {t("Previous period")}
+289:             </span>
+290:           )}
+291:           {nextPeriod ? (
+292:             <a
+293:               href={base + "/dashboard?periodId=" + nextPeriod.id}
+294:               class="flex items-center gap-1 hover:text-foreground hover:underline"
+295:             >
+296:               {formatPeriod(nextPeriod.year, nextPeriod.month, locale)}
+297:               <Icon name="arrow-right" size="xs" />
+298:             </a>
+299:           ) : (
+300:             <span class="flex items-center gap-1" aria-disabled="true">
+301:               {t("Next period")}
+302:               <Icon name="arrow-right" size="xs" />
+303:             </span>
+304:           )}
+305:         </nav>
+306:         <div class="grid gap-4 sm:grid-cols-3">
+307:           <>
+308:             <KpiCard
+309:               icon="invoice"
+310:               label={t("Total invoiced")}
+311:               value={formatMoney(
+312:                 summary.totalInvoiced,
+313:                 organization.currency,
+314:                 locale
+315:               )}
+316:             />
+317:             <KpiCard
+318:               icon="coins"
+319:               label={t("Paid")}
+320:               tone="success"
+321:               value={formatMoney(
+322:                 summary.totalPaid,
+323:                 organization.currency,
+324:                 locale
+325:               )}
+326:             />
+327:             <KpiCard
+328:               icon="clock"
+329:               label={t("Outstanding")}
+330:               tone="warning"
+331:               value={formatMoney(
+332:                 summary.totalOutstanding,
+333:                 organization.currency,
+334:                 locale
+335:               )}
+336:             />
+337:           </>
+338:         </div>
+339:         <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+340:           <section class="dashboard-attention">
+341:             <div class="mb-4 flex items-center justify-between">
+342:               <>
+343:                 <h2 class="font-semibold">{t("Needs attention")}</h2>
+344:                 <span class="text-body-sm text-muted">
+345:                   {summary.needsAttention.length}
+346:                 </span>
+347:               </>
+348:             </div>
+349:             {summary.needsAttention.length === 0 ? (
+350:               <EmptyState title={t("Nothing needs attention right now.")} />
+351:             ) : (
+352:               <div class="panel divide-y divide-border">
+353:                 {attentionCases
+354:                   .filter(
+355:                     (c) => c.status === "MISSING_DATA" || c.status === "OVERDUE"
+356:                   )
+357:                   .map((c) => {
+358:                     // missingData is a JSONB column with no schema
+359:                     // enforcement: cases whose readiness was last computed by
+360:                     // an older app version can still carry a legacy
+361:                     // plain-string shape instead of today's {meterType,
+362:                     // label, reason} object (see the same fix in
+363:                     // periods/[periodId]/index.astro).
+364:                     const missing = c.missingData as (
+365:                       | {
+366:                           label: string | null;
+367:                           meterType: string;
+368:                           reason?: "NO_READING";
+369:                         }
+370:                       | {
+371:                           billingRuleId: string;
+372:                           ruleName: string;
+373:                           reason?: "NO_MANUAL_INPUT";
+374:                         }
+375:                       | {
+376:                           billingRuleId: string;
+377:                           ruleName: string;
+378:                           meterType: string;
+379:                           reason: "NO_ACTIVE_METER_FOR_RULE";
+380:                         }
+381:                       | { reason: "NO_APPLICABLE_RULES" }
+382:                       | string
+383:                     )[];
+384:                     const overdue = c.status === "OVERDUE";
+385:                     const href = overdue
+386:                       ? base + "/payments"
+387:                       : base + "/periods/" + summary.period.id;
+388:                     const readingsUrl = new URL(Astro.url);
+389:                     readingsUrl.searchParams.set("drawer", "readings");
+390:                     readingsUrl.searchParams.set("dwelling", c.dwellingId);
+391:                     readingsUrl.searchParams.delete("focus");
+392:                     return (
+393:                       <div class="dashboard-attention-row">
+394:                         <div class="dashboard-attention-content">
+395:                           <div class="dashboard-attention-heading">
+396:                             <a
+397:                               class="dashboard-dwelling-link"
+398:                               href={base + "/dwellings/" + c.dwellingId}
+399:                             >
+400:                               {t("Dwelling")} {c.dwellingNumber}
+401:                             </a>
+402:                             <StatusBadge status={c.status} />
+403:                           </div>
+404:                           <p class="text-body-sm text-muted">
+405:                             {overdue
+406:                               ? t(
+407:                                   "Payment is past its due date. Review reconciliation."
+408:                                 )
+409:                               : missing.length
+410:                                 ? missing
+411:                                     .map((m) =>
+412:                                       typeof m === "object" &&
+413:                                       m &&
+414:                                       m.reason === "NO_APPLICABLE_RULES"
+415:                                         ? t("No billing rule applies")
+416:                                         : typeof m === "object" &&
+417:                                             m &&
+418:                                             m.reason ===
+419:                                               "NO_ACTIVE_METER_FOR_RULE"
+420:                                           ? `${m.ruleName} — ${t("no active meter")}`
+421:                                           : typeof m === "string"
+422:                                             ? m
+423:                                             : "billingRuleId" in m
+424:                                               ? m.ruleName
+425:                                               : (m.label ??
+426:                                                 entityLabel(
+427:                                                   m.meterType,
+428:                                                   locale
+429:                                                 ))
+430:                                     )
+431:                                     .join(", ")
+432:                                 : t(
+433:                                     "All readings are present. Generate the invoice in the workbench."
+434:                                   )}
+435:                           </p>
+436:                           {missing.length > 0 && (
+437:                             <p class="mt-1 text-caption text-muted">
+438:                               {t(
+439:                                 "Readings are required before generating an invoice."
+440:                               )}
+441:                             </p>
+442:                           )}
+443:                         </div>
+444:                         {missing.length > 0 &&
+445:                         !overdue &&
+446:                         summary.period.status !== "LOCKED" ? (
+447:                           <a
+448:                             class="dashboard-attention-action"
+449:                             href={readingsUrl.pathname + readingsUrl.search}
+450:                             data-open-drawer="readings"
+451:                             data-dwelling-id={c.dwellingId}
+452:                             aria-haspopup="dialog"
+453:                             aria-controls="admin-context-drawer"
+454:                           >
+455:                             {t("Add readings")}
+456:                             <Icon name="arrow-right" size="xs" />
+457:                           </a>
+458:                         ) : (
+459:                           <a class="dashboard-attention-action" href={href}>
+460:                             {t(overdue ? "Review payments" : "Open workbench")}
+461:                             <Icon name="arrow-right" size="xs" />
+462:                           </a>
+463:                         )}
+464:                       </div>
+465:                     );
+466:                   })}
+467:               </div>
+468:             )}
+469:           </section>
+470:           <div class="space-y-6">
+471:             <>
+472:               <section class="dashboard-case-status panel p-5">
+473:                 <>
+474:                   <h2 class="section-title">{t("Case status")}</h2>
+475:                   <div class="space-y-1">
+476:                     {statuses.map((status) => (
+477:                       <a
+478:                         class="dashboard-status-link text-body-sm"
+479:                         href={
+480:                           base +
+481:                           "/periods/" +
+482:                           summary.period.id +
+483:                           "?status=" +
+484:                           status
+485:                         }
+486:                       >
+487:                         <StatusBadge status={status} />
+488:                         <span class="dashboard-status-count font-semibold tabular-nums">
+489:                           {summary.caseStatusCounts[status]}
+490:                           <Icon name="arrow-right" size="xs" />
+491:                         </span>
+492:                       </a>
+493:                     ))}
+494:                   </div>
+495:                 </>
+496:               </section>
+497:               <section class="panel p-5">
+498:                 <>
+499:                   <h2 class="section-title flex items-center gap-2">
+500:                     <Icon name="droplet" size="sm" class="text-muted" />
+501:                     {t("Consumption")}
+502:                   </h2>
+503:                   <dl class="space-y-3 text-body-sm">
+504:                     <>
+505:                       <div class="flex justify-between gap-3">
+506:                         <>
+507:                           <dt class="text-muted">{t("Cold water")}</dt>
+508:                           <dd class="font-semibold tabular-nums">
+509:                             {formatNumber(summary.coldWaterConsumption, locale)}{" "}
+510:                             m³
+511:                           </dd>
+512:                         </>
+513:                       </div>
+514:                       <div class="flex justify-between gap-3">
+515:                         <>
+516:                           <dt class="text-muted">{t("Hot water")}</dt>
+517:                           <dd class="font-semibold tabular-nums">
+518:                             {formatNumber(summary.hotWaterConsumption, locale)}{" "}
+519:                             m³
+520:                           </dd>
+521:                         </>
+522:                       </div>
+523:                     </>
+524:                   </dl>
+525:                 </>
+526:               </section>
+527:             </>
+528:           </div>
+529:         </div>
+530:       </div>
+531:     )
+532:   }
+533: </AdminLayout>
+534: 
+535: <style>
+536:   .dashboard-setup {
+537:     display: grid;
+538:     grid-template-columns: minmax(0, 1fr) auto;
+539:     align-items: center;
+540:     gap: 1.5rem;
+541:     padding: 1.5rem;
+542:     margin-bottom: 2rem;
+543:   }
+544:   .setup-banner-title {
+545:     display: flex;
+546:     flex-wrap: wrap;
+547:     align-items: baseline;
+548:     gap: 0.5rem 1rem;
+549:   }
+550:   .setup-banner-title h2 {
+551:     font-size: 1.25rem;
+552:     line-height: 1.3;
+553:     font-weight: 600;
+554:     color: var(--color-foreground);
+555:   }
+556:   .setup-banner-count {
+557:     color: var(--color-muted);
+558:     font-size: 0.8125rem;
+559:     font-variant-numeric: tabular-nums;
+560:   }
+561:   .setup-banner-next {
+562:     margin-top: 0.375rem;
+563:     font-size: 0.875rem;
+564:     color: var(--color-muted);
+565:   }
+566:   .setup-banner-next strong {
+567:     color: var(--color-foreground);
+568:     font-weight: 500;
+569:   }
+570:   .setup-banner-continue {
+571:     grid-area: 1 / 2;
+572:   }
+573:   .setup-banner-steps {
+574:     grid-column: 1 / -1;
+575:     display: grid;
+576:     grid-template-columns: repeat(5, minmax(0, 1fr));
+577:     gap: 0.75rem;
+578:     list-style: none;
+579:     padding: 0;
+580:     margin: 0;
+581:   }
+582:   .setup-banner-step {
+583:     display: flex;
+584:     align-items: flex-start;
+585:     gap: 0.5rem;
+586:     position: relative;
+587:     min-height: 3.5rem;
+588:     padding: 1rem 0.25rem 0.25rem;
+589:     border-radius: 0 0 var(--radius-control) var(--radius-control);
+590:     color: var(--color-muted);
+591:     font-size: 0.8125rem;
+592:     line-height: 1.4;
+593:     text-decoration: none;
+594:   }
+595:   .setup-banner-step::before {
+596:     content: "";
+597:     position: absolute;
+598:     inset: 0 0 auto;
+599:     height: 3px;
+600:     border-radius: 1rem;
+601:     background: var(--color-border);
+602:   }
+603:   .setup-banner-step.is-done::before {
+604:     background: var(--color-success);
+605:   }
+606:   .setup-banner-step.is-next {
+607:     color: var(--color-primary);
+608:     font-weight: 600;
+609:   }
+610:   .setup-banner-step.is-next::before {
+611:     background: var(--color-primary);
+612:   }
+613:   .setup-banner-step:hover {
+614:     background: var(--color-surface-hover);
+615:     color: var(--color-foreground);
+616:   }
+617:   .setup-banner-symbol {
+618:     display: grid;
+619:     place-items: center;
+620:     flex: 0 0 1.375rem;
+621:     height: 1.375rem;
+622:     border-radius: 50%;
+623:     background: var(--color-badge-neutral-bg);
+624:     color: var(--color-badge-neutral-text);
+625:     font-size: 0.6875rem;
+626:     font-weight: 600;
+627:     line-height: 1;
+628:   }
+629:   .setup-banner-step.is-done .setup-banner-symbol {
+630:     background: var(--color-badge-success-bg);
+631:     color: var(--color-badge-success-text);
+632:   }
+633:   .setup-banner-step.is-next .setup-banner-symbol {
+634:     background: var(--color-primary);
+635:     color: var(--color-on-primary);
+636:   }
+637:   @media (max-width: 45rem) {
+638:     .dashboard-setup {
+639:       grid-template-columns: minmax(0, 1fr);
+640:       padding: 1.25rem;
+641:       gap: 1.25rem;
+642:     }
+643:     .setup-banner-steps {
+644:       grid-template-columns: repeat(2, minmax(0, 1fr));
+645:       gap: 0.75rem 1rem;
+646:     }
+647:     .setup-banner-continue {
+648:       grid-area: 3 / 1;
+649:       width: 100%;
+650:     }
+651:   }
+652: 
+653:   .dashboard-period-nav {
+654:     display: grid;
+655:     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+656:     align-items: center;
+657:     gap: 0.5rem;
+658:     padding-block: 0.25rem;
+659:   }
+660:   .dashboard-period-nav > a,
+661:   .dashboard-period-nav > span {
+662:     display: flex;
+663:     align-items: center;
+664:     gap: 0.375rem;
+665:     min-height: 2.75rem;
+666:     border-radius: var(--radius-control);
+667:   }
+668:   .dashboard-period-nav > :last-child {
+669:     justify-content: flex-end;
+670:     text-align: end;
+671:   }
+672:   .dashboard-period-nav > a:hover {
+673:     color: var(--color-primary);
+674:     background: var(--color-surface-hover);
+675:   }
+676:   .dashboard-period-list {
+677:     padding-inline: 0.75rem;
+678:     font-weight: 600;
+679:   }
+680: 
+681:   .dashboard-totals :global(.kpi[data-tone="success"] .kpi-icon) {
+682:     color: var(--color-success);
+683:     background: var(--color-badge-success-bg);
+684:   }
+685:   .dashboard-totals :global(.kpi[data-tone="warning"] .kpi-icon) {
+686:     color: var(--color-warning);
+687:     background: var(--color-badge-warning-bg);
+688:   }
+689: 
+690:   .dashboard-attention-row {
+691:     display: grid;
+692:     grid-template-columns: minmax(0, 1fr) auto;
+693:     align-items: start;
+694:     gap: 0.5rem 1.5rem;
+695:     padding: 1rem 1.25rem;
+696:   }
+697:   .dashboard-attention-content {
+698:     min-width: 0;
+699:     overflow-wrap: anywhere;
+700:   }
+701:   .dashboard-attention-heading {
+702:     display: flex;
+703:     flex-wrap: wrap;
+704:     align-items: center;
+705:     gap: 0.25rem 0.75rem;
+706:     margin-bottom: 0.25rem;
+707:   }
+708:   .dashboard-dwelling-link,
+709:   .dashboard-attention-action {
+710:     display: inline-flex;
+711:     align-items: center;
+712:     gap: 0.375rem;
+713:     min-height: 2.75rem;
+714:     font-size: 0.875rem;
+715:     font-weight: 600;
+716:     text-decoration: underline;
+717:     text-decoration-color: var(--color-border);
+718:     text-underline-offset: 0.25em;
+719:     text-decoration-thickness: 1px;
+720:   }
+721:   .dashboard-dwelling-link {
+722:     color: var(--color-foreground);
+723:   }
+724:   .dashboard-attention-action {
+725:     color: var(--color-primary);
+726:     white-space: nowrap;
+727:   }
+728:   .dashboard-dwelling-link:hover,
+729:   .dashboard-attention-action:hover {
+730:     color: var(--color-primary-hover);
+731:     text-decoration-color: currentColor;
+732:   }
+733:   @media (max-width: 45rem) {
+734:     .dashboard-attention-row {
+735:       grid-template-columns: minmax(0, 1fr);
+736:       gap: 0.25rem;
+737:       padding: 1rem;
+738:     }
+739:     .dashboard-attention-action {
+740:       justify-self: start;
+741:     }
+742:   }
+743:   .dashboard-status-link {
+744:     display: flex;
+745:     align-items: center;
+746:     justify-content: space-between;
+747:     gap: 0.75rem;
+748:     min-height: 2.75rem;
+749:     padding-inline: 0.5rem;
+750:     border-radius: var(--radius-control);
+751:   }
+752: 
+753:   .dashboard-status-count {
+754:     display: flex;
+755:     align-items: center;
+756:     gap: 0.75rem;
+757:   }
+758:   .dashboard-status-count :global(svg) {
+759:     color: var(--color-muted);
+760:   }
+761: </style>
+
+===== FILE: src/styles/global.css (lines 1-300; line numbers prefixed) =====
+1: @import "tailwindcss";
+2: 
+3: /* Typography (docs/decisions/0010-typography.md). All fonts are self-hosted
+4:    from src/fonts (licenses sit next to the files): no request goes to a
+5:    third party, and the CSP needs only font-src 'self'.
+6: 
+7:    Fraunces (display): all four axes (opsz, SOFT, WONK, wght), latin + latin-ext
+8:    only. This is fontsource's full.css with one fix: its latin subset also
+9:    claims the combining marks U+0304/0308/0329, which makes Chrome draw the
+10:    macron of "ē", "ā", "ī" over the next letter in Latvian. Only latin-ext
+11:    lists them here. */
+12: @font-face {
+13:   font-family: "Fraunces Variable";
+14:   font-style: normal;
+15:   font-display: swap;
+16:   font-weight: 100 900;
+17:   src: url("../fonts/fraunces-latin-ext-full-normal.woff2")
+18:     format("woff2-variations");
+19:   unicode-range:
+20:     U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+21:     U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+22:     U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+23: }
+24: @font-face {
+25:   font-family: "Fraunces Variable";
+26:   font-style: normal;
+27:   font-display: swap;
+28:   font-weight: 100 900;
+29:   src: url("../fonts/fraunces-latin-full-normal.woff2")
+30:     format("woff2-variations");
+31:   unicode-range:
+32:     U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+33:     U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+34: }
+35: 
+36: /* Sans. Switzer: Swiss grotesque, Latin only. Overused Grotesk: Neue Haas /
+37:    Helvetica lineage, OFL, Latin + Cyrillic. It is the fallback, so Russian
+38:    text (and any glyph Switzer lacks) is set in it. */
+39: @font-face {
+40:   font-family: "Overused Grotesk";
+41:   font-style: normal;
+42:   font-display: swap;
+43:   font-weight: 300 900;
+44:   src: url("../fonts/OverusedGrotesk-VF.woff2") format("woff2");
+45: }
+46: @font-face {
+47:   font-family: "Switzer";
+48:   font-style: normal;
+49:   font-display: swap;
+50:   font-weight: 100 900;
+51:   src: url("../fonts/Switzer-Variable.woff2") format("woff2");
+52: }
+53: 
+54: /* ---------------------------------------------------------------------
+55:    Riga design system (docs/product/UI_SPECIFICATION.md,
+56:    docs/product/FULL_DESIGN_SPECIFICATION.md). Foundation palette, for
+57:    reference -- these hex values feed the semantic tokens below, they are
+58:    not used directly in components:
+59:      limestone-50  #F7F4EE   limestone-100 #EEE8DE   limestone-300 #D5CEC2
+60:      ink-900       #17242B
+61:      daugava-700   #274B5B   daugava-600   #35677A
+62:      verdigris-700 #1F5955   verdigris-600 #2F736D   verdigris-200 #BFD8D1
+63:      brick-700     #783529   brick-600     #9A493A   brick-200     #E5C2BA
+64:      amber-700     #7C470F   amber-500     #C17B26   amber-200     #E8C99A
+65:      pine-700      #38452B   pine-600      #4F5D3A   pine-200      #CBD1BC
+66:      night-950     #0E1517   night-900     #151F21   night-800     #1E2B2E
+67:    Semantic mapping: Daugava = action/navigation, Verdigris = success,
+68:    Amber = warning, Brick = danger, Pine = positive-secondary state,
+69:    Limestone = structure/neutral surfaces. Existing --color-* variable
+70:    names are kept as-is (only their values change) so every component
+71:    that already references them picks up the new palette for free.
+72:    --------------------------------------------------------------------- */
+73: :root {
+74:   color-scheme: light dark;
+75: 
+76:   /* Letter-spacing for all sans text (Switzer and its Overused Grotesk
+77:      fallback). One value to tune: see the base layer rule below. */
+78:   --tracking-sans: 0.03em;
+79:   --font-regular-weight: 400;
+80: 
+81:   --color-surface-hover: light-dark(#eee8de, #1e2b2e);
+82:   --color-primary-hover: light-dark(#35677a, #a9c2cb);
+83:   --color-secondary: light-dark(#2f736d, #bfd8d1);
+84:   --color-destructive-hover-bg: light-dark(
+85:     rgba(120, 53, 41, 0.08),
+86:     rgba(229, 194, 186, 0.15)
+87:   );
+88:   --color-destructive-hover: light-dark(#9a493a, #d8ad9f);
+89:   --color-positive-secondary: light-dark(#4f5d3a, #9dab88);
+90:   /* Section 8 gives form inputs their own (slightly deeper) border tone,
+91:      distinct from --color-border's card/table hairlines. */
+92:   --color-input-border: light-dark(#8f887e, #718083);
+93:   --color-focus-ring: light-dark(rgb(39 75 91 / 14%), rgb(191 209 215 / 20%));
+94:   --color-backdrop: rgb(9 15 27 / 55%);
+95:   --color-control-thumb: #fffcf7;
+96:   --color-on-primary: light-dark(#fffcf7, #17242b);
+97:   --shadow-control: 0 1px 2px rgb(23 36 43 / 25%);
+98: 
+99:   /* Muted categorical accents. These preserve quick meter recognition
+100:      without importing Tailwind's saturated product palette. */
+101:   --color-meter-cold-bg: light-dark(#e4ecee, rgb(191 209 215 / 16%));
+102:   --color-meter-cold-text: light-dark(#274b5b, #bfd1d7);
+103:   --color-meter-hot-bg: light-dark(#f1ded9, rgb(229 194 186 / 18%));
+104:   --color-meter-hot-text: light-dark(#783529, #e5c2ba);
+105:   --color-meter-electricity-bg: light-dark(#f3e6d1, rgb(232 201 154 / 18%));
+106:   --color-meter-electricity-text: light-dark(#7c470f, #e8c99a);
+107:   --color-meter-gas-bg: light-dark(#e7eadf, rgb(203 209 188 / 16%));
+108:   --color-meter-gas-text: light-dark(#4f5d3a, #cbd1bc);
+109:   --color-meter-heat-bg: light-dark(#e3efec, rgb(191 216 209 / 18%));
+110:   --color-meter-heat-text: light-dark(#1f5955, #bfd8d1);
+111: 
+112:   --color-badge-neutral-bg: light-dark(#eee8de, #1e2b2e);
+113:   --color-badge-neutral-text: light-dark(#58666c, #b7c0bd);
+114:   --color-badge-info-bg: light-dark(#e4ecee, rgba(191, 209, 215, 0.16));
+115:   --color-badge-info-text: light-dark(#274b5b, #bfd1d7);
+116:   --color-badge-success-bg: light-dark(#e3efec, rgba(191, 216, 209, 0.18));
+117:   --color-badge-success-text: light-dark(#1f5955, #bfd8d1);
+118:   --color-badge-warning-bg: light-dark(#f3e6d1, rgba(232, 201, 154, 0.18));
+119:   --color-badge-warning-text: light-dark(#7c470f, #e8c99a);
+120:   --color-badge-danger-bg: light-dark(#f1ded9, rgba(229, 194, 186, 0.18));
+121:   --color-badge-danger-text: light-dark(#783529, #e5c2ba);
+122: 
+123:   --color-notice-bg: light-dark(#e4ecee, rgba(191, 209, 215, 0.12));
+124:   --color-notice-text: light-dark(#274b5b, #bfd1d7);
+125:   --color-notice-warning-bg: light-dark(#f3e6d1, rgba(232, 201, 154, 0.14));
+126:   --color-notice-warning-text: light-dark(#7c470f, #e8c99a);
+127:   --color-notice-danger-bg: light-dark(#f1ded9, rgba(229, 194, 186, 0.14));
+128:   --color-notice-danger-text: light-dark(#783529, #e5c2ba);
+129: 
+130:   --color-table-th-bg: light-dark(#f1ede4, #1a2528);
+131:   --color-org-context-bg: light-dark(#f1ede4, #1a2528);
+132:   --color-nav-active-bg: light-dark(#e4ecee, rgba(191, 209, 215, 0.16));
+133:   --color-current-invoice-border: light-dark(#c9d3d6, #2c3a3d);
+134: 
+135:   /* Tabler Icons (Outline) system -- see src/components/ui/Icon.astro.
+136:      Sizes keep the original 24x24 viewBox even when displayed smaller. */
+137:   --icon-size-xs: 16px;
+138:   --icon-size-sm: 18px;
+139:   --icon-size-md: 20px;
+140:   --icon-size-lg: 24px;
+141:   --icon-stroke: 1.75;
+142: 
+143:   /* Section 18 chart sequence -- not yet consumed by a chart component,
+144:      defined ahead of need since the palette is part of the spec. */
+145:   --chart-1: #35677a;
+146:   --chart-2: #2f736d;
+147:   --chart-3: #c17b26;
+148:   --chart-4: #9a493a;
+149:   --chart-5: #4f5d3a;
+150:   --chart-6: #58666c;
+151:   --chart-grid: light-dark(#d5cec2, #3d4a4d);
+152: }
+153: 
+154: :root[data-theme="dark"],
+155: [data-theme="dark"] {
+156:   color-scheme: dark;
+157:   --lightningcss-light: ;
+158:   --lightningcss-dark: initial;
+159:   --color-canvas: #0e1517;
+160:   --color-surface: #151f21;
+161:   --color-surface-hover: #1e2b2e;
+162:   --color-foreground: #f2eee6;
+163:   --color-muted: #b7c0bd;
+164:   --color-border: #3d4a4d;
+165:   --color-primary: #bfd1d7;
+166:   --color-primary-hover: #a9c2cb;
+167:   --color-secondary: #bfd8d1;
+168:   --color-success: #bfd8d1;
+169:   --color-warning: #e8c99a;
+170:   --color-destructive: #e5c2ba;
+171:   --color-destructive-hover-bg: rgba(229, 194, 186, 0.15);
+172:   --color-destructive-hover: #d8ad9f;
+173:   --color-positive-secondary: #9dab88;
+174:   --color-input-border: #718083;
+175:   --color-info: #bfd1d7;
+176:   --shadow-panel: none;
+177: 
+178:   --color-badge-neutral-bg: #1e2b2e;
+179:   --color-badge-neutral-text: #b7c0bd;
+180:   --color-badge-info-bg: rgba(191, 209, 215, 0.16);
+181:   --color-badge-info-text: #bfd1d7;
+182:   --color-badge-success-bg: rgba(191, 216, 209, 0.18);
+183:   --color-badge-success-text: #bfd8d1;
+184:   --color-badge-warning-bg: rgba(232, 201, 154, 0.18);
+185:   --color-badge-warning-text: #e8c99a;
+186:   --color-badge-danger-bg: rgba(229, 194, 186, 0.18);
+187:   --color-badge-danger-text: #e5c2ba;
+188: 
+189:   --color-notice-bg: rgba(191, 209, 215, 0.12);
+190:   --color-notice-text: #bfd1d7;
+191:   --color-notice-warning-bg: rgba(232, 201, 154, 0.14);
+192:   --color-notice-warning-text: #e8c99a;
+193:   --color-notice-danger-bg: rgba(229, 194, 186, 0.14);
+194:   --color-notice-danger-text: #e5c2ba;
+195: 
+196:   --color-table-th-bg: #1a2528;
+197:   --color-org-context-bg: #1a2528;
+198:   --color-nav-active-bg: rgba(191, 209, 215, 0.16);
+199:   --color-current-invoice-border: #2c3a3d;
+200: }
+201: 
+202: :root[data-theme="light"],
+203: [data-theme="light"] {
+204:   color-scheme: light;
+205:   --lightningcss-light: initial;
+206:   --lightningcss-dark: ;
+207:   --color-canvas: #f7f4ee;
+208:   --color-surface: #fffcf7;
+209:   --color-surface-hover: #eee8de;
+210:   --color-foreground: #17242b;
+211:   --color-muted: #58666c;
+212:   --color-border: #d5cec2;
+213:   --color-primary: #274b5b;
+214:   --color-primary-hover: #35677a;
+215:   --color-secondary: #2f736d;
+216:   --color-success: #1f5955;
+217:   --color-warning: #7c470f;
+218:   --color-destructive: #783529;
+219:   --color-destructive-hover-bg: rgba(120, 53, 41, 0.08);
+220:   --color-destructive-hover: #9a493a;
+221:   --color-positive-secondary: #4f5d3a;
+222:   --color-input-border: #8f887e;
+223:   --color-info: #274b5b;
+224:   --shadow-panel: none;
+225: 
+226:   --color-badge-neutral-bg: #eee8de;
+227:   --color-badge-neutral-text: #58666c;
+228:   --color-badge-info-bg: #e4ecee;
+229:   --color-badge-info-text: #274b5b;
+230:   --color-badge-success-bg: #e3efec;
+231:   --color-badge-success-text: #1f5955;
+232:   --color-badge-warning-bg: #f3e6d1;
+233:   --color-badge-warning-text: #7c470f;
+234:   --color-badge-danger-bg: #f1ded9;
+235:   --color-badge-danger-text: #783529;
+236: 
+237:   --color-notice-bg: #e4ecee;
+238:   --color-notice-text: #274b5b;
+239:   --color-notice-warning-bg: #f3e6d1;
+240:   --color-notice-warning-text: #7c470f;
+241:   --color-notice-danger-bg: #f1ded9;
+242:   --color-notice-danger-text: #783529;
+243: 
+244:   --color-table-th-bg: #f1ede4;
+245:   --color-org-context-bg: #f1ede4;
+246:   --color-nav-active-bg: #e4ecee;
+247:   --color-current-invoice-border: #c9d3d6;
+248: }
+249: 
+250: @theme {
+251:   --color-canvas: light-dark(#f7f4ee, #0e1517);
+252:   --color-surface: light-dark(#fffcf7, #151f21);
+253:   --color-foreground: light-dark(#17242b, #f2eee6);
+254:   --color-muted: light-dark(#58666c, #b7c0bd);
+255:   --color-border: light-dark(#d5cec2, #3d4a4d);
+256:   --color-primary: light-dark(#274b5b, #bfd1d7);
+257:   --color-secondary: light-dark(#2f736d, #bfd8d1);
+258:   --color-success: light-dark(#1f5955, #bfd8d1);
+259:   --color-warning: light-dark(#7c470f, #e8c99a);
+260:   --color-destructive: light-dark(#783529, #e5c2ba);
+261:   --color-positive-secondary: light-dark(#4f5d3a, #9dab88);
+262:   --color-info: light-dark(#274b5b, #bfd1d7);
+263:   --color-danger-surface: var(--color-notice-danger-bg);
+264:   --color-success-surface: var(--color-badge-success-bg);
+265:   --color-info-surface: var(--color-notice-bg);
+266:   --radius-badge: 0.3125rem;
+267:   --radius-input: 0.4375rem;
+268:   --radius-control: 0.5rem;
+269:   --radius-panel: 0.625rem;
+270:   --shadow-panel: none;
+271:   --font-sans:
+272:     "Switzer", "Overused Grotesk", "Segoe UI", ui-sans-serif, system-ui,
+273:     sans-serif;
+274:   --font-display:
+275:     "Fraunces Variable", "Fraunces", Georgia, "Times New Roman", serif;
+276: 
+277:   /* Section 6.2 elevation tokens. Reserved for menus/toolbars (1), raised
+278:      contextual elements (2), and drawers/modals (overlay) -- ordinary
+279:      cards and tables stay at elevation-0 (--shadow-panel: none above). */
+280:   --elevation-1: 0 1px 2px rgb(23 36 43 / 5%), 0 4px 12px rgb(23 36 43 / 4%);
+281:   --elevation-2: 0 2px 4px rgb(23 36 43 / 6%), 0 12px 28px rgb(23 36 43 / 8%);
+282:   --elevation-overlay:
+283:     0 8px 20px rgb(23 36 43 / 10%), 0 30px 80px rgb(23 36 43 / 14%);
+284:   --shadow-drawer:
+285:     -8px 0 20px rgb(23 36 43 / 10%), -30px 0 80px rgb(23 36 43 / 14%);
+286: }
+287: @layer base {
+288:   body {
+289:     background: var(--color-canvas);
+290:     color: var(--color-foreground);
+291:     font-family: var(--font-sans);
+292:     font-weight: var(--font-regular-weight);
+293:   }
+294:   /* Set on every element, not on body: an em value inherits as a fixed length
+295:      (16px x 0.03 = 0.48px), so each element has to resolve 0.03em against its
+296:      own font size. Form controls are listed because preflight sets
+297:      letter-spacing: inherit on them with a higher specificity than `*`.
+298:      This rule is in the base layer on purpose: any tracking-* utility and any
+299:      explicit letter-spacing elsewhere (eyebrows, big numerals) still wins. */
+300:   *,
+
+===== FILE: src/styles/global.css (lines 395-430; line numbers prefixed) =====
+395:     font-weight: 600;
+396:     white-space: nowrap;
+397:   }
+398:   td {
+399:     vertical-align: middle;
+400:   }
+401: }
+402: 
+403: /* Section 4 type scale (UI_SPECIFICATION.md Sec. 4.1). Named utilities so
+404:    pages can express intent ("this is a Label") instead of ad-hoc
+405:    font-size/weight combinations. */
+406: @layer components {
+407:   .text-caption {
+408:     font-size: 0.75rem; /* 12px */
+409:     line-height: 1rem; /* 16px */
+410:     font-weight: 500;
+411:   }
+412:   .text-label {
+413:     font-size: 0.8125rem; /* 13px */
+414:     line-height: 1.125rem; /* 18px */
+415:     font-weight: 600;
+416:   }
+417:   .text-body-sm {
+418:     font-size: 0.875rem; /* 14px */
+419:     line-height: 1.25rem; /* 20px */
+420:     font-weight: var(--font-regular-weight);
+421:   }
+422:   .text-body {
+423:     font-size: 1rem; /* 16px */
+424:     line-height: 1.5rem; /* 24px */
+425:     font-weight: var(--font-regular-weight);
+426:   }
+427:   .text-ui-strong {
+428:     font-size: 1rem; /* 16px */
+429:     line-height: 1.375rem; /* 22px */
+430:     font-weight: 600;
+
+===== FILE: src/styles/global.css (lines 500-560; line numbers prefixed) =====
+500:       stroke;
+501:     transition-duration: 180ms;
+502:     transition-timing-function: ease;
+503:   }
+504: }
+505: 
+506: @layer components {
+507:   .btn-primary,
+508:   .btn-secondary,
+509:   .btn-danger {
+510:     display: inline-flex;
+511:     align-items: center;
+512:     justify-content: center;
+513:     gap: 0.5rem;
+514:     min-height: 2.625rem;
+515:     border-radius: var(--radius-control);
+516:     padding: 0.75rem 1rem;
+517:     font-size: 0.875rem;
+518:     font-weight: 600;
+519:     line-height: 1.4;
+520:     text-decoration: none;
+521:   }
+522:   @media (prefers-reduced-motion: no-preference) {
+523:     .btn-primary,
+524:     .btn-secondary,
+525:     .btn-danger,
+526:     .icon-btn {
+527:       transition:
+528:         background-color 140ms ease,
+529:         border-color 140ms ease,
+530:         color 140ms ease;
+531:     }
+532:   }
+533:   .btn-primary {
+534:     background: var(--color-primary);
+535:     border: 1px solid var(--color-primary);
+536:     /* Dark mode's --color-primary is a pale daugava tint (readable AS text
+537:        on a dark canvas), not a fill dark enough for white text on top of
+538:        it -- light-dark() picks the readable foreground for each fill. */
+539:     color: var(--color-on-primary);
+540:   }
+541:   .btn-primary:hover {
+542:     background: var(--color-primary-hover);
+543:   }
+544:   .btn-secondary {
+545:     background: var(--color-surface);
+546:     border: 1px solid var(--color-border);
+547:     color: var(--color-foreground);
+548:   }
+549:   .btn-secondary:hover {
+550:     background: var(--color-surface-hover);
+551:   }
+552:   .btn-danger {
+553:     background: var(--color-destructive);
+554:     border: 1px solid var(--color-destructive);
+555:     color: var(--color-on-primary);
+556:   }
+557:   .btn-danger:hover {
+558:     background: var(--color-destructive-hover);
+559:   }
+560:   .btn-sm {
+
+===== FILE: src/styles/global.css (lines 630-810; line numbers prefixed) =====
+630:     border-radius: var(--radius-panel);
+631:     box-shadow: var(--shadow-panel);
+632:   }
+633:   .table-wrap {
+634:     overflow-x: auto;
+635:   }
+636:   .page-header {
+637:     position: relative;
+638:     isolation: isolate;
+639:     display: flex;
+640:     align-items: center;
+641:     justify-content: space-between;
+642:     gap: 1.5rem;
+643:     flex-wrap: wrap;
+644:     margin-bottom: 1.75rem;
+645:   }
+646:   .page-header h1 {
+647:     font-size: clamp(1.65rem, 2.4vw, 2rem);
+648:     font-weight: 700;
+649:     line-height: 1.2;
+650:   }
+651:   /* Section 4.2's "major period/month heading" example (October 2026,
+652:      Fraunces 40/44, weight 550-600) -- only where .font-display is also
+653:      present, so ordinary page titles (Dwellings, Payments, Settings, ...)
+654:      keep the plain Switzer treatment above. */
+655:   .page-header h1.font-display {
+656:     font-size: clamp(1.85rem, 3.2vw, 2.5rem);
+657:     font-weight: 600;
+658:     line-height: 1.15;
+659:   }
+660:   /* 3.2vw passes 36px at 1125px (70.3125rem): Fraunces is 700 above 36px. */
+661:   @media (min-width: 70.3125rem) {
+662:     .page-header h1.font-display {
+663:       font-weight: 700;
+664:     }
+665:   }
+666:   .eyebrow {
+667:     color: var(--color-muted);
+668:     font-size: 0.75rem;
+669:     text-transform: uppercase;
+670:     letter-spacing: 0.1em;
+671:     font-weight: 600;
+672:     margin-bottom: 0.75rem;
+673:   }
+674:   .breadcrumb {
+675:     display: flex;
+676:     align-items: center;
+677:     gap: 0.5rem;
+678:     margin-bottom: 0.5rem;
+679:     color: var(--color-muted);
+680:     font-size: 0.75rem;
+681:     font-weight: 600;
+682:     text-transform: uppercase;
+683:     letter-spacing: 0.08em;
+684:   }
+685:   .breadcrumb a {
+686:     color: var(--color-muted);
+687:   }
+688:   .breadcrumb a:hover {
+689:     color: var(--color-foreground);
+690:   }
+691:   .page-description {
+692:     color: var(--color-muted);
+693:     font-size: 0.875rem;
+694:     margin-top: 0.75rem;
+695:     max-width: 42rem;
+696:   }
+697:   .page-actions {
+698:     display: flex;
+699:     flex-wrap: wrap;
+700:     gap: 0.75rem;
+701:     align-items: center;
+702:   }
+703:   .kpi {
+704:     display: flex;
+705:     align-items: stretch;
+706:     gap: 0.75rem;
+707:     padding: 1rem;
+708:     background: var(--color-surface);
+709:     border: 1px solid var(--color-border);
+710:     border-radius: var(--radius-panel);
+711:     box-shadow: var(--shadow-panel);
+712:     min-width: 0;
+713:   }
+714:   .kpi-icon {
+715:     display: grid;
+716:     place-items: center;
+717:     aspect-ratio: 1;
+718:     min-width: 2.75rem;
+719:     flex: 0 0 auto;
+720:     border-radius: var(--radius-panel);
+721:     background: var(--color-badge-neutral-bg);
+722:     color: var(--color-muted);
+723:   }
+724:   .kpi-icon svg {
+725:     width: 1.25rem;
+726:     height: 1.25rem;
+727:     flex-shrink: 0;
+728:   }
+729:   .kpi-text {
+730:     min-width: 0;
+731:   }
+732:   .kpi-text h2 {
+733:     color: var(--color-muted);
+734:     font-size: 0.8125rem;
+735:     font-weight: 500;
+736:   }
+737:   .kpi-text > p {
+738:     margin-top: 0.5rem;
+739:     font-size: clamp(1.25rem, 2vw, 1.85rem);
+740:     letter-spacing: -0.025em;
+741:     line-height: 1.25;
+742:     font-weight: 650;
+743:     font-variant-numeric: tabular-nums;
+744:     overflow-wrap: anywhere;
+745:   }
+746:   .kpi[data-tone="success"] .kpi-text > p {
+747:     color: var(--color-success);
+748:   }
+749:   .kpi[data-tone="warning"] .kpi-text > p {
+750:     color: var(--color-warning);
+751:   }
+752:   .status-badge {
+753:     display: inline-flex;
+754:     align-items: center;
+755:     gap: 0.25rem;
+756:     white-space: nowrap;
+757:     border-radius: var(--radius-badge);
+758:     padding: 0.1875rem 0.4375rem;
+759:     font-size: 0.75rem;
+760:     font-weight: 600;
+761:     line-height: 1.4;
+762:     background: var(--color-badge-neutral-bg);
+763:     color: var(--color-badge-neutral-text);
+764:   }
+765:   .status-badge[data-tone="info"] {
+766:     background: var(--color-badge-info-bg);
+767:     color: var(--color-badge-info-text);
+768:   }
+769:   .status-badge[data-tone="success"] {
+770:     background: var(--color-badge-success-bg);
+771:     color: var(--color-badge-success-text);
+772:   }
+773:   .status-badge[data-tone="warning"] {
+774:     background: var(--color-badge-warning-bg);
+775:     color: var(--color-badge-warning-text);
+776:   }
+777:   .status-badge[data-tone="danger"] {
+778:     background: var(--color-badge-danger-bg);
+779:     color: var(--color-badge-danger-text);
+780:   }
+781:   .empty-state {
+782:     padding: 3rem 1.5rem;
+783:     text-align: center;
+784:     background: var(--color-surface);
+785:     border: 1px dashed var(--color-border);
+786:     border-radius: var(--radius-panel);
+787:   }
+788:   .notice {
+789:     padding: 1rem;
+790:     border-radius: var(--radius-panel);
+791:     background: var(--color-notice-bg);
+792:     color: var(--color-notice-text);
+793:     font-size: 0.875rem;
+794:     line-height: 1.6;
+795:   }
+796:   .notice-warning {
+797:     background: var(--color-notice-warning-bg);
+798:     color: var(--color-notice-warning-text);
+799:   }
+800:   .notice-danger {
+801:     background: var(--color-notice-danger-bg);
+802:     color: var(--color-notice-danger-text);
+803:   }
+804:   .section-title {
+805:     font-size: 1rem;
+806:     font-weight: 650;
+807:     margin-bottom: 1rem;
+808:   }
+809:   .filter-bar {
+810:     display: flex;
+
+===== FILE: src/lib/ui/i18n.ts (lines 370-430; line numbers prefixed) =====
+370:   "Skip to content": "Pāriet uz saturu",
+371:   Menu: "Izvēlne",
+372:   Profile: "Profils",
+373:   Overview: "Pārskats",
+374:   Invoices: "Rēķini",
+375:   Dwelling: "Īpašums",
+376:   "Missing data": "Trūkst datu",
+377:   Draft: "Melnraksts",
+378:   Prepared: "Sagatavots",
+379:   Sent: "Nosūtīts",
+380:   Paid: "Apmaksāts",
+381:   Overdue: "Kavēts",
+382:   Open: "Atvērts",
+383:   Locked: "Slēgts",
+384:   Active: "Aktīvs",
+385:   Archived: "Arhivēts",
+386:   New: "Jauns",
+387:   Resolved: "Atrisināts",
+388:   Proposed: "Ierosināts",
+389:   Confirmed: "Apstiprināts",
+390:   Rejected: "Noraidīts",
+391:   Unmatched: "Nesaskaņots",
+392:   Failed: "Neizdevās",
+393:   Pending: "Gaida",
+394:   Enabled: "Ieslēgts",
+395:   Disabled: "Izslēgts",
+396:   "Total invoiced": "Rēķinu kopsumma",
+397:   Outstanding: "Neapmaksātā summa",
+398:   "Cold water": "Aukstais ūdens",
+399:   "Hot water": "Karstais ūdens",
+400:   Consumption: "Patēriņš",
+401:   "Needs attention": "Nepieciešama uzmanība",
+402:   "Case status": "Norēķinu statuss",
+403:   "Open workbench": "Atvērt norēķinu darbvietu",
+404:   "Monitor billing, payments and work requiring attention.":
+405:     "Pārskatiet rēķinus, maksājumus un veicamos darbus.",
+406:   "No billing periods yet.": "Vēl nav norēķinu periodu.",
+407:   "Create a period to start the monthly billing workflow.":
+408:     "Izveidojiet periodu, lai sāktu ikmēneša norēķinus.",
+409:   "Nothing needs attention right now.": "Pašlaik nav steidzamu darbu.",
+410:   "Add readings": "Pievienot rādījumus",
+411:   "Review invoice": "Pārskatīt rēķinu",
+412:   "Review payments": "Pārskatīt maksājumus",
+413:   "Ready to generate": "Gatavs rēķina izveidei",
+414:   "Ready to invoice": "Gatavs rēķina izrakstīšanai",
+415:   "Generate the invoice": "Izveidot rēķinu",
+416:   "Ready to send": "Gatavs nosūtīšanai",
+417:   "Readings are required before generating an invoice.":
+418:     "Pirms rēķina izveides nepieciešami rādījumi.",
+419:   "Payment is past its due date. Review reconciliation.":
+420:     "Maksājuma termiņš ir pagājis. Pārskatiet maksājumu saskaņošanu.",
+421:   "All readings are present. Generate the invoice in the workbench.":
+422:     "Visi rādījumi ir ievadīti. Izveidojiet rēķinu darbvietā.",
+423:   "Billing periods": "Norēķinu periodi",
+424:   "Period history": "Periodu vēsture",
+425:   "Review past periods or open a monthly billing workbench.":
+426:     "Pārskatiet iepriekšējos periodus vai atveriet norēķinu darbvietu.",
+427:   "Create period": "Izveidot periodu",
+428:   "Total periods": "Periodu skaits",
+429:   "Latest period": "Jaunākais periods",
+430:   Period: "Periods",
+
+===== FILE: src/lib/ui/invoice-status.ts (lines 1-38; line numbers prefixed) =====
+1: import type { IconName } from "./icons";
+2: 
+3: // Strict status -> icon mapping (Tabler Icons, Outline). Never invent a new
+4: // icon per state -- the icon reinforces the text label, it never replaces
+5: // it, so states that share a meaning share an icon.
+6: const statuses: Record<string, [string, string, IconName]> = {
+7:   MISSING_DATA: ["Missing data", "danger", "alert-triangle"],
+8:   READY: ["Ready to invoice", "warning", "check"],
+9:   DRAFT: ["Draft", "neutral", "file-description"],
+10:   PREPARED: ["Prepared", "info", "check"],
+11:   SENT: ["Sent", "info", "send"],
+12:   PAID: ["Paid", "success", "circle-check"],
+13:   OVERDUE: ["Overdue", "warning", "clock-exclamation"],
+14:   // "OPEN" is shared by two unrelated domains (billing period + message
+15:   // thread) -- "lock-open" reads sensibly for both ("not yet locked" /
+16:   // "not yet resolved") without inventing a per-domain variant.
+17:   OPEN: ["Open", "info", "lock-open"],
+18:   LOCKED: ["Locked", "neutral", "lock"],
+19:   ACTIVE: ["Active", "success", "check"],
+20:   ARCHIVED: ["Archived", "neutral", "archive"],
+21:   NEW: ["Awaiting reply", "warning", "clock-exclamation"],
+22:   RESOLVED: ["Resolved", "success", "circle-check"],
+23:   PROPOSED: ["Proposed", "info", "clock"],
+24:   CONFIRMED: ["Confirmed", "success", "check"],
+25:   REJECTED: ["Rejected", "neutral", "x"],
+26:   REVERSED: ["Reversed", "neutral", "x"],
+27:   UNMATCHED: ["Unmatched", "warning", "alert-triangle"],
+28:   FAILED: ["Failed", "danger", "alert-triangle"],
+29: };
+30: 
+31: export function invoiceStatusBadge(status: string) {
+32:   const [label, tone, icon] = statuses[status] ?? [
+33:     status,
+34:     "neutral",
+35:     "info-circle",
+36:   ];
+37:   return { label, tone, icon, className: "status-badge" };
+38: }
+
+===== FILE: src/components/ui/KpiCard.astro (lines 1-38; line numbers prefixed) =====
+1: ---
+2: import Icon from "./Icon.astro";
+3: interface Props {
+4:   label: string;
+5:   value: string | number;
+6:   tone?: "neutral" | "success" | "warning";
+7:   icon?: "invoice" | "coins" | "clock" | "open" | "lock";
+8:   hint?: string;
+9: }
+10: const { label, value, tone = "neutral", icon, hint } = Astro.props;
+11: 
+12: // Summary/KPI cards keep their icon-container badge treatment (Tabler
+13: // Icons system) -- unlike table rows, buttons, and status chips, which
+14: // use bare icons with no background.
+15: const ICON_NAMES = {
+16:   invoice: "receipt-euro",
+17:   coins: "coin",
+18:   clock: "clock",
+19:   open: "lock-open",
+20:   lock: "lock",
+21: } as const;
+22: ---
+23: 
+24: <section class="kpi" data-tone={tone}>
+25:   {
+26:     icon && (
+27:       <span class="kpi-icon" aria-hidden="true">
+28:         <Icon name={ICON_NAMES[icon]} size="lg" />
+29:       </span>
+30:     )
+31:   }
+32:   <div class="kpi-text">
+33:     <h2>{label}</h2>
+34:     <p>{value}</p>
+35:     {hint && <small class="text-muted">{hint}</small>}
+36:   </div>
+37:   <slot />
+38: </section>
+
+===== FILE: src/components/ui/StatusBadge.astro (lines 1-15; line numbers prefixed) =====
+1: ---
+2: import Icon from "./Icon.astro";
+3: import { invoiceStatusBadge } from "../../lib/ui/invoice-status";
+4: import { translate, uiLocale } from "../../lib/ui/i18n";
+5: interface Props {
+6:   status: string;
+7: }
+8: const { status } = Astro.props;
+9: const locale = uiLocale(Astro.cookies, Astro.url);
+10: const { label, tone, icon } = invoiceStatusBadge(status);
+11: ---
+12: 
+13: <span class="status-badge" data-tone={tone}
+14:   ><Icon name={icon} size="xs" />{translate(locale, label)}</span
+15: >
+
+===== FILE: src/components/ui/EmptyState.astro (lines 1-22; line numbers prefixed) =====
+1: ---
+2: import Ornament from "./Ornament.astro";
+3: interface Props {
+4:   title: string;
+5:   description?: string;
+6:   // Section 14: reserved for a handful of significant empty states (a
+7:   // brand-new organization's very first screen), not every empty list in
+8:   // the app -- omit for routine ones ("No meters yet.", etc.).
+9:   ornament?: boolean;
+10:   class?: string;
+11: }
+12: const { title, description, ornament = false, class: className } = Astro.props;
+13: ---
+14: 
+15: <div class="empty-state" class:list={[className]}>
+16:   {ornament && <Ornament />}
+17:   <p class="font-display text-h3" class:list={{ "mt-3": ornament }}>
+18:     {title}
+19:   </p>
+20:   {description && <p class="mt-2 text-sm text-muted">{description}</p>}
+21:   <div class="mt-4"><slot /></div>
+22: </div>
+
+===== FILE: src/layouts/AdminLayout.astro (lines 1-207; line numbers prefixed) =====
+1: ---
+2: import "../styles/global.css";
+3: import AppNavigation from "../components/ui/AppNavigation.astro";
+4: import OrganizationSwitcher from "../components/ui/OrganizationSwitcher.astro";
+5: import { listOrganizations } from "../domain/organizations/organizations";
+6: import BrandMark from "../components/ui/BrandMark.astro";
+7: import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
+8: import ThemeToggle from "../components/ui/ThemeToggle.astro";
+9: import Icon from "../components/ui/Icon.astro";
+10: import MutationStatus from "../components/ui/MutationStatus.astro";
+11: import DevFontPreview from "../components/ui/DevFontPreview.astro";
+12: import { ClientRouter } from "astro:transitions";
+13: import { translate, uiLocale } from "../lib/ui/i18n";
+14: import { countUnreadConversationsForOrganization } from "../domain/messaging/conversations";
+15: import { withRequestDb } from "../lib/db-request";
+16: interface Props {
+17:   title?: string;
+18:   organizationId?: string;
+19:   organizationName?: string;
+20:   // A page that just archived or restored the organization passes the fresh
+21:   // state. Astro.locals.auth was loaded before the action ran.
+22:   archived?: boolean;
+23: }
+24: const {
+25:   title = "Admin - Namkopa",
+26:   organizationId,
+27:   organizationName,
+28:   archived = organizationId
+29:     ? (Astro.locals.auth?.archivedOrganizationIds?.includes(organizationId) ??
+30:       false)
+31:     : false,
+32: } = Astro.props;
+33: const locale = uiLocale(Astro.cookies, Astro.url);
+34: const t = (text: string) => translate(locale, text);
+35: const previewFontUrl = import.meta.env.DEV
+36:   ? "/src/fonts/MedeoSansVariable.woff2"
+37:   : undefined;
+38: const residentAccess = (Astro.locals.auth?.dwellingIds.length ?? 0) > 0;
+39: const { unreadMessages, switcherOrganizations } = organizationId
+40:   ? await withRequestDb(async (db) => {
+41:       const [unreadMessages, switcherOrganizations] = await Promise.all([
+42:         countUnreadConversationsForOrganization(db, organizationId),
+43:         listOrganizations(db, Astro.locals.auth?.organizationIds ?? []),
+44:       ]);
+45:       return { unreadMessages, switcherOrganizations };
+46:     })
+47:   : { unreadMessages: 0, switcherOrganizations: [] };
+48: ---
+49: 
+50: <!doctype html>
+51: <html lang={locale} transition:name="root" transition:animate="none">
+52:   <head>
+53:     <meta charset="UTF-8" />
+54:     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+55:     <meta name="color-scheme" content="light dark" />
+56:     <ClientRouter fallback="swap" />
+57:     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+58:     <script is:inline>
+59:       (function () {
+60:         try {
+61:           const stored = localStorage.getItem("color-scheme");
+62:           if (stored === "dark" || stored === "light") {
+63:             document.documentElement.setAttribute("data-theme", stored);
+64:             const meta = document.querySelector('meta[name="color-scheme"]');
+65:             if (meta) meta.content = stored;
+66:           }
+67:         } catch (e) {
+68:           void e;
+69:         }
+70:       })();
+71:     </script>
+72:     <title>{title}</title>
+73:   </head>
+74:   <body data-working-label={t("Working…")}>
+75:     <a class="skip-link" href="#main-content">{t("Skip to content")}</a>
+76:     <aside class="admin-sidebar">
+77:       <a class="brand" href="/admin/organizations"
+78:         ><BrandMark />{t("Namkopa")}</a
+79:       >
+80:       <OrganizationSwitcher
+81:         organizationId={organizationId}
+82:         organizationName={organizationName}
+83:         organizations={switcherOrganizations}
+84:         residentAccess={residentAccess}
+85:       />
+86:       {
+87:         organizationId && (
+88:           <AppNavigation
+89:             organizationId={organizationId}
+90:             unreadMessages={unreadMessages}
+91:           />
+92:         )
+93:       }
+94:       <div class="sidebar-account">
+95:         <p class="mb-2 truncate text-muted">{Astro.locals.auth?.email}</p><div
+96:           class="flex flex-col items-start gap-2"
+97:         >
+98:           <form method="POST" action="/logout">
+99:             <button type="submit">{t("Sign out")}</button>
+100:           </form><div class="flex items-center gap-2">
+101:             <ThemeToggle /><LanguageSwitch />
+102:           </div>
+103:         </div>
+104:       </div>
+105:     </aside>
+106:     <header class="admin-mobile">
+107:       <span class="brand"><BrandMark />{t("Namkopa")}</span>
+108:       <button type="button" class="btn-secondary btn-sm" data-open-mobile-nav>
+109:         {t("Menu")} ☰
+110:       </button>
+111:     </header>
+112:     <dialog
+113:       id="mobile-nav-drawer"
+114:       class="context-drawer mobile-nav-drawer"
+115:       aria-labelledby="mobile-nav-drawer-title"
+116:     >
+117:       <header class="context-drawer-header">
+118:         <span class="brand" id="mobile-nav-drawer-title"
+119:           ><BrandMark />{t("Namkopa")}</span
+120:         >
+121:         <button
+122:           type="button"
+123:           class="context-drawer-close"
+124:           data-close-mobile-nav
+125:           aria-label={t("Close menu")}
+126:         >
+127:           <Icon name="x" size="sm" />
+128:         </button>
+129:       </header>
+130:       <div class="context-drawer-body">
+131:         <OrganizationSwitcher
+132:           organizationId={organizationId}
+133:           organizationName={organizationName}
+134:           organizations={switcherOrganizations}
+135:           residentAccess={residentAccess}
+136:         />
+137:         {
+138:           organizationId && (
+139:             <AppNavigation
+140:               organizationId={organizationId}
+141:               unreadMessages={unreadMessages}
+142:             />
+143:           )
+144:         }
+145:         <div
+146:           class="mt-4 flex flex-wrap items-center gap-5 border-t border-border pt-4 text-sm"
+147:         >
+148:           <form method="POST" action="/logout">
+149:             <button type="submit">{t("Sign out")}</button>
+150:           </form><div class="ml-auto flex items-center gap-2">
+151:             <ThemeToggle /><LanguageSwitch />
+152:           </div>
+153:         </div>
+154:       </div>
+155:     </dialog>
+156:     <main id="main-content" tabindex="-1" class="admin-content app-content">
+157:       {
+158:         archived && (
+159:           <p class="notice notice-danger mb-4" role="status">
+160:             {t(
+161:               "This organization is archived. You can read it but not change it. Residents cannot sign in. Restore it in Settings > Organization."
+162:             )}
+163:           </p>
+164:         )
+165:       }
+166:       <slot />
+167:     </main>
+168:     <MutationStatus />
+169:     {
+170:       previewFontUrl && (
+171:         <DevFontPreview
+172:           fontUrl={previewFontUrl}
+173:           italicFontUrl="/src/fonts/MedeoSansVariable-Italic.woff2"
+174:         />
+175:       )
+176:     }
+177:     <script>
+178:       import "../lib/ui/forms";
+179:       import { onPageLoad } from "../lib/ui/page-lifecycle";
+180:       import { labelStackTables } from "../lib/ui/stack-tables";
+181: 
+182:       onPageLoad(() => {
+183:         labelStackTables();
+184:         const mobileNavDialog =
+185:           document.querySelector<HTMLDialogElement>("#mobile-nav-drawer");
+186:         if (!mobileNavDialog) return;
+187:         document
+188:           .querySelector("[data-open-mobile-nav]")
+189:           ?.addEventListener("click", () => mobileNavDialog.showModal());
+190:         document
+191:           .querySelector("[data-close-mobile-nav]")
+192:           ?.addEventListener("click", () => mobileNavDialog.close());
+193:         mobileNavDialog.addEventListener("click", (event) => {
+194:           if (event.target === mobileNavDialog) mobileNavDialog.close();
+195:         });
+196:         // Navigating to a link inside the drawer should close it -- without
+197:         // this, a slow page load leaves the previous page's drawer open
+198:         // and dimmed behind whatever loads next.
+199:         mobileNavDialog
+200:           .querySelectorAll("a")
+201:           .forEach((link) =>
+202:             link.addEventListener("click", () => mobileNavDialog.close())
+203:           );
+204:       });
+205:     </script>
+206:   </body>
+207: </html>
+

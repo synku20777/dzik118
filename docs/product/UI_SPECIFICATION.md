@@ -13,6 +13,8 @@ Architectural references should appear primarily through **construction rather t
 
 From a distance, the product should appear modern and functional. Riga-specific characteristics should become apparent only through typography, material palette, geometry, linework, icon details, and selected accent treatments.
 
+Admin dashboard: content, priority, sizes and Latvian wording are in [DASHBOARD_GUIDELINES.md](DASHBOARD_GUIDELINES.md) (research of 2026-10-28; some of it is inferred, not user-tested).
+
 ---
 
 # 2. Color System
@@ -273,6 +275,14 @@ box-shadow: none;
 
 Default cards should appear **set into the composition**, not floating above it.
 
+Use uniform 1px neutral borders for cards, panels, dividers and navigation.
+Do not use thicker edges, colored accent borders or decorative selection stripes.
+Show selection and status through text, icons and surface fills. Keep accessible
+focus outlines and validation indicators distinct from decorative borders.
+This applies across admin, resident and design-system pages, including tabs,
+setup steps, invoice cards, selected filters and billing rows. Do not simulate
+accent borders with inset shadows or pseudo-elements.
+
 Avoid:
 
 - excessive cardification
@@ -390,7 +400,7 @@ Requirements:
 - tabular numerals
 - state colors used only as small accents
 - row height approximately **52–60px**
-- 2px left-edge status/exception indicators
+- status/exception icons and text, without left-edge stripes
 - no full-row red/green/blue backgrounds
 
 Example:

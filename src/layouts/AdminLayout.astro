@@ -1,11 +1,14 @@
 ---
 import "../styles/global.css";
 import AppNavigation from "../components/ui/AppNavigation.astro";
+import OrganizationSwitcher from "../components/ui/OrganizationSwitcher.astro";
+import { listOrganizations } from "../domain/organizations/organizations";
 import BrandMark from "../components/ui/BrandMark.astro";
 import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
 import ThemeToggle from "../components/ui/ThemeToggle.astro";
 import Icon from "../components/ui/Icon.astro";
 import MutationStatus from "../components/ui/MutationStatus.astro";
+import DevFontPreview from "../components/ui/DevFontPreview.astro";
 import { ClientRouter } from "astro:transitions";
 import { translate, uiLocale } from "../lib/ui/i18n";
 import { countUnreadConversationsForOrganization } from "../domain/messaging/conversations";
@@ -29,16 +32,23 @@ const {
 } = Astro.props;
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
-// Badge on the Messages navigation item.
-const unreadMessages = organizationId
-  ? await withRequestDb((db) =>
-      countUnreadConversationsForOrganization(db, organizationId)
-    )
-  : 0;
+const previewFontUrl = import.meta.env.DEV
+  ? "/src/fonts/MedeoSansVariable.woff2"
+  : undefined;
+const residentAccess = (Astro.locals.auth?.dwellingIds.length ?? 0) > 0;
+const { unreadMessages, switcherOrganizations } = organizationId
+  ? await withRequestDb(async (db) => {
+      const [unreadMessages, switcherOrganizations] = await Promise.all([
+        countUnreadConversationsForOrganization(db, organizationId),
+        listOrganizations(db, Astro.locals.auth?.organizationIds ?? []),
+      ]);
+      return { unreadMessages, switcherOrganizations };
+    })
+  : { unreadMessages: 0, switcherOrganizations: [] };
 ---
 
 <!doctype html>
-<html lang={locale}>
+<html lang={locale} transition:name="root" transition:animate="none">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -62,53 +72,44 @@ const unreadMessages = organizationId
     <title>{title}</title>
   </head>
   <body data-working-label={t("Working…")}>
-    <a class="skip-link" href="#main-content">{t("Skip to content")}</a>
+    <a class="skip-link" href="#main-content">
+      {t("Skip to content")}
+    </a>
     <aside class="admin-sidebar">
-      <a class="brand" href="/admin/organizations"
-        ><BrandMark />{t("Namkopa")}</a
-      >
-      <div class="org-context">
-        <p class="eyebrow">{t("Administration")}</p><p
-          class="text-sm font-semibold"
-        >
-          {organizationName ?? t("Organization")}
-        </p><a
-          href="/admin/organizations"
-          class="mt-2 inline-block text-xs text-muted hover:underline"
-          >{t("Switch organization")} ↗</a
-        >{
-          (Astro.locals.auth?.dwellingIds.length ?? 0) > 0 && (
-            <a
-              href="/portal"
-              class="mt-2 block text-xs text-muted hover:underline"
-            >
-              {t("Switch to resident view")} ↗
-            </a>
-          )
-        }
-      </div>
-      {
-        organizationId && (
-          <AppNavigation
-            organizationId={organizationId}
-            unreadMessages={unreadMessages}
-          />
-        )
-      }
+      <a class="brand" href="/admin/organizations">
+        <BrandMark />
+        {t("Namkopa")}
+      </a>
+      <OrganizationSwitcher
+        organizationId={organizationId}
+        organizationName={organizationName}
+        organizations={switcherOrganizations}
+        residentAccess={residentAccess}
+      />
+      {organizationId && (
+        <AppNavigation
+          organizationId={organizationId}
+          unreadMessages={unreadMessages}
+        />
+      )}
       <div class="sidebar-account">
-        <p class="mb-2 truncate text-muted">{Astro.locals.auth?.email}</p><div
-          class="flex flex-col items-start gap-2"
-        >
+        <p class="mb-2 truncate text-muted">{Astro.locals.auth?.email}</p>
+        <div class="flex flex-col items-start gap-2">
           <form method="POST" action="/logout">
             <button type="submit">{t("Sign out")}</button>
-          </form><div class="flex items-center gap-2">
-            <ThemeToggle /><LanguageSwitch />
+          </form>
+          <div class="flex items-center gap-2">
+            <ThemeToggle />
+            <LanguageSwitch />
           </div>
         </div>
       </div>
     </aside>
     <header class="admin-mobile">
-      <span class="brand"><BrandMark />{t("Namkopa")}</span>
+      <span class="brand">
+        <BrandMark />
+        {t("Namkopa")}
+      </span>
       <button type="button" class="btn-secondary btn-sm" data-open-mobile-nav>
         {t("Menu")} ☰
       </button>
@@ -119,9 +120,10 @@ const unreadMessages = organizationId
       aria-labelledby="mobile-nav-drawer-title"
     >
       <header class="context-drawer-header">
-        <span class="brand" id="mobile-nav-drawer-title"
-          ><BrandMark />{t("Namkopa")}</span
-        >
+        <span class="brand" id="mobile-nav-drawer-title">
+          <BrandMark />
+          {t("Namkopa")}
+        </span>
         <button
           type="button"
           class="context-drawer-close"
@@ -132,42 +134,46 @@ const unreadMessages = organizationId
         </button>
       </header>
       <div class="context-drawer-body">
-        {
-          organizationId && (
-            <AppNavigation
-              organizationId={organizationId}
-              unreadMessages={unreadMessages}
-            />
-          )
-        }
-        <div
-          class="mt-4 flex flex-wrap items-center gap-5 border-t border-border pt-4 text-sm"
-        >
-          <a href="/admin/organizations">{t("Switch organization")}</a>{
-            (Astro.locals.auth?.dwellingIds.length ?? 0) > 0 && (
-              <a href="/portal">{t("Switch to resident view")}</a>
-            )
-          }<form method="POST" action="/logout">
+        <OrganizationSwitcher
+          organizationId={organizationId}
+          organizationName={organizationName}
+          organizations={switcherOrganizations}
+          residentAccess={residentAccess}
+        />
+        {organizationId && (
+          <AppNavigation
+            organizationId={organizationId}
+            unreadMessages={unreadMessages}
+          />
+        )}
+        <div class="mt-4 flex flex-wrap items-center gap-5 border-t border-border pt-4 text-sm">
+          <form method="POST" action="/logout">
             <button type="submit">{t("Sign out")}</button>
-          </form><div class="ml-auto flex items-center gap-2">
-            <ThemeToggle /><LanguageSwitch />
+          </form>
+          <div class="ml-auto flex items-center gap-2">
+            <ThemeToggle />
+            <LanguageSwitch />
           </div>
         </div>
       </div>
     </dialog>
     <main id="main-content" tabindex="-1" class="admin-content app-content">
-      {
-        archived && (
-          <p class="notice notice-danger mb-4" role="status">
-            {t(
-              "This organization is archived. You can read it but not change it. Residents cannot sign in. Restore it in Settings > Organization."
-            )}
-          </p>
-        )
-      }
+      {archived && (
+        <p class="notice notice-danger mb-4" role="status">
+          {t(
+            "This organization is archived. You can read it but not change it. Residents cannot sign in. Restore it in Settings > Organization."
+          )}
+        </p>
+      )}
       <slot />
     </main>
     <MutationStatus />
+    {previewFontUrl && (
+      <DevFontPreview
+        fontUrl={previewFontUrl}
+        italicFontUrl="/src/fonts/MedeoSansVariable-Italic.woff2"
+      />
+    )}
     <script>
       import "../lib/ui/forms";
       import { onPageLoad } from "../lib/ui/page-lifecycle";

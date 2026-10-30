@@ -3,14 +3,16 @@
 // on purpose: that file is also imported by scripts/seed.ts and
 // db-migrate-fresh.ts, which run as plain Node scripts where the
 // cloudflare:workers virtual module this file needs doesn't exist.
-import { env } from "cloudflare:workers";
+import { env, tracing } from "cloudflare:workers";
 import { createDb, type Db } from "../db/client";
 
 export async function withRequestDb<T>(fn: (db: Db) => Promise<T>): Promise<T> {
-  const db = await createDb(env.HYPERDRIVE.connectionString);
+  const db = await tracing.enterSpan("db.connect", () =>
+    createDb(env.HYPERDRIVE.connectionString)
+  );
   try {
-    return await fn(db);
+    return await tracing.enterSpan("db.work", () => fn(db));
   } finally {
-    await db.$client.end();
+    await tracing.enterSpan("db.close", () => db.$client.end());
   }
 }

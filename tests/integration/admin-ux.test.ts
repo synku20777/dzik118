@@ -468,4 +468,167 @@ describe("dashboard summary", () => {
 
     await cleanupOrg(org.id);
   });
+
+  it("reports reconciled money, progress, the next action, overdue detail, deadlines and exception counts", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT-H Org Dashboard Next", addressLine1: "Addr 1" },
+      seedAdminId
+    );
+    const [d1, d2, d3] = [
+      await createDwelling(db, org.id, { number: "1" }, seedAdminId),
+      await createDwelling(db, org.id, { number: "2" }, seedAdminId),
+      await createDwelling(db, org.id, { number: "3" }, seedAdminId),
+    ];
+    const period = await createPeriod(
+      db,
+      org.id,
+      {
+        year: 2026,
+        month: 6,
+        startsOn: "2026-06-01",
+        endsOn: "2026-06-28",
+        readingDeadline: "2026-06-25",
+        invoiceIssueDate: "2026-06-28",
+        invoiceDueDate: "2026-07-14",
+      },
+      seedAdminId
+    );
+    await createRule(
+      db,
+      org.id,
+      {
+        name: "Fee",
+        code: "fee",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "10.00",
+        effectiveFrom: "2025-01-01",
+      },
+      seedAdminId
+    );
+    const overdueInvoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      d1.id,
+      seedAdminId
+    );
+    const paidInvoice = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      d2.id,
+      seedAdminId
+    );
+    const setCase = (dwellingId: string, status: string) =>
+      db.$client.query(
+        "update billing_cases set status = $1 where organization_id = $2 and period_id = $3 and dwelling_id = $4",
+        [status, org.id, period.id, dwellingId]
+      );
+    await setCase(d1.id, "OVERDUE");
+    await setCase(d2.id, "PAID");
+    await setCase(d3.id, "MISSING_DATA");
+    await db.$client.query(
+      "update invoices set paid_at = now() where id = $1",
+      [paidInvoice.id]
+    );
+
+    let s = await getDashboardSummary(db, org.id, period.id);
+    // Money: the headline total reconciles with its parts.
+    expect(s.amountDue).toBe(
+      (
+        Number(s.currentCharges) +
+        Number(s.carriedOutstanding) -
+        Number(s.creditsApplied) +
+        Number(s.lateFees)
+      ).toFixed(2)
+    );
+    expect(Number(s.totalPaid) + Number(s.totalOutstanding)).toBeCloseTo(
+      Number(s.amountDue)
+    );
+    // Overdue row carries what is owed, the due date and the days late.
+    const row = s.needsAttention.find((a) => a.status === "OVERDUE")!;
+    expect(row.overdueAmount).toBe(overdueInvoice.amountDue);
+    expect(row.dueDate).toBe(overdueInvoice.dueDate);
+    expect(row.daysLate).toBeGreaterThan(0);
+    expect(
+      s.needsAttention.find((a) => a.status === "MISSING_DATA")
+    ).toMatchObject({ overdueAmount: null, dueDate: null, daysLate: null });
+    expect(s.progress).toEqual({
+      dwellingsTotal: 3,
+      readingsDone: 2,
+      invoicesGenerated: 2,
+      invoicesSent: 2,
+      invoicesPaid: 1,
+    });
+    expect(s.nextAction).toEqual({ key: "ENTER_READINGS", count: 1 });
+    expect(s.readiness).toEqual({ billingReady: false, readyToSend: false });
+    expect(s.isNewestPeriod).toBe(true);
+    expect(s.deadlines).toEqual({
+      readingDeadline: "2026-06-25",
+      invoiceIssueDate: "2026-06-28",
+      invoiceDueDate: "2026-07-14",
+    });
+
+    // Exceptions: one unsent invoice with a failed delivery, one unmatched payment.
+    await setCase(d1.id, "DRAFT");
+    await db.$client.query(
+      "insert into invoice_deliveries (organization_id, invoice_id, provider, status) values ($1, $2, 'smtp', 'FAILED')",
+      [org.id, overdueInvoice.id]
+    );
+    const bankImport = await db.$client.query(
+      "insert into bank_imports (organization_id, original_filename, file_sha256, imported_by_user_id, row_count) values ($1, 'a.csv', $2, $3, 1) returning id",
+      [org.id, `it-h-${org.id}`, seedAdminId]
+    );
+    await db.$client.query(
+      "insert into bank_transactions (organization_id, bank_import_id, booking_date, amount, currency, raw_data, row_number) values ($1, $2, '2026-06-30', 5.00, 'EUR', '{}', 1)",
+      [org.id, bankImport.rows[0].id]
+    );
+    s = await getDashboardSummary(db, org.id, period.id);
+    expect(s.deliveryFailureCount).toBe(1);
+    expect(s.unmatchedPaymentCount).toBe(1);
+
+    // Next action follows the workflow: readings, generate, send, payments.
+    await setCase(d3.id, "READY");
+    s = await getDashboardSummary(db, org.id, period.id);
+    expect(s.nextAction).toEqual({ key: "GENERATE_INVOICES", count: 1 });
+    expect(s.readiness.billingReady).toBe(true);
+    await setCase(d3.id, "PAID");
+    s = await getDashboardSummary(db, org.id, period.id);
+    expect(s.nextAction).toEqual({ key: "SEND_INVOICES", count: 1 });
+    expect(s.readiness.readyToSend).toBe(true);
+    await setCase(d1.id, "SENT");
+    s = await getDashboardSummary(db, org.id, period.id);
+    expect(s.nextAction).toEqual({ key: "REVIEW_PAYMENTS", count: 1 });
+    await setCase(d1.id, "PAID");
+    s = await getDashboardSummary(db, org.id, period.id);
+    expect(s.nextAction).toEqual({ key: "ALL_DONE", count: 0 });
+
+    // A locked month offers "create next" only while it is the newest.
+    await db.$client.query(
+      "update billing_periods set status = 'LOCKED' where id = $1",
+      [period.id]
+    );
+    s = await getDashboardSummary(db, org.id, period.id);
+    expect(s.nextAction.key).toBe("CREATE_NEXT_PERIOD");
+    await createPeriod(
+      db,
+      org.id,
+      {
+        year: 2026,
+        month: 7,
+        startsOn: "2026-07-01",
+        endsOn: "2026-07-28",
+        invoiceIssueDate: "2026-07-28",
+        invoiceDueDate: "2026-08-14",
+      },
+      seedAdminId
+    );
+    s = await getDashboardSummary(db, org.id, period.id);
+    expect(s.isNewestPeriod).toBe(false);
+    expect(s.nextAction.key).toBe("ALL_DONE");
+
+    await cleanupOrg(org.id);
+  });
 });

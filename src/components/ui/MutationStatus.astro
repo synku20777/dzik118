@@ -38,12 +38,15 @@ const strings = {
     data-mutation-toasts
     aria-live="polite"
     aria-atomic="false"
-  >
-  </div>
+  ></div>
   <details class="mutation-activity">
     <summary class="mutation-summary">
-      <span aria-hidden="true" data-mutation-summary-icon>✓</span>
-      <span data-mutation-summary aria-live="polite">{strings.allSaved}</span>
+      <span aria-hidden="true" data-mutation-summary-icon>
+        ✓
+      </span>
+      <span data-mutation-summary aria-live="polite">
+        {strings.allSaved}
+      </span>
     </summary>
     <section class="mutation-panel" aria-labelledby="mutation-panel-title">
       <h2 id="mutation-panel-title">{strings.recent}</h2>
@@ -251,6 +254,13 @@ const strings = {
     justify-items: end;
     gap: 0.75rem;
     width: min(24rem, calc(100vw - 2rem));
+    /* The wrapper is 24rem wide but mostly empty: only real controls take clicks. */
+    pointer-events: none;
+  }
+  #mutation-status .mutation-item,
+  #mutation-status .mutation-summary,
+  #mutation-status .mutation-panel {
+    pointer-events: auto;
   }
   .mutation-toasts {
     display: grid;
@@ -324,6 +334,7 @@ const strings = {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    min-height: 2.75rem;
     padding: 0.625rem 0.875rem;
     border: 1px solid var(--color-border);
     border-radius: 999px;
@@ -340,6 +351,27 @@ const strings = {
   }
   #mutation-status[data-state="error"] .mutation-summary {
     color: var(--color-destructive);
+  }
+  /* Idle: a 44px check mark instead of a 219px pill, so it rarely sits on
+     content. The text stays in the DOM (aria-live) and the full pill returns on
+     hover, keyboard focus, while saving, on errors, and when the panel is open. */
+  #mutation-status:not([data-state="pending"]):not([data-state="error"])
+    .mutation-activity:not([open]):not(:hover):not(:focus-within)
+    .mutation-summary {
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+  }
+  #mutation-status:not([data-state="pending"]):not([data-state="error"])
+    .mutation-activity:not([open]):not(:hover):not(:focus-within)
+    [data-mutation-summary] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .mutation-panel {
     position: absolute;

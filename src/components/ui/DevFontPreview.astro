@@ -1,0 +1,33 @@
+---
+interface Props {
+  fontUrl: string;
+  italicFontUrl: string;
+}
+const { fontUrl, italicFontUrl } = Astro.props;
+---
+
+<style
+  is:inline
+  set:html={`
+      @font-face {
+        font-family: "Medeo Sans Preview";
+        src: url("${fontUrl}") format("woff2");
+        font-weight: 200 800;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "Medeo Sans Preview";
+        src: url("${italicFontUrl}") format("woff2");
+        font-weight: 200 800;
+        font-style: italic;
+        font-display: swap;
+      }
+      :root {
+        --font-sans: "Medeo Sans Preview", "Overused Grotesk", sans-serif;
+        --font-regular-weight: 400;
+        --font-weight-normal: 400;
+        --tracking-sans: 0;
+      }
+    `}
+></style>

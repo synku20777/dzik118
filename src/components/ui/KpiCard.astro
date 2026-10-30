@@ -3,7 +3,7 @@ import Icon from "./Icon.astro";
 interface Props {
   label: string;
   value: string | number;
-  tone?: "neutral" | "success" | "warning";
+  tone?: "neutral" | "success" | "warning" | "danger";
   icon?: "invoice" | "coins" | "clock" | "open" | "lock";
   hint?: string;
 }
@@ -21,18 +21,16 @@ const ICON_NAMES = {
 } as const;
 ---
 
-<section class="kpi" data-tone={tone}>
-  {
-    icon && (
-      <span class="kpi-icon" aria-hidden="true">
-        <Icon name={ICON_NAMES[icon]} size="lg" />
-      </span>
-    )
-  }
+<div class="kpi" data-tone={tone}>
+  {icon && (
+    <span class="kpi-icon" aria-hidden="true">
+      <Icon name={ICON_NAMES[icon]} size="lg" />
+    </span>
+  )}
   <div class="kpi-text">
-    <h2>{label}</h2>
-    <p>{value}</p>
+    <p class="kpi-label">{label}</p>
+    <p class="kpi-value">{value}</p>
     {hint && <small class="text-muted">{hint}</small>}
   </div>
   <slot />
-</section>
+</div>

@@ -738,6 +738,17 @@ export async function prepareInvoice(
       .limit(1);
     if (!invoice) throw new NotFoundError("Invoice not found");
 
+    // The opening balance import (ADR 0013) takes the same lock on the
+    // dwelling. An opening balance posted at the same moment is then either
+    // seen by this preparation, or the import finds this invoice prepared and
+    // refuses the dwelling. Without it the invoice could freeze its balance
+    // without the debt the import commits a moment later.
+    await tx
+      .select({ id: dwellings.id })
+      .from(dwellings)
+      .where(eq(dwellings.id, invoice.dwellingId))
+      .for("no key update");
+
     const [billingCase] = await tx
       .select()
       .from(billingCases)

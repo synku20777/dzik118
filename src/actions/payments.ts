@@ -6,10 +6,15 @@
 import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
 import { requireActiveOrganization } from "../domain/authorization/guards";
+import {
+  recordDwellingPayment,
+  reverseDwellingPayment,
+} from "../domain/payments/direct";
 import { confirmMatch, rejectMatch } from "../domain/payments/matching";
 import {
   matchTransactionToInvoice,
   recordManualPayment,
+  updateUnmatchedTransaction,
 } from "../domain/payments/manual";
 import { reversePayment } from "../domain/payments/reversal";
 import { decimalInput } from "../lib/decimal-input";
@@ -94,22 +99,96 @@ export const payments = {
     ),
   }),
 
+  // One form for both targets: an open invoice, or a dwelling account that has
+  // no open invoice. `target` is "invoice:<id>" or "dwelling:<id>".
   recordManual: defineAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
-      invoiceId: z.uuid(),
+      target: z.string().regex(/^(invoice|dwelling):[0-9a-fA-F-]{36}$/),
+      method: z.enum(["BANK", "CASH"]).default("BANK"),
       amount: decimalInput(/^\d+(\.\d{1,2})?$/, POSITIVE_AMOUNT_MESSAGE),
       bookingDate: z.iso.date(),
       payerName: z.string().max(140).optional(),
-      reference: z.string().trim().min(1).max(140),
+      reference: z.string().trim().max(140).optional(),
+      reason: z.string().trim().min(1).max(500),
+      // Required: a retry of a cash payment has no other duplicate check.
+      submissionId: z.uuid(),
+    }),
+    handler: safeHandler(
+      async ({ organizationId, target, ...input }, { locals }) => {
+        requireActiveOrganization(locals.auth, organizationId);
+        const [kind, id] = target.split(":");
+        const actor = locals.auth!.userId;
+        await withDb(async (db) => {
+          if (kind === "invoice") {
+            await recordManualPayment(
+              db,
+              organizationId,
+              { ...input, invoiceId: id },
+              actor
+            );
+          } else {
+            await recordDwellingPayment(
+              db,
+              organizationId,
+              { ...input, dwellingId: id },
+              actor
+            );
+          }
+        });
+        return { recorded: true };
+      }
+    ),
+  }),
+
+  reverseDwellingPayment: defineAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      transactionId: z.uuid(),
       reason: z.string().trim().min(1).max(500),
     }),
-    handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
-      return withDb((db) =>
-        recordManualPayment(db, organizationId, input, locals.auth!.userId)
-      );
+    handler: safeHandler(
+      async ({ organizationId, transactionId, reason }, { locals }) => {
+        requireActiveOrganization(locals.auth, organizationId);
+        return withDb((db) =>
+          reverseDwellingPayment(
+            db,
+            organizationId,
+            transactionId,
+            reason,
+            locals.auth!.userId
+          )
+        );
+      }
+    ),
+  }),
+
+  editUnmatched: defineAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      transactionId: z.uuid(),
+      amount: decimalInput(/^\d+(\.\d{1,2})?$/, POSITIVE_AMOUNT_MESSAGE),
+      bookingDate: z.iso.date(),
+      payerName: z.string().max(140).optional(),
+      reference: z.string().trim().max(140).optional(),
+      reason: z.string().trim().min(1).max(500),
     }),
+    handler: safeHandler(
+      async ({ organizationId, transactionId, ...input }, { locals }) => {
+        requireActiveOrganization(locals.auth, organizationId);
+        return withDb((db) =>
+          updateUnmatchedTransaction(
+            db,
+            organizationId,
+            transactionId,
+            input,
+            locals.auth!.userId
+          )
+        );
+      }
+    ),
   }),
 };

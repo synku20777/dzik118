@@ -1,0 +1,309 @@
+2026-10-28T11:33:41.277493Z ERROR codex_skills_extension::loader::host: skills scan reached its traversal limit (root: file:///C:/Users/nesto/.agents/skills)
+OpenAI Codex v0.164.0
+--------
+workdir: C:\Users\nesto\orca\projects\dzik118
+model: gpt-5.6-sol
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 01a18249-8610-7e43-a491-9017a70de820
+--------
+user
+You are an independent senior product/UX reviewer. Repo root (your cwd or: C:\Users\nesto\orca\projects\dzik118): "Namkopa", an Astro + Cloudflare + Supabase billing app for Latvian housing co-ops (dzivokla biedriba / apsaimniekosana). Today is 2026-10-28.
+
+Persona: the admin of a Latvian house co-op, ~50 years old, not tech-savvy, used to doing the monthly work in Excel. She/he wants to see a summary of the CURRENT MONTH.
+
+Task (PASS 1 - CONTENT): Read these files: src/pages/admin/o/[orgId]/dashboard/index.astro, src/domain/periods/dashboard.ts, src/domain/periods/cases.ts, src/domain/periods/case-readiness.ts, src/lib/ui/invoice-status.ts, src/components/ui/KpiCard.astro, src/layouts/AdminLayout.astro (nav only), and docs: docs/product/UI_SPECIFICATION.md, docs/product/USER_JOURNEYS.md, docs/product/SERVICE_DESIGN_BLUEPRINT.md, docs/research/EASYBILLY_REVIEW_2026-10-05.md. Do not modify anything.
+
+Answer:
+1. What MUST a monthly dashboard show for this persona (the questions she asks every month: have all readings come in, can I issue invoices, were they sent, who has paid, who owes and how much, what is overdue, anything unusual)?
+2. What does the dashboard show today? Be exact (KPIs, needs-attention list, case status list, consumption box, period navigation).
+3. What is missing or misleading? Check especially: what "Total invoiced" really sums (domain/periods/dashboard.ts), whether "Outstanding" includes carried-over debt and how it relates to "Paid" and "Total invoiced" (do the three KPIs add up?), whether dashboard numbers can disagree with other pages, whether consumption (cold/hot water m3 totals) is useful for this persona, whether the 7 status rows are meaningful, whether "OVERDUE" cases are listed with amounts, whether there is any progress/"next step" cue, due date, missing-readings count, delivery failures, unmatched payments etc.
+4. A priority matrix with four buckets: must-see-now / should-see / one-click-away / never-on-dashboard, each item with a one-line justification.
+Ground EVERY claim in file:line of the current code (format path:line). Write concretely. Keep the answer under 1200 words. Output the answer as plain markdown.
+
+
+warning: Exceeded skills context budget. All skill descriptions were removed and 306 additional skills were not included in the model-visible skills list.
+hook: SessionStart
+hook: SessionStart
+hook: SessionStart Completed
+hook: SessionStart Completed
+hook: UserPromptSubmit
+hook: UserPromptSubmit
+hook: UserPromptSubmit Completed
+hook: UserPromptSubmit Completed
+codex
+I’m using the project’s Graphify instructions to scope relationships first, then the UI/UX review skill to evaluate the dashboard content against the specified admin persona. I’ll keep this read-only and cite every claim to the requested files.
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+"C:\\Users\\nesto\\AppData\\Local\\Microsoft\\WindowsApps\\Microsoft.PowerShell_8wekyb3d8bbwe\\pwsh.exe" -Command "Get-Content -Raw '.agents/skills/graphify/SKILL.md'; Get-Content -Raw '.codex/skills/ui-ux-pro-max/SKILL.md'" in C:\Users\nesto\orca\projects\dzik118
+ exited -1 in 0ms:
+Failed to create unified exec process: CreateProcessAsUserW failed: 5 (Access is denied.) | cwd=C:\Users\nesto\orca\projects\dzik118 | cmd=C:\Users\nesto\AppData\Local\Microsoft\WindowsApps\Microsoft.PowerShell_8wekyb3d8bbwe\pwsh.exe -Command "try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}
+Get-Content -Raw '.agents/skills/graphify/SKILL.md'; Get-Content -Raw '.codex/skills/ui-ux-pro-max/SKILL.md'" | env_u16_len=9350 | si_flags=256 | creation_flags=134743040
+2026-10-28T11:33:55.688209Z ERROR codex_core::tools::router: error=exec_command failed: CreateProcess { message: "Rejected(\"Failed to create unified exec process: CreateProcessAsUserW failed: 5 (Access is denied.) | cwd=C:\\\\Users\\\\nesto\\\\orca\\\\projects\\\\dzik118 | cmd=C:\\\\Users\\\\nesto\\\\AppData\\\\Local\\\\Microsoft\\\\WindowsApps\\\\Microsoft.PowerShell_8wekyb3d8bbwe\\\\pwsh.exe -Command \\\"try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}\\nGet-Content -Raw '.agents/skills/graphify/SKILL.md'; Get-Content -Raw '.codex/skills/ui-ux-pro-max/SKILL.md'\\\" | env_u16_len=9350 | si_flags=256 | creation_flags=134743040\")" }
+codex
+The shell was blocked by the read-only environment before it could read anything. I’m retrying with the workspace’s native shell path; no files will be changed.
+hook: PreToolUse
+hook: PreToolUse
+hook: PreToolUse Completed
+hook: PreToolUse Completed
+exec
+"C:\\Users\\nesto\\AppData\\Local\\Microsoft\\WindowsApps\\Microsoft.PowerShell_8wekyb3d8bbwe\\pwsh.exe" -NoProfile -Command "Get-Content -Raw '.agents\\skills\\graphify\\SKILL.md'; Get-Content -Raw '.codex\\skills\\ui-ux-pro-max\\SKILL.md'" in C:\Users\nesto\orca\projects\dzik118
+ exited -1 in 0ms:
+Failed to create unified exec process: CreateProcessAsUserW failed: 5 (Access is denied.) | cwd=C:\Users\nesto\orca\projects\dzik118 | cmd=C:\Users\nesto\AppData\Local\Microsoft\WindowsApps\Microsoft.PowerShell_8wekyb3d8bbwe\pwsh.exe -NoProfile -Command "try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}
+Get-Content -Raw '.agents\skills\graphify\SKILL.md'; Get-Content -Raw '.codex\skills\ui-ux-pro-max\SKILL.md'" | env_u16_len=9350 | si_flags=256 | creation_flags=134743040
+2026-10-28T11:34:04.148248Z ERROR codex_core::tools::router: error=exec_command failed: CreateProcess { message: "Rejected(\"Failed to create unified exec process: CreateProcessAsUserW failed: 5 (Access is denied.) | cwd=C:\\\\Users\\\\nesto\\\\orca\\\\projects\\\\dzik118 | cmd=C:\\\\Users\\\\nesto\\\\AppData\\\\Local\\\\Microsoft\\\\WindowsApps\\\\Microsoft.PowerShell_8wekyb3d8bbwe\\\\pwsh.exe -NoProfile -Command \\\"try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}\\nGet-Content -Raw '.agents\\\\skills\\\\graphify\\\\SKILL.md'; Get-Content -Raw '.codex\\\\skills\\\\ui-ux-pro-max\\\\SKILL.md'\\\" | env_u16_len=9350 | si_flags=256 | creation_flags=134743040\")" }
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: cua_repl/js started
+mcp: cua_repl/js (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex/list_mcp_resources started
+mcp: codex/list_mcp_resources (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.search_repositories started
+mcp: codex_apps/github.search_repositories (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.search_repositories started
+mcp: codex_apps/github.search_repositories (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (failed)
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (failed)
+codex
+Graphify’s local graph is not present in the GitHub mirror, and the sandbox blocks all local processes, so its traversal cannot run. I’m using the repository’s current default branch as the read-only fallback and will flag that limitation; next I’m loading only the nine files you named.
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+hook: PreToolUse
+hook: PreToolUse Completed
+mcp: codex_apps/github.fetch_file started
+mcp: codex_apps/github.fetch_file (completed)
+hook: PostToolUse
+hook: PostToolUse Completed
+codex
+# PASS 1 — Monthly dashboard content review
+
+## 1. What this admin must see
+
+The dashboard should answer one question first: **“What must I do next to finish this month?”** The documented monthly cycle is readings → invoice generation → preparation/delivery → reconciliation, with the dashboard intended for monitoring and prioritization and the workbench for execution (`docs/product/USER_JOURNEYS.md:7`, `docs/product/SERVICE_DESIGN_BLUEPRINT.md:97`).
+
+It therefore must show:
+
+- **Month and deadlines:** selected billing month, OPEN/LOCKED state, reading deadline, issue date and payment due date (`docs/product/SERVICE_DESIGN_BLUEPRINT.md:36`, `docs/research/EASYBILLY_REVIEW_2026-10-05.md:117`).
+- **Reading completeness:** dwellings complete/total, dwellings missing data, and actual missing readings/manual inputs—not merely a status label (`src/domain/periods/case-readiness.ts:21`, `src/domain/periods/case-readiness.ts:28`, `src/domain/periods/case-readiness.ts:200`).
+- **Invoice readiness and progress:** how many can be invoiced now, remain blocked, are drafts, are prepared, were sent, failed delivery, or are complete (`docs/product/SERVICE_DESIGN_BLUEPRINT.md:35`, `docs/product/SERVICE_DESIGN_BLUEPRINT.md:154`).
+- **Financial position with reconcilable definitions:** current-month charges, debt/credit carried forward, total due, paid, remaining, and overdue. Partial payments must retain a remaining balance; overpayments become account credit (`docs/product/USER_JOURNEYS.md:46`, `docs/product/USER_JOURNEYS.md:78`).
+- **Actionable exceptions:** dwelling, amount, due date, cause and next action for overdue invoices, delivery failures, unmatched payments and unusual readings (`docs/product/USER_JOURNEYS.md:63`, `docs/product/USER_JOURNEYS.md:82`, `docs/product/SERVICE_DESIGN_BLUEPRINT.md:129`).
+
+## 2. What the dashboard shows today
+
+- **Period selection:** `periodId` overrides everything; otherwise it opens the current OPEN period, or the first period returned. Consequently, on 2026-10-28 it is not guaranteed to mean October 2026 (`src/pages/admin/o/[orgId]/dashboard/index.astro:30`, `src/pages/admin/o/[orgId]/dashboard/index.astro:53`). Opening-readings periods are excluded (`src/pages/admin/o/[orgId]/dashboard/index.astro:42`).
+- **Header/navigation:** organization, formatted month, OPEN/LOCKED badge, “Open workbench,” and previous/next period links (`src/pages/admin/o/[orgId]/dashboard/index.astro:221`, `src/pages/admin/o/[orgId]/dashboard/index.astro:246`).
+- **Three KPIs:** “Total invoiced,” “Paid,” and “Outstanding,” displayed without explanatory hints (`src/pages/admin/o/[orgId]/dashboard/index.astro:279`; hints are supported by `src/components/ui/KpiCard.astro:8`).
+- **Needs attention:** count plus dwelling rows limited to `MISSING_DATA` and `OVERDUE`. Missing rows list blocker labels and offer “Add readings”; overdue rows say only that payment is past due and link to Payments (`src/pages/admin/o/[orgId]/dashboard/index.astro:313`, `src/pages/admin/o/[orgId]/dashboard/index.astro:326`, `src/pages/admin/o/[orgId]/dashboard/index.astro:377`).
+- **Case status:** seven linked counts—Missing data, Ready to invoice, Draft, Prepared, Overdue, Sent, Paid (`src/pages/admin/o/[orgId]/dashboard/index.astro:109`, `src/pages/admin/o/[orgId]/dashboard/index.astro:443`; labels at `src/lib/ui/invoice-status.ts:7`).
+- **Consumption:** summed cold- and hot-water consumption in m³ (`src/pages/admin/o/[orgId]/dashboard/index.astro:468`).
+- **Setup only:** incomplete organizations get a five-step setup checklist; completed organizations get no comparable monthly progress cue (`src/pages/admin/o/[orgId]/dashboard/index.astro:119`, `src/pages/admin/o/[orgId]/dashboard/index.astro:151`).
+
+## 3. Missing or misleading
+
+### The financial KPIs do not form one equation
+
+“Total invoiced” is actually only `Σ invoice.currentCharges`; it is not invoice `total` or `amountDue` (`src/domain/periods/dashboard.ts:126`, `src/domain/periods/dashboard.ts:156`). The query includes every generated invoice in the period without filtering out DRAFT or PREPARED, so “invoiced” does not mean “issued/sent” (`src/domain/periods/dashboard.ts:63`, `src/domain/periods/cases.ts:27`).
+
+“Outstanding” is `Σ max(amountDue − net allocations, 0)`, while “Paid” is net allocations, with a `paidAt` fallback (`src/domain/periods/dashboard.ts:135`, `src/domain/periods/dashboard.ts:143`). Thus Paid + Outstanding normally reconciles to **amount due**, not “Total invoiced.” Carried debt, credit and late fees affect Outstanding insofar as they are already incorporated into `amountDue`; their separately calculated totals are never displayed (`src/domain/periods/dashboard.ts:127`, `src/domain/periods/dashboard.ts:220`).
+
+KPIs silently exclude invoices whose snapshotted currency differs from the organization’s current currency, but case counts do not (`src/domain/periods/dashboard.ts:81`, `src/domain/periods/dashboard.ts:189`). The case read model also exposes `invoiceTotal`, `invoiceCurrentCharges`, `invoiceAmountDue` and carry-over separately, creating several plausible “total” definitions across screens (`src/domain/periods/cases.ts:67`).
+
+### Operational gaps
+
+- `MISSING_DATA` counts dwellings, not missing readings/inputs; one dwelling can contain several blockers (`src/domain/periods/dashboard.ts:204`, `src/domain/periods/case-readiness.ts:57`).
+- READY cases are excluded from “Needs attention,” despite “Can I issue invoices?” being a primary dashboard branch (`src/domain/periods/dashboard.ts:45`, `docs/product/USER_JOURNEYS.md:24`).
+- Overdue rows show neither amount nor due date, although those rows already contain `invoiceAmountDue` (`src/pages/admin/o/[orgId]/dashboard/index.astro:377`, `src/domain/periods/cases.ts:69`).
+- Delivery failures and unmatched/proposed payments are absent. The UI vocabulary supports `FAILED` and `UNMATCHED`, but the dashboard’s seven-status array omits them (`src/lib/ui/invoice-status.ts:27`, `src/pages/admin/o/[orgId]/dashboard/index.astro:109`).
+- There is no “N of X complete,” recommended next step, or monthly deadline.
+- Raw water totals are weak dashboard content: they sum only readings already present, so incomplete collection lowers the total; there is no previous-month comparison or anomaly threshold (`src/domain/periods/dashboard.ts:158`, `src/domain/periods/dashboard.ts:178`). Consumption is useful as detail/history, or as an exception when materially unusual—not as two isolated totals.
+- Seven equally weighted workflow rows are technically meaningful, but Draft versus Prepared requires process knowledge. Monitoring should foreground blockers and next actions; detailed states can remain as filters (`src/domain/periods/case-readiness.ts:2`, `docs/product/SERVICE_DESIGN_BLUEPRINT.md:99`).
+
+## 4. Priority matrix
+
+| Bucket | Item | Why |
+|---|---|---|
+| **Must-see-now** | Month, status and deadlines | Prevents work in the wrong period and answers “when?” (`src/pages/admin/o/[orgId]/dashboard/index.astro:221`). |
+| **Must-see-now** | Readings complete/total and missing-input count | Direct prerequisite for invoice eligibility (`src/domain/periods/case-readiness.ts:123`). |
+| **Must-see-now** | Ready/blocking/sent progress plus one next action | Converts seven states into an executable monthly plan (`docs/product/SERVICE_DESIGN_BLUEPRINT.md:99`). |
+| **Must-see-now** | Current charges, carry-over, total due, paid, outstanding and overdue | Makes the financial arithmetic explainable (`src/domain/periods/dashboard.ts:126`). |
+| **Must-see-now** | Exception list with dwelling, amount, due date and action | Answers who owes and what to do (`docs/product/USER_JOURNEYS.md:58`). |
+| **Should-see** | Sent by email/paper and delivery failures | Sending is not complete when delivery failed (`docs/product/USER_JOURNEYS.md:63`). |
+| **Should-see** | Unmatched, partial and overpayment counts | These are the reconciliation exceptions requiring judgment (`docs/product/SERVICE_DESIGN_BLUEPRINT.md:157`). |
+| **Should-see** | Consumption anomaly versus prior month | Comparative exceptions are actionable; isolated totals are not (`docs/research/EASYBILLY_REVIEW_2026-10-05.md:61`). |
+| **One-click-away** | Seven detailed status filters and per-dwelling workbench | Useful for execution after the dashboard identifies the task (`src/pages/admin/o/[orgId]/dashboard/index.astro:447`). |
+| **One-click-away** | Reading grid, invoices, payment matches, ledger and consumption history | Detailed investigation belongs in existing task surfaces (`docs/product/SERVICE_DESIGN_BLUEPRINT.md:37`). |
+| **Never-on-dashboard** | Raw cold/hot m³ totals without completeness or comparison | They can look reassuring while readings are missing (`src/domain/periods/dashboard.ts:158`). |
+| **Never-on-dashboard** | Provider internals, full audit history or detailed accounting controls | The dashboard prioritizes work; backstage mechanics stay outside the frontstage UI (`docs/product/SERVICE_DESIGN_BLUEPRINT.md:28`). |
+
+Skipped: no code changes, runtime data, visual rendering or unrequested pages were inspected.  
+Risk: local shell/Graphify access was blocked, so citations use GitHub `master`; unpushed local changes could differ.
+hook: Stop
+hook: Stop Completed
+tokens used
+119,887
+# PASS 1 — Monthly dashboard content review
+
+## 1. What this admin must see
+
+The dashboard should answer one question first: **“What must I do next to finish this month?”** The documented monthly cycle is readings → invoice generation → preparation/delivery → reconciliation, with the dashboard intended for monitoring and prioritization and the workbench for execution (`docs/product/USER_JOURNEYS.md:7`, `docs/product/SERVICE_DESIGN_BLUEPRINT.md:97`).
+
+It therefore must show:
+
+- **Month and deadlines:** selected billing month, OPEN/LOCKED state, reading deadline, issue date and payment due date (`docs/product/SERVICE_DESIGN_BLUEPRINT.md:36`, `docs/research/EASYBILLY_REVIEW_2026-10-05.md:117`).
+- **Reading completeness:** dwellings complete/total, dwellings missing data, and actual missing readings/manual inputs—not merely a status label (`src/domain/periods/case-readiness.ts:21`, `src/domain/periods/case-readiness.ts:28`, `src/domain/periods/case-readiness.ts:200`).
+- **Invoice readiness and progress:** how many can be invoiced now, remain blocked, are drafts, are prepared, were sent, failed delivery, or are complete (`docs/product/SERVICE_DESIGN_BLUEPRINT.md:35`, `docs/product/SERVICE_DESIGN_BLUEPRINT.md:154`).
+- **Financial position with reconcilable definitions:** current-month charges, debt/credit carried forward, total due, paid, remaining, and overdue. Partial payments must retain a remaining balance; overpayments become account credit (`docs/product/USER_JOURNEYS.md:46`, `docs/product/USER_JOURNEYS.md:78`).
+- **Actionable exceptions:** dwelling, amount, due date, cause and next action for overdue invoices, delivery failures, unmatched payments and unusual readings (`docs/product/USER_JOURNEYS.md:63`, `docs/product/USER_JOURNEYS.md:82`, `docs/product/SERVICE_DESIGN_BLUEPRINT.md:129`).
+
+## 2. What the dashboard shows today
+
+- **Period selection:** `periodId` overrides everything; otherwise it opens the current OPEN period, or the first period returned. Consequently, on 2026-10-28 it is not guaranteed to mean October 2026 (`src/pages/admin/o/[orgId]/dashboard/index.astro:30`, `src/pages/admin/o/[orgId]/dashboard/index.astro:53`). Opening-readings periods are excluded (`src/pages/admin/o/[orgId]/dashboard/index.astro:42`).
+- **Header/navigation:** organization, formatted month, OPEN/LOCKED badge, “Open workbench,” and previous/next period links (`src/pages/admin/o/[orgId]/dashboard/index.astro:221`, `src/pages/admin/o/[orgId]/dashboard/index.astro:246`).
+- **Three KPIs:** “Total invoiced,” “Paid,” and “Outstanding,” displayed without explanatory hints (`src/pages/admin/o/[orgId]/dashboard/index.astro:279`; hints are supported by `src/components/ui/KpiCard.astro:8`).
+- **Needs attention:** count plus dwelling rows limited to `MISSING_DATA` and `OVERDUE`. Missing rows list blocker labels and offer “Add readings”; overdue rows say only that payment is past due and link to Payments (`src/pages/admin/o/[orgId]/dashboard/index.astro:313`, `src/pages/admin/o/[orgId]/dashboard/index.astro:326`, `src/pages/admin/o/[orgId]/dashboard/index.astro:377`).
+- **Case status:** seven linked counts—Missing data, Ready to invoice, Draft, Prepared, Overdue, Sent, Paid (`src/pages/admin/o/[orgId]/dashboard/index.astro:109`, `src/pages/admin/o/[orgId]/dashboard/index.astro:443`; labels at `src/lib/ui/invoice-status.ts:7`).
+- **Consumption:** summed cold- and hot-water consumption in m³ (`src/pages/admin/o/[orgId]/dashboard/index.astro:468`).
+- **Setup only:** incomplete organizations get a five-step setup checklist; completed organizations get no comparable monthly progress cue (`src/pages/admin/o/[orgId]/dashboard/index.astro:119`, `src/pages/admin/o/[orgId]/dashboard/index.astro:151`).
+
+## 3. Missing or misleading
+
+### The financial KPIs do not form one equation
+
+“Total invoiced” is actually only `Σ invoice.currentCharges`; it is not invoice `total` or `amountDue` (`src/domain/periods/dashboard.ts:126`, `src/domain/periods/dashboard.ts:156`). The query includes every generated invoice in the period without filtering out DRAFT or PREPARED, so “invoiced” does not mean “issued/sent” (`src/domain/periods/dashboard.ts:63`, `src/domain/periods/cases.ts:27`).
+
+“Outstanding” is `Σ max(amountDue − net allocations, 0)`, while “Paid” is net allocations, with a `paidAt` fallback (`src/domain/periods/dashboard.ts:135`, `src/domain/periods/dashboard.ts:143`). Thus Paid + Outstanding normally reconciles to **amount due**, not “Total invoiced.” Carried debt, credit and late fees affect Outstanding insofar as they are already incorporated into `amountDue`; their separately calculated totals are never displayed (`src/domain/periods/dashboard.ts:127`, `src/domain/periods/dashboard.ts:220`).
+
+KPIs silently exclude invoices whose snapshotted currency differs from the organization’s current currency, but case counts do not (`src/domain/periods/dashboard.ts:81`, `src/domain/periods/dashboard.ts:189`). The case read model also exposes `invoiceTotal`, `invoiceCurrentCharges`, `invoiceAmountDue` and carry-over separately, creating several plausible “total” definitions across screens (`src/domain/periods/cases.ts:67`).
+
+### Operational gaps
+
+- `MISSING_DATA` counts dwellings, not missing readings/inputs; one dwelling can contain several blockers (`src/domain/periods/dashboard.ts:204`, `src/domain/periods/case-readiness.ts:57`).
+- READY cases are excluded from “Needs attention,” despite “Can I issue invoices?” being a primary dashboard branch (`src/domain/periods/dashboard.ts:45`, `docs/product/USER_JOURNEYS.md:24`).
+- Overdue rows show neither amount nor due date, although those rows already contain `invoiceAmountDue` (`src/pages/admin/o/[orgId]/dashboard/index.astro:377`, `src/domain/periods/cases.ts:69`).
+- Delivery failures and unmatched/proposed payments are absent. The UI vocabulary supports `FAILED` and `UNMATCHED`, but the dashboard’s seven-status array omits them (`src/lib/ui/invoice-status.ts:27`, `src/pages/admin/o/[orgId]/dashboard/index.astro:109`).
+- There is no “N of X complete,” recommended next step, or monthly deadline.
+- Raw water totals are weak dashboard content: they sum only readings already present, so incomplete collection lowers the total; there is no previous-month comparison or anomaly threshold (`src/domain/periods/dashboard.ts:158`, `src/domain/periods/dashboard.ts:178`). Consumption is useful as detail/history, or as an exception when materially unusual—not as two isolated totals.
+- Seven equally weighted workflow rows are technically meaningful, but Draft versus Prepared requires process knowledge. Monitoring should foreground blockers and next actions; detailed states can remain as filters (`src/domain/periods/case-readiness.ts:2`, `docs/product/SERVICE_DESIGN_BLUEPRINT.md:99`).
+
+## 4. Priority matrix
+
+| Bucket | Item | Why |
+|---|---|---|
+| **Must-see-now** | Month, status and deadlines | Prevents work in the wrong period and answers “when?” (`src/pages/admin/o/[orgId]/dashboard/index.astro:221`). |
+| **Must-see-now** | Readings complete/total and missing-input count | Direct prerequisite for invoice eligibility (`src/domain/periods/case-readiness.ts:123`). |
+| **Must-see-now** | Ready/blocking/sent progress plus one next action | Converts seven states into an executable monthly plan (`docs/product/SERVICE_DESIGN_BLUEPRINT.md:99`). |
+| **Must-see-now** | Current charges, carry-over, total due, paid, outstanding and overdue | Makes the financial arithmetic explainable (`src/domain/periods/dashboard.ts:126`). |
+| **Must-see-now** | Exception list with dwelling, amount, due date and action | Answers who owes and what to do (`docs/product/USER_JOURNEYS.md:58`). |
+| **Should-see** | Sent by email/paper and delivery failures | Sending is not complete when delivery failed (`docs/product/USER_JOURNEYS.md:63`). |
+| **Should-see** | Unmatched, partial and overpayment counts | These are the reconciliation exceptions requiring judgment (`docs/product/SERVICE_DESIGN_BLUEPRINT.md:157`). |
+| **Should-see** | Consumption anomaly versus prior month | Comparative exceptions are actionable; isolated totals are not (`docs/research/EASYBILLY_REVIEW_2026-10-05.md:61`). |
+| **One-click-away** | Seven detailed status filters and per-dwelling workbench | Useful for execution after the dashboard identifies the task (`src/pages/admin/o/[orgId]/dashboard/index.astro:447`). |
+| **One-click-away** | Reading grid, invoices, payment matches, ledger and consumption history | Detailed investigation belongs in existing task surfaces (`docs/product/SERVICE_DESIGN_BLUEPRINT.md:37`). |
+| **Never-on-dashboard** | Raw cold/hot m³ totals without completeness or comparison | They can look reassuring while readings are missing (`src/domain/periods/dashboard.ts:158`). |
+| **Never-on-dashboard** | Provider internals, full audit history or detailed accounting controls | The dashboard prioritizes work; backstage mechanics stay outside the frontstage UI (`docs/product/SERVICE_DESIGN_BLUEPRINT.md:28`). |
+
+Skipped: no code changes, runtime data, visual rendering or unrequested pages were inspected.  
+Risk: local shell/Graphify access was blocked, so citations use GitHub `master`; unpushed local changes could differ.

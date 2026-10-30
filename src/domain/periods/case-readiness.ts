@@ -6,7 +6,7 @@
 // Phase F actually generates an invoice -- recalculateCaseReadiness never
 // touches a case that has already reached DRAFT or later, since at that
 // point "Regenerate invoice" is the mechanism for re-syncing it.
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { DbOrTx } from "../../db/client";
 import {
   billingCases,
@@ -485,6 +485,82 @@ export async function recalculateCaseReadinessForOpenPeriods(
     );
   for (const { periodId } of openCases) {
     await recalculateCaseReadiness(tx, organizationId, dwellingId, periodId);
+  }
+}
+
+// recalculateCaseReadinessForOpenPeriods for many dwellings (imports): one
+// batch of readiness queries per open period and one UPDATE for every case
+// that changed, instead of several queries per case.
+export async function recalculateCaseReadinessForDwellings(
+  tx: DbOrTx,
+  organizationId: string,
+  dwellingIds: string[]
+) {
+  if (dwellingIds.length === 0) return;
+  const openPeriods = await tx
+    .select()
+    .from(billingPeriods)
+    .where(
+      and(
+        eq(billingPeriods.organizationId, organizationId),
+        eq(billingPeriods.status, "OPEN")
+      )
+    );
+  for (const period of openPeriods) {
+    const cases = [];
+    for (let i = 0; i < dwellingIds.length; i += 500) {
+      cases.push(
+        ...(await tx
+          .select()
+          .from(billingCases)
+          .where(
+            and(
+              eq(billingCases.periodId, period.id),
+              inArray(billingCases.dwellingId, dwellingIds.slice(i, i + 500))
+            )
+          ))
+      );
+    }
+    if (cases.length === 0) continue;
+    const eligibility = await resolveEligibilityMany(
+      tx,
+      organizationId,
+      period.id,
+      period,
+      cases.map((c) => c.dwellingId)
+    );
+    const changed: { id: string; missing_data: unknown; status: string }[] = [];
+    for (const existing of cases) {
+      const missingData = eligibility.get(existing.dwellingId)!.blockers;
+      // Same rule as recalculateCaseReadiness: only the pre-invoice stage
+      // tracks live readiness.
+      const status =
+        existing.status === "MISSING_DATA" || existing.status === "READY"
+          ? deriveReadinessStatus(missingData)
+          : existing.status;
+      if (
+        JSON.stringify(existing.missingData) !== JSON.stringify(missingData) ||
+        status !== existing.status
+      ) {
+        changed.push({
+          id: existing.id,
+          missing_data: missingData,
+          status,
+        });
+      }
+    }
+    for (let i = 0; i < changed.length; i += 500) {
+      const part = changed.slice(i, i + 500);
+      // One JSON parameter: drizzle would expand a JS array into a list.
+      await tx.execute(sql`
+        update billing_cases set
+          missing_data = v.missing_data,
+          status = v.status::billing_case_status,
+          status_updated_at = now()
+        from jsonb_to_recordset(${JSON.stringify(part)}::jsonb)
+          as v(id uuid, missing_data jsonb, status text)
+        where billing_cases.id = v.id`);
+    }
   }
 }
 

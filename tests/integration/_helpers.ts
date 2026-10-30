@@ -74,6 +74,8 @@ export async function cleanupOrganization(
     await db.$client.query("set session_replication_role = default");
   }
   const statements = [
+    "delete from migration_imports where organization_id = $1",
+    "delete from migration_mappings where organization_id = $1",
     "delete from suppressed_emails where organization_id = $1",
     "delete from late_fee_policies where organization_id = $1",
     "delete from payment_matches where organization_id = $1",

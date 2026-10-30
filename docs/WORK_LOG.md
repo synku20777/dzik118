@@ -646,3 +646,344 @@ badge in `AdminLayout`, and the sign-in check calls Supabase Auth on every
 request (about 52 ms). Supabase advises indexes on 32 foreign keys (for example
 `billing_cases.dwelling_id`); review them. Production time was not measured after
 the fix, so measure on the next deploy.
+
+
+## Migration Center, phase 1 (2026-10-07)
+
+Plan: `docs/decisions/0013-migration-center.md`. The owner chose: Jev only for
+judgment (shapes, never values), CSV and paste first and XLSX later, one opening
+balance per dwelling, and opening debt that is not late-fee principal.
+
+Built in phase 1:
+
+- `src/domain/migration/`: `files.ts` (encoding, delimiter, header row, totals),
+  `values.ts` (numbers, dates, delivery words in EN/LV/RU), `targets.ts` and
+  `mapping.ts` (aliases, scores, saved mappings), `dwellings.ts` (validate,
+  import), `flow.ts` (upload, template, issue list).
+- Migration 0023: `migration_imports`, `migration_mappings` (RLS on, no grants).
+- Pages: `/admin/o/{orgId}/migration` (history), `/migration/dwellings` (upload,
+  map, review, import), `/migration/templates/dwellings.csv`, `/migration/issues`.
+  Linked from Settings > Data.
+- `isSameOriginRequest` for page POSTs, `recordAuditEvents` (bulk),
+  `syncCasesForDwellings` (batch, drops dwellings of other organizations).
+- Import of 2,000 dwellings: 0.55 s, 25 queries.
+
+Codex reviewed the domain code read-only (12 findings, all checked). Fixed: real
+dwellings named "Summa" or "Total 1" were dropped as total rows; a text title
+line could become the header; a comma title line above a `;` file broke the
+delimiter guess; unclosed quotes merged rows; "1,2,3" read as 123; a bare
+"почта" meant email; update audit rows had no before values; two same-name
+columns shared one saved mapping key; the cross-organization case helper.
+Update mode now groups equal patches. Removed unused `parseBool`. Not fixed
+(listed in KNOWN_GAPS): organization-wide eligibility load, short Windows-1251
+files, file names in history.
+
+Agy hung twice on the LV/RU translation prompt (no output for 13 minutes, no
+edit), so I wrote the 59 entries myself. A unit test now checks that every string
+on the Migration pages has an LV and an RU entry, and that each page keeps its
+guard and Origin check.
+
+Browser check (temporary spec, deleted): a Windows-1257 file with a title line,
+a total row, comma decimals and "1 234,50" went through upload, mapping, review,
+import and a second run in EN, LV and RU, and at 390 px. The second run showed
+the saved-mapping notice and created nothing.
+
+
+## Migration Center, phase 2: opening balances (2026-10-07)
+
+See ADR 0013, items 13 to 20.
+
+Built:
+
+- `src/domain/migration/balances.ts`: validate (read-only), import, report.
+  One `OPENING_BALANCE` entry per dwelling, with the import id, source row and
+  optional original due date. Debt and credit columns or one signed balance
+  column, with a choice of sign. Amounts have exactly two decimals; a currency
+  sign or code that is not the organization's is an error; blank amounts are
+  skipped and listed.
+- Migration 0024: partial unique index on `account_entries` (organization,
+  dwelling) for migrated opening balances. The older opening balances are not
+  covered.
+- Late fees (`ledger.ts`, `statements.ts`): `getProtectedOpeningDebt` and
+  `getDwellingAccountBalance(..., asOf)`. Late-fee principal is
+  `max(balance - protected, 0)`; `penaltySnapshot.excludedOpeningDebt` records the
+  amount. A migrated balance dated after an invoice's issue date is left off that
+  invoice. I did not add the plan's as-of filter for all entries: an invoice
+  issue date is fixed per period, so a payment booked after it but before the
+  invoice is made would have disappeared for every organization.
+- `prepareInvoice` now locks the dwelling row (`FOR NO KEY UPDATE`), and so does
+  the import. Without it an invoice could freeze its balance without a debt that
+  an import committed a moment later. A test runs both at once on two
+  connections; with the lock removed it fails.
+- Pages: `/migration/balances` (the same page as the dwellings import, now
+  `[kind].astro`), `/migration/report/{importId}` with a CSV download, and a
+  balances template. The history links a balance import to its report.
+- The import now computes the file hash from the imported text. Before, a form
+  field supplied it.
+
+Codex reviewed the domain code before the pages (8 findings). Fixed: currency
+signs were dropped silently; the import could race invoice preparation; 12-digit
+amounts were refused; blank amounts looked like zero; the report mixed currencies
+and lost skipped rows; the stored hash came from a form field. Not changed: a
+balance dated after a period that is created later (the date cannot be checked
+before a period exists). The as-of rule is working as designed there, so the
+review now shows a warning.
+
+Tests: `tests/integration/migration-balances.test.ts` (19 tests: posting,
+reruns, the database index, error rows, columns and sign, currency, limits,
+dates, prepared invoices, 2,000 balances in 0.5 s, the race, and the late-fee
+cases from the plan). Browser check (temporary spec, deleted): a Windows-1257
+file through upload, mapping, review in EN, LV and RU, import, report, CSV,
+a rerun that posts nothing, and the ledger entry on the dwelling page.
+
+Agy was not used: it hung twice in the previous batch, so I wrote the 47 LV/RU
+entries myself. Please have a Latvian and a Russian speaker read them.
+
+
+## Migration Center, phase 3: meters and latest readings (2026-10-07)
+
+See ADR 0013, items 21 to 28.
+
+Built:
+
+- `src/domain/migration/meters.ts` (validate, import) and a meters page flow
+  (`/migration/meters`, the same `[kind].astro` page), a template, and an issue
+  list. A missing first billing period shows a link to setup step 3.
+- `writeOpeningReadings` is now bulk and exported. The typed starting readings
+  and the older CSV import use it too. `createMetersBulk`, `matchMeter` and
+  `recalculateCaseReadinessForDwellings` are new. 2,000 readings with 2,000 new
+  meters: about 1 s, 50 statements.
+- The decimal mark of a column comes from the file's delimiter when every number
+  has three decimals (water readings): a `;` file means decimal commas. Before,
+  a file of only "123,456" readings was refused as ambiguous, and the reading
+  column was not even proposed.
+- A total row with an ambiguous number ("Kopā;1 369,456") is now dropped.
+
+Codex reviewed the domain code before the page (5 findings). Fixed: the bulk
+write checked "later reading" before ownership, so a meter of another
+organization could be told apart by its readings; an unchanged starting reading
+was an error once billing had started; the import could miss a meter that was
+being added by hand; replaced readings were counted as created. The fifth
+(delimiter not passed to the meters check) I had already fixed. Two tests prove
+the locks: with the lock removed, each fails.
+
+Browser check (temporary spec, deleted, in its own organization): a missing
+first period shows the link; then a Windows-1257 file with a title line, a total
+row and only three-decimal readings went through mapping (all five columns
+proposed), review in EN, LV and RU and at 390 px, import, and a rerun that
+skips every row. I wrote the 24 new LV/RU entries myself again.
+
+## Manual payments: dwelling account, cash, row edit (2026-10-28)
+
+See ADR 0014. The owner asked for a way to add an incoming payment by hand when
+the statement reader misses it. Most of it existed (ADR 0006: "Record a payment"
+and "Match to invoice"). The gaps were: no way to record money for a dwelling
+with no open invoice (an advance, or migrated opening debt), no cash, and no way
+to fix a misread row. The owner chose all three, with entry on the Payments page
+and the dwelling page.
+
+Built:
+
+- Migration 0025: `bank_transactions.payment_method` and `applied_dwelling_id`.
+- `src/domain/payments/direct.ts`: `recordDwellingPayment`,
+  `reverseDwellingPayment`, `listDwellingPayments`. `manual.ts`: cash,
+  `submissionId` retry key, `updateUnmatchedTransaction`, shared validation.
+  `matching.ts`, `reversal.ts`: the applied-row guards, the dwelling lock, "Cash
+  payment" descriptions.
+- One form component for both pages, "Payments to an account" in the Confirmed
+  and Reversed tabs, an Edit panel on unmatched rows, three guide entries.
+- 17 integration tests (`payment-direct.test.ts`). The 10 older manual payment
+  tests still pass. With the dwelling lock removed, its test fails.
+
+Codex (`gpt-5.6-sol`, read-only) could not start commands in this session, and
+it fell back to web search on the first run. I stopped it and ran it again with
+the source inlined in the prompt. It reviewed the design (13 findings), then the
+code (13). Findings used and fixed are in ADR 0014. Not adopted: an ignore
+state, a `dedupe_key`, and a `reversal_of` column.
+
+Browser check (temporary spec, deleted, own organization): the target select
+offers open invoices and only the dwellings without one; a cash payment to a
+dwelling account shows in Confirmed, reverses and shows in Reversed; an
+unmatched row is edited; the dwelling page offers its own open invoice and takes
+a cash payment; LV and RU render; no horizontal overflow at 390 px. The first run
+found the dwelling page panel opening over the sidebar: fixed. I wrote the new
+LV/RU entries (about 40) myself. Agy proofread them (6 fixes applied).
+
+Terminology fix (owner): in Latvian and Russian "kredīts" and "кредит" mean a
+loan. Where the app means money the resident paid in excess, the UI now says
+"pārmaksa" and "переплата": account credit, credit applied, credit created, the
+credit-used error and guide text, and the invoice labels (`invoice-i18n.ts`,
+which prints on the invoice). The ledger columns Debit and Credit now read
+"Aprēķināts / Ieskaitīts" and "Начислено / Зачтено", and "Credit adjustment"
+reads "Korekcija (samazinājums)" / "Корректировка (уменьшение)". The Migration
+Center strings already used "pārmaksa". The balance import still accepts
+"кредит" as a column header, because old systems use it. Rule for new strings:
+never translate "credit" as "kredīts" or "кредит".
+
+
+
+## Dashboard research (2026-10-28)
+
+Research only. No source code changed.
+
+The question: what should the admin dashboard show a Latvian cooperative
+administrator of about 50 who thinks in Excel? The report is
+`reports/Dashboard UX for Latvian coop admin.md`. Its notes, with file:line
+evidence, are in `research_notes/Dashboard UX for Latvian coop admin/`. Codex
+(`gpt-5.6-sol`, read-only) gave a second opinion. I checked 32 of its claims
+against the working tree. 28 held. Three were wrong and are not acted on
+(focus style, two missing translations, a doubled gap).
+
+Findings:
+
+- The money cards do not reconcile. "Total invoiced" is current charges only.
+  "Paid" and "Outstanding" use the full amount due.
+- After setup the page has no next step. The button says "Open workbench" in
+  every state.
+- Overdue rows show no amount or due date, although the amount is fetched.
+- Text is 12 to 14 px and the main button is 42 px. Contrast passes AA.
+- The persona, the priority matrix and the Latvian wording are inferred, not
+  user-tested. The Latvian law is from secondary sources.
+
+Docs changed:
+
+- New `docs/product/DASHBOARD_GUIDELINES.md`: persona, monthly cycle, content,
+  priority matrix, UX and UI numbers, lv-LV formats, proposed strings, a
+  12-item backlog, verified versus inferred, open questions.
+- `USER_JOURNEYS.md`: fixed the dashboard drawer and "Ready to bill" lines,
+  added a setup state and a persona note.
+- `KNOWN_GAPS.md`: corrected the "readings only in the workbench" note and added
+  the dashboard gaps.
+- `UI_SPECIFICATION.md` and the product spec: one pointer line each. The
+  normative dashboard list in the spec is unchanged.
+
+Not done: ADR 0012 item 9 (the new banner and per-step links) and a short ADR
+for the money definitions; both belong with the dashboard change. Regenerating
+`public/guide/dashboard.jpg` and the guide step about unmatched payments is also
+open. The dashboard changes already in the working tree (about 275 lines) are not
+yet committed or logged. Next: a native Latvian read of the new strings, and a
+short session with two or three real administrators.
+
+## Dashboard redesign (2026-10-28)
+
+See ADR 0015. The research above is now built. The guidelines file has the
+backlog status.
+
+Built (source in the working tree, not committed):
+
+- `dashboard.ts`: `DashboardSummary` gained the money breakdown (`amountDue`
+  is the headline), `progress`, `nextAction`, `deadlines`, `isNewestPeriod`,
+  uncapped `needsAttention` with amount, due date and days late, payment and
+  delivery counts, and `readiness`.
+- The page: next-step band with four-step progress, money block that
+  reconciles, a severity-ordered attention list capped at 5 (`?all=1`), a closed
+  "Additional information" section, and an error state.
+- `global.css`, `KpiCard.astro`, `invoice-status.ts`: 44 px controls, 16 px
+  operational text, READY info and OVERDUE danger.
+- `i18n.ts`: `fill()` and `plural()` helpers and the new lv/ru strings.
+- Tests: a dashboard summary test in `admin-ux.test.ts` and
+  `tests/unit/i18n-plural.test.ts`.
+
+How: Codex wrote the UI in three passes. Two live Playwright reviews between the
+passes found layout problems that Codex then fixed.
+
+Results: typecheck clean. 339 unit tests pass. The dashboard integration tests
+in `admin-ux.test.ts` pass. The `bulkSendInvoices` test fails because local
+Supabase Storage is not available. It does not touch the dashboard.
+
+Not verified live: the last Codex pass. That is the header height at 1024 and
+375 px, KPI baseline alignment, and the `?all=1` expander. Also open: native
+Latvian review, user testing, `public/guide/dashboard.jpg`, the guide step, and a
+dwelling filter on the Payments page.
+
+## Dashboard compact layout (2026-10-28)
+
+A second round to put more above the fold. See the ADR 0015 addendum and
+section 10 of `DASHBOARD_GUIDELINES.md`. This entry is docs only; the source is
+in the working tree, not committed.
+
+Built:
+
+- One-row header: month title and badge, period previous and next as a joined
+  44 px control. The organization eyebrow and the facade accent are removed.
+- Status band: sentence, numeric deadlines and the primary button, with the
+  four-step strip (2 by 2 below about 48 rem of band width; a pending step shows
+  "Gaida" with a dots icon).
+- Two columns from 56 rem. Attention list left. One money panel right: month
+  charges + previous debt - credits + late fees [+ manual adjustment] = total to
+  pay, then received and still unpaid, with an operator column (+, -, =).
+- The three KPI cards are removed. Readiness chips moved into the closed
+  "Papildu informācija" section.
+- Compact attention rows: overdue rows have two lines (amount; due date and days
+  late). Missing-reading reasons show two labels and "+N".
+- The fixed `MutationStatus` chip is a 44 px idle circle that expands on hover,
+  focus and activity. It is hidden at 375 px while idle. Status badges are 15 px.
+
+Measured live (state a): at 1440 x 900 the band ends at 238 px, attention rows 1
+to 3 are at 307, 372 and 437 px, and the money total is at 472 px. At 1280 x 720
+the numbers are similar. At 1024 x 768 the money total is about 323 px and rows 1
+to 3 are at 623, 688 and 753 px (row 3 partly below the fold). At 375 x 812 the
+band ends at about 477 px and the first row is at 574 px.
+
+How: Claude forks built it. Codex did the earlier passes (frontend-design skill)
+and hit its usage limit until 23:26 on 2026-10-28, so the last two passes were
+Claude's. The v5 live review found no text collisions in lv and ru at four widths.
+
+Not verified in a browser: the very last CSS fixes (money panel icon and
+baseline, 1024 title truncation, Russian 2 by 2 progress, chip clearance at 1024).
+
+Still open:
+
+- Codex review of the final layout after its limit resets.
+- Native Latvian review.
+- A user test of next action first versus money first.
+- The readings drawer shows "Iepriekšējais rādījums: —" for a dwelling that has
+  an earlier reading, and its save gives no chip feedback (new items in
+  `KNOWN_GAPS.md`).
+
+## Dashboard less dense (2026-10-30)
+
+User feedback on a 1919 x 905 screenshot: the status band and the attention list
+were too dense. See the ADR 0015 addendum of 2026-10-30 and section 10 of
+`DASHBOARD_GUIDELINES.md`. This entry is docs only; the source is in the working
+tree, not committed.
+
+Built:
+
+- Status band: the sentence is the focal point (22 px semibold) beside the primary
+  button. The separate "Coming up" row is removed. Each deadline sits in its
+  progress step as "līdz 30.09." (ru "до", en "by"). A step shows its label and a
+  muted "X no Y līdz dd.mm.". Only the current step shows a visible "Tagad" (its
+  own line at 375 px). Waiting and done steps use the icon and sr-only state text.
+- Needs attention: rows grouped by kind with one quiet heading of about 32 px per
+  group (icon, title, count), no per-row badge. Each group is a labelled list. A
+  row is a semibold dwelling link, one muted detail line and the action in a
+  fixed `minmax(11rem, max-content)` nowrap column. Rows are about 65 px.
+- Cap of 5 rows across groups with an in-list "+N vēl" cue and "Rādīt visus (N)".
+  Rows that duplicate the primary button are omitted. Legacy long reasons clamp
+  to one line.
+- Below 56 rem of band width the attention list comes before the money panel.
+- Rule added to the guidelines: density comes from equal-weight fragments.
+
+Measured live (v7, Latvian, state a): at 1440 x 900 the band ends at 240 px, the
+list starts at 316 px, rows are at 349, 418 and 487 px and the money total is at
+476 px (v5: band 238, rows 307, 372, 437, money 472; the first declutter pass v6
+pushed to 266, 387, 462, 537 and 502, and the Codex refinement won it back). At
+1024 x 768 the band ends at 296 px, rows are at 405, 470 and 535 px and the money
+panel is below the list (875 px). At 375 x 812 the band ends at 503 px and the
+first row is at 640 px. At 1919 x 905 in dark mode the whole page fits in about
+955 px. Tradeoff: calmer costs about one attention row of fold space against v5.
+
+How: a Claude fork did the declutter. Codex (frontend-design skill) did two
+refinement passes after the v6 and v7 live reviews, then a final small pass
+(action-column nowrap at 1280, the 375 "Tagad/Сейчас" overlap, a shorter period
+navigation on mobile, the "+N vēl" cue, the reason clamp).
+
+Not verified in a browser: that final pass.
+
+Still open:
+
+- Re-measure after the final pass: the 1280 action wrap, the 375 Russian progress
+  strip and the 375 period navigation height (46 px).
+- Native Latvian review of the new strings.
+- A user test.

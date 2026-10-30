@@ -112,13 +112,11 @@ function getInitialConsumption(
       </h1>
     </header>
 
-    {
-      isLocked && (
-        <p class="notice" role="status">
-          {t("This period is locked. Readings cannot be changed.")}
-        </p>
-      )
-    }
+    {isLocked && (
+      <p class="notice" role="status">
+        {t("This period is locked. Readings cannot be changed.")}
+      </p>
+    )}
 
     <nav class="tabs" aria-label={t("Filter readings")}>
       <a
@@ -135,140 +133,135 @@ function getInitialConsumption(
       </a>
     </nav>
 
-    {
-      visibleRows.length === 0 ? (
-        <div class="rounded-panel border border-border bg-surface p-6 text-center text-muted text-body-sm">
-          <p>
-            {filter === "missing"
-              ? t("No missing readings.")
-              : t("No meters found.")}
-          </p>
-        </div>
-      ) : (
-        <div class="table-wrap stack-table">
-          <table class="w-full text-left text-body-sm">
-            <caption class="sr-only">{t("Meter readings")}</caption>
-            <thead class="border-b border-border bg-surface-hover text-muted">
-              <tr>
-                <th scope="col" class="px-4 py-2">
-                  {t("Dwelling")}
-                </th>
-                <th scope="col" class="px-4 py-2">
-                  {t("Meter")}
-                </th>
-                <th scope="col" class="px-4 py-2">
-                  {t("Previous reading")}
-                </th>
-                <th scope="col" class="px-4 py-2">
-                  {t("Current reading")}
-                </th>
-                <th scope="col" class="px-4 py-2">
-                  {t("Consumption")}
-                </th>
-                <th scope="col" class="px-4 py-2">
-                  {t("Source")}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              {visibleRows.map((row) => {
-                const initialConsumption = getInitialConsumption(
-                  row.currentValue,
-                  row.previousValue,
-                  row.consumption
-                );
-                return (
-                  <tr>
-                    <td
-                      class="px-4 py-2 font-medium"
-                      data-label={t("Dwelling")}
+    {visibleRows.length === 0 ? (
+      <div class="rounded-panel border border-border bg-surface p-6 text-center text-muted text-body-sm">
+        <p>
+          {filter === "missing"
+            ? t("No missing readings.")
+            : t("No meters found.")}
+        </p>
+      </div>
+    ) : (
+      <div class="table-wrap stack-table">
+        <table class="w-full text-left text-body-sm">
+          <caption class="sr-only">{t("Meter readings")}</caption>
+          <thead class="border-b border-border bg-surface-hover text-muted">
+            <tr>
+              <th scope="col" class="px-4 py-2">
+                {t("Dwelling")}
+              </th>
+              <th scope="col" class="px-4 py-2">
+                {t("Meter")}
+              </th>
+              <th scope="col" class="px-4 py-2">
+                {t("Previous reading")}
+              </th>
+              <th scope="col" class="px-4 py-2">
+                {t("Current reading")}
+              </th>
+              <th scope="col" class="px-4 py-2">
+                {t("Consumption")}
+              </th>
+              <th scope="col" class="px-4 py-2">
+                {t("Source")}
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border">
+            {visibleRows.map((row) => {
+              const initialConsumption = getInitialConsumption(
+                row.currentValue,
+                row.previousValue,
+                row.consumption
+              );
+              return (
+                <tr>
+                  <td class="px-4 py-2 font-medium" data-label={t("Dwelling")}>
+                    <a
+                      href={`/admin/o/${organizationId}/dwellings/${row.dwellingId}`}
+                      class="text-foreground hover:underline"
                     >
-                      <a
-                        href={`/admin/o/${organizationId}/dwellings/${row.dwellingId}`}
-                        class="text-foreground hover:underline"
-                      >
-                        {row.dwellingNumber}
-                      </a>
-                    </td>
-                    <td class="px-4 py-2" data-label={t("Meter")}>
-                      <div class="font-medium text-foreground">
+                      {row.dwellingNumber}
+                    </a>
+                  </td>
+                  <td class="px-4 py-2" data-label={t("Meter")}>
+                    <div class="font-medium text-foreground">
+                      {row.label || entityLabel(row.type, locale)}
+                    </div>
+                    <div class="text-muted text-body-sm">
+                      {row.serialNumber ? `${row.serialNumber} · ` : ""}
+                      {row.unit}
+                    </div>
+                  </td>
+                  <td
+                    class="px-4 py-2 tabular-nums text-muted"
+                    data-label={t("Previous reading")}
+                  >
+                    {row.previousValue ?? "—"}
+                  </td>
+                  <td class="px-4 py-2" data-label={t("Current reading")}>
+                    <div class="flex flex-col items-end sm:items-start gap-1 w-full max-w-[14rem]">
+                      <label for={`reading-${row.meterId}`} class="sr-only">
+                        {t("Current reading for")} {row.dwellingNumber}{" "}
                         {row.label || entityLabel(row.type, locale)}
-                      </div>
-                      <div class="text-muted text-body-sm">
-                        {row.serialNumber ? `${row.serialNumber} · ` : ""}
-                        {row.unit}
-                      </div>
-                    </td>
-                    <td
-                      class="px-4 py-2 tabular-nums text-muted"
-                      data-label={t("Previous reading")}
-                    >
-                      {row.previousValue ?? "—"}
-                    </td>
-                    <td class="px-4 py-2" data-label={t("Current reading")}>
-                      <div class="flex flex-col items-end sm:items-start gap-1 w-full max-w-[14rem]">
-                        <label for={`reading-${row.meterId}`} class="sr-only">
-                          {t("Current reading for")} {row.dwellingNumber}{" "}
-                          {row.label || entityLabel(row.type, locale)}
-                        </label>
-                        <div class="flex items-center gap-2">
-                          <input
-                            id={`reading-${row.meterId}`}
-                            type="text"
-                            inputmode="decimal"
-                            data-meter-id={row.meterId}
-                            data-previous={row.previousValue ?? ""}
-                            data-initial={row.currentValue ?? ""}
-                            value={row.currentValue ?? ""}
-                            disabled={isLocked}
-                            aria-describedby={`err-${row.meterId}`}
-                            class="rounded-control border border-border px-3 py-1.5 text-body-sm tabular-nums w-32 focus:border-primary focus:outline-none"
-                          />
-                          <span
-                            class="reading-saved-indicator hidden text-success font-semibold"
-                            aria-hidden="true"
-                          >
-                            ✓
-                          </span>
-                        </div>
-                        <p
-                          id={`err-${row.meterId}`}
-                          class="text-destructive text-body-sm text-right sm:text-left"
-                          role="alert"
+                      </label>
+                      <div class="flex items-center gap-2">
+                        <input
+                          id={`reading-${row.meterId}`}
+                          type="text"
+                          inputmode="decimal"
+                          data-meter-id={row.meterId}
+                          data-previous={row.previousValue ?? ""}
+                          data-initial={row.currentValue ?? ""}
+                          value={row.currentValue ?? ""}
+                          disabled={isLocked}
+                          aria-describedby={`err-${row.meterId}`}
+                          class="rounded-control border border-border px-3 py-1.5 text-body-sm tabular-nums w-32 focus:border-primary focus:outline-none"
                         />
-                      </div>
-                    </td>
-                    <td
-                      class="px-4 py-2 tabular-nums"
-                      data-label={t("Consumption")}
-                    >
-                      <div class="text-right sm:text-left">
-                        <span class="consumption-value font-medium text-foreground">
-                          {initialConsumption.value}
-                        </span>
                         <span
-                          class:list={[
-                            "consumption-hint block text-xs text-muted mt-0.5",
-                            { hidden: !initialConsumption.isWholeValue },
-                          ]}
+                          class="reading-saved-indicator hidden text-success font-semibold"
+                          aria-hidden="true"
                         >
-                          {t(
-                            "No previous reading: the whole value counts as consumption."
-                          )}
+                          ✓
                         </span>
                       </div>
-                    </td>
-                    <td class="px-4 py-2 text-muted" data-label={t("Source")}>
-                      {row.source ? entityLabel(row.source, locale) : "—"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )
-    }
+                      <p
+                        id={`err-${row.meterId}`}
+                        class="text-destructive text-body-sm text-right sm:text-left"
+                        role="alert"
+                      />
+                    </div>
+                  </td>
+                  <td
+                    class="px-4 py-2 tabular-nums"
+                    data-label={t("Consumption")}
+                  >
+                    <div class="text-right sm:text-left">
+                      <span class="consumption-value font-medium text-foreground">
+                        {initialConsumption.value}
+                      </span>
+                      <span
+                        class:list={[
+                          "consumption-hint block text-xs text-muted mt-0.5",
+                          { hidden: !initialConsumption.isWholeValue },
+                        ]}
+                      >
+                        {t(
+                          "No previous reading: the whole value counts as consumption."
+                        )}
+                      </span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-2 text-muted" data-label={t("Source")}>
+                    {row.source ? entityLabel(row.source, locale) : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    )}
 
     <div class="flex flex-wrap items-center gap-4">
       <button
@@ -283,8 +276,7 @@ function getInitialConsumption(
         id="save-summary"
         class="text-body-sm text-foreground font-medium"
         aria-live="polite"
-      >
-      </p>
+      ></p>
     </div>
   </div>
 </AdminLayout>

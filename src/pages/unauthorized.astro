@@ -13,21 +13,17 @@ const needsMfa = Astro.url.searchParams.get("reason") === "mfa";
 ---
 
 <AuthLayout title={t("Access denied") + " - " + t("Namkopa")}>
-  <div
-    class="w-full max-w-md rounded-panel border border-border bg-surface p-8 text-center"
-  >
+  <div class="w-full max-w-md rounded-panel border border-border bg-surface p-8 text-center">
     <h1 class="text-xl font-bold text-foreground">{t("Access denied")}</h1>
     <p class="mt-2 text-sm text-muted">
-      {
-        needsMfa
-          ? t(
-              "This area requires additional verification. Please complete sign-in with your second factor."
-            )
-          : t("You do not have access to this resource.")
-      }
+      {needsMfa
+        ? t(
+            "This area requires additional verification. Please complete sign-in with your second factor."
+          )
+        : t("You do not have access to this resource.")}
     </p>
-    <a href="/login" class="btn-primary mt-6 inline-flex"
-      >{t("Back to sign in")}</a
-    >
+    <a href="/login" class="btn-primary mt-6 inline-flex">
+      {t("Back to sign in")}
+    </a>
   </div>
 </AuthLayout>

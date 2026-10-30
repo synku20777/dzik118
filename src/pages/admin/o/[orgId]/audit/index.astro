@@ -107,69 +107,69 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
 
     <form method="GET" class="flex flex-wrap items-end gap-3">
       <div>
-        <label class="block text-sm font-medium text-foreground" for="action"
-          >{t("Action")}</label
-        >
+        <label class="block text-sm font-medium text-foreground" for="action">
+          {t("Action")}
+        </label>
         <select
           id="action"
           name="action"
           class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
         >
-          <option value="" selected={!actionFilter}>{t("All actions")}</option>
-          {
-            availableActions.map((action) => (
-              <option value={action} selected={action === actionFilter}>
-                {action}
-              </option>
-            ))
-          }
+          <option value="" selected={!actionFilter}>
+            {t("All actions")}
+          </option>
+          {availableActions.map((action) => (
+            <option value={action} selected={action === actionFilter}>
+              {action}
+            </option>
+          ))}
         </select>
       </div>
       <div>
         <label
           class="block text-sm font-medium text-foreground"
-          for="entityType">{t("Entity type")}</label
+          for="entityType"
         >
+          {t("Entity type")}
+        </label>
         <select
           id="entityType"
           name="entityType"
           class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
         >
-          <option value="" selected={!entityTypeFilter}
-            >{t("All entity types")}</option
-          >
-          {
-            availableEntityTypes.map((type) => (
-              <option value={type} selected={type === entityTypeFilter}>
-                {type}
-              </option>
-            ))
-          }
+          <option value="" selected={!entityTypeFilter}>
+            {t("All entity types")}
+          </option>
+          {availableEntityTypes.map((type) => (
+            <option value={type} selected={type === entityTypeFilter}>
+              {type}
+            </option>
+          ))}
         </select>
       </div>
       <div>
-        <label class="block text-sm font-medium text-foreground" for="actor"
-          >{t("Actor")}</label
-        >
+        <label class="block text-sm font-medium text-foreground" for="actor">
+          {t("Actor")}
+        </label>
         <select
           id="actor"
           name="actor"
           class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
         >
-          <option value="" selected={!actorFilter}>{t("All actors")}</option>
-          {
-            availableActors.map((actor) => (
-              <option value={actor.id} selected={actor.id === actorFilter}>
-                {actor.label}
-              </option>
-            ))
-          }
+          <option value="" selected={!actorFilter}>
+            {t("All actors")}
+          </option>
+          {availableActors.map((actor) => (
+            <option value={actor.id} selected={actor.id === actorFilter}>
+              {actor.label}
+            </option>
+          ))}
         </select>
       </div>
       <div>
-        <label class="block text-sm font-medium text-foreground" for="from"
-          >{t("From date")}</label
-        >
+        <label class="block text-sm font-medium text-foreground" for="from">
+          {t("From date")}
+        </label>
         <input
           type="date"
           id="from"
@@ -179,9 +179,9 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
         />
       </div>
       <div>
-        <label class="block text-sm font-medium text-foreground" for="to"
-          >{t("To date")}</label
-        >
+        <label class="block text-sm font-medium text-foreground" for="to">
+          {t("To date")}
+        </label>
         <input
           type="date"
           id="to"
@@ -193,7 +193,9 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
       <button type="submit" class="btn-primary">
         {t("Filter")}
       </button>
-      <a class="btn-secondary" href={exportHref}>{t("Export CSV")}</a>
+      <a class="btn-secondary" href={exportHref}>
+        {t("Export CSV")}
+      </a>
     </form>
 
     <div class="table-wrap stack-table">
@@ -201,73 +203,79 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
         <caption class="sr-only">{t("Audit log entries")}</caption>
         <thead class="border-b border-border bg-surface-hover text-muted">
           <tr>
-            <th scope="col" class="px-4 py-2">{t("Time")}</th>
-            <th scope="col" class="px-4 py-2">{t("Actor")}</th>
-            <th scope="col" class="px-4 py-2">{t("Action")}</th>
-            <th scope="col" class="px-4 py-2">{t("Entity")}</th>
-            <th scope="col" class="px-4 py-2">{t("Details")}</th>
+            <th scope="col" class="px-4 py-2">
+              {t("Time")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Actor")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Action")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Entity")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Details")}
+            </th>
           </tr>
         </thead>
         <tbody class="divide-y divide-border">
-          {
-            logs.map((log) => (
-              <tr>
-                <td class="px-4 py-2">
-                  {formatDate(log.createdAt, locale, organization.timezone)}
-                </td>
-                <td class="px-4 py-2">
-                  {log.actorDisplayName ?? log.actorEmail ?? "—"}
-                </td>
-                <td class="px-4 py-2">
-                  {/* One block: in the stacked phone layout a cell is a flex
+          {logs.map((log) => (
+            <tr>
+              <td class="px-4 py-2">
+                {formatDate(log.createdAt, locale, organization.timezone)}
+              </td>
+              <td class="px-4 py-2">
+                {log.actorDisplayName ?? log.actorEmail ?? "—"}
+              </td>
+              <td class="px-4 py-2">
+                {/* One block: in the stacked phone layout a cell is a flex
                       row, so two separate children would sit side by side. */}
-                  <div>
-                    {log.action}
-                    {log.requestId && (
-                      <div
-                        class="text-xs text-muted break-all"
-                        title={t("Request ID")}
-                        aria-label={`${t("Request ID")}: ${log.requestId}`}
-                      >
-                        {log.requestId}
-                      </div>
-                    )}
-                  </div>
-                </td>
-                <td class="px-4 py-2">
-                  {log.entityType}
-                  {log.entityId ? ` (${log.entityId})` : ""}
-                </td>
-                <td class="px-4 py-2">
-                  {log.beforeData != null || log.afterData != null ? (
-                    <details>
-                      <summary class="cursor-pointer text-muted hover:underline">
-                        {t("View")}
-                      </summary>
-                      <pre class="mt-2 max-w-md overflow-x-auto rounded bg-surface-hover p-2 text-xs">
+                <div>
+                  {log.action}
+                  {log.requestId && (
+                    <div
+                      class="text-xs text-muted break-all"
+                      title={t("Request ID")}
+                      aria-label={`${t("Request ID")}: ${log.requestId}`}
+                    >
+                      {log.requestId}
+                    </div>
+                  )}
+                </div>
+              </td>
+              <td class="px-4 py-2">
+                {log.entityType}
+                {log.entityId ? ` (${log.entityId})` : ""}
+              </td>
+              <td class="px-4 py-2">
+                {log.beforeData != null || log.afterData != null ? (
+                  <details>
+                    <summary class="cursor-pointer text-muted hover:underline">
+                      {t("View")}
+                    </summary>
+                    <pre class="mt-2 max-w-md overflow-x-auto rounded bg-surface-hover p-2 text-xs">
                         {JSON.stringify(
                           { before: log.beforeData, after: log.afterData },
                           null,
                           2
                         )}
                       </pre>
-                    </details>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              </tr>
-            ))
-          }
-          {
-            logs.length === 0 && (
-              <tr>
-                <td colspan="5" class="px-4 py-8 text-center text-muted">
-                  {t("No audit events match this filter.")}
-                </td>
-              </tr>
-            )
-          }
+                  </details>
+                ) : (
+                  "—"
+                )}
+              </td>
+            </tr>
+          ))}
+          {logs.length === 0 && (
+            <tr>
+              <td colspan="5" class="px-4 py-8 text-center text-muted">
+                {t("No audit events match this filter.")}
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
@@ -279,7 +287,9 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
       >
         ← {t("Previous")}
       </a>
-      <span>{t("Page")} {page}</span>
+      <span>
+        {t("Page")} {page}
+      </span>
       <a
         href={pageHref(page + 1)}
         class:list={{

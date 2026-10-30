@@ -206,8 +206,7 @@ const overrideStatuses: string[] = [
       href={`/admin/o/${organizationId}/periods/${periodId}`}
       class="text-sm text-muted hover:underline"
     >
-      ← {t("Period")}{" "}
-      {period.year}-{String(period.month).padStart(2, "0")}
+      ← {t("Period")} {period.year}-{String(period.month).padStart(2, "0")}
     </a>
 
     <div class="flex flex-wrap items-start justify-between gap-4">
@@ -220,118 +219,141 @@ const overrideStatuses: string[] = [
           </span>
         </h1>
         <p class="mt-2 text-sm text-muted">
-          {t("Amount due")}: <strong class="text-lg text-foreground"
-            >{formatMoney(invoice.amountDue, invoice.currency, locale)}</strong
-          > · {t("Due date")}{" "}
-          {formatDate(invoice.dueDate, locale)}
+          {t("Amount due")}:{" "}
+          <strong class="text-lg text-foreground">
+            {formatMoney(invoice.amountDue, invoice.currency, locale)}
+          </strong>{" "}
+          · {t("Due date")} {formatDate(invoice.dueDate, locale)}
         </p>
       </div>
       <div class="flex flex-col items-start sm:items-end gap-2">
         <div class="page-actions">
-          {
-            caseStatus !== "DRAFT" && (
-              <a
-                href={pdfHref}
-                target="_blank"
-                class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
+          {caseStatus !== "DRAFT" && (
+            <a
+              href={pdfHref}
+              target="_blank"
+              class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
+            >
+              {t("Download PDF")}
+            </a>
+          )}
+          {caseStatus === "DRAFT" && (
+            <form method="POST" action={actions.billing.prepare}>
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <button
+                type="submit"
+                disabled={recipientIncomplete || organizationIncomplete}
+                aria-describedby={
+                  recipientIncomplete || organizationIncomplete
+                    ? "invoice-validation"
+                    : undefined
+                }
+                class="btn-primary"
               >
-                {t("Download PDF")}
-              </a>
-            )
-          }
-          {
-            caseStatus === "DRAFT" && (
-              <form method="POST" action={actions.billing.prepare}>
-                <input
-                  type="hidden"
-                  name="organizationId"
-                  value={organizationId}
-                />
-                <input type="hidden" name="invoiceId" value={invoice.id} />
-                <button
-                  type="submit"
-                  disabled={recipientIncomplete || organizationIncomplete}
-                  aria-describedby={
-                    recipientIncomplete || organizationIncomplete
-                      ? "invoice-validation"
-                      : undefined
-                  }
-                  class="btn-primary"
-                >
-                  {t("Prepare")}
-                </button>
-              </form>
-            )
-          }
-          {
-            caseStatus !== "DRAFT" && invoiceByEmail && (
-              <>
-                {electronicState === "IN_PROGRESS" && (
-                  // A CLAIMED/DISPATCHING attempt might be a genuinely live
-                  // dispatch in flight, or a crashed Worker's stale attempt
-                  // that hasn't been reconciled yet -- the button below is
-                  // NOT hidden in either case: the domain layer safely
-                  // reconciles a stale attempt (finalizing or unblocking
-                  // it) if clicked, or reports "still in progress" if it's
-                  // genuinely live. The invoice must never be permanently
-                  // stuck behind this text with no available action.
-                  <span class="text-sm text-muted">
-                    {t("Sending in progress…")}
-                  </span>
+                {t("Prepare")}
+              </button>
+            </form>
+          )}
+          {caseStatus !== "DRAFT" && invoiceByEmail && (
+            <>
+              {electronicState === "IN_PROGRESS" && (
+                // A CLAIMED/DISPATCHING attempt might be a genuinely live
+                // dispatch in flight, or a crashed Worker's stale attempt
+                // that hasn't been reconciled yet -- the button below is
+                // NOT hidden in either case: the domain layer safely
+                // reconciles a stale attempt (finalizing or unblocking
+                // it) if clicked, or reports "still in progress" if it's
+                // genuinely live. The invoice must never be permanently
+                // stuck behind this text with no available action.
+                <span class="text-sm text-muted">
+                  {t("Sending in progress…")}
+                </span>
+              )}
+              {!useResendCommand && (
+                <form method="POST" action={actions.invoices.send}>
+                  <input
+                    type="hidden"
+                    name="organizationId"
+                    value={organizationId}
+                  />
+                  <input type="hidden" name="invoiceId" value={invoice.id} />
+                  <button
+                    type="submit"
+                    disabled={!hasValidEmail}
+                    aria-describedby={
+                      !hasValidEmail ? "email-validation" : undefined
+                    }
+                    data-confirm={t(
+                      "Send this invoice to the resident by email now? Sent invoices cannot be edited."
+                    )}
+                    class="btn-primary"
+                  >
+                    {t("Send")}
+                  </button>
+                </form>
+              )}
+              {useResendCommand && (
+                <form method="POST" action={actions.invoices.resend}>
+                  <input
+                    type="hidden"
+                    name="organizationId"
+                    value={organizationId}
+                  />
+                  <input type="hidden" name="invoiceId" value={invoice.id} />
+                  <input
+                    type="hidden"
+                    name="commandId"
+                    value={resendCommandId}
+                  />
+                  <button
+                    type="submit"
+                    data-confirm={t(
+                      "Send this invoice to the resident again by email?"
+                    )}
+                    class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
+                  >
+                    {t("Resend")}
+                  </button>
+                </form>
+              )}
+            </>
+          )}
+          {invoice.sentAt && (
+            <form method="POST" action={actions.invoices.revokeAccess}>
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <button
+                type="submit"
+                data-confirm={t(
+                  "Revoke the resident's access link? They will no longer be able to open this invoice with it."
                 )}
-                {!useResendCommand && (
-                  <form method="POST" action={actions.invoices.send}>
-                    <input
-                      type="hidden"
-                      name="organizationId"
-                      value={organizationId}
-                    />
-                    <input type="hidden" name="invoiceId" value={invoice.id} />
-                    <button
-                      type="submit"
-                      disabled={!hasValidEmail}
-                      aria-describedby={
-                        !hasValidEmail ? "email-validation" : undefined
-                      }
-                      data-confirm={t(
-                        "Send this invoice to the resident by email now? Sent invoices cannot be edited."
-                      )}
-                      class="btn-primary"
-                    >
-                      {t("Send")}
-                    </button>
-                  </form>
-                )}
-                {useResendCommand && (
-                  <form method="POST" action={actions.invoices.resend}>
-                    <input
-                      type="hidden"
-                      name="organizationId"
-                      value={organizationId}
-                    />
-                    <input type="hidden" name="invoiceId" value={invoice.id} />
-                    <input
-                      type="hidden"
-                      name="commandId"
-                      value={resendCommandId}
-                    />
-                    <button
-                      type="submit"
-                      data-confirm={t(
-                        "Send this invoice to the resident again by email?"
-                      )}
-                      class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
-                    >
-                      {t("Resend")}
-                    </button>
-                  </form>
-                )}
-              </>
-            )
-          }
-          {
-            invoice.sentAt && (
-              <form method="POST" action={actions.invoices.revokeAccess}>
+                class="rounded-control border border-border px-4 py-2 text-sm text-destructive hover:bg-danger-surface"
+              >
+                {t("Revoke access link")}
+              </button>
+            </form>
+          )}
+        </div>
+        {caseStatus !== "DRAFT" && invoiceByPaper && (
+          <div class="flex flex-wrap items-center gap-2 pt-1 text-sm">
+            <span class="text-xs font-semibold uppercase tracking-wider text-muted">
+              {t("Paper delivery")}:
+            </span>
+            {verifiedPaperDispatch ? (
+              <span class="text-sm text-success font-medium">
+                ✓ {t("Paper dispatched")}
+              </span>
+            ) : (
+              <form method="POST" action={actions.invoices.recordPaperDispatch}>
                 <input
                   type="hidden"
                   name="organizationId"
@@ -341,360 +363,219 @@ const overrideStatuses: string[] = [
                 <button
                   type="submit"
                   data-confirm={t(
-                    "Revoke the resident's access link? They will no longer be able to open this invoice with it."
+                    "Record that this invoice was physically posted? This cannot be undone."
                   )}
-                  class="rounded-control border border-destructive px-4 py-2 text-sm text-destructive hover:bg-danger-surface"
+                  class="rounded-control border border-border px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover"
                 >
-                  {t("Revoke access link")}
+                  {t("Record paper dispatch")}
                 </button>
               </form>
-            )
-          }
-        </div>
-        {
-          caseStatus !== "DRAFT" && invoiceByPaper && (
-            <div class="flex flex-wrap items-center gap-2 pt-1 text-sm">
-              <span class="text-xs font-semibold uppercase tracking-wider text-muted">
-                {t("Paper delivery")}:
-              </span>
-              {verifiedPaperDispatch ? (
-                <span class="text-sm text-success font-medium">
-                  ✓ {t("Paper dispatched")}
-                </span>
-              ) : (
-                <form
-                  method="POST"
-                  action={actions.invoices.recordPaperDispatch}
-                >
-                  <input
-                    type="hidden"
-                    name="organizationId"
-                    value={organizationId}
-                  />
-                  <input type="hidden" name="invoiceId" value={invoice.id} />
-                  <button
-                    type="submit"
-                    data-confirm={t(
-                      "Record that this invoice was physically posted? This cannot be undone."
-                    )}
-                    class="rounded-control border border-border px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover"
-                  >
-                    {t("Record paper dispatch")}
-                  </button>
-                </form>
-              )}
-            </div>
-          )
-        }
+            )}
+          </div>
+        )}
       </div>
     </div>
-    {
-      (prepareResult?.error ||
-        sendResult?.error ||
-        resendResult?.error ||
-        revokeResult?.error ||
-        recordPaperDispatchResult?.error) && (
-        <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
-          {prepareResult?.error?.message ??
-            sendResult?.error?.message ??
-            resendResult?.error?.message ??
-            revokeResult?.error?.message ??
-            recordPaperDispatchResult?.error?.message}
-        </p>
-      )
-    }
+    {(prepareResult?.error ||
+      sendResult?.error ||
+      resendResult?.error ||
+      revokeResult?.error ||
+      recordPaperDispatchResult?.error) && (
+      <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
+        {prepareResult?.error?.message ??
+          sendResult?.error?.message ??
+          resendResult?.error?.message ??
+          revokeResult?.error?.message ??
+          recordPaperDispatchResult?.error?.message}
+      </p>
+    )}
 
-    {
-      !(
-        prepareResult?.error ||
-        sendResult?.error ||
-        resendResult?.error ||
-        revokeResult?.error ||
-        recordPaperDispatchResult?.error
-      ) &&
-        (prepareResult ||
-          sendResult ||
-          resendResult ||
-          revokeResult ||
-          recordPaperDispatchResult) && (
-          <p class="notice" role="status">
-            {prepareResult
-              ? t("Invoice prepared.")
-              : sendResult
-                ? sendResult.data?.sentAt
-                  ? t("Invoice sent.")
-                  : t(
-                      "Sending has not finished yet. Check the delivery status."
-                    )
-                : resendResult
-                  ? t("Resend submitted. Check the delivery status.")
-                  : revokeResult
-                    ? t("Access link revoked.")
-                    : t("Paper dispatch recorded.")}
-          </p>
-        )
-    }
-
-    {
-      (adjustLateFeeResult?.error || manualAdjustmentResult?.error) && (
-        <p class="notice notice-danger" role="alert">
-          {friendlyActionErrorMessage(
-            adjustLateFeeResult?.error ?? manualAdjustmentResult?.error,
-            locale
-          )}
-        </p>
-      )
-    }
-    {
-      adjustLateFeeResult?.data ? (
+    {!(
+      prepareResult?.error ||
+      sendResult?.error ||
+      resendResult?.error ||
+      revokeResult?.error ||
+      recordPaperDispatchResult?.error
+    ) &&
+      (prepareResult ||
+        sendResult ||
+        resendResult ||
+        revokeResult ||
+        recordPaperDispatchResult) && (
         <p class="notice" role="status">
-          {t("Late fee updated.")}
+          {prepareResult
+            ? t("Invoice prepared.")
+            : sendResult
+              ? sendResult.data?.sentAt
+                ? t("Invoice sent.")
+                : t("Sending has not finished yet. Check the delivery status.")
+              : resendResult
+                ? t("Resend submitted. Check the delivery status.")
+                : revokeResult
+                  ? t("Access link revoked.")
+                  : t("Paper dispatch recorded.")}
         </p>
-      ) : manualAdjustmentResult?.data ? (
-        <p class="notice" role="status">
-          {t("Adjustment saved.")}
-        </p>
-      ) : null
-    }
+      )}
 
-    {
-      overrideStatusResult?.error && (
-        <p class="notice notice-danger" role="alert">
-          {friendlyActionErrorMessage(overrideStatusResult.error, locale)}
-        </p>
-      )
-    }
-    {
-      overrideStatusResult?.data ? (
-        <p class="notice" role="status">
-          {t("Status changed.")}
-        </p>
-      ) : null
-    }
+    {(adjustLateFeeResult?.error || manualAdjustmentResult?.error) && (
+      <p class="notice notice-danger" role="alert">
+        {friendlyActionErrorMessage(
+          adjustLateFeeResult?.error ?? manualAdjustmentResult?.error,
+          locale
+        )}
+      </p>
+    )}
+    {adjustLateFeeResult?.data ? (
+      <p class="notice" role="status">
+        {t("Late fee updated.")}
+      </p>
+    ) : manualAdjustmentResult?.data ? (
+      <p class="notice" role="status">
+        {t("Adjustment saved.")}
+      </p>
+    ) : null}
 
-    {
-      caseStatus === "DRAFT" &&
-        (recipientIncomplete || organizationIncomplete) && (
-          <section
-            id="invoice-validation"
-            class="notice notice-danger"
-            role="alert"
-          >
-            {recipientIncomplete && (
-              <p>
-                {t(
-                  "Recipient information is incomplete. Add a billing name or occupant name and billing address."
-                )}{" "}
-                <a
-                  class="font-semibold underline"
-                  href={
-                    "/admin/o/" +
-                    organizationId +
-                    "/dwellings/" +
-                    invoice.dwellingId
-                  }
-                >
-                  {t("Fix dwelling details")}
-                </a>
-              </p>
-            )}
-            {organizationIncomplete && (
-              <p>
-                {t(
-                  "Issuer or payment information is incomplete. Add the organization name, address, bank name and IBAN."
-                )}{" "}
-                <a
-                  class="font-semibold underline"
-                  href={"/admin/o/" + organizationId + "/settings/organization"}
-                >
-                  {t("Fix organization details")}
-                </a>
-              </p>
-            )}
-            <p class="mt-2">
-              {t(
-                "After correcting the details, regenerate this draft in the workbench to refresh its snapshot."
-              )}
-            </p>
-          </section>
-        )
-    }
-    {
-      caseStatus !== "DRAFT" &&
-        invoiceByEmail &&
-        !useResendCommand &&
-        electronicState !== "IN_PROGRESS" &&
-        !hasValidEmail && (
-          <p id="email-validation" class="notice notice-danger" role="alert">
-            {t("Invoice email is missing. Add a billing email before sending.")}
-          </p>
-        )
-    }
-    {
-      caseStatus !== "DRAFT" &&
-        invoiceByEmail &&
-        electronicState === "UNKNOWN" && (
-          <div class="notice notice-warning" role="alert">
-            <p>
-              {hasConfirmedEmailDelivery
-                ? t(
-                    "This invoice was delivered by email previously. A later attempt's outcome could not be confirmed -- verify the recipient mailbox or provider logs before resending."
-                  )
-                : t(
-                    "Delivery outcome could not be confirmed. The email provider may have accepted this invoice, but the application did not receive confirmation. Verify the recipient mailbox or provider logs before resending."
-                  )}
-            </p>
-            {!hasEmailDelivery && (
-              <p class="mt-2 text-xs font-semibold">
-                {t("Email")} — {t("Needs attention")}
-              </p>
-            )}
-          </div>
-        )
-    }
-    {
-      caseStatus !== "DRAFT" &&
-        invoiceByEmail &&
-        electronicState === "FAILED" &&
-        hasConfirmedEmailDelivery && (
-          <div class="notice notice-warning" role="alert">
+    {overrideStatusResult?.error && (
+      <p class="notice notice-danger" role="alert">
+        {friendlyActionErrorMessage(overrideStatusResult.error, locale)}
+      </p>
+    )}
+    {overrideStatusResult?.data ? (
+      <p class="notice" role="status">
+        {t("Status changed.")}
+      </p>
+    ) : null}
+
+    {caseStatus === "DRAFT" &&
+      (recipientIncomplete || organizationIncomplete) && (
+        <section
+          id="invoice-validation"
+          class="notice notice-danger"
+          role="alert"
+        >
+          {recipientIncomplete && (
             <p>
               {t(
-                "This invoice was delivered by email previously. The most recent resend failed -- use Resend to try again."
-              )}
-            </p>
-          </div>
-        )
-    }
-    {
-      caseStatus === "DRAFT" && (
-        <section class="panel p-4" aria-labelledby="preparation-checks">
-          <>
-            <h2 id="preparation-checks" class="section-title">
-              {t("Preparation checks")}
-            </h2>
-            <ul class="mt-3 space-y-2 text-sm">
-              <>
-                <li>
-                  {recipientIncomplete ? "!" : "✓"}{" "}
-                  {t("Recipient details complete")}
-                </li>
-                <li>
-                  {organizationIncomplete ? "!" : "✓"}{" "}
-                  {t("Issuer and payment details complete")}
-                </li>
-                <li>✓ {t("Current charges calculated")}</li>
-                <li>✓ {t("Account balance resolved")}</li>
-              </>
-            </ul>
-          </>
-        </section>
-      )
-    }
-    {
-      caseStatus === "DRAFT" && !invoice.preparedAt && !invoice.sentAt && (
-        <section class="panel p-4" aria-labelledby="draft-adjustments">
-          <h2 id="draft-adjustments" class="section-title">
-            {t("Adjust this draft")}
-          </h2>
-          <p class="text-sm text-muted">
-            {t("You can change these amounts until you prepare the invoice.")}
-          </p>
-          {Number(invoice.lateFeeCalculated) > 0 && (
-            <div class="mt-4">
-              <h3>{t("Late fee")}</h3>
-              <p class="text-sm text-muted">
-                {t("Calculated late fee")}:{" "}
-                {formatMoney(
-                  invoice.lateFeeCalculated,
-                  invoice.currency,
-                  locale
-                )}
-              </p>
-              <p class="text-sm text-muted">
-                {t("Applied late fee")}:{" "}
-                {formatMoney(invoice.lateFeeApplied, invoice.currency, locale)}
-              </p>
-              <form
-                method="POST"
-                action={actions.accounts.adjustLateFee}
-                class="mt-3 grid grid-cols-2 gap-3"
+                "Recipient information is incomplete. Add a billing name or occupant name and billing address."
+              )}{" "}
+              <a
+                class="font-semibold underline"
+                href={
+                  "/admin/o/" +
+                  organizationId +
+                  "/dwellings/" +
+                  invoice.dwellingId
+                }
               >
-                <input
-                  type="hidden"
-                  name="organizationId"
-                  value={organizationId}
-                />
-                <input type="hidden" name="invoiceId" value={invoice.id} />
-                <div>
-                  <label class="block text-label" for="late-fee-amount">
-                    {t("New late fee amount")}
-                  </label>
-                  <input
-                    id="late-fee-amount"
-                    name="newAppliedAmount"
-                    inputmode="decimal"
-                    required
-                    value={invoice.lateFeeApplied}
-                    class="mt-1 w-full"
-                  />
-                </div>
-                <div>
-                  <label class="block text-label" for="late-fee-reason">
-                    {t("Reason")}
-                  </label>
-                  <select
-                    id="late-fee-reason"
-                    name="reason"
-                    required
-                    class="mt-1 w-full"
-                  >
-                    <option value="BANK_PROCESSING_DELAY">
-                      {t("Bank processing delay")}
-                    </option>
-                    <option value="BILLING_DISPUTE">
-                      {t("Billing dispute")}
-                    </option>
-                    <option value="METER_ISSUE">{t("Meter issue")}</option>
-                    <option value="AGREEMENT_WITH_RESIDENT">
-                      {t("Agreement with resident")}
-                    </option>
-                    <option value="ADMIN_WAIVER">
-                      {t("Administrative waiver")}
-                    </option>
-                    <option value="OTHER">{t("Other")}</option>
-                  </select>
-                </div>
-                <div class="col-span-2">
-                  <label class="block text-label" for="late-fee-note">
-                    {t("Note (required when the reason is Other)")}
-                  </label>
-                  <textarea
-                    id="late-fee-note"
-                    name="note"
-                    class="mt-1 w-full"
-                  />
-                </div>
-                <div class="col-span-2">
-                  <button type="submit" class="btn-secondary">
-                    {t("Update late fee")}
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-          <div class="mt-4">
-            <h3>{t("Manual adjustment")}</h3>
-            <p class="text-sm text-muted">
-              {t("Manual adjustment")}:{" "}
-              {formatMoney(invoice.manualAdjustment, invoice.currency, locale)}
+                {t("Fix dwelling details")}
+              </a>
             </p>
-            <p class="text-xs text-muted">
-              {t("A negative amount lowers the amount due.")}
+          )}
+          {organizationIncomplete && (
+            <p>
+              {t(
+                "Issuer or payment information is incomplete. Add the organization name, address, bank name and IBAN."
+              )}{" "}
+              <a
+                class="font-semibold underline"
+                href={"/admin/o/" + organizationId + "/settings/organization"}
+              >
+                {t("Fix organization details")}
+              </a>
+            </p>
+          )}
+          <p class="mt-2">
+            {t(
+              "After correcting the details, regenerate this draft in the workbench to refresh its snapshot."
+            )}
+          </p>
+        </section>
+      )}
+    {caseStatus !== "DRAFT" &&
+      invoiceByEmail &&
+      !useResendCommand &&
+      electronicState !== "IN_PROGRESS" &&
+      !hasValidEmail && (
+        <p id="email-validation" class="notice notice-danger" role="alert">
+          {t("Invoice email is missing. Add a billing email before sending.")}
+        </p>
+      )}
+    {caseStatus !== "DRAFT" &&
+      invoiceByEmail &&
+      electronicState === "UNKNOWN" && (
+        <div class="notice notice-warning" role="alert">
+          <p>
+            {hasConfirmedEmailDelivery
+              ? t(
+                  "This invoice was delivered by email previously. A later attempt's outcome could not be confirmed -- verify the recipient mailbox or provider logs before resending."
+                )
+              : t(
+                  "Delivery outcome could not be confirmed. The email provider may have accepted this invoice, but the application did not receive confirmation. Verify the recipient mailbox or provider logs before resending."
+                )}
+          </p>
+          {!hasEmailDelivery && (
+            <p class="mt-2 text-xs font-semibold">
+              {t("Email")} — {t("Needs attention")}
+            </p>
+          )}
+        </div>
+      )}
+    {caseStatus !== "DRAFT" &&
+      invoiceByEmail &&
+      electronicState === "FAILED" &&
+      hasConfirmedEmailDelivery && (
+        <div class="notice notice-warning" role="alert">
+          <p>
+            {t(
+              "This invoice was delivered by email previously. The most recent resend failed -- use Resend to try again."
+            )}
+          </p>
+        </div>
+      )}
+    {caseStatus === "DRAFT" && (
+      <section class="panel p-4" aria-labelledby="preparation-checks">
+        <>
+          <h2 id="preparation-checks" class="section-title">
+            {t("Preparation checks")}
+          </h2>
+          <ul class="mt-3 space-y-2 text-sm">
+            <>
+              <li>
+                {recipientIncomplete ? "!" : "✓"}{" "}
+                {t("Recipient details complete")}
+              </li>
+              <li>
+                {organizationIncomplete ? "!" : "✓"}{" "}
+                {t("Issuer and payment details complete")}
+              </li>
+              <li>✓ {t("Current charges calculated")}</li>
+              <li>✓ {t("Account balance resolved")}</li>
+            </>
+          </ul>
+        </>
+      </section>
+    )}
+    {caseStatus === "DRAFT" && !invoice.preparedAt && !invoice.sentAt && (
+      <section class="panel p-4" aria-labelledby="draft-adjustments">
+        <h2 id="draft-adjustments" class="section-title">
+          {t("Adjust this draft")}
+        </h2>
+        <p class="text-sm text-muted">
+          {t("You can change these amounts until you prepare the invoice.")}
+        </p>
+        {Number(invoice.lateFeeCalculated) > 0 && (
+          <div class="mt-4">
+            <h3>{t("Late fee")}</h3>
+            <p class="text-sm text-muted">
+              {t("Calculated late fee")}:{" "}
+              {formatMoney(invoice.lateFeeCalculated, invoice.currency, locale)}
+            </p>
+            <p class="text-sm text-muted">
+              {t("Applied late fee")}:{" "}
+              {formatMoney(invoice.lateFeeApplied, invoice.currency, locale)}
             </p>
             <form
               method="POST"
-              action={actions.accounts.setInvoiceManualAdjustment}
+              action={actions.accounts.adjustLateFee}
               class="mt-3 grid grid-cols-2 gap-3"
             >
               <input
@@ -704,56 +585,122 @@ const overrideStatuses: string[] = [
               />
               <input type="hidden" name="invoiceId" value={invoice.id} />
               <div>
-                <label class="block text-label" for="manual-adjustment-amount">
-                  {t("Adjustment amount")}
+                <label class="block text-label" for="late-fee-amount">
+                  {t("New late fee amount")}
                 </label>
                 <input
-                  id="manual-adjustment-amount"
-                  name="amount"
+                  id="late-fee-amount"
+                  name="newAppliedAmount"
                   inputmode="decimal"
                   required
-                  value={invoice.manualAdjustment}
+                  value={invoice.lateFeeApplied}
                   class="mt-1 w-full"
                 />
               </div>
               <div>
-                <label class="block text-label" for="manual-adjustment-reason">
+                <label class="block text-label" for="late-fee-reason">
                   {t("Reason")}
                 </label>
-                <input
-                  id="manual-adjustment-reason"
+                <select
+                  id="late-fee-reason"
                   name="reason"
                   required
                   class="mt-1 w-full"
-                />
+                >
+                  <option value="BANK_PROCESSING_DELAY">
+                    {t("Bank processing delay")}
+                  </option>
+                  <option value="BILLING_DISPUTE">
+                    {t("Billing dispute")}
+                  </option>
+                  <option value="METER_ISSUE">{t("Meter issue")}</option>
+                  <option value="AGREEMENT_WITH_RESIDENT">
+                    {t("Agreement with resident")}
+                  </option>
+                  <option value="ADMIN_WAIVER">
+                    {t("Administrative waiver")}
+                  </option>
+                  <option value="OTHER">{t("Other")}</option>
+                </select>
               </div>
               <div class="col-span-2">
-                <label class="block text-label" for="manual-adjustment-note">
-                  {t("Note")}
+                <label class="block text-label" for="late-fee-note">
+                  {t("Note (required when the reason is Other)")}
                 </label>
-                <textarea
-                  id="manual-adjustment-note"
-                  name="note"
-                  class="mt-1 w-full"
-                />
+                <textarea id="late-fee-note" name="note" class="mt-1 w-full" />
               </div>
               <div class="col-span-2">
                 <button type="submit" class="btn-secondary">
-                  {t("Save adjustment")}
+                  {t("Update late fee")}
                 </button>
               </div>
             </form>
           </div>
-        </section>
-      )
-    }
+        )}
+        <div class="mt-4">
+          <h3>{t("Manual adjustment")}</h3>
+          <p class="text-sm text-muted">
+            {t("Manual adjustment")}:{" "}
+            {formatMoney(invoice.manualAdjustment, invoice.currency, locale)}
+          </p>
+          <p class="text-xs text-muted">
+            {t("A negative amount lowers the amount due.")}
+          </p>
+          <form
+            method="POST"
+            action={actions.accounts.setInvoiceManualAdjustment}
+            class="mt-3 grid grid-cols-2 gap-3"
+          >
+            <input type="hidden" name="organizationId" value={organizationId} />
+            <input type="hidden" name="invoiceId" value={invoice.id} />
+            <div>
+              <label class="block text-label" for="manual-adjustment-amount">
+                {t("Adjustment amount")}
+              </label>
+              <input
+                id="manual-adjustment-amount"
+                name="amount"
+                inputmode="decimal"
+                required
+                value={invoice.manualAdjustment}
+                class="mt-1 w-full"
+              />
+            </div>
+            <div>
+              <label class="block text-label" for="manual-adjustment-reason">
+                {t("Reason")}
+              </label>
+              <input
+                id="manual-adjustment-reason"
+                name="reason"
+                required
+                class="mt-1 w-full"
+              />
+            </div>
+            <div class="col-span-2">
+              <label class="block text-label" for="manual-adjustment-note">
+                {t("Note")}
+              </label>
+              <textarea
+                id="manual-adjustment-note"
+                name="note"
+                class="mt-1 w-full"
+              />
+            </div>
+            <div class="col-span-2">
+              <button type="submit" class="btn-secondary">
+                {t("Save adjustment")}
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+    )}
     <div class="invoice-doc-locale-bar">
       <p class="text-sm text-muted">
-        {
-          t(
-            "Latvian is the canonical invoice document. English and Russian are optional translated copies of the same invoice — not separate invoices."
-          )
-        }
+        {t(
+          "Latvian is the canonical invoice document. English and Russian are optional translated copies of the same invoice — not separate invoices."
+        )}
       </p>
       <form method="GET" class="invoice-doc-locale-form">
         <label for="doc-locale-select" class="text-sm text-muted">
@@ -764,13 +711,11 @@ const overrideStatuses: string[] = [
           name="docLocale"
           class="invoice-doc-locale-select"
         >
-          {
-            INVOICE_LOCALES.map((l) => (
-              <option value={l} selected={l === docLocale}>
-                {localeNames[l]}
-              </option>
-            ))
-          }
+          {INVOICE_LOCALES.map((l) => (
+            <option value={l} selected={l === docLocale}>
+              {localeNames[l]}
+            </option>
+          ))}
         </select>
         <button type="submit" class="btn-secondary btn-sm">
           {t("Preview")}
@@ -781,89 +726,86 @@ const overrideStatuses: string[] = [
       <iframe
         class="invoice-preview-frame"
         title={t("Invoice")}
-        srcdoc={invoiceHtml}></iframe>
+        srcdoc={invoiceHtml}
+      ></iframe>
     </div>
 
-    {
-      deliveries.length > 0 && (
-        <section>
-          <h2 class="section-title mb-3">{t("Delivery history")}</h2>
-          <div class="table-wrap stack-table">
-            <table class="w-full text-left text-sm">
-              <caption class="sr-only">{t("Delivery history")}</caption>
-              <thead class="border-b border-border bg-surface-hover text-muted">
+    {deliveries.length > 0 && (
+      <section>
+        <h2 class="section-title mb-3">{t("Delivery history")}</h2>
+        <div class="table-wrap stack-table">
+          <table class="w-full text-left text-sm">
+            <caption class="sr-only">{t("Delivery history")}</caption>
+            <thead class="border-b border-border bg-surface-hover text-muted">
+              <tr>
+                <th scope="col" class="px-4 py-2">
+                  {t("When")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Method")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("To")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Status")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Error")}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              {deliveries.map((d) => (
                 <tr>
-                  <th scope="col" class="px-4 py-2">
-                    {t("When")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Method")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("To")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Status")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Error")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-border">
-                {deliveries.map((d) => (
-                  <tr>
-                    <td class="px-4 py-2">
-                      {formatDate(d.createdAt, locale, organization.timezone)}
-                    </td>
-                    <td class="px-4 py-2">
-                      {d.method === "PAPER" ? t("Paper") : t("Email")}
-                    </td>
-                    <td class="px-4 py-2">{d.destinationEmail ?? "—"}</td>
-                    <td class="px-4 py-2">
-                      {d.status === "SENT" ? (
-                        d.method === "PAPER" && !d.isInitialPaperDispatch ? (
-                          <span
-                            class="text-muted"
-                            title={t(
-                              "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch."
-                            )}
-                          >
-                            {t("Paper (unverified legacy record)")}
-                          </span>
-                        ) : (
-                          <span class="text-success">
-                            {d.method === "PAPER"
-                              ? t("Paper dispatched")
-                              : t("Sent")}
-                          </span>
-                        )
-                      ) : d.status === "UNKNOWN" ? (
-                        <span class="text-warning">{t("Needs attention")}</span>
+                  <td class="px-4 py-2">
+                    {formatDate(d.createdAt, locale, organization.timezone)}
+                  </td>
+                  <td class="px-4 py-2">
+                    {d.method === "PAPER" ? t("Paper") : t("Email")}
+                  </td>
+                  <td class="px-4 py-2">{d.destinationEmail ?? "—"}</td>
+                  <td class="px-4 py-2">
+                    {d.status === "SENT" ? (
+                      d.method === "PAPER" && !d.isInitialPaperDispatch ? (
+                        <span
+                          class="text-muted"
+                          title={t(
+                            "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch."
+                          )}
+                        >
+                          {t("Paper (unverified legacy record)")}
+                        </span>
                       ) : (
-                        <span class="text-destructive">{t("Failed")}</span>
-                      )}
-                    </td>
-                    <td class="px-4 py-2 text-muted">{d.errorCode ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )
-    }
+                        <span class="text-success">
+                          {d.method === "PAPER"
+                            ? t("Paper dispatched")
+                            : t("Sent")}
+                        </span>
+                      )
+                    ) : d.status === "UNKNOWN" ? (
+                      <span class="text-warning">{t("Needs attention")}</span>
+                    ) : (
+                      <span class="text-destructive">{t("Failed")}</span>
+                    )}
+                  </td>
+                  <td class="px-4 py-2 text-muted">{d.errorCode ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )}
 
     <section class="panel p-4" aria-labelledby="override-status">
       <h2 id="override-status" class="section-title">
         {t("Override status")}
       </h2>
       <p class="text-sm text-muted">
-        {
-          t(
-            "Use this only to correct a status that is wrong. The change is recorded with your reason."
-          )
-        }
+        {t(
+          "Use this only to correct a status that is wrong. The change is recorded with your reason."
+        )}
       </p>
       <form
         method="POST"
@@ -892,13 +834,11 @@ const overrideStatuses: string[] = [
             >
               {t("Choose a status")}
             </option>
-            {
-              overrideStatuses.map((s) => (
-                <option value={s} selected={s === caseStatus}>
-                  {t(invoiceStatusBadge(s).label)}
-                </option>
-              ))
-            }
+            {overrideStatuses.map((s) => (
+              <option value={s} selected={s === caseStatus}>
+                {t(invoiceStatusBadge(s).label)}
+              </option>
+            ))}
           </select>
         </div>
         <div>

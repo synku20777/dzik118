@@ -17,7 +17,7 @@ export interface AuditEventInput {
   afterData?: unknown;
 }
 
-export async function recordAuditEvent(tx: DbOrTx, event: AuditEventInput) {
+function auditRow(event: AuditEventInput) {
   // Set by the middleware for every web request. Scripts and tests that call
   // the domain directly have no context, so both columns stay null there.
   const context = getRequestContext();
@@ -28,7 +28,7 @@ export async function recordAuditEvent(tx: DbOrTx, event: AuditEventInput) {
         ? event.entityId
         : null;
 
-  await tx.insert(auditLogs).values({
+  return {
     requestId: context?.requestId ?? null,
     ipHash: context?.ipHash ?? null,
     organizationId: event.organizationId ?? null,
@@ -39,5 +39,17 @@ export async function recordAuditEvent(tx: DbOrTx, event: AuditEventInput) {
     entityId: event.entityId ?? null,
     beforeData: event.beforeData ?? null,
     afterData: event.afterData ?? null,
-  });
+  };
+}
+
+export async function recordAuditEvent(tx: DbOrTx, event: AuditEventInput) {
+  await tx.insert(auditLogs).values(auditRow(event));
+}
+
+// Many events in a few statements, for imports. Same rows as recordAuditEvent,
+// in the caller's transaction.
+export async function recordAuditEvents(tx: DbOrTx, events: AuditEventInput[]) {
+  for (let i = 0; i < events.length; i += 500) {
+    await tx.insert(auditLogs).values(events.slice(i, i + 500).map(auditRow));
+  }
 }

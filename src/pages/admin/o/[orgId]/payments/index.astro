@@ -4,7 +4,6 @@ import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import KpiCard from "../../../../../components/ui/KpiCard.astro";
 import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
 import EmptyState from "../../../../../components/ui/EmptyState.astro";
-import FieldError from "../../../../../components/ui/FieldError.astro";
 import { listDwellings } from "../../../../../domain/organizations/dwellings";
 import {
   translate,
@@ -28,6 +27,8 @@ import {
   listUnmatchedTransactions,
 } from "../../../../../domain/payments/matching";
 import { listOpenInvoicesForPayment } from "../../../../../domain/payments/manual";
+import { listDwellingPayments } from "../../../../../domain/payments/direct";
+import ManualPaymentForm from "../../../../../components/ui/ManualPaymentForm.astro";
 import { parseDateInput } from "../../../../../lib/date-input";
 import { orgLocalDateString } from "../../../../../lib/org-time";
 import { withRequestDb } from "../../../../../lib/db-request";
@@ -45,6 +46,10 @@ const rejectResult = Astro.getActionResult(actions.payments.rejectMatch);
 const reverseResult = Astro.getActionResult(actions.payments.reverseMatch);
 const matchResult = Astro.getActionResult(actions.payments.matchTransaction);
 const recordManualResult = Astro.getActionResult(actions.payments.recordManual);
+const reverseDwellingResult = Astro.getActionResult(
+  actions.payments.reverseDwellingPayment
+);
+const editResult = Astro.getActionResult(actions.payments.editUnmatched);
 
 const {
   organization,
@@ -56,6 +61,7 @@ const {
   reversedMatches,
   unmatchedTransactions,
   openInvoices,
+  dwellingPayments,
 } = await withRequestDb(async (db) => ({
   organization: await getOrganization(db, organizationId),
   dwellingDirectory: await listDwellings(db, organizationId, {
@@ -69,7 +75,15 @@ const {
   reversedMatches: await listPaymentMatches(db, organizationId, "REVERSED"),
   unmatchedTransactions: await listUnmatchedTransactions(db, organizationId),
   openInvoices: await listOpenInvoicesForPayment(db, organizationId),
+  dwellingPayments: await listDwellingPayments(db, organizationId),
 }));
+
+// A dwelling account can take a payment only when the dwelling has no open
+// invoice (that invoice froze its balance and takes the payment instead).
+const dwellingsWithOpenInvoice = new Set(openInvoices.map((i) => i.dwellingId));
+const accountTargets = dwellingDirectory
+  .filter((d) => !d.archivedAt && !dwellingsWithOpenInvoice.has(d.id))
+  .map((d) => ({ id: d.id, number: d.number }));
 
 const imports = [...rawImports].reverse();
 const views = [
@@ -211,6 +225,24 @@ const shownUnmatched =
     : [];
 const shownCount =
   view === "UNMATCHED" ? shownUnmatched.length : shownMatches.length;
+
+// Payments posted straight to a dwelling account (ADR 0014) have no invoice,
+// so they sit beside the invoice payments in the Confirmed and Reversed tabs.
+const directInView = dwellingPayments.filter((p) =>
+  view === "CONFIRMED" ? !p.reversed : view === "REVERSED" ? p.reversed : false
+);
+const shownDirect = directInView.filter((p) => {
+  if (from && p.bookingDate < from) return false;
+  if (to && p.bookingDate > to) return false;
+  if (!q) return true;
+  const needle = q.toLowerCase();
+  return [
+    p.reference,
+    p.payerName,
+    p.amount,
+    `${t("Dwelling")} ${p.dwellingNumber}`,
+  ].some((v) => v?.toLowerCase().includes(needle));
+});
 ---
 
 <AdminLayout
@@ -234,138 +266,13 @@ const shownCount =
       <details class="edit-disclosure" open={!!recordManualResult?.error}>
         <summary class="btn-secondary">{t("Record a payment")}</summary>
         <div class="edit-disclosure-panel">
-          <p class="text-sm text-muted">
-            {
-              t(
-                "Use this for a bank transfer that is not in an imported statement. The payment is applied right away."
-              )
-            }
-          </p>
-          <form
-            method="POST"
-            action={actions.payments.recordManual}
-            class="mt-4 space-y-3"
-          >
-            <input type="hidden" name="organizationId" value={organizationId} />
-            <div>
-              <label
-                class="block text-sm font-medium text-foreground"
-                for="manual-invoice"
-              >
-                {t("Invoice")}
-              </label>
-              <select
-                id="manual-invoice"
-                name="invoiceId"
-                required
-                class="mt-1 w-full rounded-control border border-border px-3 py-1.5 text-sm"
-              >
-                <option value="" disabled selected>
-                  {t("Choose an invoice")}
-                </option>
-                {
-                  openInvoices.map((inv) => (
-                    <option value={inv.id}>
-                      {`${inv.invoiceNumber} · ${t("Dwelling")} ${inv.dwellingNumber} · ${formatMoney(inv.remaining, inv.currency, locale)}`}
-                    </option>
-                  ))
-                }
-              </select>
-              <FieldError name="invoiceId" error={recordManualResult?.error} />
-            </div>
-            <div>
-              <label
-                class="block text-sm font-medium text-foreground"
-                for="manual-amount"
-              >
-                {t("Amount")}
-              </label>
-              <input
-                id="manual-amount"
-                name="amount"
-                inputmode="decimal"
-                required
-                class="mt-1 w-full rounded-control border border-border px-3 py-1.5 text-sm"
-              />
-              <FieldError name="amount" error={recordManualResult?.error} />
-            </div>
-            <div>
-              <label
-                class="block text-sm font-medium text-foreground"
-                for="manual-date"
-              >
-                {t("Date")}
-              </label>
-              <input
-                id="manual-date"
-                name="bookingDate"
-                type="date"
-                required
-                max={today}
-                class="mt-1 w-full rounded-control border border-border px-3 py-1.5 text-sm"
-              />
-              <FieldError
-                name="bookingDate"
-                error={recordManualResult?.error}
-              />
-            </div>
-            <div>
-              <label
-                class="block text-sm font-medium text-foreground"
-                for="manual-payer"
-              >
-                {t("Payer")}
-              </label>
-              <input
-                id="manual-payer"
-                name="payerName"
-                class="mt-1 w-full rounded-control border border-border px-3 py-1.5 text-sm"
-              />
-              <FieldError name="payerName" error={recordManualResult?.error} />
-            </div>
-            <div>
-              <label
-                class="block text-sm font-medium text-foreground"
-                for="manual-reference"
-              >
-                {t("Bank reference")}
-              </label>
-              <input
-                id="manual-reference"
-                name="reference"
-                required
-                class="mt-1 w-full rounded-control border border-border px-3 py-1.5 text-sm"
-              />
-              <FieldError name="reference" error={recordManualResult?.error} />
-            </div>
-            <div>
-              <label
-                class="block text-sm font-medium text-foreground"
-                for="manual-reason"
-              >
-                {t("Reason")}
-              </label>
-              <input
-                id="manual-reason"
-                name="reason"
-                required
-                maxlength="500"
-                class="mt-1 w-full rounded-control border border-border px-3 py-1.5 text-sm"
-              />
-              <FieldError name="reason" error={recordManualResult?.error} />
-            </div>
-            <div>
-              <button
-                type="submit"
-                class="btn-primary"
-                data-confirm={t(
-                  "Record this payment? It is applied to the invoice right away."
-                )}
-              >
-                {t("Record payment")}
-              </button>
-            </div>
-          </form>
+          <ManualPaymentForm
+            organizationId={organizationId}
+            invoices={openInvoices}
+            dwellings={accountTargets}
+            today={today}
+            error={recordManualResult?.error}
+          />
         </div>
       </details>
       <a
@@ -375,48 +282,55 @@ const shownCount =
         {t("Import bank statement")}
       </a>
     </PageHeader>
-    {
-      (confirmResult?.error ||
-        rejectResult?.error ||
-        reverseResult?.error ||
-        matchResult?.error ||
-        recordManualResult?.error) && (
-        <p role="alert" class="notice notice-danger mb-6">
-          {friendlyActionErrorMessage(
-            confirmResult?.error ??
-              rejectResult?.error ??
-              reverseResult?.error ??
-              matchResult?.error ??
-              recordManualResult?.error,
-            locale
-          )}
-        </p>
-      )
-    }
-    {
-      (reverseResult?.data ||
-        matchResult?.data ||
-        recordManualResult?.data) && (
-        <p role="status" class="notice mb-6">
-          {reverseResult?.data
-            ? t("Payment reversed.")
-            : matchResult?.data
-              ? t("Payment matched.")
+    {(confirmResult?.error ||
+      rejectResult?.error ||
+      reverseResult?.error ||
+      matchResult?.error ||
+      recordManualResult?.error ||
+      reverseDwellingResult?.error ||
+      editResult?.error) && (
+      <p role="alert" class="notice notice-danger mb-6">
+        {friendlyActionErrorMessage(
+          confirmResult?.error ??
+            rejectResult?.error ??
+            reverseResult?.error ??
+            matchResult?.error ??
+            recordManualResult?.error ??
+            reverseDwellingResult?.error ??
+            editResult?.error,
+          locale
+        )}
+      </p>
+    )}
+    {(reverseResult?.data ||
+      reverseDwellingResult?.data ||
+      matchResult?.data ||
+      recordManualResult?.data ||
+      editResult?.data) && (
+      <p role="status" class="notice mb-6">
+        {reverseResult?.data || reverseDwellingResult?.data
+          ? t("Payment reversed.")
+          : matchResult?.data
+            ? t("Payment matched.")
+            : editResult?.data
+              ? t("Payment updated.")
               : t("Payment recorded.")}
-        </p>
-      )
-    }
+      </p>
+    )}
     <div class="grid grid-cols-2 gap-4 xl:grid-cols-4">
-      <KpiCard label={t("Imports")} value={imports.length} /><KpiCard
+      <KpiCard label={t("Imports")} value={imports.length} />
+      <KpiCard
         label={t("Proposed")}
         value={proposedMatches.length}
         hint={matchTotal(proposedMatches)}
-      /><KpiCard
+      />
+      <KpiCard
         label={t("Confirmed")}
         tone="success"
         value={confirmedMatches.length}
         hint={matchTotal(confirmedMatches)}
-      /><KpiCard
+      />
+      <KpiCard
         label={t("Unmatched")}
         tone="warning"
         value={unmatchedTransactions.length}
@@ -424,20 +338,13 @@ const shownCount =
       />
     </div>
     <section class="mt-8">
-      <h2 class="section-title">{t("Reconciliation")}</h2><nav
-        class="tabs"
-        aria-label={t("Reconciliation")}
-      >
-        {
-          views.map((v) => (
-            <a
-              href={"?view=" + v}
-              aria-current={view === v ? "page" : undefined}
-            >
-              {t(labels[v])} <span class="ml-1 tabular-nums">{counts[v]}</span>
-            </a>
-          ))
-        }
+      <h2 class="section-title">{t("Reconciliation")}</h2>
+      <nav class="tabs" aria-label={t("Reconciliation")}>
+        {views.map((v) => (
+          <a href={"?view=" + v} aria-current={view === v ? "page" : undefined}>
+            {t(labels[v])} <span class="ml-1 tabular-nums">{counts[v]}</span>
+          </a>
+        ))}
       </nav>
       <form method="GET" class="mb-6 flex flex-wrap items-end gap-3">
         <input type="hidden" name="view" value={view} />
@@ -490,19 +397,17 @@ const shownCount =
         <button type="submit" class="btn-primary">
           {t("Filter")}
         </button>
-        {
-          (q || from || to) && (
-            <a
-              href={"?view=" + view}
-              class="clear-filters text-sm text-primary hover:underline"
-            >
-              {t("Clear filters")}
-            </a>
-          )
-        }
+        {(q || from || to) && (
+          <a
+            href={"?view=" + view}
+            class="clear-filters text-sm text-primary hover:underline"
+          >
+            {t("Clear filters")}
+          </a>
+        )}
       </form>
-      {
-        counts[view] === 0 ? (
+      {counts[view] === 0 ? (
+        directInView.length === 0 ? (
           <EmptyState title={t("No transactions in this view.")}>
             {view !== "CONFIRMED" && counts.CONFIRMED > 0 && (
               <a href="?view=CONFIRMED">
@@ -510,57 +415,116 @@ const shownCount =
               </a>
             )}
           </EmptyState>
-        ) : shownCount === 0 ? (
+        ) : null
+      ) : shownCount === 0 ? (
+        shownDirect.length === 0 ? (
           <p class="text-sm text-muted">
             {t("No payments match these filters.")}
           </p>
-        ) : (
-          <div class="table-wrap stack-table">
-            <table class="w-full text-left text-sm">
-              <caption class="sr-only">
+        ) : null
+      ) : (
+        <div class="table-wrap stack-table">
+          <table class="w-full text-left text-sm">
+            <caption class="sr-only">
+              {view === "UNMATCHED"
+                ? t("Unmatched payments")
+                : t("Payment matches")}
+            </caption>
+            <>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Invoice")}</th>
+                  <th scope="col" class="text-right">
+                    {t("Payment")}
+                  </th>
+                  <th scope="col">{t("Payer")}</th>
+                  <th scope="col">{t("Reference")}</th>
+                  <th scope="col">{t("Date")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  {(view === "PROPOSED" ||
+                    view === "CONFIRMED" ||
+                    view === "UNMATCHED") && (
+                    <th scope="col">{t("Actions")}</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
                 {view === "UNMATCHED"
-                  ? t("Unmatched payments")
-                  : t("Payment matches")}
-              </caption>
-              <>
-                <thead>
-                  <tr>
-                    <th scope="col">{t("Invoice")}</th>
-                    <th scope="col" class="text-right">
-                      {t("Payment")}
-                    </th>
-                    <th scope="col">{t("Payer")}</th>
-                    <th scope="col">{t("Reference")}</th>
-                    <th scope="col">{t("Date")}</th>
-                    <th scope="col">{t("Status")}</th>
-                    {(view === "PROPOSED" ||
-                      view === "CONFIRMED" ||
-                      view === "UNMATCHED") && (
-                      <th scope="col">{t("Actions")}</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-border">
-                  {view === "UNMATCHED"
-                    ? shownUnmatched.map((tx) => (
-                        <tr>
-                          <td>—</td>
-                          <td class="text-right whitespace-nowrap font-medium">
-                            {formatMoney(tx.amount, tx.currency, locale)}
-                          </td>
-                          <td>{payer(tx.payerName)}</td>
-                          <td>{tx.reference ?? "—"}</td>
-                          <td class="whitespace-nowrap">
-                            {formatDate(tx.bookingDate, locale)}
-                          </td>
-                          <td>
-                            <StatusBadge status="UNMATCHED" />
-                          </td>
-                          <td data-label={t("Actions")}>
+                  ? shownUnmatched.map((tx) => (
+                      <tr>
+                        <td>—</td>
+                        <td class="text-right whitespace-nowrap font-medium">
+                          {formatMoney(tx.amount, tx.currency, locale)}
+                        </td>
+                        <td>{payer(tx.payerName)}</td>
+                        <td>
+                          {tx.reference ?? "—"}
+                          {tx.paymentMethod === "CASH" && (
+                            <small class="block text-muted">{t("Cash")}</small>
+                          )}
+                        </td>
+                        <td class="whitespace-nowrap">
+                          {formatDate(tx.bookingDate, locale)}
+                        </td>
+                        <td>
+                          <StatusBadge status="UNMATCHED" />
+                        </td>
+                        <td data-label={t("Actions")}>
+                          <form
+                            method="POST"
+                            action={actions.payments.matchTransaction}
+                            class="flex flex-wrap items-center gap-2"
+                          >
+                            <input
+                              type="hidden"
+                              name="organizationId"
+                              value={organizationId}
+                            />
+                            <input
+                              type="hidden"
+                              name="transactionId"
+                              value={tx.id}
+                            />
+                            <select
+                              name="invoiceId"
+                              required
+                              aria-label={t("Invoice")}
+                              class="rounded-control border border-border px-3 py-1.5 text-sm"
+                            >
+                              <option value="" disabled selected>
+                                {t("Choose an invoice")}
+                              </option>
+                              {openInvoices
+                                .filter((inv) => inv.currency === tx.currency)
+                                .map((inv) => (
+                                  <option value={inv.id}>
+                                    {`${inv.invoiceNumber} · ${t("Dwelling")} ${inv.dwellingNumber} · ${formatMoney(inv.remaining, inv.currency, locale)}`}
+                                  </option>
+                                ))}
+                            </select>
+                            <button
+                              type="submit"
+                              class="btn-primary"
+                              data-confirm={t(
+                                "Match this payment to the chosen invoice? The payment is applied right away."
+                              )}
+                            >
+                              {t("Match to invoice")}
+                            </button>
+                          </form>
+                          <details class="mt-2">
+                            <summary class="cursor-pointer text-primary hover:underline">
+                              {t("Edit")}
+                            </summary>
+                            <p class="mt-2 text-sm text-muted">
+                              {t(
+                                "Fix a row the statement reader got wrong. The old values stay in the audit history."
+                              )}
+                            </p>
                             <form
                               method="POST"
-                              action={actions.payments.matchTransaction}
-                              class="flex flex-wrap items-center gap-2"
+                              action={actions.payments.editUnmatched}
+                              class="mt-2 grid gap-2 sm:grid-cols-2"
                             >
                               <input
                                 type="hidden"
@@ -572,254 +536,419 @@ const shownCount =
                                 name="transactionId"
                                 value={tx.id}
                               />
-                              <select
-                                name="invoiceId"
-                                required
-                                aria-label={t("Invoice")}
-                                class="rounded-control border border-border px-3 py-1.5 text-sm"
-                              >
-                                <option value="" disabled selected>
-                                  {t("Choose an invoice")}
-                                </option>
-                                {openInvoices
-                                  .filter((inv) => inv.currency === tx.currency)
-                                  .map((inv) => (
-                                    <option value={inv.id}>
-                                      {`${inv.invoiceNumber} · ${t("Dwelling")} ${inv.dwellingNumber} · ${formatMoney(inv.remaining, inv.currency, locale)}`}
-                                    </option>
-                                  ))}
-                              </select>
-                              <button
-                                type="submit"
-                                class="btn-primary"
-                                data-confirm={t(
-                                  "Match this payment to the chosen invoice? The payment is applied right away."
-                                )}
-                              >
-                                {t("Match to invoice")}
-                              </button>
+                              <div>
+                                <label
+                                  class="block text-sm font-medium text-foreground"
+                                  for={`edit-amount-${tx.id}`}
+                                >
+                                  {t("Amount")}
+                                </label>
+                                <input
+                                  id={`edit-amount-${tx.id}`}
+                                  name="amount"
+                                  inputmode="decimal"
+                                  required
+                                  value={tx.amount}
+                                  class="mt-1 w-full rounded-control border border-border px-3 py-1.5 text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label
+                                  class="block text-sm font-medium text-foreground"
+                                  for={`edit-date-${tx.id}`}
+                                >
+                                  {t("Date")}
+                                </label>
+                                <input
+                                  id={`edit-date-${tx.id}`}
+                                  name="bookingDate"
+                                  type="date"
+                                  required
+                                  max={today}
+                                  value={tx.bookingDate}
+                                  class="mt-1 w-full rounded-control border border-border px-3 py-1.5 text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label
+                                  class="block text-sm font-medium text-foreground"
+                                  for={`edit-payer-${tx.id}`}
+                                >
+                                  {t("Payer")}
+                                </label>
+                                <input
+                                  id={`edit-payer-${tx.id}`}
+                                  name="payerName"
+                                  maxlength="140"
+                                  value={tx.payerName ?? ""}
+                                  class="mt-1 w-full rounded-control border border-border px-3 py-1.5 text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label
+                                  class="block text-sm font-medium text-foreground"
+                                  for={`edit-reference-${tx.id}`}
+                                >
+                                  {t("Reference")}
+                                </label>
+                                <input
+                                  id={`edit-reference-${tx.id}`}
+                                  name="reference"
+                                  maxlength="140"
+                                  value={tx.reference ?? ""}
+                                  class="mt-1 w-full rounded-control border border-border px-3 py-1.5 text-sm"
+                                />
+                              </div>
+                              <div class="sm:col-span-2">
+                                <label
+                                  class="block text-sm font-medium text-foreground"
+                                  for={`edit-reason-${tx.id}`}
+                                >
+                                  {t("Reason for the change")}
+                                </label>
+                                <input
+                                  id={`edit-reason-${tx.id}`}
+                                  name="reason"
+                                  required
+                                  maxlength="500"
+                                  class="mt-1 w-full rounded-control border border-border px-3 py-1.5 text-sm"
+                                />
+                              </div>
+                              <div class="sm:col-span-2">
+                                <button type="submit" class="btn-secondary">
+                                  {t("Save changes")}
+                                </button>
+                              </div>
                             </form>
-                          </td>
-                        </tr>
-                      ))
-                    : shownMatches.map((m) => (
-                        <tr>
-                          <td class="font-semibold">
-                            <div>
-                              <a
-                                href={`/admin/o/${organizationId}/periods/${m.periodId}/invoices/${m.invoiceId}`}
-                                class="text-primary hover:underline"
-                              >
-                                {m.invoiceNumber}
-                              </a>
-                            </div>
-                            <small class="text-muted">
-                              {t("Amount due")}:{" "}
+                          </details>
+                        </td>
+                      </tr>
+                    ))
+                  : shownMatches.map((m) => (
+                      <tr>
+                        <td class="font-semibold">
+                          <div>
+                            <a
+                              href={`/admin/o/${organizationId}/periods/${m.periodId}/invoices/${m.invoiceId}`}
+                              class="text-primary hover:underline"
+                            >
+                              {m.invoiceNumber}
+                            </a>
+                          </div>
+                          <small class="text-muted">
+                            {t("Amount due")}:{" "}
+                            {formatMoney(
+                              m.amountDue,
+                              m.transactionCurrency,
+                              locale
+                            )}
+                          </small>
+                          {m.resultType !== "EXACT" && (
+                            <small class="block text-muted">
+                              {m.resultType === "PARTIAL"
+                                ? t("Remaining after allocation")
+                                : t("Credit created")}
+                              :{" "}
                               {formatMoney(
-                                m.amountDue,
+                                m.resultType === "PARTIAL"
+                                  ? m.remainingAfterAllocation
+                                  : m.creditCreated,
                                 m.transactionCurrency,
                                 locale
                               )}
                             </small>
-                            {m.resultType !== "EXACT" && (
-                              <small class="block text-muted">
-                                {m.resultType === "PARTIAL"
-                                  ? t("Remaining after allocation")
-                                  : t("Credit created")}
-                                :{" "}
-                                {formatMoney(
-                                  m.resultType === "PARTIAL"
-                                    ? m.remainingAfterAllocation
-                                    : m.creditCreated,
-                                  m.transactionCurrency,
-                                  locale
-                                )}
-                              </small>
-                            )}
+                          )}
+                        </td>
+                        <td class="text-right whitespace-nowrap font-medium">
+                          {formatMoney(
+                            m.transactionAmount,
+                            m.transactionCurrency,
+                            locale
+                          )}
+                        </td>
+                        <td>
+                          <div>{payer(m.transactionPayerName)}</div>
+                          <a
+                            href={`/admin/o/${organizationId}/dwellings/${m.dwellingId}`}
+                            class="text-xs text-primary hover:underline"
+                          >
+                            {t("View dwelling")}
+                          </a>
+                        </td>
+                        <td>{m.transactionReference ?? "—"}</td>
+                        <td class="whitespace-nowrap">
+                          {formatDate(m.transactionBookingDate, locale)}
+                        </td>
+                        <td>
+                          <StatusBadge status={m.status} />
+                        </td>
+                        {view === "PROPOSED" && (
+                          <td data-label={t("Actions")}>
+                            <div class="flex gap-2">
+                              <form
+                                method="POST"
+                                action={actions.payments.confirmMatch}
+                              >
+                                <input
+                                  type="hidden"
+                                  name="organizationId"
+                                  value={organizationId}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="matchId"
+                                  value={m.id}
+                                />
+                                <button
+                                  type="submit"
+                                  class="btn-primary"
+                                  data-confirm={t(
+                                    "Confirm this payment? The invoice balance will be updated."
+                                  )}
+                                >
+                                  {t("Confirm")}
+                                </button>
+                              </form>
+                              <form
+                                method="POST"
+                                action={actions.payments.rejectMatch}
+                              >
+                                <input
+                                  type="hidden"
+                                  name="organizationId"
+                                  value={organizationId}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="matchId"
+                                  value={m.id}
+                                />
+                                <button type="submit" class="btn-secondary">
+                                  {t("Reject")}
+                                </button>
+                              </form>
+                            </div>
                           </td>
-                          <td class="text-right whitespace-nowrap font-medium">
-                            {formatMoney(
-                              m.transactionAmount,
-                              m.transactionCurrency,
-                              locale
-                            )}
+                        )}
+                        {view === "CONFIRMED" && (
+                          <td data-label={t("Actions")}>
+                            <details>
+                              <summary class="cursor-pointer text-primary hover:underline">
+                                {t("Reverse")}
+                              </summary>
+                              <form
+                                method="POST"
+                                action={actions.payments.reverseMatch}
+                                class="mt-2 space-y-2"
+                              >
+                                <input
+                                  type="hidden"
+                                  name="organizationId"
+                                  value={organizationId}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="matchId"
+                                  value={m.id}
+                                />
+                                <div>
+                                  <label
+                                    class="block text-sm font-medium text-foreground"
+                                    for={`reverse-reason-${m.id}`}
+                                  >
+                                    {t("Reason for reversal")}
+                                  </label>
+                                  <input
+                                    type="text"
+                                    id={`reverse-reason-${m.id}`}
+                                    name="reason"
+                                    required
+                                    maxlength="500"
+                                    class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
+                                  />
+                                </div>
+                                <button
+                                  type="submit"
+                                  class="btn-secondary"
+                                  data-confirm={t(
+                                    "Reverse this payment? The original payment stays in the history and a cancelling entry is added. The invoice becomes unpaid again."
+                                  )}
+                                >
+                                  {t("Reverse payment")}
+                                </button>
+                              </form>
+                            </details>
                           </td>
-                          <td>
-                            <div>{payer(m.transactionPayerName)}</div>
-                            <a
-                              href={`/admin/o/${organizationId}/dwellings/${m.dwellingId}`}
-                              class="text-xs text-primary hover:underline"
+                        )}
+                      </tr>
+                    ))}
+              </tbody>
+            </>
+          </table>
+        </div>
+      )}
+      {shownDirect.length > 0 && (
+        <div class="mt-6">
+          <h3 class="font-semibold">{t("Payments to an account")}</h3>
+          <p class="text-sm text-muted">
+            {t("Posted to the dwelling account, not to an invoice.")}
+          </p>
+          <div class="table-wrap stack-table mt-2">
+            <table class="w-full text-left text-sm">
+              <caption class="sr-only">{t("Payments to an account")}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Dwelling")}</th>
+                  <th scope="col" class="text-right">
+                    {t("Payment")}
+                  </th>
+                  <th scope="col">{t("Payer")}</th>
+                  <th scope="col">{t("Reference")}</th>
+                  <th scope="col">{t("Method")}</th>
+                  <th scope="col">{t("Date")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  {view === "CONFIRMED" && <th scope="col">{t("Actions")}</th>}
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                {shownDirect.map((p) => (
+                  <tr>
+                    <td class="font-semibold">
+                      <a
+                        href={`/admin/o/${organizationId}/dwellings/${p.dwellingId}`}
+                        class="text-primary hover:underline"
+                      >
+                        {p.dwellingNumber}
+                      </a>
+                    </td>
+                    <td class="text-right whitespace-nowrap font-medium">
+                      {formatMoney(p.amount, p.currency, locale)}
+                    </td>
+                    <td>{p.payerName ?? "—"}</td>
+                    <td>{p.reference ?? "—"}</td>
+                    <td>
+                      {p.paymentMethod === "CASH"
+                        ? t("Cash")
+                        : t("Bank transfer")}
+                    </td>
+                    <td class="whitespace-nowrap">
+                      {formatDate(p.bookingDate, locale)}
+                    </td>
+                    <td>
+                      <StatusBadge
+                        status={p.reversed ? "REVERSED" : "CONFIRMED"}
+                      />
+                    </td>
+                    {view === "CONFIRMED" && (
+                      <td data-label={t("Actions")}>
+                        <details>
+                          <summary class="cursor-pointer text-primary hover:underline">
+                            {t("Reverse")}
+                          </summary>
+                          <form
+                            method="POST"
+                            action={actions.payments.reverseDwellingPayment}
+                            class="mt-2 space-y-2"
+                          >
+                            <input
+                              type="hidden"
+                              name="organizationId"
+                              value={organizationId}
+                            />
+                            <input
+                              type="hidden"
+                              name="transactionId"
+                              value={p.id}
+                            />
+                            <div>
+                              <label
+                                class="block text-sm font-medium text-foreground"
+                                for={`reverse-direct-reason-${p.id}`}
+                              >
+                                {t("Reason for reversal")}
+                              </label>
+                              <input
+                                type="text"
+                                id={`reverse-direct-reason-${p.id}`}
+                                name="reason"
+                                required
+                                maxlength="500"
+                                class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
+                              />
+                            </div>
+                            <button
+                              type="submit"
+                              class="btn-secondary"
+                              data-confirm={t(
+                                "Reverse this payment? The original payment stays in the history and a cancelling entry is added. The dwelling account goes back to its balance before the payment."
+                              )}
                             >
-                              {t("View dwelling")}
-                            </a>
-                          </td>
-                          <td>{m.transactionReference ?? "—"}</td>
-                          <td class="whitespace-nowrap">
-                            {formatDate(m.transactionBookingDate, locale)}
-                          </td>
-                          <td>
-                            <StatusBadge status={m.status} />
-                          </td>
-                          {view === "PROPOSED" && (
-                            <td data-label={t("Actions")}>
-                              <div class="flex gap-2">
-                                <form
-                                  method="POST"
-                                  action={actions.payments.confirmMatch}
-                                >
-                                  <input
-                                    type="hidden"
-                                    name="organizationId"
-                                    value={organizationId}
-                                  />
-                                  <input
-                                    type="hidden"
-                                    name="matchId"
-                                    value={m.id}
-                                  />
-                                  <button
-                                    type="submit"
-                                    class="btn-primary"
-                                    data-confirm={t(
-                                      "Confirm this payment? The invoice balance will be updated."
-                                    )}
-                                  >
-                                    {t("Confirm")}
-                                  </button>
-                                </form>
-                                <form
-                                  method="POST"
-                                  action={actions.payments.rejectMatch}
-                                >
-                                  <input
-                                    type="hidden"
-                                    name="organizationId"
-                                    value={organizationId}
-                                  />
-                                  <input
-                                    type="hidden"
-                                    name="matchId"
-                                    value={m.id}
-                                  />
-                                  <button type="submit" class="btn-secondary">
-                                    {t("Reject")}
-                                  </button>
-                                </form>
-                              </div>
-                            </td>
-                          )}
-                          {view === "CONFIRMED" && (
-                            <td data-label={t("Actions")}>
-                              <details>
-                                <summary class="cursor-pointer text-primary hover:underline">
-                                  {t("Reverse")}
-                                </summary>
-                                <form
-                                  method="POST"
-                                  action={actions.payments.reverseMatch}
-                                  class="mt-2 space-y-2"
-                                >
-                                  <input
-                                    type="hidden"
-                                    name="organizationId"
-                                    value={organizationId}
-                                  />
-                                  <input
-                                    type="hidden"
-                                    name="matchId"
-                                    value={m.id}
-                                  />
-                                  <div>
-                                    <label
-                                      class="block text-sm font-medium text-foreground"
-                                      for={`reverse-reason-${m.id}`}
-                                    >
-                                      {t("Reason for reversal")}
-                                    </label>
-                                    <input
-                                      type="text"
-                                      id={`reverse-reason-${m.id}`}
-                                      name="reason"
-                                      required
-                                      maxlength="500"
-                                      class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
-                                    />
-                                  </div>
-                                  <button
-                                    type="submit"
-                                    class="btn-secondary"
-                                    data-confirm={t(
-                                      "Reverse this payment? The original payment stays in the history and a cancelling entry is added. The invoice becomes unpaid again."
-                                    )}
-                                  >
-                                    {t("Reverse payment")}
-                                  </button>
-                                </form>
-                              </details>
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                </tbody>
-              </>
+                              {t("Reverse payment")}
+                            </button>
+                          </form>
+                        </details>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
-        )
-      }
+        </div>
+      )}
     </section>
     <section class="mt-8">
-      <h2 class="section-title">{t("Import history")}</h2>{
-        imports.length === 0 ? (
-          <EmptyState title={t("No imports yet.")} />
-        ) : (
-          <div class="table-wrap stack-table">
-            <table class="w-full text-left text-sm">
-              <caption class="sr-only">{t("Import history")}</caption>
-              <>
-                <thead>
+      <h2 class="section-title">{t("Import history")}</h2>
+      {imports.length === 0 ? (
+        <EmptyState title={t("No imports yet.")} />
+      ) : (
+        <div class="table-wrap stack-table">
+          <table class="w-full text-left text-sm">
+            <caption class="sr-only">{t("Import history")}</caption>
+            <>
+              <thead>
+                <tr>
+                  <>
+                    <th scope="col">{t("Filename")}</th>
+                    <th scope="col">{t("Imported")}</th>
+                    <th scope="col" class="text-right">
+                      {t("Rows")}
+                    </th>
+                    <th scope="col">{t("Actions")}</th>
+                  </>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                {imports.map((imp) => (
                   <tr>
-                    <>
-                      <th scope="col">{t("Filename")}</th>
-                      <th scope="col">{t("Imported")}</th>
-                      <th scope="col" class="text-right">
-                        {t("Rows")}
-                      </th>
-                      <th scope="col">{t("Actions")}</th>
-                    </>
+                    <td class="font-medium">{imp.originalFilename}</td>
+                    <td>
+                      {formatDate(
+                        imp.importedAt,
+                        locale,
+                        organization.timezone
+                      )}
+                    </td>
+                    <td class="text-right">{imp.rowCount}</td>
+                    <td class="text-right">
+                      <a
+                        href={
+                          "/admin/o/" +
+                          organizationId +
+                          "/payments/imports/" +
+                          imp.id
+                        }
+                      >
+                        {t("View")} →
+                      </a>
+                    </td>
                   </tr>
-                </thead>
-                <tbody class="divide-y divide-border">
-                  {imports.map((imp) => (
-                    <tr>
-                      <td class="font-medium">{imp.originalFilename}</td>
-                      <td>
-                        {formatDate(
-                          imp.importedAt,
-                          locale,
-                          organization.timezone
-                        )}
-                      </td>
-                      <td class="text-right">{imp.rowCount}</td>
-                      <td class="text-right">
-                        <a
-                          href={
-                            "/admin/o/" +
-                            organizationId +
-                            "/payments/imports/" +
-                            imp.id
-                          }
-                        >
-                          {t("View")} →
-                        </a>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </>
-            </table>
-          </div>
-        )
-      }
+                ))}
+              </tbody>
+            </>
+          </table>
+        </div>
+      )}
     </section>
   </div>
 </AdminLayout>

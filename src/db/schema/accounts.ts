@@ -13,6 +13,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { appUsers } from "./auth";
@@ -95,6 +96,15 @@ export const accountEntries = pgTable(
       table.effectiveDate,
       table.createdAt
     ),
+    // One opening balance per dwelling from the Migration Center (ADR 0013).
+    // The older OPENING_BALANCE rows (one per unpaid v1 invoice) have no
+    // migrationImportId and are not covered. Corrections are manual
+    // adjustments.
+    uniqueIndex("account_entries_one_migrated_opening")
+      .on(table.organizationId, table.dwellingId)
+      .where(
+        sql`${table.type} = 'OPENING_BALANCE' and ${table.metadata} ? 'migrationImportId'`
+      ),
     index("account_entries_invoice_id_idx").on(table.invoiceId),
     index("account_entries_bank_transaction_id_idx").on(
       table.bankTransactionId
