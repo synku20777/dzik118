@@ -33,12 +33,12 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^14.4.3",
+    "@astrojs/cloudflare": "^14.4.5",
     "@cloudflare/puppeteer": "^1.4.0",
     "@supabase/ssr": "^0.12.7",
-    "@supabase/supabase-js": "^2.117.2",
-    "@tailwindcss/vite": "^4.3.3",
-    "astro": "^7.4.4",
+    "@supabase/supabase-js": "^2.119.0",
+    "@tailwindcss/vite": "^4.3.4",
+    "astro": "^7.4.6",
     "aws4fetch": "^1.0.20",
     "drizzle-orm": "^0.45.3",
     "papaparse": "^5.7.0",
@@ -59,13 +59,13 @@
     "drizzle-kit": "^0.31.11",
     "eslint": "^10.11.0",
     "eslint-plugin-astro": "^3.2.1",
-    "globals": "^17.12.0",
+    "globals": "^17.14.0",
     "prettier": "^3.9.9",
     "prettier-plugin-astro": "^1.1.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.0",
-    "vitest": "^5.0.3",
-    "wrangler": "^4.156.0"
+    "vitest": "^5.1.0",
+    "wrangler": "^4.158.0"
   },
   "overrides": {
     "basic-ftp": "^6.2.4",
