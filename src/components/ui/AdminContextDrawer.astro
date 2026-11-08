@@ -7,6 +7,7 @@
 // demand (spec section 28: "if data is not already in workbench payload,
 // show a compact loading state").
 import { entityLabel, translate, uiLocale } from "../../lib/ui/i18n";
+import Icon from "./Icon.astro";
 import { invoiceStatusBadge } from "../../lib/ui/invoice-status";
 
 interface Props {
@@ -160,11 +161,11 @@ const config = {
     </div>
     <button
       type="button"
-      class="context-drawer-close"
+      class="icon-btn context-drawer-close"
       data-close-drawer
       aria-label={t("Close")}
     >
-      <span aria-hidden="true">×</span>
+      <Icon name="x" size="sm" />
     </button>
   </header>
   <div
@@ -382,7 +383,8 @@ const config = {
     min-width: 0;
     width: 100%;
     padding: 0.75rem 0.75rem;
-    border: 1px solid var(--color-border);
+    border-width: 1px;
+    border-style: solid;
     border-radius: var(--radius-control);
     font-size: 0.875rem;
     font-variant-numeric: tabular-nums;
@@ -390,6 +392,7 @@ const config = {
     box-sizing: border-box;
   }
   .drawer-readonly-box {
+    border-color: var(--color-border);
     background: var(--color-surface-hover);
     color: var(--color-muted);
   }
@@ -398,18 +401,11 @@ const config = {
     background: var(--color-surface);
     color: var(--color-foreground);
   }
-  .drawer-input-box:focus-visible,
-  .drawer-textarea-box:focus-visible {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px var(--color-focus-ring);
-  }
   .drawer-textarea-box {
     display: block;
     width: 100%;
     min-height: 5.5rem;
     padding: 0.75rem 0.75rem;
-    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     font-size: 0.875rem;
     font-family: inherit;

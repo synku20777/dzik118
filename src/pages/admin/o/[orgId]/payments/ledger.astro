@@ -1,0 +1,427 @@
+---
+// Account ledger: every charge, payment, reversal, fee and adjustment across
+// the building, or one dwelling's statement with a running balance. Read-only.
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import EmptyState from "../../../../../components/ui/EmptyState.astro";
+import {
+  translate,
+  uiLocale,
+  formatMoney,
+  formatDate,
+  plural,
+} from "../../../../../lib/ui/i18n";
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { listDwellings } from "../../../../../domain/organizations/dwellings";
+import {
+  LEDGER_DEFAULT_LIMIT,
+  listLedgerEntries,
+} from "../../../../../domain/payments/trail";
+import { NotFoundError } from "../../../../../domain/errors";
+import { compareExact, subtractExact } from "../../../../../lib/decimal2";
+import { parseDateInput } from "../../../../../lib/date-input";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+const organizationId = Astro.params.orgId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const base = `/admin/o/${organizationId}`;
+const kinds = {
+  payments: ["PAYMENT", "PAYMENT_REVERSAL"],
+  charges: [
+    "INVOICE_CHARGE",
+    "OPENING_BALANCE",
+    "DEBT_CARRY_FORWARD",
+    "CREDIT_CARRY_FORWARD",
+  ],
+  fees: ["LATE_FEE", "LATE_FEE_ADJUSTMENT"],
+  adjustments: ["MANUAL_ADJUSTMENT"],
+} as const;
+const kindLabels: Record<keyof typeof kinds, string> = {
+  payments: "Payments and reversals",
+  charges: "Invoice charges and balances",
+  fees: "Late fees",
+  adjustments: "Adjustments",
+};
+const entryTypeLabels: Record<string, string> = {
+  OPENING_BALANCE: "Opening balance",
+  INVOICE_CHARGE: "Invoice charge",
+  PAYMENT: "Payment received",
+  LATE_FEE: "Late fee",
+  LATE_FEE_ADJUSTMENT: "Late fee adjustment",
+  MANUAL_ADJUSTMENT: "Manual adjustment",
+  CREDIT_CARRY_FORWARD: "Credit carried forward",
+  DEBT_CARRY_FORWARD: "Debt carried forward",
+  PAYMENT_REVERSAL: "Payment reversed",
+};
+
+const params = Astro.url.searchParams;
+const kind = (Object.keys(kinds) as (keyof typeof kinds)[]).find(
+  (k) => k === params.get("kind")
+);
+const from = parseDateInput(params.get("from"));
+const to = parseDateInput(params.get("to"));
+const requestedDwelling = params.get("dwelling") ?? undefined;
+
+let organization: Awaited<ReturnType<typeof getOrganization>>;
+let directory: Awaited<ReturnType<typeof listDwellings>>;
+let ledger: Awaited<ReturnType<typeof listLedgerEntries>>;
+try {
+  ({ organization, directory, ledger } = await withRequestDb(async (db) => {
+    const organization = await getOrganization(db, organizationId);
+    const directory = await listDwellings(db, organizationId, {
+      includeArchived: true,
+      limit: 2147483647,
+    });
+    // A dwelling id that is not in this organization shows the whole ledger
+    // rather than another building's rows or an error.
+    const dwellingId = directory.find((d) => d.id === requestedDwelling)?.id;
+    return {
+      organization,
+      directory,
+      ledger: await listLedgerEntries(db, organizationId, {
+        dwellingId,
+        currency: organization.currency,
+        from,
+        to,
+        types: kind ? [...kinds[kind]] : undefined,
+      }),
+    };
+  }));
+} catch (err) {
+  if (err instanceof NotFoundError) return Astro.redirect(`${base}/payments`);
+  throw err;
+}
+
+const dwelling = directory.find((d) => d.id === requestedDwelling);
+const filtered = Boolean(kind || from || to || dwelling);
+const money = (value: string) =>
+  formatMoney(value, organization.currency, locale);
+// Same direction as the balance: positive means more is owed.
+const change = subtractExact(ledger.debits, ledger.credits);
+const changeSize = change.startsWith("-") ? change.slice(1) : change;
+// The balance now, whatever the filters hide.
+const closing = ledger.currentBalance;
+const sourceHref = (e: (typeof ledger.entries)[number]) =>
+  e.bankTransactionId
+    ? `${base}/payments/${e.bankTransactionId}`
+    : e.invoiceId && e.periodId
+      ? `${base}/periods/${e.periodId}/invoices/${e.invoiceId}`
+      : null;
+const sourceLabel = (e: (typeof ledger.entries)[number]) =>
+  e.bankTransactionId
+    ? t("About this payment")
+    : e.invoiceNumber
+      ? `${t("Invoice")} ${e.invoiceNumber}`
+      : null;
+---
+
+<AdminLayout
+  title={t("Account ledger") + " - " + organization.name}
+  organizationId={organizationId}
+  organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Payments"), href: `${base}/payments` },
+    dwelling
+      ? { label: t("Account ledger"), href: `${base}/payments/ledger` }
+      : { label: t("Account ledger") },
+    ...(dwelling ? [{ label: `${t("Dwelling")} ${dwelling.number}` }] : []),
+  ]}
+>
+  <div class="space-y-6">
+    <PageHeader
+      title={
+        dwelling
+          ? `${t("Account statement")} · ${t("Dwelling")} ${dwelling.number}`
+          : t("Account ledger")
+      }
+      description={
+        dwelling
+          ? t(
+              "Every charge, payment and adjustment on this account, with the balance after each line."
+            )
+          : t(
+              "Every charge, payment and adjustment across the building. Entries are never edited; a correction is a new line."
+            )
+      }
+      display
+    >
+      {dwelling && (
+        <a class="btn-secondary" href={`${base}/dwellings/${dwelling.id}`}>
+          {t("Open dwelling")}
+        </a>
+      )}
+    </PageHeader>
+
+    <section
+      class="metric-strip"
+      style={`--metrics: ${dwelling ? 4 : 3}`}
+      aria-label={t("Summary")}
+    >
+      <div class="metric">
+        <span class="metric-label">{t("Debits")}</span>
+        <strong class="metric-value">{money(ledger.debits)}</strong>
+        <span class="metric-note">{t("Charges, fees and reversals")}</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">{t("Credits")}</span>
+        <strong class="metric-value">{money(ledger.credits)}</strong>
+        <span class="metric-note">{t("Payments and credits")}</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">{t("Change in what is owed")}</span>
+        <strong class="metric-value">{money(changeSize)}</strong>
+        <span class="metric-note">
+          {compareExact(change, "0") === 0
+            ? t("No change")
+            : compareExact(change, "0") > 0
+              ? t("More is owed")
+              : t("Less is owed")}
+        </span>
+      </div>
+      {dwelling && closing != null && (
+        <div
+          class="metric"
+          data-tone={compareExact(closing, "0") > 0 ? "warning" : "success"}
+        >
+          <span class="metric-label">
+            {compareExact(closing, "0") < 0
+              ? t("Account credit")
+              : t("Outstanding balance")}
+          </span>
+          <strong class="metric-value">
+            {money(closing.startsWith("-") ? closing.slice(1) : closing)}
+          </strong>
+        </div>
+      )}
+    </section>
+
+    <section aria-labelledby="entries-heading">
+      <h2 id="entries-heading" class="sr-only">
+        {t("Ledger entries")}
+      </h2>
+      <form method="GET" class="filters">
+        <div>
+          <label for="ledger-dwelling">{t("Dwelling")}</label>
+          <select id="ledger-dwelling" name="dwelling">
+            <option value="">{t("All dwellings")}</option>
+            {directory.map((d) => (
+              <option value={d.id} selected={d.id === dwelling?.id}>
+                {d.number}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label for="ledger-kind">{t("Show")}</label>
+          <select id="ledger-kind" name="kind">
+            <option value="">{t("All entries")}</option>
+            {(Object.keys(kinds) as (keyof typeof kinds)[]).map((k) => (
+              <option value={k} selected={k === kind}>
+                {t(kindLabels[k])}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label for="ledger-from">{t("From date")}</label>
+          <input type="date" id="ledger-from" name="from" value={from ?? ""} />
+        </div>
+        <div>
+          <label for="ledger-to">{t("To date")}</label>
+          <input type="date" id="ledger-to" name="to" value={to ?? ""} />
+        </div>
+        <button type="submit" class="btn-primary">
+          {t("Apply")}
+        </button>
+        {filtered && (
+          <a class="clear-filters" href="?">
+            {t("Clear filters")}
+          </a>
+        )}
+      </form>
+
+      {ledger.entries.length === 0 ? (
+        <EmptyState
+          title={
+            filtered
+              ? t("No entries match these filters.")
+              : t("No ledger entries yet.")
+          }
+          description={
+            filtered
+              ? undefined
+              : t("Charges and payments appear here as they happen.")
+          }
+        />
+      ) : (
+        <>
+          {dwelling && (
+            <p class="result-note">
+              {t(
+                "Balances follow each entry's effective date, so a back-dated entry changes the lines after it. A negative balance is credit."
+              )}
+            </p>
+          )}
+          <p class="result-note" role="status">
+            {ledger.truncated
+              ? t(
+                  "Showing the latest {shown} of {total} entries. Narrow the dates to see the rest."
+                )
+                  .replace("{shown}", String(LEDGER_DEFAULT_LIMIT))
+                  .replace("{total}", String(ledger.total))
+              : plural(locale, ledger.total, "{n} entry", "{n} entries")}
+          </p>
+          <div class="table-wrap stack-table">
+            <table class="w-full text-left text-body-sm">
+              <caption class="sr-only">{t("Ledger entries")}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Date")}</th>
+                  {!dwelling && <th scope="col">{t("Dwelling")}</th>}
+                  <th scope="col">{t("Entry")}</th>
+                  <th scope="col" class="text-right">
+                    {t("Debit")}
+                  </th>
+                  <th scope="col" class="text-right">
+                    {t("Credit")}
+                  </th>
+                  {dwelling && (
+                    <th scope="col" class="text-right">
+                      {t("Balance")}
+                    </th>
+                  )}
+                  <th scope="col">{t("Source")}</th>
+                  <th scope="col">{t("Recorded by")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ledger.entries.map((e) => (
+                  <tr data-type={e.type}>
+                    <td class="whitespace-nowrap" data-label={t("Date")}>
+                      {formatDate(e.effectiveDate, locale)}
+                    </td>
+                    {!dwelling && (
+                      <td data-label={t("Dwelling")}>
+                        <a
+                          class="link"
+                          href={`${base}/payments/ledger?dwelling=${e.dwellingId}`}
+                        >
+                          {e.dwellingNumber}
+                        </a>
+                      </td>
+                    )}
+                    <td data-label={t("Entry")}>
+                      <div class="font-medium">
+                        {t(entryTypeLabels[e.type] ?? e.type)}
+                      </div>
+                      {e.reason && <small class="text-muted">{e.reason}</small>}
+                    </td>
+                    <td class="text-right" data-label={t("Debit")}>
+                      {compareExact(e.debit, "0") > 0 ? money(e.debit) : "—"}
+                    </td>
+                    <td class="text-right" data-label={t("Credit")}>
+                      {compareExact(e.credit, "0") > 0 ? money(e.credit) : "—"}
+                    </td>
+                    {dwelling && (
+                      <td
+                        class="text-right font-medium"
+                        data-label={t("Balance")}
+                      >
+                        {money(e.balance ?? "0")}
+                      </td>
+                    )}
+                    <td data-label={t("Source")}>
+                      {sourceHref(e) ? (
+                        <a class="link" href={sourceHref(e)!}>
+                          {sourceLabel(e)}
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td data-label={t("Recorded by")}>
+                      {e.actorName ?? e.actorEmail ?? "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  </div>
+</AdminLayout>
+
+<style>
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .filters label {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+  .filters :is(select, input) {
+    min-width: 9rem;
+  }
+  .clear-filters {
+    color: var(--color-primary);
+    font-size: 0.875rem;
+  }
+  .clear-filters:hover {
+    text-decoration: underline;
+  }
+  .result-note {
+    margin-bottom: 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .link {
+    color: var(--color-primary);
+  }
+  .link:hover {
+    text-decoration: underline;
+  }
+  td.text-right,
+  th.text-right {
+    font-variant-numeric: tabular-nums;
+  }
+  tr[data-type="PAYMENT_REVERSAL"] td:nth-child(n + 2) {
+    color: var(--color-muted);
+  }
+  /* On a phone the filters are a form: fields take the full row, the two dates
+     share one, and Apply spans. */
+  @media (max-width: 639px) {
+    .filters > div {
+      flex: 1 1 100%;
+    }
+    .filters > div:has(input[type="date"]) {
+      flex: 1 1 8rem;
+    }
+    .filters :is(select, input) {
+      width: 100%;
+      min-width: 0;
+    }
+    .filters .btn-primary {
+      width: 100%;
+    }
+  }
+</style>

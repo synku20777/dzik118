@@ -104,14 +104,12 @@ if (Astro.request.method === "POST") {
   title={`Import bank statement - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Payments"), href: `/admin/o/${organizationId}/payments` },
+    { label: t("Import bank statement") },
+  ]}
 >
   <div class="space-y-6">
-    <a
-      href={`/admin/o/${organizationId}/payments`}
-      class="text-body-sm text-muted hover:underline"
-    >
-      ← {t("Payments")}
-    </a>
     <h1 class="text-h2 text-foreground">{t("Import bank statement")}</h1>
 
     {step === "upload" && (

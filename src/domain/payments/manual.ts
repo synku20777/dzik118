@@ -70,8 +70,10 @@ export async function matchTransactionToInvoice(
       );
     }
 
-    const nonReversed = existingMatches.find((m) => m.status !== "REVERSED");
-    if (nonReversed) {
+    const activeMatch = existingMatches.find(
+      (m) => m.status === "PROPOSED" || m.status === "CONFIRMED"
+    );
+    if (activeMatch) {
       throw new ConflictError("This payment is already matched");
     }
 
@@ -128,7 +130,7 @@ export async function matchTransactionToInvoice(
       throw new ConflictError("This invoice is already fully allocated");
     }
 
-    const resultType =
+    const resultType: "EXACT" | "PARTIAL" | "OVERPAYMENT" =
       compareExact(transaction.amount, remaining) === 0
         ? "EXACT"
         : compareExact(transaction.amount, remaining) < 0
@@ -136,19 +138,26 @@ export async function matchTransactionToInvoice(
           : "OVERPAYMENT";
     const proposedAllocationAmount = minExact(transaction.amount, remaining);
 
-    const [inserted] = await tx
-      .insert(paymentMatches)
-      .values({
-        organizationId,
-        bankTransactionId: transaction.id,
-        invoiceId: invoice.id,
-        matchType: "MANUAL",
-        resultType,
-        proposedAllocationAmount,
-        status: "PROPOSED",
-        confidence: null,
-      })
-      .returning();
+    const rejected = existingMatches.find(
+      (m) => m.status === "REJECTED" && m.invoiceId === invoice.id
+    );
+    const values = {
+      organizationId,
+      bankTransactionId: transaction.id,
+      invoiceId: invoice.id,
+      matchType: "MANUAL" as const,
+      resultType,
+      proposedAllocationAmount,
+      status: "PROPOSED" as const,
+      confidence: null,
+    };
+    const [inserted] = rejected
+      ? await tx
+          .update(paymentMatches)
+          .set(values)
+          .where(eq(paymentMatches.id, rejected.id))
+          .returning()
+      : await tx.insert(paymentMatches).values(values).returning();
 
     await recordAuditEvent(tx, {
       organizationId,
@@ -472,8 +481,8 @@ export interface EditUnmatchedInput {
 }
 
 // Fixes a statement row the parser read wrongly, before it is matched. A row
-// with a match (or posted to a dwelling account) has moved money: reverse that
-// first. The currency and the imported raw data never change; the audit event
+// with an active match or posted to a dwelling account cannot be edited. The
+// currency and the imported raw data never change; the audit event
 // keeps the old values.
 export async function updateUnmatchedTransaction(
   db: Db,
@@ -507,7 +516,7 @@ export async function updateUnmatchedTransaction(
         and(
           eq(paymentMatches.bankTransactionId, transactionId),
           eq(paymentMatches.organizationId, organizationId),
-          ne(paymentMatches.status, "REVERSED")
+          inArray(paymentMatches.status, ["PROPOSED", "CONFIRMED"])
         )
       )
       .limit(1);

@@ -88,6 +88,14 @@ function getInitialConsumption(
   organizationId={organizationId}
   organizationName={organization.name}
   archived={!!organization.archivedAt}
+  breadcrumbs={[
+    { label: t("Periods"), href: `/admin/o/${organizationId}/periods` },
+    {
+      label: periodName,
+      href: `/admin/o/${organizationId}/periods/${periodId}`,
+    },
+    { label: t("Readings") },
+  ]}
 >
   <div
     class="reading-grid-wrapper space-y-6"
@@ -98,14 +106,6 @@ function getInitialConsumption(
     data-label-no-changes={t("No changed readings to save.")}
     data-label-generic-error={t("An error occurred while saving readings.")}
   >
-    <a
-      href={`/admin/o/${organizationId}/periods/${periodId}`}
-      class="back-link"
-    >
-      <span aria-hidden="true">←</span>
-      {t("Back to the period")}
-    </a>
-
     <header class="space-y-1">
       <h1 class="font-display text-h2 text-foreground">
         {t("Meter readings")} — {periodName}
@@ -216,7 +216,7 @@ function getInitialConsumption(
                           value={row.currentValue ?? ""}
                           disabled={isLocked}
                           aria-describedby={`err-${row.meterId}`}
-                          class="rounded-control border border-border px-3 py-1.5 text-body-sm tabular-nums w-32 focus:border-primary focus:outline-none"
+                          class="rounded-control border border-(--color-input-border) px-3 py-1.5 text-body-sm tabular-nums w-32"
                         />
                         <span
                           class="reading-saved-indicator hidden text-success font-semibold"
@@ -526,18 +526,3 @@ function getInitialConsumption(
     });
   });
 </script>
-
-<style>
-  .back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: fit-content;
-    color: var(--color-muted);
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
-  .back-link:hover {
-    text-decoration: underline;
-  }
-</style>

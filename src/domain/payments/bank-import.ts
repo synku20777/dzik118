@@ -3,7 +3,7 @@
 // (read-only preview) and import (re-validates from raw text, then
 // writes) -- "never write immediately on file selection".
 import Papa from "papaparse";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import {
   bankImports,
@@ -346,7 +346,7 @@ export async function listTransactionsForImport(
       paymentMatches,
       and(
         eq(paymentMatches.bankTransactionId, bankTransactions.id),
-        ne(paymentMatches.status, "REVERSED")
+        inArray(paymentMatches.status, ["PROPOSED", "CONFIRMED"])
       )
     )
     .where(

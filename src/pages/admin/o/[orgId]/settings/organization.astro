@@ -44,13 +44,12 @@ const cityLine = [organization.city, organization.postalCode]
   organizationId={organizationId}
   organizationName={organization.name}
   archived={!!organization.archivedAt}
+  breadcrumbs={[
+    { label: t("Settings"), href: `/admin/o/${organizationId}/settings` },
+    { label: t("Organization") },
+  ]}
 >
   <div class="org-settings-page">
-    <a href={settingsHref} class="back-link">
-      <span aria-hidden="true">←</span>
-      {t("Settings")}
-    </a>
-
     <header class="org-settings-header">
       <div>
         <h1 class="font-display">{t("Organization")}</h1>
@@ -411,15 +410,6 @@ const cityLine = [organization.city, organization.postalCode]
     display: grid;
     gap: 1.25rem;
   }
-  .back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: fit-content;
-    color: var(--color-muted);
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
   .org-settings-header {
     display: flex;
     align-items: flex-start;
@@ -525,18 +515,12 @@ const cityLine = [organization.city, organization.postalCode]
   .org-field input {
     width: 100%;
     padding: 0.75rem 0.75rem;
-    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
-    background: var(--color-surface);
+    background-color: var(--color-surface);
     color: var(--color-foreground);
     font: inherit;
     font-size: 0.875rem;
     box-sizing: border-box;
-  }
-  .org-field input:focus-visible {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px var(--color-focus-ring);
   }
   .org-settings-actions {
     display: flex;

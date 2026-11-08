@@ -29,14 +29,12 @@ const organization = await withRequestDb((db) =>
   title="Data import/export"
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Settings"), href: `/admin/o/${organizationId}/settings` },
+    { label: t("Data") },
+  ]}
 >
-  <a
-    href={`/admin/o/${organizationId}/settings`}
-    class="text-body-sm text-muted hover:underline"
-  >
-    ← {t("Settings")}
-  </a>
-  <h1 class="mt-4 text-h2 text-foreground">{t("Data")}</h1>
+  <h1 class="text-h2 text-foreground">{t("Data")}</h1>
   <ul class="mt-6 grid gap-4 sm:grid-cols-2">
     <li>
       <a

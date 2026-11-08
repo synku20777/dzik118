@@ -114,7 +114,13 @@ export async function listDwellingAccountActivity(
         eq(accountEntries.currency, currency)
       )
     )
-    .orderBy(asc(accountEntries.effectiveDate), asc(accountEntries.createdAt));
+    // The id is the last, arbitrary-but-stable key for lines posted together,
+    // so a running balance never changes between two reads.
+    .orderBy(
+      asc(accountEntries.effectiveDate),
+      asc(accountEntries.createdAt),
+      asc(accountEntries.id)
+    );
   let balance = "0.00";
   return rows.map((row) => {
     balance = sumExact([balance, subtractExact(row.debit, row.credit)]);

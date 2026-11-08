@@ -43,14 +43,12 @@ const currentUserId = Astro.locals.auth!.userId;
   title={`Users - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Settings"), href: `/admin/o/${organizationId}/settings` },
+    { label: t("Admin users") },
+  ]}
 >
   <div class="max-w-2xl space-y-6">
-    <a
-      href={`/admin/o/${organizationId}/settings`}
-      class="text-body-sm text-muted hover:underline"
-    >
-      ← {t("Settings")}
-    </a>
     <h1 class="text-h2 text-foreground">{t("Admin users")}</h1>
     <p class="text-body-sm text-muted">
       {t(
@@ -105,7 +103,7 @@ const currentUserId = Astro.locals.auth!.userId;
           type="email"
           required
           placeholder="admin@example.com"
-          class="flex-1 rounded-control border border-border px-3 py-2 text-body-sm"
+          class="flex-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
         />
         <button type="submit" class="btn-primary">
           {t("Add admin")}

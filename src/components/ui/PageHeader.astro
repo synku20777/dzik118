@@ -2,6 +2,7 @@
 import FacadeAccent from "./FacadeAccent.astro";
 interface Props {
   title: string;
+  headingLevel?: "h1" | "h2" | "h3";
   description?: string;
   eyebrow?: string;
   // Section 4.2's Fraunces display treatment -- opt-in per page, not the
@@ -12,6 +13,7 @@ interface Props {
 }
 const {
   title,
+  headingLevel: Heading = "h1",
   description,
   eyebrow,
   display = false,
@@ -22,7 +24,7 @@ const {
 <header class="page-header">
   <div>
     {eyebrow && <p class="eyebrow">{eyebrow}</p>}
-    <h1 class:list={{ "font-display": display }}>{title}</h1>
+    <Heading class:list={{ "font-display": display }}>{title}</Heading>
     {description && <p class="page-description">{description}</p>}
     {accent && <FacadeAccent />}
   </div>

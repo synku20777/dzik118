@@ -112,14 +112,12 @@ if (Astro.request.method === "POST") {
   title={`Import dwellings - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Dwellings"), href: `/admin/o/${organizationId}/dwellings` },
+    { label: t("Import dwellings") },
+  ]}
 >
   <div class="space-y-6">
-    <a
-      href={`/admin/o/${organizationId}/dwellings`}
-      class="text-body-sm text-muted hover:underline"
-    >
-      ← {t("Dwellings")}
-    </a>
     <h1 class="text-h2 text-foreground">{t("Import dwellings")}</h1>
 
     {step === "upload" && (
@@ -148,7 +146,7 @@ if (Astro.request.method === "POST") {
           <select
             id="mode"
             name="mode"
-            class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+            class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
           >
             <option value="create">
               {t("Create only (default) -- existing numbers become errors")}

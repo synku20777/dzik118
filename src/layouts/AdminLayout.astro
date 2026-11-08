@@ -4,10 +4,11 @@ import AppNavigation from "../components/ui/AppNavigation.astro";
 import OrganizationSwitcher from "../components/ui/OrganizationSwitcher.astro";
 import { listOrganizations } from "../domain/organizations/organizations";
 import BrandMark from "../components/ui/BrandMark.astro";
-import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
-import ThemeToggle from "../components/ui/ThemeToggle.astro";
+import SidebarAccount from "../components/ui/SidebarAccount.astro";
+import Tooltips from "../components/ui/Tooltips.astro";
 import Icon from "../components/ui/Icon.astro";
 import MutationStatus from "../components/ui/MutationStatus.astro";
+import Breadcrumbs, { type Crumb } from "../components/ui/Breadcrumbs.astro";
 import DevFontPreview from "../components/ui/DevFontPreview.astro";
 import { ClientRouter } from "astro:transitions";
 import { translate, uiLocale } from "../lib/ui/i18n";
@@ -20,9 +21,14 @@ interface Props {
   // A page that just archived or restored the organization passes the fresh
   // state. Astro.locals.auth was loaded before the action ran.
   archived?: boolean;
+  // Where the page sits UNDER the Dashboard, outermost first; the last item is
+  // the current page and has no href. The layout adds the Dashboard root, so a
+  // page never repeats it. Omit only on pages outside an organization.
+  breadcrumbs?: Crumb[];
 }
 const {
   title = "Admin - Namkopa",
+  breadcrumbs,
   organizationId,
   organizationName,
   archived = organizationId
@@ -32,6 +38,22 @@ const {
 } = Astro.props;
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
+// Inside an organization every trail starts at its Dashboard. On the Dashboard
+// itself that root is the current page.
+const trail: Crumb[] | undefined =
+  breadcrumbs === undefined
+    ? undefined
+    : organizationId
+      ? breadcrumbs.length === 0
+        ? [{ label: t("Dashboard") }]
+        : [
+            {
+              label: t("Dashboard"),
+              href: `/admin/o/${organizationId}/dashboard`,
+            },
+            ...breadcrumbs,
+          ]
+      : breadcrumbs;
 const previewFontUrl = import.meta.env.DEV
   ? "/src/fonts/MedeoSansVariable.woff2"
   : undefined;
@@ -93,16 +115,7 @@ const { unreadMessages, switcherOrganizations } = organizationId
         />
       )}
       <div class="sidebar-account">
-        <p class="mb-2 truncate text-muted">{Astro.locals.auth?.email}</p>
-        <div class="flex flex-col items-start gap-2">
-          <form method="POST" action="/logout">
-            <button type="submit">{t("Sign out")}</button>
-          </form>
-          <div class="flex items-center gap-2">
-            <ThemeToggle />
-            <LanguageSwitch />
-          </div>
-        </div>
+        <SidebarAccount email={Astro.locals.auth?.email} />
       </div>
     </aside>
     <header class="admin-mobile">
@@ -126,7 +139,7 @@ const { unreadMessages, switcherOrganizations } = organizationId
         </span>
         <button
           type="button"
-          class="context-drawer-close"
+          class="icon-btn context-drawer-close"
           data-close-mobile-nav
           aria-label={t("Close menu")}
         >
@@ -146,18 +159,13 @@ const { unreadMessages, switcherOrganizations } = organizationId
             unreadMessages={unreadMessages}
           />
         )}
-        <div class="mt-4 flex flex-wrap items-center gap-5 border-t border-border pt-4 text-sm">
-          <form method="POST" action="/logout">
-            <button type="submit">{t("Sign out")}</button>
-          </form>
-          <div class="ml-auto flex items-center gap-2">
-            <ThemeToggle />
-            <LanguageSwitch />
-          </div>
+        <div class="mt-4 border-t border-border pt-4">
+          <SidebarAccount email={Astro.locals.auth?.email} />
         </div>
       </div>
     </dialog>
     <main id="main-content" tabindex="-1" class="admin-content app-content">
+      {trail && <Breadcrumbs items={trail} />}
       {archived && (
         <p class="notice notice-danger mb-4" role="status">
           {t(
@@ -168,6 +176,7 @@ const { unreadMessages, switcherOrganizations } = organizationId
       <slot />
     </main>
     <MutationStatus />
+    <Tooltips />
     {previewFontUrl && (
       <DevFontPreview
         fontUrl={previewFontUrl}
@@ -178,8 +187,22 @@ const { unreadMessages, switcherOrganizations } = organizationId
       import "../lib/ui/forms";
       import { onPageLoad } from "../lib/ui/page-lifecycle";
       import { labelStackTables } from "../lib/ui/stack-tables";
+      import { installDismissableDetails } from "../lib/ui/dismissable-details";
 
+      installDismissableDetails();
+      // The sidebar is re-rendered on every navigation. Marking the active item
+      // only when the section changed lets CSS play its "arrive" motion without
+      // blinking on same-section reloads (filters, form posts).
+      let lastSection: string | null = null;
       onPageLoad(() => {
+        const active = document.querySelector<HTMLElement>(
+          '.admin-sidebar .app-nav a[aria-current="page"]'
+        );
+        const section = active?.getAttribute("href") ?? null;
+        if (active && lastSection && section !== lastSection) {
+          active.dataset.arrived = "";
+        }
+        lastSection = section;
         labelStackTables();
         const mobileNavDialog =
           document.querySelector<HTMLDialogElement>("#mobile-nav-drawer");

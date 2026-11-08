@@ -1,0 +1,38 @@
+---
+// Who is signed in, the two display preferences, and the way out. Shared by the
+// desktop sidebar and the mobile drawer so the two never drift apart.
+import Icon from "./Icon.astro";
+import LanguageSwitch from "./LanguageSwitch.astro";
+import ThemeToggle from "./ThemeToggle.astro";
+import { translate, uiLocale } from "../../lib/ui/i18n";
+
+interface Props {
+  email?: string;
+}
+const { email } = Astro.props;
+const t = (text: string) => translate(uiLocale(Astro.cookies, Astro.url), text);
+const initial = email?.trim().charAt(0).toUpperCase();
+---
+
+<div class="account" role="group" aria-label={t("Account")}>
+  {email && (
+    <p class="account-id">
+      <span class="account-avatar" aria-hidden="true">
+        {initial}
+      </span>
+      <span class="account-email" data-tip={email} data-tip-clipped>
+        {email}
+      </span>
+    </p>
+  )}
+  <div class="account-tools">
+    <LanguageSwitch />
+    <ThemeToggle />
+  </div>
+  <form method="POST" action="/logout">
+    <button type="submit" class="account-signout">
+      <Icon name="logout" class="nav-icon" />
+      {t("Sign out")}
+    </button>
+  </form>
+</div>

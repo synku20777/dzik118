@@ -45,6 +45,10 @@ const { organization, progress } = await withRequestDb(async (db) => {
   title={`${t("Organization details")} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Setup"), href: `/admin/o/${organizationId}/setup` },
+    { label: t("Organization details") },
+  ]}
 >
   <SetupLayout
     title={t("Organization details")}
@@ -93,7 +97,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
             required
             aria-describedby="name-error"
             value={organization.name}
-            class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+            class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
           />
           <FieldError name="name" error={result?.error} />
         </div>
@@ -112,7 +116,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
             required
             aria-describedby="addressLine1-error"
             value={organization.addressLine1}
-            class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+            class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
           />
           <FieldError name="addressLine1" error={result?.error} />
         </div>
@@ -130,7 +134,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
             type="text"
             aria-describedby="addressLine2-error"
             value={organization.addressLine2 ?? ""}
-            class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+            class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
           />
           <FieldError name="addressLine2" error={result?.error} />
         </div>
@@ -146,7 +150,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
               type="text"
               aria-describedby="city-error"
               value={organization.city ?? ""}
-              class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="city" error={result?.error} />
           </div>
@@ -164,7 +168,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
               type="text"
               aria-describedby="postalCode-error"
               value={organization.postalCode ?? ""}
-              class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="postalCode" error={result?.error} />
           </div>
@@ -184,7 +188,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
               type="email"
               aria-describedby="email-error"
               value={organization.email ?? ""}
-              class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="email" error={result?.error} />
           </div>
@@ -202,7 +206,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
               type="tel"
               aria-describedby="phone-error"
               value={organization.phone ?? ""}
-              class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="phone" error={result?.error} />
           </div>
@@ -233,7 +237,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
               type="text"
               aria-describedby="registrationNumber-error"
               value={organization.registrationNumber ?? ""}
-              class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="registrationNumber" error={result?.error} />
           </div>
@@ -251,7 +255,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
               type="text"
               aria-describedby="vatNumber-error"
               value={organization.vatNumber ?? ""}
-              class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="vatNumber" error={result?.error} />
           </div>
@@ -271,7 +275,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
               type="text"
               aria-describedby="bankName-error"
               value={organization.bankName ?? ""}
-              class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="bankName" error={result?.error} />
           </div>
@@ -286,7 +290,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
               type="text"
               aria-describedby="iban-error"
               value={organization.iban ?? ""}
-              class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="iban" error={result?.error} />
           </div>
@@ -302,7 +306,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
             type="text"
             aria-describedby="bic-error"
             value={organization.bic ?? ""}
-            class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground sm:w-1/2"
+            class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground sm:w-1/2"
           />
           <FieldError name="bic" error={result?.error} />
         </div>

@@ -40,7 +40,6 @@ const updateResult = Astro.getActionResult(actions.billing.updateRule);
 const archiveResult = Astro.getActionResult(actions.billing.archiveRule);
 
 const base = `/admin/o/${organizationId}`;
-const settingsHref = `${base}/settings`;
 
 const search = Astro.url.searchParams.get("search")?.trim().toLowerCase() ?? "";
 const typeFilter = Astro.url.searchParams.get("type") ?? "";
@@ -216,13 +215,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   title="Tariffs & rules"
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Settings"), href: `/admin/o/${organizationId}/settings` },
+    { label: t("Tariffs & rules") },
+  ]}
 >
   <div class="rules-page">
-    <a href={settingsHref} class="back-link">
-      <span aria-hidden="true">←</span>
-      {t("Settings")}
-    </a>
-
     <PageHeader
       title={t("Tariffs & rules")}
       description={t(
@@ -258,7 +256,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
           value={search}
           placeholder={t("Search rules by name or code...")}
           autocomplete="off"
-          class="mt-1 rounded-control border border-border px-3 py-1.5 text-body-sm"
+          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-body-sm"
         />
       </div>
       <div>
@@ -268,7 +266,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
         <select
           id="type-filter"
           name="type"
-          class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
         >
           <option value="">{t("All types")}</option>
           {calculationTypes.map((type) => (
@@ -285,7 +283,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
         <select
           id="status-filter"
           name="status"
-          class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
         >
           <option value="">{t("All statuses")}</option>
           <option value="ACTIVE" selected={statusFilter === "ACTIVE"}>
@@ -622,11 +620,11 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       </div>
       <button
         type="button"
-        class="context-drawer-close"
+        class="icon-btn context-drawer-close"
         data-close-tariff-drawer
         aria-label={t("Close")}
       >
-        <span aria-hidden="true">×</span>
+        <Icon name="x" size="sm" />
       </button>
     </header>
     <div class="context-drawer-body">
@@ -1385,21 +1383,15 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   .rule-icon[data-icon="hot_water"] {
     color: var(--color-meter-hot-text);
   }
+  .rule-field select {
+    padding-inline-end: 2.25rem;
+  }
 </style>
 
 <style>
   .rules-page {
     display: grid;
     gap: 1.25rem;
-  }
-  .back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: fit-content;
-    color: var(--color-muted);
-    font-size: 0.875rem;
-    font-weight: 600;
   }
   .settings-help {
     display: inline-flex;
@@ -1526,7 +1518,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   .rule-field select {
     width: 100%;
     padding: 0.75rem 0.75rem;
-    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     /* background-color, not the background shorthand -- the shorthand
        resets background-image to none, wiping out the global select
@@ -1540,9 +1531,9 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   }
   .rule-field input:focus-visible,
   .rule-field select:focus-visible {
-    outline: none;
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px var(--color-focus-ring);
   }
   .rule-field-hint {
     margin-top: 0.5rem;
@@ -1682,7 +1673,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     width: 100%;
     min-height: 4.5rem;
     padding: 0.75rem;
-    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     font-size: 0.875rem;
     font-family: inherit;
@@ -1767,5 +1757,8 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     padding: 0;
     border: none;
     background: none;
+  }
+  .rule-field select {
+    padding-inline-end: 2.25rem;
   }
 </style>

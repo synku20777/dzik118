@@ -164,14 +164,12 @@ const bootstrap = {
   title={`${t("Invoice template")} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Settings"), href: `/admin/o/${organizationId}/settings` },
+    { label: t("Invoice template") },
+  ]}
 >
   <div class="space-y-6">
-    <nav class="breadcrumb" aria-label={t("Breadcrumb")}>
-      <a href={`${base}/settings`}>{t("Settings")}</a>
-      <span aria-hidden="true">›</span>
-      <span aria-current="page">{t("Invoice template")}</span>
-    </nav>
-
     <PageHeader
       title={t("Invoice template")}
       description={t(
@@ -432,9 +430,8 @@ const bootstrap = {
   .tpl-period-select select {
     padding: 0.3rem 0.5rem;
     font-size: 0.8125rem;
-    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
-    background: var(--color-surface);
+    background-color: var(--color-surface);
     color: var(--color-foreground);
   }
   .tpl-period-note {
@@ -452,9 +449,8 @@ const bootstrap = {
     padding: 0.25rem 0.5rem;
     font-size: 0.8125rem;
     font-weight: 500;
-    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
-    background: var(--color-surface);
+    background-color: var(--color-surface);
     color: var(--color-foreground);
     cursor: pointer;
   }
@@ -580,7 +576,6 @@ const bootstrap = {
   .tpl-select {
     width: 100%;
     padding: 0.4rem 0.5rem;
-    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     background-color: var(--color-surface);
     color: var(--color-foreground);
@@ -597,7 +592,6 @@ const bootstrap = {
   .tpl-textarea {
     width: 100%;
     padding: 0.5rem;
-    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     background-color: var(--color-surface);
     color: var(--color-foreground);
@@ -782,5 +776,10 @@ const bootstrap = {
     border-radius: 0.25rem;
     transform-origin: top left;
     transition: transform 0.15s ease;
+  }
+  .tpl-period-select select,
+  .tpl-zoom-select,
+  .tpl-select {
+    padding-inline-end: 2.25rem;
   }
 </style>

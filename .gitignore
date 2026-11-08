@@ -37,6 +37,24 @@ graphify-out/
 
 # Temporary UX review artifacts
 .ux-shots*/
+/reports/Admin dashboard UI design review.md
+/research_notes/Admin dashboard UI design review/
+
+# Locally installed agent skills
+/.agents/skills/apple-design/
+/.agents/skills/batch-grill-me/
+/.agents/skills/epic-design/
+/.agents/skills/frontend-design-review/
+/.agents/skills/frontend-ui-engineering/
+/.agents/skills/premium-frontend-ui/
+/.agents/skills/ui-design-system/
+/.agents/skills/using-superpowers/
+/.claude/skills/apple-design/
+/.claude/skills/batch-grill-me/
+/.claude/skills/epic-design/
+/.claude/skills/frontend-ui-engineering/
+/.claude/skills/ui-design-system/
+/.claude/skills/using-superpowers/
 
 # Locally evaluated fonts; commercial licenses are required before distribution.
 /src/fonts/local/

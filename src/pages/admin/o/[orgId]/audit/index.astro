@@ -101,6 +101,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
   title={`Audit log - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[{ label: t("Audit log") }]}
 >
   <div class="space-y-6">
     <h1 class="text-xl font-bold text-foreground">{t("Audit log")}</h1>
@@ -113,7 +114,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
         <select
           id="action"
           name="action"
-          class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
+          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-sm"
         >
           <option value="" selected={!actionFilter}>
             {t("All actions")}
@@ -135,7 +136,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
         <select
           id="entityType"
           name="entityType"
-          class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
+          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-sm"
         >
           <option value="" selected={!entityTypeFilter}>
             {t("All entity types")}
@@ -154,7 +155,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
         <select
           id="actor"
           name="actor"
-          class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
+          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-sm"
         >
           <option value="" selected={!actorFilter}>
             {t("All actors")}
@@ -175,7 +176,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
           id="from"
           name="from"
           value={fromFilter ?? ""}
-          class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
+          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-sm"
         />
       </div>
       <div>
@@ -187,7 +188,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
           id="to"
           name="to"
           value={toFilter ?? ""}
-          class="mt-1 rounded-control border border-border px-3 py-1.5 text-sm"
+          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-sm"
         />
       </div>
       <button type="submit" class="btn-primary">
@@ -237,9 +238,9 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
                   {log.requestId && (
                     <div
                       class="text-xs text-muted break-all"
-                      title={t("Request ID")}
-                      aria-label={`${t("Request ID")}: ${log.requestId}`}
+                      data-tip={t("Request ID")}
                     >
+                      <span class="sr-only">{t("Request ID")}: </span>
                       {log.requestId}
                     </div>
                   )}
@@ -252,7 +253,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
               <td class="px-4 py-2">
                 {log.beforeData != null || log.afterData != null ? (
                   <details>
-                    <summary class="cursor-pointer text-muted hover:underline">
+                    <summary class="chevron-toggle text-muted hover:underline">
                       {t("View")}
                     </summary>
                     <pre class="mt-2 max-w-md overflow-x-auto rounded bg-surface-hover p-2 text-xs">

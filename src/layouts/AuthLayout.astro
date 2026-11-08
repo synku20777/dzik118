@@ -2,6 +2,7 @@
 import "../styles/global.css";
 import ThemeToggle from "../components/ui/ThemeToggle.astro";
 import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
+import Tooltips from "../components/ui/Tooltips.astro";
 import { uiLocale } from "../lib/ui/i18n";
 
 interface Props {
@@ -56,6 +57,7 @@ const locale = uiLocale(Astro.cookies, Astro.url);
     <main class="relative flex min-h-screen items-center justify-center px-4 py-20">
       <slot />
     </main>
+    <Tooltips />
   </body>
 </html>
 

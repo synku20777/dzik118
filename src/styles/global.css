@@ -73,10 +73,30 @@
 :root {
   color-scheme: light dark;
 
-  /* Letter-spacing for all sans text (Switzer and its Overused Grotesk
-     fallback). One value to tune: see the base layer rule below. */
-  --tracking-sans: 0.03em;
+  /* Body copy stays neutral; small labels and headings have their own
+     optical spacing so translated UI is not needlessly widened. */
+  --tracking-sans: 0;
+  --tracking-small: 0.01em;
+  --tracking-heading: -0.02em;
+  --tracking-display: -0.015em;
   --font-regular-weight: 400;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --control-size-sm: 2.25rem;
+  --control-size-md: 2.75rem;
+  --control-size-lg: 3rem;
+  --duration-feedback: 100ms;
+  --duration-fast: 140ms;
+  --duration-normal: 180ms;
+  --duration-panel: 220ms;
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
 
   --color-surface-hover: light-dark(#eee8de, #1e2b2e);
   --color-primary-hover: light-dark(#35677a, #a9c2cb);
@@ -90,7 +110,9 @@
   /* Section 8 gives form inputs their own (slightly deeper) border tone,
      distinct from --color-border's card/table hairlines. */
   --color-input-border: light-dark(#8f887e, #718083);
-  --color-focus-ring: light-dark(rgb(39 75 91 / 14%), rgb(191 209 215 / 20%));
+  --color-focus-ring: light-dark(#274b5b, #bfd1d7);
+  --color-primary-active: light-dark(#1d3a47, #99b6c0);
+  --color-destructive-active: light-dark(#612b21, #cc9c8e);
   --color-backdrop: rgb(9 15 27 / 55%);
   --color-control-thumb: #fffcf7;
   --color-on-primary: light-dark(#fffcf7, #17242b);
@@ -150,8 +172,7 @@
   --chart-grid: light-dark(#d5cec2, #3d4a4d);
 }
 
-:root[data-theme="dark"],
-[data-theme="dark"] {
+:root[data-theme="dark"] {
   color-scheme: dark;
   --lightningcss-light: ;
   --lightningcss-dark: initial;
@@ -197,8 +218,7 @@
   --color-nav-active-bg: rgba(191, 209, 215, 0.16);
 }
 
-:root[data-theme="light"],
-[data-theme="light"] {
+:root[data-theme="light"] {
   color-scheme: light;
   --lightningcss-light: initial;
   --lightningcss-dark: ;
@@ -263,6 +283,7 @@
   --radius-badge: 0.3125rem;
   --radius-input: 0.4375rem;
   --radius-control: 0.5rem;
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9l6 6l6-6'/%3E%3C/svg%3E");
   --radius-panel: 0.625rem;
   --shadow-panel: none;
   --font-sans:
@@ -287,18 +308,6 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     font-weight: var(--font-regular-weight);
-  }
-  /* Set on every element, not on body: an em value inherits as a fixed length
-     (16px x 0.03 = 0.48px), so each element has to resolve 0.03em against its
-     own font size. Form controls are listed because preflight sets
-     letter-spacing: inherit on them with a higher specificity than `*`.
-     This rule is in the base layer on purpose: any tracking-* utility and any
-     explicit letter-spacing elsewhere (eyebrows, big numerals) still wins. */
-  *,
-  button,
-  input,
-  select,
-  textarea {
     letter-spacing: var(--tracking-sans);
   }
   /* Fraunces (display) and monospace text keep their own spacing. */
@@ -307,15 +316,10 @@
     letter-spacing: normal;
   }
   .font-display {
-    letter-spacing: -0.015em;
-  }
-  .font-display *,
-  .brand *,
-  .font-mono * {
-    letter-spacing: inherit;
+    letter-spacing: var(--tracking-display);
   }
   :focus-visible {
-    outline: 3px solid var(--color-primary-hover);
+    outline: 2px solid var(--color-focus-ring);
     outline-offset: 3px;
   }
   html {
@@ -358,24 +362,36 @@
   input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
   select,
   textarea {
-    min-height: 2.5rem;
+    min-height: var(--control-size-md);
     max-width: 100%;
     background-color: var(--color-surface);
     color: var(--color-foreground);
     border: 1px solid var(--color-input-border);
     border-radius: var(--radius-input);
   }
-  /* Section 8: focus ring replaces the generic outline with the exact
-     brand-colored ring the spec gives, on the fields it actually applies
-     to (not buttons/links, which keep the plain outline above). */
-  input:not([type="hidden"]):not([type="checkbox"]):not(
-      [type="radio"]
-    ):focus-visible,
-  select:focus-visible,
-  textarea:focus-visible {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px var(--color-focus-ring);
+  input:not(
+    [type="hidden"],
+    [type="checkbox"],
+    [type="radio"],
+    [type="color"],
+    [type="range"],
+    [type="file"]
+  ),
+  textarea {
+    /* Text sits clear of the border. File, colour and range inputs are not
+       text fields and keep the browser's own spacing. Field utilities and page
+       rules still override this. */
+    padding: 0.5rem 0.75rem;
+  }
+  /* A select keeps its own wider right padding for the arrow (set above). */
+  select {
+    padding-block: 0.5rem;
+    padding-left: 0.75rem;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-muted);
+    opacity: 1;
   }
   input[type="checkbox"],
   input[type="radio"] {
@@ -398,16 +414,48 @@
   }
 }
 
+/* State rules are unlayered so field utilities cannot erase feedback.
+   Error borders survive focus; the outline still indicates keyboard position. */
+:where(
+  input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea
+):focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+:where(
+    input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea
+  ):focus-visible:not([aria-invalid="true"]) {
+  border-color: var(--color-primary);
+}
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: var(--color-destructive);
+}
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  background-color: var(--color-surface-hover);
+  color: var(--color-muted);
+}
+
 /* Section 4 type scale (UI_SPECIFICATION.md Sec. 4.1). Named utilities so
    pages can express intent ("this is a Label") instead of ad-hoc
    font-size/weight combinations. */
 @layer components {
   .text-caption {
+    letter-spacing: var(--tracking-small);
     font-size: 0.75rem; /* 12px */
     line-height: 1rem; /* 16px */
     font-weight: 500;
   }
   .text-label {
+    letter-spacing: var(--tracking-small);
     font-size: 0.8125rem; /* 13px */
     line-height: 1.125rem; /* 18px */
     font-weight: 600;
@@ -428,11 +476,13 @@
     font-weight: 600;
   }
   .text-h3 {
+    letter-spacing: var(--tracking-heading);
     font-size: 1.25rem; /* 20px */
     line-height: 1.625rem; /* 26px */
     font-weight: 600;
   }
   .text-h2 {
+    letter-spacing: var(--tracking-heading);
     font-size: 1.75rem; /* 28px */
     line-height: 2.125rem; /* 34px */
     font-weight: 600;
@@ -442,6 +492,7 @@
      numbers, empty-state titles) -- never in tables, forms, buttons,
      badges, or fine print. */
   .font-display {
+    letter-spacing: var(--tracking-display);
     font-family: var(--font-display);
     font-weight: 600;
     font-optical-sizing: auto;
@@ -465,7 +516,7 @@
 .theme-toggle svg,
 .nav-icon,
 .brand-mark svg {
-  stroke-width: 1.75;
+  stroke-width: var(--icon-stroke);
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -485,6 +536,13 @@
   }
 }
 
+@media (forced-colors: active) {
+  .status-badge {
+    outline: 1px solid CanvasText;
+    outline-offset: -1px;
+  }
+}
+
 /* Theme-switch transition: lib/ui/theme.ts's setTheme() stamps this
    attribute for ~180ms around the data-theme flip. Scoping the transition
    to that window (rather than a permanent rule on every element) means the
@@ -496,7 +554,7 @@
     transition-property:
       background-color, color, border-color, outline-color, box-shadow, fill,
       stroke;
-    transition-duration: 180ms;
+    transition-duration: var(--duration-normal);
     transition-timing-function: ease;
   }
 }
@@ -504,28 +562,33 @@
 @layer components {
   .btn-primary,
   .btn-secondary,
-  .btn-danger {
+  .btn-danger,
+  .btn-ghost {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    min-height: 2.75rem;
+    gap: var(--space-2);
+    min-height: var(--control-size-md);
     border-radius: var(--radius-control);
-    padding: 0.75rem 1rem;
+    padding: var(--space-2) var(--space-4);
     font-size: 1rem;
     font-weight: 600;
     line-height: 1.4;
     text-decoration: none;
+    text-align: center;
+    overflow-wrap: break-word;
+    touch-action: manipulation;
   }
   @media (prefers-reduced-motion: no-preference) {
     .btn-primary,
     .btn-secondary,
     .btn-danger,
+    .btn-ghost,
     .icon-btn {
       transition:
-        background-color 140ms ease,
-        border-color 140ms ease,
-        color 140ms ease;
+        background-color var(--duration-fast) ease,
+        border-color var(--duration-fast) ease,
+        color var(--duration-fast) ease;
     }
   }
   .btn-primary {
@@ -536,7 +599,7 @@
        it -- light-dark() picks the readable foreground for each fill. */
     color: var(--color-on-primary);
   }
-  .btn-primary:hover {
+  .btn-primary:where(:not(:disabled):not([aria-disabled="true"])):hover {
     background: var(--color-primary-hover);
   }
   .btn-secondary {
@@ -544,7 +607,7 @@
     border: 1px solid var(--color-border);
     color: var(--color-foreground);
   }
-  .btn-secondary:hover {
+  .btn-secondary:where(:not(:disabled):not([aria-disabled="true"])):hover {
     background: var(--color-surface-hover);
   }
   .btn-danger {
@@ -552,25 +615,67 @@
     border: 1px solid var(--color-destructive);
     color: var(--color-on-primary);
   }
-  .btn-danger:hover {
+  .btn-danger:where(:not(:disabled):not([aria-disabled="true"])):hover {
     background: var(--color-destructive-hover);
   }
+  .btn-ghost {
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--color-primary);
+  }
+  .btn-ghost:where(:not(:disabled):not([aria-disabled="true"])):hover {
+    background: var(--color-surface-hover);
+  }
+  /* Press feedback begins on pointer-down without moving the label or
+     delaying the click. Color transitions can be redirected immediately. */
+  .btn-primary:where(:not(:disabled):not([aria-disabled="true"])):active {
+    background: var(--color-primary-active);
+    transition-duration: var(--duration-feedback);
+  }
+  .btn-danger:where(:not(:disabled):not([aria-disabled="true"])):active {
+    background: var(--color-destructive-active);
+    transition-duration: var(--duration-feedback);
+  }
+  :is(.btn-secondary, .btn-ghost, .icon-btn):where(
+      :not(:disabled):not([aria-disabled="true"])
+    ):active {
+    background: var(--color-nav-active-bg);
+    color: var(--color-primary);
+    transition-duration: var(--duration-feedback);
+  }
+  :is(
+    .btn-primary,
+    .btn-secondary,
+    .btn-danger,
+    .btn-ghost,
+    .icon-btn
+  )[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+  :is(.btn-primary, .btn-secondary, .btn-danger, .btn-ghost)[aria-busy="true"] {
+    cursor: progress;
+  }
   .btn-sm {
-    min-height: 2.25rem;
-    padding: 0.5rem 0.75rem;
+    min-height: var(--control-size-sm);
+    padding: var(--space-2) var(--space-3);
     font-size: 0.8125rem;
+  }
+  .btn-lg {
+    min-height: var(--control-size-lg);
+    padding: var(--space-3) var(--space-6);
   }
   @media (pointer: coarse) {
     .btn-sm {
-      min-height: 2.75rem;
+      min-height: var(--control-size-md);
     }
   }
   .icon-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2.25rem;
-    height: 2.25rem;
+    width: var(--control-size-md);
+    height: var(--control-size-md);
     flex-shrink: 0;
     border-radius: var(--radius-control);
     border: 1px solid var(--color-border);
@@ -578,7 +683,7 @@
     color: var(--color-muted);
     cursor: pointer;
   }
-  .icon-btn:hover {
+  .icon-btn:where(:not(:disabled):not([aria-disabled="true"])):hover {
     background: var(--color-surface-hover);
     color: var(--color-foreground);
   }
@@ -587,15 +692,22 @@
     height: 1.125rem;
     flex-shrink: 0;
   }
-  .icon-btn-danger:hover {
+  .icon-btn-danger:where(:not(:disabled):not([aria-disabled="true"])):hover {
     background: var(--color-destructive-hover-bg);
     color: var(--color-destructive);
   }
-  @media (pointer: coarse) {
-    .icon-btn {
-      width: 2.75rem;
-      height: 2.75rem;
-    }
+  .icon-btn-danger:where(:not(:disabled):not([aria-disabled="true"])):active {
+    background: var(--color-destructive-hover-bg);
+    color: var(--color-destructive);
+  }
+  :is(
+    .btn-primary,
+    .btn-secondary,
+    .btn-danger,
+    .btn-ghost,
+    .icon-btn
+  ):disabled {
+    cursor: not-allowed;
   }
   /* Stretched-link rows: put class="row-link" on the <tr> and
      class="row-link-target" on the one <a> that should govern the whole
@@ -630,6 +742,74 @@
   .table-wrap {
     overflow-x: auto;
   }
+  /* One surface, a few figures with dividers: the same construction as the
+     Current Month finances and the dwelling summary. Two columns on a phone,
+     one below 360px. */
+  .metric-strip {
+    display: grid;
+    grid-template-columns: repeat(var(--metrics, 4), minmax(0, 1fr));
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+  }
+  .metric {
+    display: grid;
+    align-content: start;
+    gap: 0.375rem;
+    min-width: 0;
+    padding: 1.25rem 1.5rem;
+  }
+  .metric + .metric {
+    border-left: 1px solid var(--color-border);
+  }
+  .metric-label {
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    font-weight: 550;
+  }
+  .metric-value {
+    margin: 0;
+    font-size: clamp(1.5rem, 2.2vw, 2rem);
+    font-weight: 600;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .metric-note {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+  .metric[data-tone="success"] .metric-value {
+    color: var(--color-success);
+  }
+  .metric[data-tone="warning"] .metric-value {
+    color: var(--color-warning);
+  }
+  @media (max-width: 900px) {
+    .metric-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .metric:nth-child(odd) {
+      border-left: 0;
+    }
+    .metric:nth-child(n + 3) {
+      border-top: 1px solid var(--color-border);
+    }
+  }
+  @media (max-width: 540px) {
+    .metric {
+      padding: 1rem;
+    }
+  }
+  @media (max-width: 359px) {
+    .metric-strip {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .metric + .metric {
+      border-top: 1px solid var(--color-border);
+      border-left: 0;
+    }
+  }
   .page-header {
     position: relative;
     isolation: isolate;
@@ -640,7 +820,10 @@
     flex-wrap: wrap;
     margin-bottom: 1.75rem;
   }
-  .page-header h1 {
+  .page-header :is(h1, h2, h3) {
+    letter-spacing: var(--tracking-heading);
+    overflow-wrap: break-word;
+    min-width: 0;
     font-size: clamp(1.65rem, 2.4vw, 2rem);
     font-weight: 700;
     line-height: 1.2;
@@ -649,14 +832,15 @@
      Fraunces 40/44, weight 550-600) -- only where .font-display is also
      present, so ordinary page titles (Dwellings, Payments, Settings, ...)
      keep the plain Switzer treatment above. */
-  .page-header h1.font-display {
+  .page-header :is(h1, h2, h3).font-display {
+    letter-spacing: var(--tracking-display);
     font-size: clamp(1.85rem, 3.2vw, 2.5rem);
     font-weight: 600;
     line-height: 1.15;
   }
   /* 3.2vw passes 36px at 1125px (70.3125rem): Fraunces is 700 above 36px. */
   @media (min-width: 70.3125rem) {
-    .page-header h1.font-display {
+    .page-header :is(h1, h2, h3).font-display {
       font-weight: 700;
     }
   }
@@ -667,22 +851,154 @@
     font-weight: 600;
     margin-bottom: 0.75rem;
   }
-  .breadcrumb {
+  /* Button group (shadcn-style): neighbouring controls share one border and
+     only the outer corners are rounded. Takes links, buttons and a <details>
+     whose <summary> is the button. Stacks on a phone. */
+  .btn-group {
+    position: relative;
+    display: inline-flex;
+    align-items: stretch;
+    max-width: 100%;
+  }
+  .btn-group > :is(.btn-primary, .btn-secondary, .btn-danger),
+  .btn-group > details > summary {
+    border-radius: 0;
+  }
+  .btn-group > details {
     display: flex;
+  }
+  .btn-group > details > summary {
+    flex: 1;
+    justify-content: center;
+  }
+  .btn-group > :not(:first-child) {
+    margin-left: -1px;
+  }
+  .btn-group > :first-child,
+  .btn-group > :first-child > summary {
+    border-start-start-radius: var(--radius-control);
+    border-end-start-radius: var(--radius-control);
+  }
+  .btn-group > :last-child,
+  .btn-group > :last-child > summary {
+    border-start-end-radius: var(--radius-control);
+    border-end-end-radius: var(--radius-control);
+  }
+  .btn-group > :only-child,
+  .btn-group > :only-child > summary {
+    border-radius: var(--radius-control);
+  }
+  .btn-group > :is(a, button):hover,
+  .btn-group > :is(a, button):focus-visible,
+  .btn-group > details:is([open], :hover, :focus-within) > summary {
+    position: relative;
+    z-index: 1;
+  }
+  @media (max-width: 639px) {
+    .btn-group {
+      flex-direction: column;
+      width: 100%;
+    }
+    .btn-group > :not(:first-child) {
+      margin-top: -1px;
+      margin-left: 0;
+    }
+    .btn-group > * {
+      justify-content: center;
+    }
+    .btn-group > :first-child,
+    .btn-group > :first-child > summary {
+      border-radius: var(--radius-control) var(--radius-control) 0 0;
+    }
+    .btn-group > :last-child,
+    .btn-group > :last-child > summary {
+      border-radius: 0 0 var(--radius-control) var(--radius-control);
+    }
+    .btn-group > :only-child,
+    .btn-group > :only-child > summary {
+      border-radius: var(--radius-control);
+    }
+  }
+  /* A text toggle (a bare <details> that reveals content in place, unlike the boxed `.disclosure` panel) shows a chevron
+     down when closed and up when open, everywhere. Menus and button toggles
+     keep their own look. `.chevron-toggle-end` pushes the chevron to the far edge
+     of a full-width row. */
+  summary.chevron-toggle {
+    display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-    color: var(--color-muted);
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    gap: 0.375rem;
+    list-style: none;
+    cursor: pointer;
   }
-  .breadcrumb a {
-    color: var(--color-muted);
+  summary.chevron-toggle::-webkit-details-marker {
+    display: none;
   }
-  .breadcrumb a:hover {
+  summary.chevron-toggle::after {
+    content: "";
+    flex: none;
+    width: 1.125em;
+    height: 1.125em;
+    background: currentColor;
+    -webkit-mask: var(--chevron) center / contain no-repeat;
+    mask: var(--chevron) center / contain no-repeat;
+  }
+  summary.chevron-toggle-end {
+    display: flex;
+    justify-content: space-between;
+  }
+  details[open] > summary.chevron-toggle::after {
+    transform: rotate(180deg);
+  }
+  @media (forced-colors: active) {
+    summary.chevron-toggle::after {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    summary.chevron-toggle::after {
+      transition: transform 150ms ease;
+    }
+  }
+  /* The breadcrumb trail (components/ui/Breadcrumbs.astro): rendered once by
+     AdminLayout, so it sits in the same place on every page. */
+  .crumbs {
+    margin-bottom: 1rem;
+  }
+  .crumbs ol {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.125rem 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .crumbs li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+  .crumbs li svg {
+    flex: none;
+    opacity: 0.7;
+  }
+  .crumbs a {
+    border-radius: var(--radius-badge);
+    color: var(--color-muted);
+    font-weight: 500;
+  }
+  .crumbs a:hover {
     color: var(--color-foreground);
+    text-decoration: underline;
+  }
+  .crumbs [aria-current="page"] {
+    max-width: min(32ch, 70vw);
+    overflow: hidden;
+    color: var(--color-foreground);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .page-description {
     color: var(--color-muted);
@@ -900,6 +1216,7 @@
     padding: 1.75rem 1rem;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
     z-index: 20;
   }
   .app-nav {
@@ -943,12 +1260,186 @@
     height: 1.125rem;
     flex-shrink: 0;
   }
+  /* The guide is reference material, not a workspace: same item, set apart. */
+  .app-nav .nav-divider {
+    margin: 0.5rem 0.25rem;
+    border: 0;
+    border-top: 1px solid var(--color-border);
+  }
+  /* Nav motion. The look of the items is unchanged; only how they respond is:
+     the icon leans toward the label on hover, a press sinks the item, and a
+     newly active item arrives (AdminLayout marks it only when the section
+     changed, so same-page reloads do not blink). */
+  @media (prefers-reduced-motion: no-preference) {
+    .app-nav a {
+      transition:
+        background-color var(--duration-fast) ease,
+        color var(--duration-fast) ease,
+        transform var(--duration-feedback) var(--ease-standard);
+    }
+    .app-nav a .nav-icon {
+      transition: transform var(--duration-normal) var(--ease-standard);
+    }
+    .app-nav a:hover .nav-icon {
+      transform: translateX(2px) scale(1.08);
+    }
+    .app-nav a:active {
+      transform: scale(0.985);
+      transition-duration: var(--duration-feedback);
+    }
+    .app-nav a[data-arrived] {
+      animation: nav-arrive var(--duration-panel) var(--ease-standard) both;
+    }
+    .app-nav a[data-arrived] .nav-icon {
+      animation: nav-icon-arrive var(--duration-panel) var(--ease-standard)
+        backwards;
+    }
+  }
+  @keyframes nav-arrive {
+    from {
+      background-color: transparent;
+      color: var(--color-muted);
+    }
+  }
+  @keyframes nav-icon-arrive {
+    0% {
+      transform: scale(0.8);
+    }
+    60% {
+      transform: scale(1.18);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
   .sidebar-account {
     margin-top: auto;
+    padding-top: 1rem;
     border-top: 1px solid var(--color-border);
-    padding: 1rem 0.75rem 0;
-    font-size: 0.8125rem;
     background: var(--color-surface);
+  }
+  /* Account: who, then the two display preferences, then the way out. */
+  .account {
+    display: grid;
+    gap: 0.75rem;
+    font-size: 0.8125rem;
+  }
+  .account-id {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-width: 0;
+    margin: 0;
+    padding-inline: 0.25rem;
+  }
+  .account-avatar {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    background: var(--color-nav-active-bg);
+    color: var(--color-primary);
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+  .account-email {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-muted);
+  }
+  .account-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .account-signout {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: var(--control-size-md);
+    padding: 0 0.75rem;
+    border: 0;
+    border-radius: var(--radius-control);
+    background: transparent;
+    color: var(--color-muted);
+    font: inherit;
+    font-size: 0.875rem;
+    text-align: left;
+    cursor: pointer;
+  }
+  .account-signout:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-foreground);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .account-signout {
+      transition:
+        background-color var(--duration-fast) ease,
+        color var(--duration-fast) ease,
+        transform var(--duration-feedback) var(--ease-standard);
+    }
+    .account-signout .nav-icon {
+      transition: transform var(--duration-normal) var(--ease-standard);
+    }
+    .account-signout:hover .nav-icon {
+      transform: translateX(3px);
+    }
+    .account-signout:active {
+      transform: scale(0.985);
+    }
+  }
+  /* Language: one segmented control instead of three loose links. The border
+     is a shadow so the segments keep the full 44px touch height. */
+  .lang-switch {
+    display: flex;
+    overflow: hidden;
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    box-shadow: 0 0 0 1px var(--color-border);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .lang-switch > * {
+    display: inline-flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.75rem;
+    min-height: var(--control-size-md);
+    color: var(--color-muted);
+    text-decoration: none;
+  }
+  .lang-switch > * + * {
+    border-left: 1px solid var(--color-border);
+  }
+  /* Inside the clipped group the global ring would be cut off. */
+  .lang-switch > a:focus-visible {
+    outline-offset: -3px;
+  }
+  /* In the sidebar the switch takes the width the theme button leaves. */
+  .account-tools .lang-switch {
+    flex: 1;
+    min-width: 0;
+  }
+  .lang-switch > a:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-foreground);
+  }
+  .lang-switch > [aria-current] {
+    background: var(--color-nav-active-bg);
+    color: var(--color-primary);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lang-switch > a {
+      transition:
+        background-color var(--duration-fast) ease,
+        color var(--duration-fast) ease;
+    }
   }
   .admin-content {
     margin-left: 15rem;
@@ -985,11 +1476,17 @@
   }
   .resident-nav {
     display: flex;
+    flex-wrap: wrap;
     gap: 1.25rem;
     font-size: 0.875rem;
     border-bottom: 1px solid var(--color-border);
     padding-bottom: 0.75rem;
     margin-bottom: 1.5rem;
+  }
+  .resident-nav a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--control-size-md);
   }
   .resident-nav a[aria-current="page"] {
     color: var(--color-primary);
@@ -1098,7 +1595,7 @@
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
     transform: rotate(90deg);
-    transition: transform 150ms ease;
+    transition: transform var(--duration-fast) ease;
   }
   .disclosure[open] > summary::before {
     transform: rotate(-90deg);
@@ -1108,18 +1605,20 @@
   }
 }
 .app-content h1 {
+  letter-spacing: var(--tracking-heading);
   font-size: clamp(1.65rem, 2.4vw, 2rem);
   line-height: 1.25;
   font-weight: 700;
 }
 /* Selected dwelling numbers (Section 4.2) -- same scoping approach as
-   .page-header h1.font-display above. */
+   .page-header :is(h1, h2, h3).font-display above. */
 .app-content h1.font-display {
+  letter-spacing: var(--tracking-display);
   font-size: clamp(1.85rem, 3.2vw, 2.5rem);
   line-height: 1.15;
   font-weight: 600;
 }
-/* Same 36px cut as .page-header h1.font-display above. */
+/* Same 36px cut as .page-header :is(h1, h2, h3).font-display above. */
 @media (min-width: 70.3125rem) {
   .app-content h1.font-display {
     font-weight: 700;
@@ -1149,7 +1648,7 @@
 }
 @media (prefers-reduced-motion: no-preference) {
   .app-content tbody tr {
-    transition: background-color 140ms ease;
+    transition: background-color var(--duration-fast) ease;
   }
 }
 .app-content td a {
@@ -1212,6 +1711,9 @@
   display: flex;
   flex-direction: column;
 }
+html:has(.context-drawer:modal) {
+  overflow: hidden;
+}
 /* Slide-in/out + backdrop fade. @starting-style + allow-discrete is the
    standard way to animate a native <dialog>'s entrance AND its exit
    (dialog.close() normally removes [open] and unrenders it instantly) --
@@ -1223,10 +1725,10 @@
     translate: 100% 0;
     opacity: 0;
     transition:
-      translate 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
-      opacity 180ms ease,
-      overlay 220ms allow-discrete,
-      display 220ms allow-discrete;
+      translate var(--duration-panel) var(--ease-standard),
+      opacity var(--duration-normal) ease,
+      overlay var(--duration-panel) allow-discrete,
+      display var(--duration-panel) allow-discrete;
   }
   .context-drawer[open] {
     translate: 0 0;
@@ -1241,9 +1743,9 @@
   .context-drawer::backdrop {
     background: transparent;
     transition:
-      background-color 180ms ease,
-      overlay 220ms allow-discrete,
-      display 220ms allow-discrete;
+      background-color var(--duration-normal) ease,
+      overlay var(--duration-panel) allow-discrete,
+      display var(--duration-panel) allow-discrete;
   }
   .context-drawer[open]::backdrop {
     background: var(--color-backdrop);
@@ -1286,29 +1788,16 @@
   color: var(--color-muted);
   font-size: 0.8125rem;
 }
-.context-drawer-close {
-  display: grid;
-  width: 2.25rem;
-  height: 2.25rem;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: var(--color-surface);
-  color: var(--color-muted);
-  font-size: 1.25rem;
-  line-height: 1;
-}
-.context-drawer-close:hover {
-  background: var(--color-surface-hover);
-}
 .context-drawer-body {
   flex: 1 1 auto;
+  min-height: 0;
+  overscroll-behavior: contain;
   overflow-y: auto;
   padding: 1.5rem 2rem;
 }
 .context-drawer-footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.75rem;
   padding: 1rem 2rem;
@@ -1400,56 +1889,129 @@
   }
 }
 
-/* Theme toggle button styling */
-.theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
+/* Tooltip (src/lib/ui/tooltip.ts): one element in the top layer, so it clears
+   dialogs and overflow clipping. It fades and settles toward its target. */
+.tooltip {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 0.375rem 0.625rem;
+  max-width: min(18rem, calc(100vw - 1rem));
+  overflow: visible;
+  border: 0;
   border-radius: var(--radius-control);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-muted);
-  cursor: pointer;
-  transition:
-    color 0.15s ease,
-    background-color 0.15s ease,
-    border-color 0.15s ease;
+  background: var(--color-foreground);
+  color: var(--color-surface);
+  box-shadow: var(--elevation-2);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  text-wrap: pretty;
+  opacity: 0;
+  transform: translateY(4px) scale(0.97);
+  transform-origin: bottom center;
 }
-.theme-toggle:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-foreground);
+.tooltip[data-placement="bottom"] {
+  transform: translateY(-4px) scale(0.97);
+  transform-origin: top center;
+}
+.tooltip[data-visible] {
+  opacity: 1;
+  transform: none;
+}
+/* While fading out it must not catch a click meant for what is underneath. */
+.tooltip:not([data-visible]) {
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tooltip {
+    transition:
+      opacity 140ms ease,
+      transform 180ms var(--ease-standard);
+  }
+}
+@media (forced-colors: active) {
+  .tooltip {
+    border: 1px solid CanvasText;
+  }
+}
+
+/* Menus and panels that open from a trigger ease in from it (the row and
+   "more" menus, the edit panels, the invoice-template popover); list rows and
+   cards ease their hover state. Page CSS still owns each one's position, look
+   and hover colours; this only adds the motion. */
+@media (prefers-reduced-motion: no-preference) {
+  :is(.row-menu, .more-menu) > div,
+  .edit-disclosure-panel,
+  .tpl-popover {
+    transform-origin: top right;
+    animation: panel-in var(--duration-panel) var(--ease-standard) both;
+  }
+  :is(.row-menu, .more-menu) :is(a, button),
+  .messages-list-item,
+  .settings-card,
+  .tariff-dwelling-row,
+  .tpl-icon-button {
+    transition:
+      background-color var(--duration-fast) ease,
+      border-color var(--duration-fast) ease,
+      color var(--duration-fast) ease;
+  }
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+}
+
+/* ThemeToggle shares icon-btn geometry and feedback. Both icons sit in one
+   cell; the inactive one is turned away and faded, so a flip is a small
+   rotation rather than a swap. */
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
 }
 .theme-toggle svg {
-  width: 1.125rem;
-  height: 1.125rem;
-  flex-shrink: 0;
+  grid-area: 1 / 1;
 }
 .theme-toggle .icon-sun {
-  display: none;
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.5);
 }
 .theme-toggle .icon-moon {
-  display: block;
+  opacity: 1;
+  transform: none;
 }
-:root[data-theme="dark"] .theme-toggle .icon-sun,
-[data-theme="dark"] .theme-toggle .icon-sun {
-  display: block;
+:root[data-theme="dark"] .theme-toggle .icon-sun {
+  opacity: 1;
+  transform: none;
 }
-:root[data-theme="dark"] .theme-toggle .icon-moon,
-[data-theme="dark"] .theme-toggle .icon-moon {
-  display: none;
+:root[data-theme="dark"] .theme-toggle .icon-moon {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.5);
 }
-:root[data-theme="dark"] select,
-[data-theme="dark"] select {
+@media (prefers-reduced-motion: no-preference) {
+  .theme-toggle svg {
+    transition:
+      transform var(--duration-panel) var(--ease-standard),
+      opacity var(--duration-normal) ease;
+  }
+  .theme-toggle:active svg {
+    transform: scale(0.9);
+  }
+}
+:root[data-theme="dark"] select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b7c0bd' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6l6-6'/%3E%3C/svg%3E");
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .theme-toggle .icon-sun {
-    display: block;
+    opacity: 1;
+    transform: none;
   }
   :root:not([data-theme="light"]) .theme-toggle .icon-moon {
-    display: none;
+    opacity: 0;
+    transform: rotate(90deg) scale(0.5);
   }
   :root:not([data-theme="light"]) select {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b7c0bd' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6l6-6'/%3E%3C/svg%3E");

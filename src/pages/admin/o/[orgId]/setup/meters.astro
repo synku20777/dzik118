@@ -166,6 +166,10 @@ const clientMutationId = crypto.randomUUID();
   organizationId={organizationId}
   organizationName={organization.name}
   archived={!!organization.archivedAt}
+  breadcrumbs={[
+    { label: t("Setup"), href: `/admin/o/${organizationId}/setup` },
+    { label: t("Meters and starting readings") },
+  ]}
 >
   <SetupLayout
     title={t("Meters and starting readings")}
@@ -467,7 +471,7 @@ const clientMutationId = crypto.randomUUID();
                           name="value"
                           value={meter.openingValue ?? ""}
                           inputmode="decimal"
-                          class="w-32 rounded-control border border-border px-3 py-1.5 text-body-sm bg-surface text-foreground"
+                          class="w-32 rounded-control border border-(--color-input-border) px-3 py-1.5 text-body-sm bg-surface text-foreground"
                         />
                       </td>
                     </tr>
@@ -517,7 +521,7 @@ const clientMutationId = crypto.randomUUID();
               id="meter-dwellingId"
               name="dwellingId"
               required
-              class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm bg-surface text-foreground"
+              class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm bg-surface text-foreground"
             >
               <option value="">{t("Select dwelling")}</option>
               {dwellings.map((d) => (
@@ -538,7 +542,7 @@ const clientMutationId = crypto.randomUUID();
               id="meter-type"
               name="type"
               required
-              class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm bg-surface text-foreground"
+              class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm bg-surface text-foreground"
             >
               {meterTypeEnum.enumValues.map((type) => (
                 <option value={type}>{entityLabel(type, locale)}</option>
@@ -558,7 +562,7 @@ const clientMutationId = crypto.randomUUID();
               required
               value="m3"
               maxlength="20"
-              class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm bg-surface text-foreground"
+              class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm bg-surface text-foreground"
             />
             <FieldError name="unit" error={createMeterResult?.error} />
           </div>
@@ -575,7 +579,7 @@ const clientMutationId = crypto.randomUUID();
               name="serialNumber"
               type="text"
               maxlength="100"
-              class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm bg-surface text-foreground"
+              class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm bg-surface text-foreground"
             />
             <FieldError name="serialNumber" error={createMeterResult?.error} />
           </div>
@@ -590,7 +594,7 @@ const clientMutationId = crypto.randomUUID();
               type="text"
               maxlength="100"
               placeholder={t("e.g. Kitchen or Bathroom")}
-              class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm bg-surface text-foreground"
+              class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm bg-surface text-foreground"
             />
             <FieldError name="label" error={createMeterResult?.error} />
           </div>

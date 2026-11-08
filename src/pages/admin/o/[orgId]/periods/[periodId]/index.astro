@@ -3,7 +3,6 @@
 // this page only makes their state and eligibility easier to understand.
 import { actions } from "astro:actions";
 import AdminContextDrawer from "../../../../../../components/ui/AdminContextDrawer.astro";
-import KpiCard from "../../../../../../components/ui/KpiCard.astro";
 import StatusBadge from "../../../../../../components/ui/StatusBadge.astro";
 import Icon from "../../../../../../components/ui/Icon.astro";
 import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
@@ -61,11 +60,14 @@ const sendResult = Astro.getActionResult(actions.invoices.send);
 
 const search = Astro.url.searchParams.get("search")?.trim() || undefined;
 const rawStatus = Astro.url.searchParams.get("status");
-const statusFilter = (
-  billingCaseStatusEnum.enumValues as readonly string[]
-).includes(rawStatus ?? "")
-  ? (rawStatus as CaseStatus)
-  : undefined;
+const statusFilter =
+  rawStatus === "UNSENT"
+    ? "UNSENT"
+    : (billingCaseStatusEnum.enumValues as readonly string[]).includes(
+          rawStatus ?? ""
+        )
+      ? (rawStatus as CaseStatus)
+      : undefined;
 
 let organization, period, cases, allPeriods, summary, rules, assignmentsByRule;
 let dwellingsWithoutCase;
@@ -147,21 +149,38 @@ const previousPeriod =
     : null;
 const nextPeriod = currentIndex > 0 ? navPeriods[currentIndex - 1] : null;
 const periodName = formatPeriod(period.year, period.month, locale);
-const periodCode = `${period.year}-${String(period.month).padStart(2, "0")}`;
 const workbenchPath = `/admin/o/${organizationId}/periods/${periodId}`;
 const totalCases = Object.values(summary.caseStatusCounts).reduce(
   (total, count) => total + count,
   0
 );
 const workflowFilters = [
-  [undefined, "All", "All billing cases", "neutral", "●"],
-  ["MISSING_DATA", "Missing data", "Resolve inputs", "danger", "!"],
-  ["READY", "Ready to invoice", "Generate the invoice", "warning", "✓"],
-  ["DRAFT", "Draft", "Review and prepare", "neutral", "✎"],
-  ["PREPARED", "Prepared", "Ready to send", "info", "✓"],
-  ["OVERDUE", "Overdue", "Payment needs review", "warning", "!"],
-  ["SENT", "Sent", "Delivered", "info", "↗"],
-  ["PAID", "Paid", "Complete", "success", "✓"],
+  [undefined, "All", "All billing cases", "neutral", "layout-dashboard"],
+  [
+    "MISSING_DATA",
+    "Missing data",
+    "Resolve inputs",
+    "danger",
+    "alert-triangle",
+  ],
+  [
+    "READY",
+    "Ready to invoice",
+    "Generate the invoice",
+    "warning",
+    "receipt-euro",
+  ],
+  ["DRAFT", "Draft", "Review and prepare", "neutral", "pencil"],
+  ["PREPARED", "Prepared", "Ready to send", "info", "file-description"],
+  [
+    "OVERDUE",
+    "Overdue",
+    "Payment needs review",
+    "warning",
+    "clock-exclamation",
+  ],
+  ["SENT", "Sent", "Delivered", "info", "send"],
+  ["PAID", "Paid", "Complete", "success", "circle-check"],
 ] as const;
 
 function filterHref(status?: CaseStatus) {
@@ -171,12 +190,19 @@ function filterHref(status?: CaseStatus) {
   const query = params.toString();
   return query ? `${workbenchPath}?${query}` : workbenchPath;
 }
+// Missing-data tags: show this many, then +N more (opens the readings
+// drawer, which lists every one). A dwelling can lack many meters at once.
+const MAX_MISSING = 2;
 ---
 
 <AdminLayout
   title={`${periodName} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Periods"), href: `/admin/o/${organizationId}/periods` },
+    { label: periodName },
+  ]}
 >
   <div class="workbench">
     <AdminContextDrawer
@@ -185,23 +211,16 @@ function filterHref(status?: CaseStatus) {
       periodStatus={period.status}
       periodName={periodName}
       workbenchPath={workbenchPath}
+      refreshSelectors={[".financial-summary", ".case-queue"]}
     />
-    <a href={`/admin/o/${organizationId}/periods`} class="back-link">
-      <span aria-hidden="true">←</span> {t("Periods")}
-    </a>
-
     <header class="workbench-header">
       <div>
-        <p class="eyebrow">{t("Monthly workbench")}</p>
         <div class="period-title">
           <h1 class="font-display">{periodName}</h1>
           <StatusBadge status={period.status} />
         </div>
         <p class="period-description">
           {t("Collect readings, generate invoices, then prepare and send.")}
-        </p>
-        <p class="period-code">
-          {t("Period")} {periodCode}
         </p>
       </div>
 
@@ -212,7 +231,7 @@ function filterHref(status?: CaseStatus) {
               href={`/admin/o/${organizationId}/periods/${periodId}/readings`}
               class="btn-secondary"
             >
-              {t("Enter readings")}
+              <Icon name="pencil" size="sm" /> {t("Enter readings")}
             </a>
             <form method="POST" action={actions.billing.bulkGenerate}>
               <input
@@ -236,7 +255,9 @@ function filterHref(status?: CaseStatus) {
         )}
         {period.status === "OPEN" && (
           <details class="more-menu">
-            <summary aria-label={t("More actions")}>•••</summary>
+            <summary aria-label={t("More actions")}>
+              <Icon name="dots" size="sm" />
+            </summary>
             <div>
               <button type="button" data-open-lock-dialog>
                 {t("Lock period")}
@@ -269,14 +290,19 @@ function filterHref(status?: CaseStatus) {
     </nav>
 
     {period.status === "OPEN" && (
-      <dialog class="lock-dialog" id="lock-period-dialog">
+      <dialog
+        class="lock-dialog"
+        id="lock-period-dialog"
+        aria-labelledby="lock-dialog-title"
+        aria-describedby="lock-dialog-description"
+      >
         <div class="dialog-body">
           <div class="dialog-icon" aria-hidden="true">
             !
           </div>
           <div>
-            <h2>{t("Lock this period?")}</h2>
-            <p>
+            <h2 id="lock-dialog-title">{t("Lock this period?")}</h2>
+            <p id="lock-dialog-description">
               {t(
                 "Locking this period prevents normal reading edits and invoice regeneration. Historical data will remain available."
               )}
@@ -323,168 +349,43 @@ function filterHref(status?: CaseStatus) {
       </div>
     )}
 
-    {!period.openingReadings &&
-      period.status === "OPEN" &&
-      dwellingsWithoutCase.length > 0 && (
-        <details id="add-dwelling" class="panel mb-6 p-4">
-          <summary class="cursor-pointer font-semibold">
-            {t("Dwellings not in this period")}
-            <span class="ml-2 font-normal text-muted">
-              {dwellingsWithoutCase.length}
-            </span>
-          </summary>
-          <p class="text-body-sm mt-2 text-muted">
-            {t(
-              "These dwellings have no billing case in this period, so they get no invoice for it. Add a dwelling to bill it for this period. The invoice uses the issue and due dates of this period."
-            )}
-          </p>
-          <form
-            method="POST"
-            action={actions.periods.addDwelling}
-            class="mt-3 flex flex-wrap items-end gap-3"
-          >
-            <input type="hidden" name="organizationId" value={organizationId} />
-            <input type="hidden" name="periodId" value={periodId} />
-            <label class="text-body-sm">
-              <span class="block font-medium">{t("Dwelling")}</span>
-              <select name="dwellingId" required class="mt-1">
-                {dwellingsWithoutCase.map((dwelling) => (
-                  <option value={dwelling.id}>{dwelling.number}</option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" class="btn-secondary">
-              {t("Add to period")}
-            </button>
-          </form>
-        </details>
-      )}
-
-    <details
-      id="period-tariffs"
-      class="panel mb-6 p-4"
-      open={
-        tariffRows.length === 0 ||
-        tariffRows.some(
-          (row) => !row.applies || row.rule.applicationScope !== "ONE_TO_ALL"
-        )
-      }
-    >
-      <summary class="cursor-pointer font-semibold">
-        {t("Tariffs in this period")}
-        <span class="ml-2 font-normal text-muted">
-          {t("Applying:")} {applyingTariffs} / {tariffRows.length}
-        </span>
-      </summary>
-      <p class="text-body-sm mt-2 text-muted">
-        {t(
-          "A tariff applies when its effective dates overlap the period. To bill an earlier period, give the tariff an earlier Effective from date."
-        )}{" "}
-        <a class="underline" href={rulesPath}>
-          {t("Edit tariffs")}
-        </a>
-      </p>
-      {tariffRows.length === 0 ? (
-        <p class="text-body-sm mt-3">{t("No tariffs exist yet.")}</p>
-      ) : (
-        <ul class="mt-3 divide-y divide-border">
-          {tariffRows.map(({ rule, applies, reason }) => (
-            <li class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2">
-              <span class="min-w-0">
-                <a
-                  class="font-medium underline"
-                  href={`${rulesPath}?edit=${rule.id}`}
-                >
-                  {rule.name}
-                </a>
-                <span class="text-body-sm block text-muted">
-                  {rule.effectiveFrom} → {rule.effectiveUntil ?? t("ongoing")}
-                </span>
-              </span>
-              <span
-                class="readiness-item"
-                data-tone={applies ? "success" : "danger"}
-              >
-                <Icon name={applies ? "check" : "alert-triangle"} size="xs" />
-                {reason}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </details>
-
-    <section class="workflow-overview" aria-labelledby="workflow-heading">
-      <div class="section-heading">
-        <div>
-          <h2 id="workflow-heading">{t("Billing workflow")}</h2>
-          <p>
-            {totalCases} {t("billing cases in this period")}
-          </p>
-        </div>
-        <span>{t("Select a stage to filter the queue")}</span>
-      </div>
-      <div class="workflow-scroll">
-        <nav class="workflow-rail" aria-label={t("Filter by workflow stage")}>
-          {workflowFilters.map(([status, label, description, tone, icon]) => {
-            const count = status
-              ? summary.caseStatusCounts[status]
-              : totalCases;
-            const active = status ? statusFilter === status : !statusFilter;
-            return (
-              <a
-                href={filterHref(status)}
-                class="workflow-filter"
-                data-tone={tone}
-                aria-current={active ? "page" : undefined}
-              >
-                <span class="workflow-label">
-                  <span class="workflow-icon" aria-hidden="true">
-                    {icon}
-                  </span>
-                  {t(label)}
-                  <strong>{count}</strong>
-                </span>
-                <span>{t(description)}</span>
-              </a>
-            );
-          })}
-        </nav>
-      </div>
-    </section>
-
-    <section
-      class="grid gap-4 sm:grid-cols-3"
-      aria-labelledby="financial-heading"
-    >
+    <section class="financial-summary" aria-labelledby="financial-heading">
       <h2 id="financial-heading" class="sr-only">
         {t("Financial summary")}
       </h2>
-      <KpiCard
-        icon="invoice"
-        label={t("Invoiced")}
-        value={formatMoney(
-          summary.totalInvoiced,
-          organization.currency,
-          locale
-        )}
-      />
-      <KpiCard
-        icon="coins"
-        label={t("Paid")}
-        tone="success"
-        value={formatMoney(summary.totalPaid, organization.currency, locale)}
-      />
-      <KpiCard
-        icon="clock"
-        label={t("Outstanding")}
-        tone="warning"
-        value={formatMoney(
-          summary.totalOutstanding,
-          organization.currency,
-          locale
-        )}
-      />
+      <div class="financial-stat">
+        <span class="financial-label">
+          <Icon name="receipt-euro" size="sm" />
+          {t("Total to pay")}
+        </span>
+        <strong class="font-display">
+          {formatMoney(summary.amountDue, organization.currency, locale)}
+        </strong>
+        <span>
+          {t("Current charges")}:{" "}
+          {formatMoney(summary.currentCharges, organization.currency, locale)}
+        </span>
+      </div>
+      <div class="financial-stat">
+        <span class="financial-label">
+          <Icon name="coin" size="sm" />
+          {t("Received in payments")}
+        </span>
+        <strong class="font-display">
+          {formatMoney(summary.totalPaid, organization.currency, locale)}
+        </strong>
+        <span>{t("of total to pay")}</span>
+      </div>
+      <div class="financial-stat">
+        <span class="financial-label">
+          <Icon name="clock" size="sm" />
+          {t("Still unpaid")}
+        </span>
+        <strong class="font-display">
+          {formatMoney(summary.totalOutstanding, organization.currency, locale)}
+        </strong>
+        <span>{t("of total to pay")}</span>
+      </div>
     </section>
 
     {(lockResult?.error || generateResult?.error || sendResult?.error) && (
@@ -560,23 +461,28 @@ function filterHref(status?: CaseStatus) {
     <section class="case-queue" aria-labelledby="queue-heading">
       <div class="queue-heading">
         <div>
-          <h2 id="queue-heading">{t("Billing cases")}</h2>
+          <h2 id="queue-heading">
+            {t("Billing cases")} <span class="queue-count">{totalCases}</span>
+          </h2>
           <p>
             {t("Resolve blockers, then move each invoice to its next stage.")}
           </p>
         </div>
-        <form method="GET" class="queue-filters" data-instant-filter>
-          <label class="sr-only" for="search">
-            {t("Search dwelling")}
-          </label>
-          <input
-            id="search"
-            name="search"
-            type="search"
-            value={search ?? ""}
-            placeholder={t("Search dwelling…")}
-            autocomplete="off"
-          />
+        <form method="GET" class="queue-filters">
+          <div class="queue-search">
+            <Icon name="search" size="sm" />
+            <label class="sr-only" for="search">
+              {t("Search dwelling")}
+            </label>
+            <input
+              id="search"
+              name="search"
+              type="search"
+              value={search ?? ""}
+              placeholder={t("Search dwelling…")}
+              autocomplete="off"
+            />
+          </div>
           <label class="sr-only" for="status">
             {t("Status")}
           </label>
@@ -584,12 +490,18 @@ function filterHref(status?: CaseStatus) {
             <option value="" selected={!statusFilter}>
               {t("All statuses")}
             </option>
+            <option value="UNSENT" selected={statusFilter === "UNSENT"}>
+              {t("Not sent yet")}
+            </option>
             {workflowFilters.slice(1).map(([status, label]) => (
               <option value={status} selected={statusFilter === status}>
                 {t(label)}
               </option>
             ))}
           </select>
+          <button type="submit" class="btn-secondary btn-sm filter-submit">
+            {t("Apply filters")}
+          </button>
           {(search || statusFilter) && (
             <a href={workbenchPath} class="clear-filters">
               {t("Clear filters")}
@@ -597,6 +509,49 @@ function filterHref(status?: CaseStatus) {
           )}
         </form>
       </div>
+
+      <section class="workflow-overview" aria-labelledby="workflow-heading">
+        <h3 id="workflow-heading" class="sr-only">
+          {t("Filter by workflow stage")}
+        </h3>
+        <div class="workflow-scroll">
+          <nav class="workflow-rail" aria-label={t("Filter by workflow stage")}>
+            {workflowFilters.map(([status, label, description, tone, icon]) => {
+              const count = status
+                ? summary.caseStatusCounts[status]
+                : totalCases;
+              const active = status ? statusFilter === status : !statusFilter;
+              return (
+                <a
+                  href={filterHref(status)}
+                  class="workflow-filter"
+                  data-tone={tone}
+                  aria-current={active ? "page" : undefined}
+                >
+                  <span class="workflow-label">
+                    <span class="workflow-icon" aria-hidden="true">
+                      <Icon name={icon} size="sm" />
+                    </span>
+                    <span>{t(label)}</span>
+                    <strong>{count}</strong>
+                  </span>
+                  <span class="sr-only">{t(description)}</span>
+                </a>
+              );
+            })}
+          </nav>
+        </div>
+      </section>
+
+      <p class="queue-result" role="status">
+        {fill(t("Showing {shown} of {total} billing cases"), {
+          shown: String(cases.length),
+          total: String(totalCases),
+        })}
+        {statusFilter === "UNSENT" && (
+          <> · {t("Draft and prepared invoices")}</>
+        )}
+      </p>
 
       <!-- Per-row forms cannot nest inside the bulk form, so checkboxes target
       this empty form by id. The submitted action still receives the same data. -->
@@ -650,7 +605,7 @@ function filterHref(status?: CaseStatus) {
       </div>
 
       <div class="table-wrap case-table-wrap stack-table">
-        <table class="case-table">
+        <table class="case-table" role="table">
           <caption class="sr-only">{t("Billing cases")}</caption>
           <thead>
             <tr>
@@ -671,7 +626,7 @@ function filterHref(status?: CaseStatus) {
               <th scope="col" aria-label={t("More actions")}></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {cases.map((billingCase) => {
               const missing = billingCase.missingData as (
                 | {
@@ -693,6 +648,22 @@ function filterHref(status?: CaseStatus) {
                 | { reason: "NO_APPLICABLE_RULES" }
                 | string
               )[];
+              const isRuleLevel = (item: (typeof missing)[number]) =>
+                typeof item === "object" &&
+                (item.reason === "NO_APPLICABLE_RULES" ||
+                  item.reason === "NO_ACTIVE_METER_FOR_RULE");
+              // A configuration blocker (no rule, no meter for a rule) links to
+              // tariffs or the dwelling and is not in the readings drawer, so it
+              // is never hidden behind "+N more". Reading-type items are capped.
+              const readingItems = missing.filter((item) => !isRuleLevel(item));
+              const shownMissing = [
+                ...missing.filter(isRuleLevel),
+                ...readingItems.slice(0, MAX_MISSING),
+              ];
+              const hiddenMissing = Math.max(
+                0,
+                readingItems.length - MAX_MISSING
+              );
               const issuer = (billingCase.invoiceIssuerSnapshot ??
                 {}) as Snapshot;
               const recipient = (billingCase.invoiceRecipientSnapshot ??
@@ -738,7 +709,11 @@ function filterHref(status?: CaseStatus) {
               const dwellingHref = `/admin/o/${organizationId}/dwellings/${billingCase.dwellingId}`;
 
               return (
-                <tr data-status={billingCase.status}>
+                <tr
+                  data-status={billingCase.status}
+                  data-dwelling-id={billingCase.dwellingId}
+                  role="row"
+                >
                   <td class="select-column">
                     {billingCase.invoiceId &&
                       (billingCase.status === "DRAFT" ||
@@ -765,7 +740,7 @@ function filterHref(status?: CaseStatus) {
                   <td>
                     <div class="readiness-list">
                       {missing.length > 0 ? (
-                        missing.map((item) =>
+                        shownMissing.map((item) =>
                           // missingData is a JSONB column with no schema
                           // enforcement: cases whose readiness was last
                           // computed by an older app version can still
@@ -791,6 +766,8 @@ function filterHref(status?: CaseStatus) {
                               class="readiness-item"
                               data-tone="danger"
                               href={dwellingHref}
+                              data-tip={`${item.ruleName} — ${t("no active meter")}`}
+                              data-tip-clipped
                             >
                               <Icon name="alert-triangle" size="xs" />{" "}
                               {item.ruleName} — {t("no active meter")}
@@ -807,6 +784,8 @@ function filterHref(status?: CaseStatus) {
                               data-focus={item.meterType
                                 .toLowerCase()
                                 .replace(/_/g, "-")}
+                              data-tip={`${item.label ?? entityLabel(item.meterType, locale)} — ${t("missing")}`}
+                              data-tip-clipped
                             >
                               <Icon name="alert-triangle" size="xs" />
                               {item.label ??
@@ -823,6 +802,8 @@ function filterHref(status?: CaseStatus) {
                               data-open-drawer="readings"
                               data-dwelling-id={billingCase.dwellingId}
                               data-focus={`rule-${item.billingRuleId}`}
+                              data-tip={`${item.ruleName} — ${t("missing")}`}
+                              data-tip-clipped
                             >
                               <Icon name="alert-triangle" size="xs" />
                               {item.ruleName} — {t("missing")}
@@ -846,15 +827,32 @@ function filterHref(status?: CaseStatus) {
                           )
                         )
                       ) : (
-                        <span class="readiness-item" data-tone="success">
+                        <span class="readiness-ok">
                           <Icon name="check" size="xs" />
                           {t("Required readings complete")}
                         </span>
                       )}
+                      {hiddenMissing > 0 && (
+                        <button
+                          type="button"
+                          class="readiness-more"
+                          data-open-drawer="readings"
+                          data-dwelling-id={billingCase.dwellingId}
+                          data-tip={t(
+                            "Open readings to see every missing item"
+                          )}
+                          aria-label={fill(t("{count} more missing items"), {
+                            count: String(hiddenMissing),
+                          })}
+                        >
+                          {fill(t("+{count} more"), {
+                            count: String(hiddenMissing),
+                          })}
+                        </button>
+                      )}
                       {invoiceByEmail &&
                         (billingEmail ? (
-                          <span class="readiness-item">
-                            <Icon name="check" size="xs" />{" "}
+                          <span class="sr-only">
                             {t("Billing email ready")}
                           </span>
                         ) : (
@@ -1055,47 +1053,49 @@ function filterHref(status?: CaseStatus) {
                     )}
                   </td>
                   <td class="menu-cell">
-                    <details class="case-menu">
-                      <summary
-                        aria-label={`${t("More actions")}: ${billingCase.dwellingNumber}`}
-                      >
-                        •••
-                      </summary>
-                      <div>
-                        <a href={readingsHref}>{t("View readings")}</a>
-                        <a href={dwellingHref}>{t("View dwelling")}</a>
-                        {invoiceHref && (
-                          <a href={invoiceHref}>{t("View invoice")}</a>
+                    <button
+                      type="button"
+                      class="case-menu-trigger icon-btn icon-btn-sm"
+                      popovertarget={`case-menu-${billingCase.id}`}
+                      aria-label={`${t("More actions")}: ${billingCase.dwellingNumber}`}
+                    >
+                      <Icon name="dots" size="sm" />
+                    </button>
+                    <div
+                      class="case-menu"
+                      id={`case-menu-${billingCase.id}`}
+                      popover="auto"
+                    >
+                      <a href={readingsHref}>{t("View readings")}</a>
+                      <a href={dwellingHref}>{t("View dwelling")}</a>
+                      {invoiceHref && (
+                        <a href={invoiceHref}>{t("View invoice")}</a>
+                      )}
+                      {period.status === "OPEN" &&
+                        missing.length === 0 &&
+                        billingCase.status === "DRAFT" && (
+                          <form method="POST" action={actions.billing.generate}>
+                            <input
+                              type="hidden"
+                              name="organizationId"
+                              value={organizationId}
+                            />
+                            <input
+                              type="hidden"
+                              name="periodId"
+                              value={periodId}
+                            />
+                            <input
+                              type="hidden"
+                              name="dwellingId"
+                              value={billingCase.dwellingId}
+                            />
+                            <button type="submit">
+                              {t("Regenerate invoice")}
+                            </button>
+                          </form>
                         )}
-                        {period.status === "OPEN" &&
-                          missing.length === 0 &&
-                          billingCase.status === "DRAFT" && (
-                            <form
-                              method="POST"
-                              action={actions.billing.generate}
-                            >
-                              <input
-                                type="hidden"
-                                name="organizationId"
-                                value={organizationId}
-                              />
-                              <input
-                                type="hidden"
-                                name="periodId"
-                                value={periodId}
-                              />
-                              <input
-                                type="hidden"
-                                name="dwellingId"
-                                value={billingCase.dwellingId}
-                              />
-                              <button type="submit">
-                                {t("Regenerate invoice")}
-                              </button>
-                            </form>
-                          )}
-                      </div>
-                    </details>
+                    </div>
                   </td>
                 </tr>
               );
@@ -1125,64 +1125,128 @@ function filterHref(status?: CaseStatus) {
         </table>
       </div>
     </section>
+    <div class="period-resources">
+      {!period.openingReadings &&
+        period.status === "OPEN" &&
+        dwellingsWithoutCase.length > 0 && (
+          <details id="add-dwelling" class="period-resource">
+            <summary class="chevron-toggle chevron-toggle-end font-semibold">
+              {t("Dwellings not in this period")}
+              <span class="ml-2 font-normal text-muted">
+                {dwellingsWithoutCase.length}
+              </span>
+            </summary>
+            <p class="text-body-sm mt-2 text-muted">
+              {t(
+                "These dwellings have no billing case in this period, so they get no invoice for it. Add a dwelling to bill it for this period. The invoice uses the issue and due dates of this period."
+              )}
+            </p>
+            <form
+              method="POST"
+              action={actions.periods.addDwelling}
+              class="mt-3 flex flex-wrap items-end gap-3"
+            >
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="periodId" value={periodId} />
+              <label class="text-body-sm">
+                <span class="block font-medium">{t("Dwelling")}</span>
+                <select name="dwellingId" required class="mt-1">
+                  {dwellingsWithoutCase.map((dwelling) => (
+                    <option value={dwelling.id}>{dwelling.number}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="submit" class="btn-secondary">
+                {t("Add to period")}
+              </button>
+            </form>
+          </details>
+        )}
+
+      <details id="period-tariffs" class="period-resource">
+        <summary class="chevron-toggle chevron-toggle-end font-semibold">
+          {t("Tariffs in this period")}
+          <span class="ml-2 font-normal text-muted">
+            {t("Applying:")} {applyingTariffs} / {tariffRows.length}
+          </span>
+        </summary>
+        <p class="text-body-sm mt-2 text-muted">
+          {t(
+            "A tariff applies when its effective dates overlap the period. To bill an earlier period, give the tariff an earlier Effective from date."
+          )}{" "}
+          <a class="underline" href={rulesPath}>
+            {t("Edit tariffs")}
+          </a>
+        </p>
+        {tariffRows.length === 0 ? (
+          <p class="text-body-sm mt-3">{t("No tariffs exist yet.")}</p>
+        ) : (
+          <ul class="mt-3 divide-y divide-border">
+            {tariffRows.map(({ rule, applies, reason }) => (
+              <li class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2">
+                <span class="min-w-0">
+                  <a
+                    class="font-medium underline"
+                    href={`${rulesPath}?edit=${rule.id}`}
+                  >
+                    {rule.name}
+                  </a>
+                  <span class="text-body-sm block text-muted">
+                    {rule.effectiveFrom} → {rule.effectiveUntil ?? t("ongoing")}
+                  </span>
+                </span>
+                <span
+                  class="readiness-item"
+                  data-tone={applies ? "success" : "danger"}
+                >
+                  <Icon name={applies ? "check" : "alert-triangle"} size="xs" />
+                  {reason}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
+    </div>
   </div>
 </AdminLayout>
 
 <script>
   import { onPageLoad } from "../../../../../../lib/ui/page-lifecycle";
+  import { labelStackTables } from "../../../../../../lib/ui/stack-tables";
 
   onPageLoad(() => {
     if (!document.querySelector(".workbench")) return;
-    const filterForm = document.querySelector<HTMLFormElement>(
-      "[data-instant-filter]"
-    );
-    const searchInput = document.querySelector<HTMLInputElement>("#search");
-    const statusSelect = document.querySelector("#status");
-    let searchTimer: number | undefined;
-    searchInput?.addEventListener("input", () => {
-      window.clearTimeout(searchTimer);
-      searchTimer = window.setTimeout(() => filterForm?.requestSubmit(), 300);
-    });
-    statusSelect?.addEventListener("change", () => filterForm?.requestSubmit());
-
-    const lockDialog = document.querySelector<HTMLDialogElement>(
-      "#lock-period-dialog"
-    );
-    const lockButton = document.querySelector<HTMLButtonElement>(
-      "[data-open-lock-dialog]"
-    );
-    lockButton?.addEventListener("click", () => {
-      lockButton.closest("details")?.removeAttribute("open");
-      lockDialog?.showModal();
-    });
-    lockDialog?.addEventListener("click", (event) => {
-      if (event.target === lockDialog) lockDialog.close();
-    });
-
-    const boxes = [
+    const controller = new AbortController();
+    const options = { signal: controller.signal };
+    const boxes = () => [
       ...document.querySelectorAll<HTMLInputElement>(
         'input[name="invoiceIds"]'
       ),
     ];
-    const selectAll = document.querySelector<HTMLInputElement>("#select-all");
-    const toolbar = document.querySelector<HTMLElement>("#bulk-toolbar");
-    const selectedCount =
-      document.querySelector<HTMLElement>("#selected-count");
-    const prepareCount = document.querySelector<HTMLElement>("#prepare-count");
-    const sendCount = document.querySelector<HTMLElement>("#send-count");
-
     const updateSelection = () => {
-      const selected = boxes.filter((box) => box.checked);
+      const all = boxes();
+      const selected = all.filter((box) => box.checked);
       const prepareEligible = selected.filter(
         (box) => box.dataset.prepareEligible === "true"
       ).length;
       const sendEligible = selected.filter(
         (box) => box.dataset.sendEligible === "true"
       ).length;
+      const toolbar = document.querySelector<HTMLElement>("#bulk-toolbar");
       if (toolbar) toolbar.hidden = selected.length === 0;
-      if (selectedCount) selectedCount.textContent = String(selected.length);
-      if (prepareCount) prepareCount.textContent = String(prepareEligible);
-      if (sendCount) sendCount.textContent = String(sendEligible);
+      for (const [id, value] of [
+        ["selected-count", selected.length],
+        ["prepare-count", prepareEligible],
+        ["send-count", sendEligible],
+      ] as const) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(value);
+      }
       document
         .querySelectorAll<HTMLButtonElement>("[data-bulk-status]")
         .forEach((button) => {
@@ -1191,28 +1255,152 @@ function filterHref(status?: CaseStatus) {
               ? prepareEligible === 0
               : sendEligible === 0;
         });
+      all.forEach((box) =>
+        box.closest("tr")?.toggleAttribute("data-selected", box.checked)
+      );
+      const selectAll = document.querySelector<HTMLInputElement>("#select-all");
       if (selectAll) {
-        selectAll.checked =
-          boxes.length > 0 && selected.length === boxes.length;
+        selectAll.checked = all.length > 0 && selected.length === all.length;
         selectAll.indeterminate =
-          selected.length > 0 && selected.length < boxes.length;
-        selectAll.disabled = boxes.length === 0;
+          selected.length > 0 && selected.length < all.length;
+        selectAll.disabled = all.length === 0;
       }
     };
-
-    boxes.forEach((box) => box.addEventListener("change", updateSelection));
-    selectAll?.addEventListener("change", () => {
-      boxes.forEach((box) => (box.checked = selectAll.checked));
-      updateSelection();
-    });
-    document
-      .querySelector("#clear-selection")
-      ?.addEventListener("click", () => {
-        boxes.forEach((box) => (box.checked = false));
+    document.addEventListener(
+      "change",
+      (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) return;
+        if (target.id === "select-all")
+          boxes().forEach((box) => {
+            box.checked = target.checked;
+          });
+        if (target.id === "select-all" || target.name === "invoiceIds")
+          updateSelection();
+      },
+      options
+    );
+    document.addEventListener(
+      "click",
+      (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        if (target.closest("#clear-selection")) {
+          boxes().forEach((box) => {
+            box.checked = false;
+          });
+          updateSelection();
+          document.querySelector<HTMLInputElement>("#select-all")?.focus();
+        }
+        if (target.closest("[data-open-lock-dialog]")) {
+          target.closest("details")?.removeAttribute("open");
+          document
+            .querySelector<HTMLDialogElement>("#lock-period-dialog")
+            ?.showModal();
+        }
+        document
+          .querySelectorAll<HTMLDetailsElement>(".more-menu[open]")
+          .forEach((menu) => {
+            if (!menu.contains(target)) menu.open = false;
+          });
+      },
+      options
+    );
+    document.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key !== "Escape") return;
+        document
+          .querySelectorAll<HTMLDetailsElement>(".more-menu[open]")
+          .forEach((menu) => {
+            menu.open = false;
+            menu.querySelector<HTMLElement>("summary")?.focus();
+          });
+      },
+      options
+    );
+    const positionRowMenu = (menu: HTMLElement) => {
+      const trigger = document.querySelector<HTMLElement>(
+        `[popovertarget="${CSS.escape(menu.id)}"]`
+      );
+      if (!trigger) return;
+      const anchor = trigger.getBoundingClientRect();
+      if (
+        anchor.bottom < 0 ||
+        anchor.top > innerHeight ||
+        anchor.right < 0 ||
+        anchor.left > innerWidth
+      ) {
+        menu.hidePopover();
+        return;
+      }
+      menu.style.inset = "auto";
+      menu.style.margin = "0";
+      const box = menu.getBoundingClientRect();
+      const gap = 6;
+      const margin = 8;
+      menu.style.left = `${Math.max(margin, Math.min(anchor.right - box.width, innerWidth - box.width - margin))}px`;
+      const below = anchor.bottom + gap;
+      const top =
+        below + box.height <= innerHeight - margin
+          ? below
+          : anchor.top - box.height - gap;
+      menu.style.top = `${Math.max(margin, Math.min(top, innerHeight - box.height - margin))}px`;
+    };
+    const positionRowMenus = () =>
+      document
+        .querySelectorAll<HTMLElement>(".case-menu:popover-open")
+        .forEach(positionRowMenu);
+    document.addEventListener(
+      "toggle",
+      (event) => {
+        const menu = event.target;
+        if (
+          menu instanceof HTMLElement &&
+          menu.matches(".case-menu:popover-open")
+        )
+          positionRowMenu(menu);
+      },
+      { ...options, capture: true }
+    );
+    // Follow visible rows during viewport/table scroll; dismiss when the
+    // invoker leaves the viewport. Ignore the menu's own internal scrolling.
+    document.addEventListener(
+      "scroll",
+      (event) => {
+        if (
+          !(event.target instanceof Element) ||
+          !event.target.closest(".case-menu")
+        )
+          positionRowMenus();
+      },
+      { ...options, capture: true }
+    );
+    window.addEventListener("resize", positionRowMenus, options);
+    const lockDialog = document.querySelector<HTMLDialogElement>(
+      "#lock-period-dialog"
+    );
+    lockDialog?.addEventListener(
+      "click",
+      (event) => {
+        if (event.target === lockDialog) lockDialog.close();
+      },
+      options
+    );
+    // Drawer saves replace the queue. Delegated controls and freshly applied
+    // mobile labels keep the new rows fully usable without a page navigation.
+    document.addEventListener(
+      "workbench:refreshed",
+      () => {
+        labelStackTables();
         updateSelection();
-      });
+      },
+      options
+    );
     updateSelection();
-    return () => window.clearTimeout(searchTimer);
+    return () => {
+      controller.abort();
+    };
   });
 </script>
 
@@ -1222,96 +1410,106 @@ function filterHref(status?: CaseStatus) {
     gap: 1.5rem;
     min-width: 0;
   }
-  .back-link {
-    width: fit-content;
-    color: var(--color-muted);
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
   .workbench-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 2rem;
+    gap: 1.5rem;
+  }
+  .workbench-header > div {
+    min-width: 0;
+  }
+  .eyebrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
   }
   .period-title {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.75rem;
-    margin-top: 0.5rem;
+    margin-top: 0.375rem;
   }
   .period-title h1 {
-    font-size: clamp(2rem, 4vw, 2.75rem);
-    font-weight: 600;
-    line-height: 1.1;
-  }
-  /* Fraunces: 700 above 36px. 4vw passes 36px at 56.25rem. */
-  @media (min-width: 56.25rem) {
-    .period-title h1 {
-      font-weight: 700;
-    }
+    font-size: clamp(2rem, 3.4vw, 2.75rem);
+    font-weight: 700;
+    line-height: 1.12;
   }
   .period-description {
-    max-width: 44rem;
-    margin-top: 0.75rem;
+    margin-top: 0.625rem;
+    max-width: 36rem;
     color: var(--color-muted);
-    font-size: 1rem;
-  }
-  .period-code {
-    margin-top: 0.5rem;
-    color: var(--color-muted);
-    font-size: 0.75rem;
-    font-variant-numeric: tabular-nums;
+    font-size: 0.875rem;
   }
   .period-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
+    justify-content: flex-end;
     gap: 0.5rem;
   }
-  .more-menu,
-  .case-menu {
+  .more-menu {
     position: relative;
   }
-  .more-menu summary,
-  .case-menu summary {
+  .more-menu summary {
     display: grid;
-    min-width: 2.625rem;
-    min-height: 2.625rem;
+    width: var(--control-size-md);
+    min-height: var(--control-size-md);
     place-items: center;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     background: var(--color-surface);
     color: var(--color-muted);
     list-style: none;
+    cursor: pointer;
   }
-  .more-menu summary::-webkit-details-marker,
-  .case-menu summary::-webkit-details-marker {
+  .more-menu summary:hover {
+    color: var(--color-foreground);
+    background: var(--color-surface-hover);
+  }
+  .more-menu summary::-webkit-details-marker {
     display: none;
   }
   .more-menu > div,
-  .case-menu > div {
-    position: absolute;
+  .case-menu {
     z-index: 20;
-    top: calc(100% + 0.35rem);
-    right: 0;
     min-width: 11rem;
-    padding: 0.5rem;
+    padding: 0.375rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     background: var(--color-surface);
-    /* Section 6.2: dropdown menus get elevation-1, not the elevation-0
-       cards/tables use. */
     box-shadow: var(--elevation-1);
+  }
+  .more-menu > div {
+    position: absolute;
+    top: calc(100% + 0.375rem);
+    right: 0;
+  }
+  /* Native top-layer popovers clear table clipping without changing columns. */
+  .case-menu {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    width: max-content;
+    height: fit-content;
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+    overflow: auto;
+    color: var(--color-foreground);
   }
   .more-menu button,
   .case-menu a,
   .case-menu button {
     display: block;
     width: 100%;
-    padding: 0.5rem 0.75rem;
+    padding: 0.625rem 0.75rem;
     border-radius: var(--radius-badge);
     color: var(--color-foreground);
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     text-align: left;
   }
   .more-menu button:hover,
@@ -1323,19 +1521,81 @@ function filterHref(status?: CaseStatus) {
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid var(--color-border);
-    font-size: 0.875rem;
+    font-size: 0.75rem;
   }
   .period-navigation a {
-    display: flex;
+    display: inline-flex;
+    align-items: center;
     gap: 0.5rem;
-    color: var(--color-foreground);
-    font-weight: 600;
+    font-weight: 550;
+    min-height: 2rem;
+  }
+  .period-navigation a:hover {
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
   }
   .period-navigation [aria-disabled="true"] {
+    display: inline-flex;
+    align-items: center;
     color: var(--color-muted);
-    opacity: 0.45;
+  }
+  .financial-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+  }
+  .financial-stat {
+    display: grid;
+    align-content: start;
+    gap: 0.375rem;
+    min-width: 0;
+    padding: 1.25rem 1.5rem;
+  }
+  .financial-stat + .financial-stat {
+    border-left: 1px solid var(--color-border);
+  }
+  .financial-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 550;
+  }
+  .financial-label :global(svg) {
+    color: var(--color-muted);
+    flex: none;
+  }
+  .financial-stat strong {
+    font-size: clamp(1.625rem, 2.5vw, 2.25rem);
+    line-height: 1.2;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .financial-stat > span:last-child {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+  .period-resources {
+    display: grid;
+    gap: 0.75rem;
+  }
+  .period-resource {
+    min-width: 0;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    font-size: 0.875rem;
+  }
+  .period-resource summary {
+    min-height: 1.5rem;
+  }
+  .period-resource[open] summary {
+    padding-bottom: 0.5rem;
   }
   .lock-dialog {
     width: min(30rem, calc(100vw - 2rem));
@@ -1419,90 +1679,108 @@ function filterHref(status?: CaseStatus) {
     padding: 1rem 1.5rem;
     border-top: 1px solid var(--color-border);
   }
-  .section-heading,
+  .case-queue {
+    display: grid;
+    gap: 0;
+    min-width: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+  }
   .queue-heading {
     display: flex;
-    align-items: end;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    flex-wrap: wrap;
+    padding: 1.25rem;
   }
-  .section-heading h2,
   .queue-heading h2 {
-    font-size: 1.125rem;
-    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-size: 1rem;
+    font-weight: 650;
   }
-  .section-heading p,
-  .queue-heading p,
-  .section-heading > span {
+  .queue-count {
+    display: inline-grid;
+    place-items: center;
+    min-width: 1.5rem;
+    height: 1.5rem;
+    padding-inline: 0.375rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-badge);
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .queue-heading p {
     margin-top: 0.25rem;
     color: var(--color-muted);
     font-size: 0.8125rem;
   }
-  .workflow-scroll {
-    margin-top: 0.75rem;
-    min-width: 0;
-    max-width: 100%;
-    overflow-x: auto;
-    padding-bottom: 0.25rem;
-  }
-
   .workflow-overview {
     min-width: 0;
   }
+  /* Stage filters are tabs, not boxes: one rule under the row, an underline on
+     the active one. Nothing is bordered inside the panel. */
+  .workflow-scroll {
+    padding: 0 1.25rem;
+    overflow-x: auto;
+    /* The row scrolls inside the panel. Positioned, so the screen-reader-only
+       text inside the tabs is clipped with it instead of widening the page. */
+    position: relative;
+    contain: inline-size;
+  }
   .workflow-rail {
-    display: grid;
-    grid-template-columns: repeat(8, minmax(8.5rem, 1fr));
-    min-width: 69rem;
-    overflow: hidden;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-    box-shadow: var(--shadow-panel);
+    display: flex;
+    gap: 0.25rem;
+    min-width: max-content;
+    border-bottom: 1px solid var(--color-border);
   }
   .workflow-filter {
-    position: relative;
-    display: grid;
-    gap: 0.5rem;
-    min-height: 5.25rem;
-    align-content: center;
-    padding: 0.75rem;
-    border-right: 1px solid var(--color-border);
-    color: var(--color-foreground);
-  }
-  .workflow-filter:last-child {
-    border-right: 0;
-  }
-  @media (max-width: 639px) {
-    /* 8 stages: a 2-column grid so none are hidden off-screen. */
-    .workflow-rail {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      min-width: 0;
-    }
-    .workflow-filter {
-      border-bottom: 1px solid var(--color-border);
-    }
+    display: flex;
+    align-items: center;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.875rem;
+    border-bottom: 2px solid transparent;
+    color: var(--color-muted);
+    transition: color var(--duration-feedback);
   }
   .workflow-filter:hover {
-    background: var(--color-surface-hover);
+    color: var(--color-foreground);
+  }
+  .workflow-filter:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
   }
   .workflow-filter[aria-current="page"] {
-    background: var(--color-nav-active-bg);
+    border-bottom-color: var(--color-primary);
+    color: var(--color-foreground);
   }
   .workflow-label {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 650;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    white-space: nowrap;
   }
   .workflow-label strong {
-    margin-left: auto;
-    font-size: 1rem;
+    min-width: 1.25rem;
+    padding: 0 0.375rem;
+    border-radius: 999px;
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-badge-neutral-text);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.25rem;
+    text-align: center;
   }
   .workflow-icon {
+    display: flex;
+    flex: none;
     color: var(--color-muted);
-    font-weight: 800;
   }
   [data-tone="danger"] .workflow-icon {
     color: var(--color-destructive);
@@ -1516,51 +1794,66 @@ function filterHref(status?: CaseStatus) {
   [data-tone="success"] .workflow-icon {
     color: var(--color-success);
   }
-  .workflow-filter > span:last-child {
-    color: var(--color-muted);
-    font-size: 0.75rem;
-    line-height: 1.35;
-  }
-  .case-queue {
-    display: grid;
-    gap: 1rem;
-    min-width: 0;
-  }
   .queue-filters {
     display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.75rem;
     flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
     min-width: 0;
   }
+  .queue-search {
+    position: relative;
+    flex: 1 1 10rem;
+    min-width: 0;
+  }
+  .queue-search :global(svg) {
+    position: absolute;
+    top: 50%;
+    left: 0.75rem;
+    transform: translateY(-50%);
+    color: var(--color-muted);
+    pointer-events: none;
+  }
   .queue-filters input {
-    width: min(18rem, 100%);
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--radius-control);
-    font-size: 0.875rem;
+    width: 100%;
+    padding-left: 2.25rem;
+    font-size: 0.8125rem;
   }
   .queue-filters select {
-    min-width: 9rem;
-    padding: 0.5rem 2rem 0.5rem 0.75rem;
-    border-radius: var(--radius-control);
-    font-size: 0.875rem;
+    padding-left: 0.75rem;
+    max-width: 100%;
+    width: 10.5rem;
+    font-size: 0.8125rem;
+  }
+  .queue-result {
+    padding: 0.75rem 1.25rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
   }
   .clear-filters,
   .clear-selection {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.25rem;
     color: var(--color-primary);
     font-size: 0.8125rem;
-    font-weight: 600;
+    font-weight: 550;
   }
   .bulk-toolbar {
+    position: sticky;
+    top: 0.75rem;
+    z-index: 10;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 0.75rem;
+    margin: 0 1.25rem 0.75rem;
     padding: 0.75rem 1rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
+    border: 1px solid var(--color-input-border);
+    border-radius: var(--radius-control);
     background: var(--color-nav-active-bg);
+    box-shadow: var(--elevation-1);
   }
   .bulk-toolbar[hidden] {
     display: none;
@@ -1568,9 +1861,9 @@ function filterHref(status?: CaseStatus) {
   .selection-summary,
   .bulk-actions {
     display: flex;
-    align-items: center;
-    gap: 1rem;
     flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
   }
   .selection-summary {
     font-size: 0.8125rem;
@@ -1580,25 +1873,34 @@ function filterHref(status?: CaseStatus) {
   }
   .case-table {
     width: 100%;
-    min-width: 58rem;
+    min-width: 55rem;
     border-collapse: separate;
     border-spacing: 0;
     text-align: left;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
   }
-
   .case-table-wrap {
     min-width: 0;
     max-width: 100%;
+    border: 0;
+    border-top: 1px solid var(--color-border);
+    border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+    box-shadow: none;
+    overflow-x: auto;
   }
   .case-table thead {
     background: var(--color-table-th-bg);
     color: var(--color-muted);
   }
+  .case-table th {
+    font-size: 0.6875rem;
+    font-weight: 600;
+  }
   .case-table th,
   .case-table td {
-    padding: 0.75rem 0.75rem;
+    padding: 0.875rem 0.75rem;
     border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
   }
   .case-table tbody tr:last-child td {
     border-bottom: 0;
@@ -1606,14 +1908,21 @@ function filterHref(status?: CaseStatus) {
   .case-table tbody tr:hover {
     background: var(--color-surface-hover);
   }
+  .case-table tbody tr[data-selected] {
+    background: var(--color-nav-active-bg);
+  }
   .select-column {
     width: 2.75rem;
     text-align: center;
   }
   .dwelling-cell a {
     color: var(--color-foreground);
-    font-size: 1.125rem;
-    font-weight: 750;
+    font-size: 1rem;
+    font-weight: 650;
+  }
+  .dwelling-cell a:hover {
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
   }
   .dwelling-cell span {
     display: block;
@@ -1621,17 +1930,28 @@ function filterHref(status?: CaseStatus) {
     color: var(--color-muted);
     font-size: 0.75rem;
   }
-  .readiness-list {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    max-width: 29rem;
-  }
-  .readiness-item {
+  .readiness-ok {
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+  .readiness-list {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    max-width: 24rem;
+  }
+  /* One line each. A long meter or rule name truncates (its tooltip carries the
+     full text) instead of growing the row. */
+  .readiness-item {
+    display: block;
+    /* A definite cap: with nowrap, a percentage would let the longest tag set
+       the table's minimum width and push the page sideways. */
+    max-width: 24rem;
+    overflow: hidden;
     padding: 0.25rem 0.5rem;
     border: none;
     border-radius: var(--radius-badge);
@@ -1640,6 +1960,20 @@ function filterHref(status?: CaseStatus) {
     font: inherit;
     font-size: 0.75rem;
     line-height: 1.35;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .readiness-item :global(svg) {
+    display: inline-block;
+    margin-right: 0.25rem;
+    vertical-align: -2px;
+  }
+  /* Only tags that carry their full text in a tooltip truncate; the short fixed
+     ones wrap rather than lose words. */
+  .readiness-item:not([data-tip]) {
+    overflow: visible;
+    white-space: normal;
   }
   button.readiness-item {
     cursor: pointer;
@@ -1650,6 +1984,19 @@ function filterHref(status?: CaseStatus) {
   button.readiness-item:hover,
   button.readiness-item:focus-visible {
     text-decoration-style: solid;
+  }
+  .readiness-more {
+    padding: 0.125rem 0.25rem;
+    border: none;
+    background: none;
+    color: var(--color-primary);
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .readiness-more:hover {
+    text-decoration: underline;
   }
   .readiness-item[data-tone="danger"] {
     background: var(--color-badge-danger-bg);
@@ -1665,14 +2012,19 @@ function filterHref(status?: CaseStatus) {
   }
   .numeric-column {
     text-align: right;
+    font-variant-numeric: tabular-nums;
   }
   .invoice-cell a {
     display: grid;
     gap: 0.25rem;
   }
-  .invoice-cell span {
+  .invoice-cell span,
+  .invoice-cell small {
     color: var(--color-muted);
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
+  }
+  .invoice-cell span {
+    white-space: nowrap;
   }
   .invoice-cell strong {
     color: var(--color-foreground);
@@ -1682,15 +2034,13 @@ function filterHref(status?: CaseStatus) {
     white-space: nowrap;
   }
   .menu-cell {
-    width: 3.5rem;
+    width: 3rem;
   }
-  .case-menu summary {
-    min-width: 2rem;
-    min-height: 2rem;
-    border-color: transparent;
+  .case-menu-trigger {
+    color: var(--color-muted);
   }
   .empty-queue {
-    padding: 3rem !important;
+    padding: 3rem 1.25rem;
     text-align: center;
   }
   .empty-queue strong,
@@ -1708,40 +2058,148 @@ function filterHref(status?: CaseStatus) {
   .empty-queue a {
     margin-top: 1rem;
   }
-
-  @media (max-width: 767px) {
-    .workbench-header,
-    .section-heading,
-    .queue-heading,
-    .bulk-toolbar {
-      align-items: stretch;
-      flex-direction: column;
-    }
-    .period-actions,
-    .period-actions form,
-    .period-actions .btn-primary,
-    .period-actions .btn-secondary {
-      width: 100%;
-    }
-    .more-menu {
-      margin-left: auto;
+  @media (max-width: 1279px) {
+    .workbench-header {
+      align-items: flex-start;
     }
     .queue-filters {
-      justify-content: stretch;
-    }
-    .queue-filters input,
-    .queue-filters select {
       width: 100%;
     }
+  }
+  @media (max-width: 767px) {
+    .workbench-header {
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .period-actions {
+      justify-content: flex-start;
+      width: 100%;
+    }
+    .financial-stat {
+      padding: 1rem;
+    }
+    .financial-stat strong {
+      font-size: 1.625rem;
+    }
+    .financial-label {
+      font-size: 0.75rem;
+    }
+    .financial-label :global(svg) {
+      display: none;
+    }
+  }
+  @media (max-width: 639px) {
+    .workbench {
+      gap: 1rem;
+    }
+    .period-actions > a,
+    .period-actions > form {
+      flex: 1 1 auto;
+    }
+    .period-actions form .btn-primary {
+      width: 100%;
+    }
+    .financial-summary {
+      grid-template-columns: 1fr 1fr;
+    }
+    .financial-stat:first-of-type {
+      grid-column: 1 / -1;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .financial-stat:nth-of-type(2) {
+      border-left: 0;
+    }
+    .financial-stat:first-of-type strong {
+      font-size: 2.125rem;
+    }
+    .financial-stat strong {
+      font-size: 1.5rem;
+    }
+    .queue-heading {
+      padding: 1rem;
+    }
+    .queue-heading > div {
+      min-width: 0;
+    }
+    .queue-filters {
+      gap: 0.5rem;
+    }
+    .queue-search {
+      flex-basis: 100%;
+    }
+    .queue-filters select {
+      flex: 1;
+      width: 0;
+      min-width: 0;
+    }
+    .workflow-scroll {
+      padding-inline: 0.75rem;
+    }
+    .queue-result {
+      padding-inline: 1rem;
+    }
+    .bulk-toolbar {
+      position: static;
+      margin-inline: 0.75rem;
+      padding: 0.75rem;
+    }
     .bulk-actions {
-      align-items: stretch;
+      width: 100%;
     }
     .bulk-actions .btn-primary,
     .bulk-actions .btn-secondary {
-      flex: 1 1 auto;
+      flex: 1;
     }
     .case-table-wrap {
-      overflow-x: auto;
+      padding: 0.75rem;
+    }
+    .case-table tr {
+      margin-bottom: 0.75rem;
+    }
+    .case-table tr:last-child {
+      margin-bottom: 0;
+    }
+    .readiness-list {
+      align-items: flex-end;
+    }
+    .next-action {
+      white-space: normal;
+    }
+    .case-menu-trigger {
+      margin-left: auto;
+    }
+    .dialog-actions {
+      flex-wrap: wrap;
+    }
+  }
+  @media (max-width: 639px) {
+    .readiness-list {
+      flex: 1 1 0;
+      min-width: 0;
+      max-width: none;
+    }
+    .readiness-item {
+      max-width: 100%;
+    }
+  }
+  @media (pointer: coarse) {
+    .readiness-item:is(button, a),
+    .readiness-more,
+    .clear-filters,
+    .clear-selection,
+    .period-resource summary,
+    .period-navigation a {
+      min-height: 2.75rem;
+    }
+  }
+  @media (forced-colors: active) {
+    .workflow-filter[aria-current="page"],
+    .case-table tr[data-selected] {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+    .readiness-item {
+      border: 1px solid CanvasText;
     }
   }
 </style>

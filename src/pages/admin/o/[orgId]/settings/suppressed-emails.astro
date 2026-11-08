@@ -39,16 +39,12 @@ const reasonLabel = { BOUNCE: "Bounce", COMPLAINT: "Complaint" } as const;
   title={`${t("Suppressed email addresses")} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Settings"), href: `/admin/o/${organizationId}/settings` },
+    { label: t("Suppressed email addresses") },
+  ]}
 >
-  <a
-    href={`/admin/o/${organizationId}/settings`}
-    class="text-body-sm text-muted hover:underline"
-  >
-    ← {t("Settings")}
-  </a>
-  <h1 class="mt-4 text-h2 text-foreground">
-    {t("Suppressed email addresses")}
-  </h1>
+  <h1 class="text-h2 text-foreground">{t("Suppressed email addresses")}</h1>
   <p class="mt-2 max-w-2xl text-body-sm text-muted">
     {t(
       "Invoices are not sent to these addresses. The email provider reported a permanent bounce or a complaint. Remove an address after you fix the problem."

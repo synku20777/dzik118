@@ -1,0 +1,44 @@
+---
+// The one breadcrumb trail. AdminLayout renders it at the top of every admin
+// page, so it is always in the same place and built the same way. A page only
+// says where it sits under the Dashboard; the layout adds the Dashboard root.
+import Icon from "./Icon.astro";
+import { translate, uiLocale } from "../../lib/ui/i18n";
+
+export interface Crumb {
+  label: string;
+  // Omit on the last crumb: the current page is not a link.
+  href?: string;
+}
+interface Props {
+  items: Crumb[];
+}
+const { items } = Astro.props;
+const locale = uiLocale(Astro.cookies, Astro.url);
+---
+
+{items.length > 0 && (
+  <nav class="crumbs" aria-label={translate(locale, "Breadcrumb")}>
+    <ol>
+      {items.map((item, index) => {
+        const last = index === items.length - 1;
+        return (
+          <li>
+            {index > 0 && <Icon name="chevron-right" size="xs" />}
+            {last || !item.href ? (
+              <span
+                aria-current={last ? "page" : undefined}
+                data-tip={item.label}
+                data-tip-clipped
+              >
+                {item.label}
+              </span>
+            ) : (
+              <a href={item.href}>{item.label}</a>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  </nav>
+)}

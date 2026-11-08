@@ -48,11 +48,16 @@ const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
   title={`Opening balance report - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Settings"), href: `/admin/o/${organizationId}/settings` },
+    {
+      label: t("Migration Center"),
+      href: `/admin/o/${organizationId}/migration`,
+    },
+    { label: t("Opening balance report") },
+  ]}
 >
   <div class="space-y-6">
-    <a href={base} class="back-link">
-      ← {t("Migration Center")}
-    </a>
     <h1 class="font-display text-h2 text-foreground">
       {t("Opening balance report")}
     </h1>

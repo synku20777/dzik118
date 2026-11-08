@@ -2,7 +2,6 @@
 // Phase D (Organizations/dwellings) - dwelling detail (spec Section 9.2, 27
 // "Dwellings: Detail").
 import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
-import KpiCard from "../../../../../components/ui/KpiCard.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
 import EmptyState from "../../../../../components/ui/EmptyState.astro";
 import {
@@ -232,28 +231,40 @@ const recentMessages = conversationsWithMessages
   .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
   .slice(0, 4);
 
-const meterTypeIcons: Record<string, string> = {
-  COLD_WATER: "💧",
-  HOT_WATER: "🔥",
-  ELECTRICITY: "⚡",
-  GAS: "🔥",
-  HEAT: "🌡️",
-  OTHER: "⚙️",
-};
 const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
+
+// "METER_ARCHIVED" -> "Meter archived". Unknown codes still read as a
+// sentence, and the translation table can supply the localized form.
+function auditActionLabel(action: string): string {
+  const words = action.toLowerCase().replaceAll("_", " ");
+  return t(words.charAt(0).toUpperCase() + words.slice(1));
+}
+const AUDIT_VISIBLE = 6;
+
+// The title is the label, or the type when there is no label. The caption
+// adds the type only when a custom label hides it (two "Kitchen" meters),
+// plus the serial number -- never the same words twice.
+function meterCaption(
+  label: string | null,
+  typeName: string,
+  serialNumber: string | null
+): string {
+  return [label && label !== typeName ? typeName : null, serialNumber]
+    .filter(Boolean)
+    .join(" · ");
+}
 ---
 
 <AdminLayout
   title={`Dwelling ${dwelling.number} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Dwellings"), href: `${base}/dwellings` },
+    { label: `${t("Dwelling")} ${dwelling.number}` },
+  ]}
 >
   <div class="space-y-6" data-dwelling-detail>
-    <a href={`${base}/dwellings`} class="back-link">
-      <span aria-hidden="true">←</span>
-      {t("Dwellings")}
-    </a>
-
     <header class="page-header">
       <div>
         <div class="dwelling-title-row">
@@ -301,27 +312,30 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
       </p>
     )}
 
-    <div class="stat-grid">
-      <div data-kpi="area">
-        <KpiCard label={t("Area")} value={`${dwelling.areaM2} m²`} />
+    <section class="dwelling-summary" aria-label={t("Summary")}>
+      <div class="summary-stat" data-tone={balanceKpiTone}>
+        <span class="summary-label">
+          {isCredit ? t("Account credit") : t("Outstanding balance")}
+        </span>
+        <strong class="summary-value">
+          {formatMoney(balanceForDisplay, organization.currency, locale)}
+        </strong>
       </div>
-      <div data-kpi="resident-count">
-        <KpiCard label={t("Resident count")} value={dwelling.residentCount} />
+      <div class="summary-stat" data-kpi="area">
+        <span class="summary-label">{t("Area")}</span>
+        <p class="summary-value">{dwelling.areaM2} m²</p>
       </div>
-      <KpiCard
-        label={isCredit ? t("Account credit") : t("Outstanding balance")}
-        value={formatMoney(balanceForDisplay, organization.currency, locale)}
-        tone={balanceKpiTone}
-      />
-      <div data-kpi="invoice-delivery">
-        <KpiCard
-          label={t("Invoice delivery")}
-          value={
-            deliveryMethods.length > 0 ? deliveryMethods.join(", ") : t("None")
-          }
-        />
+      <div class="summary-stat" data-kpi="resident-count">
+        <span class="summary-label">{t("Resident count")}</span>
+        <p class="summary-value">{dwelling.residentCount}</p>
       </div>
-    </div>
+      <div class="summary-stat" data-kpi="invoice-delivery">
+        <span class="summary-label">{t("Invoice delivery")}</span>
+        <p class="summary-value summary-value-text">
+          {deliveryMethods.length > 0 ? deliveryMethods.join(", ") : t("None")}
+        </p>
+      </div>
+    </section>
 
     <div class="dwelling-tabs" role="tablist" aria-label={t("Sections")}>
       <button
@@ -329,6 +343,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
         role="tab"
         data-filter="overview"
         aria-selected="true"
+        tabindex="0"
       >
         {t("Overview")}
       </button>
@@ -337,6 +352,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
         role="tab"
         data-filter="account-balance"
         aria-selected="false"
+        tabindex="-1"
       >
         {t("Account balance")}
       </button>
@@ -345,30 +361,41 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
         role="tab"
         data-filter="meters"
         aria-selected="false"
+        tabindex="-1"
       >
         {t("Meters")}
+        <span class="tab-count" data-tab-count="meters">
+          {activeMeterCount}
+        </span>
       </button>
       <button
         type="button"
         role="tab"
         data-filter="tariffs"
         aria-selected="false"
+        tabindex="-1"
       >
         {t("Recurring tariffs")}
+        <span class="tab-count">{currentTariffs.length}</span>
       </button>
       <button
         type="button"
         role="tab"
         data-filter="residents"
         aria-selected="false"
+        tabindex="-1"
       >
         {t("Residents")}
+        <span class="tab-count" data-tab-count="residents">
+          {residents.length}
+        </span>
       </button>
       <button
         type="button"
         role="tab"
         data-filter="messages"
         aria-selected="false"
+        tabindex="-1"
       >
         {t("Messages")}
       </button>
@@ -377,6 +404,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
         role="tab"
         data-filter="history"
         aria-selected="false"
+        tabindex="-1"
       >
         {t("History")}
       </button>
@@ -437,7 +465,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                       id="billingName"
                       name="billingName"
                       value={dwelling.billingName ?? ""}
-                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                     />
                   </div>
                   <div>
@@ -451,7 +479,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                       id="occupantName"
                       name="occupantName"
                       value={dwelling.occupantName ?? ""}
-                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                     />
                   </div>
                   <div>
@@ -468,7 +496,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                       step="0.01"
                       min="0"
                       value={dwelling.areaM2}
-                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                     />
                   </div>
                   <div>
@@ -484,7 +512,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                       type="number"
                       min="0"
                       value={dwelling.residentCount}
-                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                     />
                   </div>
                   <div>
@@ -499,7 +527,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                       name="billingEmail"
                       type="email"
                       value={dwelling.billingEmail ?? ""}
-                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                     />
                   </div>
                   <div class="col-span-2">
@@ -513,7 +541,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                       id="billingAddress"
                       name="billingAddress"
                       value={dwelling.billingAddress ?? ""}
-                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                     />
                   </div>
                   <div class="col-span-2 flex gap-2">
@@ -568,6 +596,12 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
               </p>
             </div>
             <div class="flex flex-wrap gap-2">
+              <a
+                class="btn-secondary"
+                href={`${base}/payments/ledger?dwelling=${dwellingId}`}
+              >
+                {t("Full statement")}
+              </a>
               <details
                 class="edit-disclosure"
                 open={!!recordPaymentResult?.error}
@@ -701,36 +735,28 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
               {t("Payment recorded.")}
             </p>
           )}
-          <div class="balance-summary">
-            <div class="balance-highlight" data-tone={balanceKpiTone}>
-              <span>
-                {isCredit ? t("Account credit") : t("Outstanding balance")}
-              </span>
-              <strong>
-                {formatMoney(balanceForDisplay, organization.currency, locale)}
-              </strong>
-            </div>
+          <dl class="balance-summary">
             <div>
-              <span>{t("Total debits")}</span>
-              <strong>
+              <dt>{t("Total debits")}</dt>
+              <dd>
                 {formatMoney(
                   String(totals.debit),
                   organization.currency,
                   locale
                 )}
-              </strong>
+              </dd>
             </div>
             <div>
-              <span>{t("Total credits")}</span>
-              <strong>
+              <dt>{t("Total credits")}</dt>
+              <dd>
                 {formatMoney(
                   String(totals.credit),
                   organization.currency,
                   locale
                 )}
-              </strong>
+              </dd>
             </div>
-          </div>
+          </dl>
           {accountActivity.length > 0 ? (
             <div
               class="table-wrap stack-table mt-4"
@@ -836,15 +862,12 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                         <div class="sidebar-item-body">
                           <strong>{rule.name}</strong>
                           <p>{tariffPriceSummary(rule)}</p>
-                          <span class="status-badge" data-tone="neutral">
-                            {tariffScopeReason(rule.applicationScope)}
-                          </span>
                         </div>
                         <a
                           href={`${base}/settings/rules?edit=${rule.id}`}
                           class="btn-secondary btn-sm"
                         >
-                          {t("Edit tariff")} →
+                          {t("Edit tariff")}
                         </a>
                       </li>
                     ))}
@@ -862,15 +885,13 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                         <div class="sidebar-item-body">
                           <strong>{rule.name}</strong>
                           <p>{tariffPriceSummary(rule)}</p>
-                          <span class="status-badge" data-tone="neutral">
-                            {tariffScopeReason(rule.applicationScope)}
-                          </span>
+                          <p>{tariffScopeReason(rule.applicationScope)}</p>
                         </div>
                         <a
                           href={`${base}/settings/rules?edit=${rule.id}`}
                           class="btn-secondary btn-sm"
                         >
-                          {t("Edit tariff")} →
+                          {t("Edit tariff")}
                         </a>
                       </li>
                     ))}
@@ -900,7 +921,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
             <ul class="message-preview-list">
               {recentMessages.map((m) => (
                 <li>
-                  <p>{m.body}</p>
+                  <p data-tip-clipped>{m.body}</p>
                   <span>
                     {formatDate(m.createdAt, locale, organization.timezone)}
                   </span>
@@ -1071,7 +1092,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                     type="email"
                     required
                     placeholder="resident@example.com"
-                    class="flex-1 rounded-control border border-border px-3 py-2 text-body-sm"
+                    class="flex-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                   />
                   <button type="submit" class="btn-primary">
                     {t("Assign")}
@@ -1229,12 +1250,10 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                     <select
                       id="type"
                       name="type"
-                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                     >
                       {meterTypeOptions.map((mt) => (
-                        <option value={mt} data-icon={meterTypeIcons[mt]}>
-                          {entityLabel(mt, locale)}
-                        </option>
+                        <option value={mt}>{entityLabel(mt, locale)}</option>
                       ))}
                     </select>
                   </div>
@@ -1247,7 +1266,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                       name="unit"
                       required
                       placeholder="m3"
-                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                     />
                   </div>
                   <div>
@@ -1260,7 +1279,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                     <input
                       id="serialNumber"
                       name="serialNumber"
-                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                     />
                   </div>
                   <div>
@@ -1270,7 +1289,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                     <input
                       id="label"
                       name="label"
-                      class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                     />
                   </div>
                   <div class="col-span-2">
@@ -1327,7 +1346,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                     data-meter-type={m.type}
                     aria-hidden="true"
                   >
-                    {meterTypeIcons[m.type] ?? "•"}
+                    {m.unit}
                   </div>
                   <div class="sidebar-item-body">
                     <strong>
@@ -1335,8 +1354,12 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                       {m.archivedAt && ` (${t("archived")})`}
                     </strong>
                     <p>
-                      {m.serialNumber ? `${m.serialNumber} · ` : ""}
-                      {m.unit}
+                      {meterCaption(
+                        m.label,
+                        entityLabel(m.type, locale),
+                        m.serialNumber
+                      )}
+                      <span class="sr-only"> ({m.unit})</span>
                     </p>
                   </div>
                   {!m.archivedAt && (
@@ -1362,7 +1385,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                       </form>
                       <div class="w-full mt-2">
                         <details class="meter-edit">
-                          <summary>{t("Edit")}</summary>
+                          <summary class="chevron-toggle">{t("Edit")}</summary>
                           <form
                             method="POST"
                             action={actions.meters.update}
@@ -1385,7 +1408,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                                 id={`meter-serial-${m.id}`}
                                 name="serialNumber"
                                 value={m.serialNumber ?? ""}
-                                class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                                class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                               />
                             </div>
                             <div>
@@ -1399,7 +1422,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                                 id={`meter-label-${m.id}`}
                                 name="label"
                                 value={m.label ?? ""}
-                                class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                                class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                               />
                             </div>
                             <div>
@@ -1414,7 +1437,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                                 name="unit"
                                 required
                                 value={m.unit}
-                                class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                                class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                               />
                             </div>
                             <div>
@@ -1429,7 +1452,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                                 id={`meter-installed-${m.id}`}
                                 name="installedAt"
                                 value={m.installedAt ?? ""}
-                                class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                                class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                               />
                             </div>
                             <div class="col-span-2">
@@ -1462,7 +1485,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
         <div class="table-wrap stack-table mt-4">
           <table class="w-full text-left text-body-sm">
             <caption class="sr-only">{t("Period history")}</caption>
-            <thead class="border-b border-border bg-surface-hover text-muted">
+            <thead>
               <tr>
                 <th scope="col" class="px-4 py-2">
                   {t("Period")}
@@ -1529,37 +1552,50 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
         {t("Changes recorded against this dwelling.")}
       </p>
       {auditEntries.length > 0 ? (
-        <div class="table-wrap stack-table mt-4">
-          <table class="w-full text-left text-body-sm">
-            <caption class="sr-only">{t("Audit history")}</caption>
-            <thead class="border-b border-border bg-surface-hover text-muted">
-              <tr>
-                <th scope="col" class="px-4 py-2">
-                  {t("Time")}
-                </th>
-                <th scope="col" class="px-4 py-2">
-                  {t("Actor")}
-                </th>
-                <th scope="col" class="px-4 py-2">
-                  {t("Action")}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              {auditEntries.map((log) => (
-                <tr>
-                  <td class="px-4 py-2">
+        <Fragment>
+          <ol class="audit-list">
+            {auditEntries.slice(0, AUDIT_VISIBLE).map((log) => (
+              <li>
+                <span class="audit-action">{auditActionLabel(log.action)}</span>
+                <span class="audit-meta">
+                  {log.actorDisplayName ?? log.actorEmail ?? "—"} ·{" "}
+                  <time datetime={log.createdAt.toISOString()}>
                     {formatDate(log.createdAt, locale, organization.timezone)}
-                  </td>
-                  <td class="px-4 py-2">
-                    {log.actorDisplayName ?? log.actorEmail ?? "—"}
-                  </td>
-                  <td class="px-4 py-2">{log.action}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </time>
+                </span>
+              </li>
+            ))}
+          </ol>
+          {auditEntries.length > AUDIT_VISIBLE && (
+            <details class="audit-more">
+              <summary class="chevron-toggle">
+                {t("Show earlier changes ({count})").replace(
+                  "{count}",
+                  String(auditEntries.length - AUDIT_VISIBLE)
+                )}
+              </summary>
+              <ol class="audit-list" start={AUDIT_VISIBLE + 1}>
+                {auditEntries.slice(AUDIT_VISIBLE).map((log) => (
+                  <li>
+                    <span class="audit-action">
+                      {auditActionLabel(log.action)}
+                    </span>
+                    <span class="audit-meta">
+                      {log.actorDisplayName ?? log.actorEmail ?? "—"} ·{" "}
+                      <time datetime={log.createdAt.toISOString()}>
+                        {formatDate(
+                          log.createdAt,
+                          locale,
+                          organization.timezone
+                        )}
+                      </time>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
+        </Fragment>
       ) : (
         <EmptyState title={t("No audit events for this dwelling yet.")} />
       )}
@@ -1600,7 +1636,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                 <select
                   id="dwelling-type"
                   name="type"
-                  class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                  class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                 >
                   {dwellingTypeOptions.map((dt) => (
                     <option value={dt} selected={dwelling.type === dt}>
@@ -1616,7 +1652,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
                 <textarea
                   id="notes"
                   name="notes"
-                  class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+                  class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                 >{dwelling.notes ?? ""}</textarea>
               </div>
               <div class="col-span-2">
@@ -1746,12 +1782,25 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
         panel.hidden = filter !== "overview" && panel.dataset.panel !== filter;
       }
       for (const tab of tabs) {
-        tab.setAttribute(
-          "aria-selected",
-          tab.dataset.filter === filter ? "true" : "false"
-        );
+        const selected = tab.dataset.filter === filter;
+        tab.setAttribute("aria-selected", selected ? "true" : "false");
+        tab.tabIndex = selected ? 0 : -1; // roving tabindex
       }
       panelGroup?.classList.toggle("is-filtered", filter !== "overview");
+      // An emptied column would still add a grid gap above the content.
+      for (const column of document.querySelectorAll<HTMLElement>(
+        ".dwelling-main, .dwelling-sidebar"
+      )) {
+        column.hidden = [...column.children].every(
+          (child) => (child as HTMLElement).hidden
+        );
+      }
+      // History lives outside the grid; with both columns empty the grid
+      // itself is an empty box that still takes a row of vertical spacing.
+      if (panelGroup)
+        panelGroup.hidden = [...panelGroup.children].every(
+          (column) => (column as HTMLElement).hidden
+        );
     }
 
     for (const tab of tabs) {
@@ -1759,7 +1808,27 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
         const filter = tab.dataset.filter;
         if (filter) setFilter(filter);
       });
+      // Arrow keys, Home and End move between tabs, as a tablist promises.
+      tab.addEventListener("keydown", (event) => {
+        const last = tabs.length - 1;
+        const index = tabs.indexOf(tab);
+        const target =
+          event.key === "ArrowRight"
+            ? tabs[index === last ? 0 : index + 1]
+            : event.key === "ArrowLeft"
+              ? tabs[index === 0 ? last : index - 1]
+              : event.key === "Home"
+                ? tabs[0]
+                : event.key === "End"
+                  ? tabs[last]
+                  : undefined;
+        if (!target) return;
+        event.preventDefault();
+        target.click();
+        target.focus();
+      });
     }
+    setFilter("overview");
 
     document
       .querySelectorAll<HTMLButtonElement>("[data-goto-panel]")
@@ -2182,11 +2251,22 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     ];
     let meterFilter: MeterFilter = "active";
 
+    // The tab counts are server-rendered; archiving or removing changes the
+    // list in place, so keep them in step with it.
+    function setTabCount(name: string, value: number) {
+      const el = document.querySelector(`[data-tab-count="${name}"]`);
+      if (el) el.textContent = String(value);
+    }
+
     function reconcileMeterList() {
       if (!metersList || !metersEmptyState) return;
       const rows = [
         ...metersList.querySelectorAll<HTMLLIElement>(".meter-row"),
       ];
+      setTabCount(
+        "meters",
+        rows.filter((row) => row.dataset.archived !== "true").length
+      );
       const visibility = meterListVisibility(
         rows.map((row) => row.dataset.archived === "true"),
         meterFilter
@@ -2280,7 +2360,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
       icon.className = "sidebar-item-icon";
       icon.dataset.meterType = meter.type;
       icon.setAttribute("aria-hidden", "true");
-      icon.textContent = option?.dataset.icon ?? "•";
+      icon.textContent = meter.unit;
 
       const body = document.createElement("div");
       body.className = "sidebar-item-body";
@@ -2288,9 +2368,18 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
       strong.textContent =
         meter.label ?? option?.textContent?.trim() ?? meter.type;
       const unitLine = document.createElement("p");
-      unitLine.textContent = meter.serialNumber
-        ? `${meter.serialNumber} · ${meter.unit}`
-        : meter.unit;
+      const typeName = option?.textContent?.trim() ?? meter.type;
+      unitLine.textContent = [
+        meter.label && meter.label !== typeName ? typeName : null,
+        meter.serialNumber,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      // The tile shows the unit visually but is aria-hidden.
+      const unitForReaders = document.createElement("span");
+      unitForReaders.className = "sr-only";
+      unitForReaders.textContent = ` (${meter.unit})`;
+      unitLine.appendChild(unitForReaders);
       body.appendChild(strong);
       body.appendChild(unitLine);
 
@@ -2446,6 +2535,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     function reconcileResidentList() {
       if (!residentsList || !residentsEmptyState) return;
       const empty = residentsList.children.length === 0;
+      setTabCount("residents", residentsList.children.length);
       residentsList.hidden = empty;
       residentsEmptyState.hidden = !empty;
     }
@@ -2640,14 +2730,6 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     min-width: 0;
     max-width: 100%;
   }
-  .back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: var(--color-muted);
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
   .dwelling-title-row {
     display: flex;
     flex-wrap: wrap;
@@ -2706,23 +2788,64 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     color: var(--color-muted);
     font-size: 0.875rem;
   }
-  .stat-grid {
+  /* Same single-surface strip as the Current Month finances, so the two
+     pages read as one product. The balance leads; the rest is reference. */
+  .dwelling-summary {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+  }
+  .summary-stat {
+    display: grid;
+    align-content: start;
+    gap: 0.375rem;
+    min-width: 0;
+    padding: 1.25rem 1.5rem;
+  }
+  .summary-stat + .summary-stat {
+    border-left: 1px solid var(--color-border);
+  }
+  .summary-label {
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    font-weight: 550;
+  }
+  .summary-value {
+    margin: 0;
+    font-size: clamp(1.5rem, 2.2vw, 2rem);
+    font-weight: 600;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .summary-value-text {
+    font-size: 1.25rem;
+    line-height: 1.6;
+  }
+  .summary-stat[data-tone="success"] .summary-value {
+    color: var(--color-success);
+  }
+  .summary-stat[data-tone="warning"] .summary-value {
+    color: var(--color-warning);
   }
   .dwelling-tabs {
     display: flex;
     width: 100%;
     max-width: 100%;
-    gap: 1.5rem;
+    gap: 0.25rem;
     overflow-x: auto;
     border-bottom: 1px solid var(--color-border);
   }
   .dwelling-tabs button {
-    padding: 0.75rem;
-    border: none;
-    border-radius: var(--radius-control);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 0.875rem;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
     background: none;
     color: var(--color-muted);
     font: inherit;
@@ -2734,16 +2857,35 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
   .dwelling-tabs button:hover {
     color: var(--color-foreground);
   }
+  .dwelling-tabs button:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
   .dwelling-tabs button[aria-selected="true"] {
+    border-bottom-color: var(--color-primary);
     color: var(--color-foreground);
-    background: var(--color-nav-active-bg);
-    font-weight: 650;
+  }
+  .tab-count {
+    min-width: 1.25rem;
+    padding: 0 0.375rem;
+    border-radius: 999px;
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-badge-neutral-text);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.25rem;
+    text-align: center;
   }
   .dwelling-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 32rem;
+    grid-template-columns: minmax(0, 1fr) 26rem;
     gap: 1.5rem;
     align-items: start;
+  }
+  .dwelling-grid[hidden],
+  .dwelling-main[hidden],
+  .dwelling-sidebar[hidden] {
+    display: none;
   }
   .dwelling-grid.is-filtered {
     grid-template-columns: minmax(0, 1fr);
@@ -2800,28 +2942,28 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     right: auto;
     left: 0;
   }
+  /* Label over value: a row-per-field table wastes the width and makes a
+     six-field summary read like a form. */
   .detail-list {
     display: grid;
-    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: 1.25rem 1.5rem;
     margin-top: 1.25rem;
   }
   .detail-list > div {
     display: grid;
-    grid-template-columns: 10rem minmax(0, 1fr);
-    gap: 1rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--color-border);
+    align-content: start;
+    gap: 0.25rem;
+    min-width: 0;
     font-size: 0.875rem;
-  }
-  .detail-list > div:last-child {
-    border-bottom: 0;
-    padding-bottom: 0;
   }
   .detail-list dt {
     color: var(--color-muted);
+    font-size: 0.8125rem;
   }
   .detail-list dd {
     color: var(--color-foreground);
+    font-weight: 500;
     white-space: pre-line;
     /* A long value with no spaces (an email, a long dwelling number) must
        wrap inside its column instead of widening the page on a phone. */
@@ -2829,31 +2971,78 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
   }
   .balance-summary {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.75rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-top: 1.25rem;
+    border-block: 1px solid var(--color-border);
   }
   .balance-summary > div {
-    padding: 1rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.875rem 0 0.875rem 1.25rem;
   }
-  .balance-summary > div > span {
-    display: block;
+  .balance-summary > div:first-child {
+    padding-left: 0;
+  }
+  .balance-summary > div + div {
+    border-left: 1px solid var(--color-border);
+  }
+  .balance-summary dt {
     color: var(--color-muted);
-    font-size: 0.75rem;
-    font-weight: 600;
+    font-size: 0.8125rem;
   }
-  .balance-summary > div > strong {
-    display: block;
-    margin-top: 0.5rem;
+  .balance-summary dd {
     font-size: 1.125rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
   }
-  .balance-highlight[data-tone="success"] > strong {
-    color: var(--color-success);
+  [data-dwelling-detail] td.text-right {
+    font-variant-numeric: tabular-nums;
   }
-  .balance-highlight[data-tone="warning"] > strong {
-    color: var(--color-warning);
+  [data-dwelling-detail] :global(.empty-state) {
+    padding: 1.5rem 1rem;
+  }
+  .audit-list {
+    display: grid;
+    margin-top: 1.25rem;
+  }
+  .audit-list li {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.125rem 1rem;
+    padding: 0.625rem 0;
+    border-top: 1px solid var(--color-border);
+    font-size: 0.875rem;
+  }
+  .audit-list li:first-child {
+    border-top: 0;
+  }
+  .audit-action {
+    font-weight: 550;
+  }
+  .audit-meta {
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .audit-more summary {
+    padding: 0.625rem 0;
+    border-top: 1px solid var(--color-border);
+    color: var(--color-primary);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .audit-more .audit-list {
+    margin-top: 0;
+  }
+  .meter-edit summary {
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+  .meter-edit summary:hover {
+    color: var(--color-foreground);
   }
   .message-preview-list {
     display: grid;
@@ -2982,14 +3171,22 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     font-size: 0.8125rem;
     font-weight: 700;
   }
+  /* The tile carries the meter's unit (m³, kWh) rather than an emoji:
+     platform-independent and it says something about the meter. */
   .sidebar-item-icon {
     display: grid;
-    width: 2rem;
+    min-width: 2.5rem;
+    max-width: 4.5rem;
     height: 2rem;
     flex: 0 0 auto;
+    padding: 0 0.5rem;
     place-items: center;
+    overflow: hidden;
     border-radius: var(--radius-control);
-    font-size: 1rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .sidebar-item-icon[data-meter-type="COLD_WATER"] {
     background: var(--color-meter-cold-bg);
@@ -3013,6 +3210,7 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
   }
   .sidebar-item-icon[data-meter-type="OTHER"] {
     background: var(--color-badge-neutral-bg);
+    color: var(--color-badge-neutral-text);
   }
   .sidebar-item-body {
     flex: 1 1 auto;
@@ -3032,13 +3230,32 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     color: var(--color-primary);
     font-weight: 650;
   }
+  /* Only removal is destructive; exporting or disabling is reversible. */
   .sidebar-item-remove {
     flex: 0 0 auto;
-    color: var(--color-destructive);
+    color: var(--color-muted);
     font-size: 0.8125rem;
+    white-space: nowrap;
   }
   .sidebar-item-remove:hover {
+    color: var(--color-foreground);
     text-decoration: underline;
+  }
+  [data-resident-remove-form] .sidebar-item-remove,
+  [data-meter-archive-form] .sidebar-item-remove {
+    color: var(--color-destructive);
+  }
+  /* A resident's actions sit on their own line under the name, aligned to
+     it, instead of wrapping unpredictably beside it. */
+  li[data-user-id] > .sidebar-item-body {
+    flex-basis: calc(100% - 2.75rem);
+  }
+  li[data-user-id] > .sidebar-item-body + .sidebar-item-remove {
+    margin-left: 2.75rem;
+  }
+  .meter-row > .sidebar-item-body {
+    flex: 1 1 0;
+    min-width: 8rem;
   }
   .lock-dialog {
     width: min(30rem, calc(100vw - 2rem));
@@ -3124,8 +3341,14 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
   }
 
   @media (max-width: 900px) {
-    .stat-grid {
+    .dwelling-summary {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .summary-stat:nth-child(odd) {
+      border-left: 0;
+    }
+    .summary-stat:nth-child(n + 3) {
+      border-top: 1px solid var(--color-border);
     }
     .dwelling-grid {
       grid-template-columns: minmax(0, 1fr);
@@ -3135,8 +3358,20 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
     [data-dwelling-detail] {
       width: calc(100vw - 2rem);
     }
-    .stat-grid {
+    .summary-stat {
+      padding: 1rem;
+    }
+    .balance-summary > div {
+      padding-left: 0.75rem;
+    }
+  }
+  @media (max-width: 359px) {
+    .dwelling-summary {
       grid-template-columns: minmax(0, 1fr);
+    }
+    .summary-stat + .summary-stat {
+      border-top: 1px solid var(--color-border);
+      border-left: 0;
     }
   }
 
@@ -3152,14 +3387,6 @@ const activeMeterCount = meterList.filter((meter) => !meter.archivedAt).length;
   }
   .tariff-list li {
     flex-wrap: wrap;
-  }
-  .tariff-list .status-badge {
-    margin-top: 0.35rem;
-    /* The scope-reason text here ("Selected dwellings · assigned here") is
-       a caption, not a short status word like other badges on this page --
-       overriding the shared .status-badge nowrap lets it wrap instead of
-       forcing the row wide enough to overflow a narrow viewport. */
-    white-space: normal;
   }
   .tariff-list a {
     flex: 0 0 auto;

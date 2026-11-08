@@ -6,6 +6,7 @@ import {
   uiLocale,
   entityLabel,
   friendlyActionErrorMessage,
+  formatPeriod,
 } from "../../../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
@@ -57,15 +58,19 @@ try {
   title={`${dwelling.number} readings - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Periods"), href: `/admin/o/${organizationId}/periods` },
+    {
+      label: formatPeriod(period.year, period.month, locale),
+      href: `/admin/o/${organizationId}/periods/${periodId}`,
+    },
+    { label: `${t("Dwelling")} ${dwelling.number}` },
+  ]}
 >
   <div class="space-y-6">
-    <a
-      href={`/admin/o/${organizationId}/periods/${periodId}`}
-      class="text-body-sm text-muted hover:underline"
-    >
-      ← {t("Period")} {period.year}-{String(period.month).padStart(2, "0")}
-    </a>
-    <h1 class="text-h2 text-foreground">Dwelling {dwelling.number} readings</h1>
+    <h1 class="text-h2 text-foreground">
+      {t("Dwelling")} {dwelling.number}: {t("Readings")}
+    </h1>
     {submitResult?.error && (
       <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
         {friendlyActionErrorMessage(submitResult.error, locale)}
@@ -123,7 +128,7 @@ try {
                     pattern="\d+(\.\d{1,3})?"
                     required
                     value={m.currentValue ?? ""}
-                    class="mt-1 w-40 rounded-control border border-border px-3 py-2 text-body-sm"
+                    class="mt-1 w-40 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                   />
                 </div>
                 {m.currentValue !== null && (

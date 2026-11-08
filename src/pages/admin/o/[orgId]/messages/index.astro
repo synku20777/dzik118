@@ -220,6 +220,7 @@ const conversationStatusMap = Object.fromEntries(
   title={`${t("Messages")} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[{ label: t("Messages") }]}
 >
   <div
     class="messages-page"
@@ -229,11 +230,6 @@ const conversationStatusMap = Object.fromEntries(
     data-resident-label={t("Resident")}
   >
     <div class="space-y-6">
-      <nav class="breadcrumb" aria-label={t("Breadcrumb")}>
-        <a href={`/admin/o/${organizationId}/dashboard`}>{t("Dashboard")}</a>
-        <span aria-hidden="true">›</span>
-        <span aria-current="page">{t("Messages")}</span>
-      </nav>
       <PageHeader
         title={t("Messages")}
         description={t(
@@ -268,7 +264,7 @@ const conversationStatusMap = Object.fromEntries(
           value={search}
           placeholder={t("Search messages by subject or content...")}
           autocomplete="off"
-          class="mt-1 rounded-control border border-border px-3 py-1.5 text-body-sm"
+          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-body-sm"
         />
       </div>
       <div>
@@ -278,7 +274,7 @@ const conversationStatusMap = Object.fromEntries(
         <select
           id="status-filter"
           name="status"
-          class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
         >
           <option value="">{t("All statuses")}</option>
           <option value="OPEN" selected={statusFilter === "OPEN"}>
@@ -362,7 +358,7 @@ const conversationStatusMap = Object.fromEntries(
                 <p class="messages-list-item-occupant">{c.occupantName}</p>
               )}
               <div class="messages-list-item-foot">
-                <span class="messages-list-item-preview">
+                <span class="messages-list-item-preview" data-tip-clipped>
                   {c.lastMessage?.body}
                 </span>
                 <span class="messages-list-item-date">
@@ -1047,7 +1043,6 @@ const conversationStatusMap = Object.fromEntries(
     width: 100%;
     min-height: 6rem;
     padding: 0.75rem 0.75rem;
-    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     font: inherit;
     font-size: 0.875rem;
@@ -1088,7 +1083,6 @@ const conversationStatusMap = Object.fromEntries(
   .messages-new-form textarea {
     width: 100%;
     padding: 0.75rem 0.75rem;
-    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     font: inherit;
     font-size: 0.875rem;
@@ -1145,6 +1139,9 @@ const conversationStatusMap = Object.fromEntries(
     .messages-split {
       grid-template-columns: 1fr;
     }
+  }
+  .messages-new-form select {
+    padding-inline-end: 2.25rem;
   }
 </style>
 
@@ -1207,5 +1204,8 @@ const conversationStatusMap = Object.fromEntries(
   }
   .message-row[data-mine="true"] .message-bubble {
     background: var(--color-nav-active-bg);
+  }
+  .messages-new-form select {
+    padding-inline-end: 2.25rem;
   }
 </style>

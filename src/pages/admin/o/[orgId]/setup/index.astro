@@ -116,6 +116,7 @@ const readyToPrepareAndSend =
   organizationId={organizationId}
   organizationName={organization.name}
   archived={!!organization.archivedAt}
+  breadcrumbs={[{ label: t("Setup") }]}
 >
   <SetupLayout
     title={t("Set up your organization")}

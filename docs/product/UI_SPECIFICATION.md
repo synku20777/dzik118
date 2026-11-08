@@ -142,7 +142,7 @@ Never rely on color alone for state communication. Combine color with text, icon
 
 **Switzer**
 
-Letter-spacing is +0.03em on all sans text (--tracking-sans). Switzer is Latin only. Russian text falls back to Overused Grotesk. See docs/decisions/0010-typography.md.
+Body sans tracking is neutral (--tracking-sans: 0). Small captions and labels use +0.01em (--tracking-small); sans headings use -0.02em (--tracking-heading). Switzer is Latin only. Russian text falls back to Overused Grotesk. See docs/decisions/0010-typography.md.
 
 Use for:
 

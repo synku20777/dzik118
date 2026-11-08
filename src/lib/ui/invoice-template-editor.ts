@@ -308,8 +308,7 @@ onPageLoad(() => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "tpl-icon-button";
-    button.setAttribute("aria-label", label);
-    button.title = label;
+    // The label is the visible text, so there is nothing for a tooltip to add.
     button.textContent = label;
     button.addEventListener("click", onClick);
     return button;
@@ -407,7 +406,7 @@ onPageLoad(() => {
     const summary = document.createElement("summary");
     summary.className = "tpl-overflow-btn tpl-icon-button";
     summary.setAttribute("aria-label", s("More options"));
-    summary.title = s("More options");
+    summary.dataset.tip = s("More options");
     summary.textContent = "⋯";
     overflow.appendChild(summary);
     const popover = document.createElement("div");

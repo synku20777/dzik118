@@ -1,9 +1,9 @@
 // Phase J (Payments) - payment match lifecycle (spec Section 25,
 // PAY-002/003). Callers must call requireOrganizationAccess() before
 // calling any of these (spec Section 14).
-import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
-import { paymentAllocations } from "../../db/schema/accounts";
+import { paymentAllocations, paymentReversals } from "../../db/schema/accounts";
 import { billingCases } from "../../db/schema/billing";
 import { invoices } from "../../db/schema/invoices";
 import {
@@ -263,6 +263,7 @@ export async function confirmMatch(
       bankTransactionId: transaction.id,
       description: `${transaction.paymentMethod === "CASH" ? "Cash" : "Bank"} payment ${transaction.reference ?? transaction.id}`,
       metadata: { allocatedAmount, resultType },
+      actorUserId,
       idempotencyKey: `bank-transaction:${transaction.id}:payment:${matchId}`,
     });
     await tx.insert(paymentAllocations).values({
@@ -406,12 +407,24 @@ export async function listPaymentMatches(
       periodId: invoices.periodId,
       currentCharges: invoices.currentCharges,
       amountDue: invoices.amountDue,
+      // What is allocated to the invoice now, across every payment, net of
+      // reversals (the same sum getInvoiceAllocatedAmount makes).
+      invoiceAllocated: sql<string>`(
+        (select coalesce(sum(${paymentAllocations.allocatedAmount}), 0)
+           from ${paymentAllocations}
+          where ${paymentAllocations.invoiceId} = ${invoices.id})
+        -
+        (select coalesce(sum(${paymentReversals.reversedAllocationAmount}), 0)
+           from ${paymentReversals}
+          where ${paymentReversals.invoiceId} = ${invoices.id})
+      )::text`,
       transactionId: bankTransactions.id,
       transactionAmount: bankTransactions.amount,
       transactionCurrency: bankTransactions.currency,
       transactionReference: bankTransactions.reference,
       transactionBookingDate: bankTransactions.bookingDate,
       transactionPayerName: bankTransactions.payerName,
+      transactionPaymentMethod: bankTransactions.paymentMethod,
     })
     .from(paymentMatches)
     .innerJoin(invoices, eq(invoices.id, paymentMatches.invoiceId))
@@ -430,8 +443,16 @@ export async function listPaymentMatches(
     .orderBy(desc(paymentMatches.createdAt));
   return matches.map((match) => ({
     ...match,
+    // A suggestion: what stays open once it is confirmed, after everything
+    // already paid. Any other row: what is still open on the invoice now.
     remainingAfterAllocation: maxExact(
-      subtractExact(match.amountDue, match.proposedAllocationAmount),
+      subtractExact(
+        subtractExact(
+          match.amountDue,
+          maxExact(match.invoiceAllocated, "0.00")
+        ),
+        match.status === "PROPOSED" ? match.proposedAllocationAmount : "0.00"
+      ),
       "0.00"
     ),
     creditCreated: maxExact(
@@ -461,7 +482,7 @@ export async function listUnmatchedTransactions(
       paymentMatches,
       and(
         eq(paymentMatches.bankTransactionId, bankTransactions.id),
-        ne(paymentMatches.status, "REVERSED")
+        inArray(paymentMatches.status, ["PROPOSED", "CONFIRMED"])
       )
     )
     .where(

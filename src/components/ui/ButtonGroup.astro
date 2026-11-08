@@ -1,0 +1,15 @@
+---
+// A row of related actions joined into one control (shadcn's ButtonGroup).
+// Children are .btn-secondary / .btn-primary links or buttons, or a <details>
+// whose <summary class="btn-secondary"> is the button. Give the group an
+// accessible name when its purpose is not clear from the buttons alone.
+interface Props {
+  label?: string;
+  class?: string;
+}
+const { label, class: className } = Astro.props;
+---
+
+<div role="group" aria-label={label} class:list={["btn-group", className]}>
+  <slot />
+</div>

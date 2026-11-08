@@ -1,0 +1,584 @@
+---
+// Payment trail: where one payment came from, who did what to it and why, and
+// where the money went. Read-only; the actions stay on the Payments page.
+import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
+import type { IconName } from "../../../../../lib/ui/icons";
+import {
+  translate,
+  uiLocale,
+  formatMoney,
+  formatDate,
+  formatDateTime,
+  fill as fillTemplate,
+} from "../../../../../lib/ui/i18n";
+import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import {
+  ForbiddenError,
+  requireOrganizationAccess,
+} from "../../../../../domain/authorization/guards";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { getPaymentTrail } from "../../../../../domain/payments/trail";
+import {
+  buildPaymentSplit,
+  buildTrailEvents,
+  type TrailEvent,
+} from "../../../../../domain/payments/trail-view";
+import { NotFoundError } from "../../../../../domain/errors";
+import { compareExact } from "../../../../../lib/decimal2";
+import { withRequestDb } from "../../../../../lib/db-request";
+
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+const organizationId = Astro.params.orgId!;
+const transactionId = Astro.params.transactionId!;
+try {
+  requireOrganizationAccess(Astro.locals.auth, organizationId);
+} catch (err) {
+  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
+  throw err;
+}
+
+const base = `/admin/o/${organizationId}`;
+let organization: Awaited<ReturnType<typeof getOrganization>>;
+let trail: Awaited<ReturnType<typeof getPaymentTrail>>;
+try {
+  ({ organization, trail } = await withRequestDb(async (db) => ({
+    organization: await getOrganization(db, organizationId),
+    trail: await getPaymentTrail(db, organizationId, transactionId),
+  })));
+} catch (err) {
+  if (err instanceof NotFoundError) return Astro.redirect(`${base}/payments`);
+  throw err;
+}
+
+const { transaction, dwelling, matches, entries } = trail;
+const split = buildPaymentSplit(trail);
+const events = buildTrailEvents(trail);
+const money = (value: string) =>
+  formatMoney(value, transaction.currency, locale);
+const fill = (text: string, values: Record<string, string>) =>
+  fillTemplate(t(text), values);
+
+const live = split.posted && !split.reversed;
+// A reversed payment still lists what it did, struck through.
+const creditShown = split.reversed ? split.originalCredit : split.credit;
+const status = split.reversed
+  ? "REVERSED"
+  : live
+    ? "CONFIRMED"
+    : matches.some((m) => m.status === "PROPOSED")
+      ? "PROPOSED"
+      : "UNMATCHED";
+
+// What the payment is called: the payer, or the dwelling when the bank gave no
+// name that matches anyone.
+const heading = transaction.payerName
+  ? fill("Payment from {payer}", { payer: transaction.payerName })
+  : t("Payment");
+const method =
+  transaction.paymentMethod === "CASH" ? t("Cash") : t("Bank transfer");
+const subtitle = [
+  formatDate(transaction.bookingDate, locale),
+  method,
+  transaction.reference ? `${t("Reference")} ${transaction.reference}` : null,
+]
+  .filter(Boolean)
+  .join(" · ");
+
+const barWidth = (part: string) =>
+  compareExact(split.total, "0") > 0
+    ? Math.max(0, Math.min(100, (Number(part) / Number(split.total)) * 100))
+    : 0;
+
+function eventTitle(e: TrailEvent): string {
+  const invoice = e.invoiceNumber ?? "";
+  switch (e.kind) {
+    case "RECEIVED":
+      return e.source
+        ? fill("Received in {file}", { file: e.source })
+        : t("Payment recorded");
+    case "TYPED_IN":
+      return invoice
+        ? fill("Typed in against invoice {invoice}", { invoice })
+        : t("Typed in");
+    case "POSTED_TO_ACCOUNT":
+      return t("Posted to the dwelling account");
+    case "MATCHED":
+      return fill("Matched to invoice {invoice}", { invoice });
+    case "SUGGESTED":
+      return fill("Suggested a match with invoice {invoice}", { invoice });
+    case "APPLIED":
+      return e.amount
+        ? fill("Applied {amount} to invoice {invoice}", {
+            amount: money(e.amount),
+            invoice,
+          })
+        : fill("Applied to invoice {invoice}", { invoice });
+    case "REJECTED":
+      return fill("Match with invoice {invoice} rejected", { invoice });
+    case "CORRECTED":
+      return t("Row corrected");
+    case "REVERSED":
+      return t("Payment reversed");
+  }
+}
+
+const changeLabel = {
+  amount: t("Amount"),
+  bookingDate: t("Date"),
+  payerName: t("Payer"),
+  reference: t("Reference"),
+};
+const changeValue = (field: string, value: string) =>
+  !value
+    ? "—"
+    : field === "amount"
+      ? money(value)
+      : field === "bookingDate"
+        ? formatDate(value, locale)
+        : value;
+// Ledger lines can span dwellings when a payment was moved.
+const showDwelling = new Set(entries.map((e) => e.dwellingId)).size > 1;
+
+const stepIcon: Record<TrailEvent["kind"], IconName> = {
+  RECEIVED: "download",
+  TYPED_IN: "pencil",
+  POSTED_TO_ACCOUNT: "building-bank",
+  SUGGESTED: "bulb",
+  MATCHED: "link",
+  APPLIED: "circle-check",
+  REJECTED: "circle-x",
+  CORRECTED: "adjustments-horizontal",
+  REVERSED: "arrow-back-up",
+};
+
+const entryTypeLabel: Record<string, string> = {
+  PAYMENT: "Payment received",
+  PAYMENT_REVERSAL: "Payment reversed",
+};
+---
+
+<AdminLayout
+  title={`${heading} - ${organization.name}`}
+  organizationId={organizationId}
+  organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Payments"), href: `${base}/payments` },
+    { label: heading },
+  ]}
+>
+  <div class="space-y-6" data-payment-trail>
+    <header class="page-header">
+      <div>
+        <div class="title-row">
+          <h1 class="font-display">{heading}</h1>
+          <StatusBadge status={status} />
+        </div>
+        <p class="page-description">{subtitle}</p>
+      </div>
+      {dwelling && (
+        <div class="page-actions">
+          <a
+            class="btn-secondary"
+            href={`${base}/payments/ledger?dwelling=${dwelling.id}`}
+          >
+            {t("Account statement")}
+          </a>
+          <a class="btn-secondary" href={`${base}/dwellings/${dwelling.id}`}>
+            {t("Dwelling")} {dwelling.number}
+          </a>
+        </div>
+      )}
+    </header>
+
+    <section
+      class="metric-strip"
+      style="--metrics: 4"
+      aria-label={t("Summary")}
+    >
+      <div class="metric" data-tone={split.reversed ? undefined : "success"}>
+        <span class="metric-label">{t("Amount received")}</span>
+        <strong class="metric-value" class:list={{ struck: split.reversed }}>
+          {money(split.total)}
+        </strong>
+      </div>
+      <div class="metric">
+        <span class="metric-label">{t("Applied to invoices")}</span>
+        <strong class="metric-value">{money(split.applied)}</strong>
+      </div>
+      <div class="metric">
+        <span class="metric-label">{t("Credited to the account")}</span>
+        <strong class="metric-value">{money(split.credit)}</strong>
+      </div>
+      <div class="metric">
+        <span class="metric-label">{t("Dwelling")}</span>
+        <p class="metric-value metric-text">
+          {dwelling ? dwelling.number : "—"}
+        </p>
+        {dwelling && (dwelling.occupantName ?? dwelling.billingName) && (
+          <span class="metric-note">
+            {dwelling.occupantName ?? dwelling.billingName}
+          </span>
+        )}
+      </div>
+    </section>
+
+    <div class="trail-grid">
+      <section class="panel p-6" aria-labelledby="history-heading">
+        <h2 id="history-heading">{t("What happened")}</h2>
+        <p class="text-body-sm text-muted">
+          {t("Every step on this payment, oldest first.")}
+        </p>
+        <ol class="trail">
+          {events.map((e) => (
+            <li data-kind={e.kind}>
+              <span class="trail-icon" aria-hidden="true">
+                <Icon name={stepIcon[e.kind]} size="sm" />
+              </span>
+              <div>
+                <p class="trail-title">
+                  {e.invoiceId && e.periodId ? (
+                    <a
+                      href={`${base}/periods/${e.periodId}/invoices/${e.invoiceId}`}
+                    >
+                      {eventTitle(e)}
+                    </a>
+                  ) : e.importId ? (
+                    <a href={`${base}/payments/imports/${e.importId}`}>
+                      {eventTitle(e)}
+                    </a>
+                  ) : (
+                    eventTitle(e)
+                  )}
+                </p>
+                <p class="trail-meta">
+                  <span>{e.actor ?? "—"}</span>
+                  <time datetime={e.at.toISOString()}>
+                    {formatDateTime(e.at, locale, organization.timezone)}
+                  </time>
+                </p>
+                {e.changes && e.changes.length > 0 && (
+                  <ul class="trail-changes">
+                    {e.changes.map((c) => (
+                      <li>
+                        <span>{changeLabel[c.field]}:</span>{" "}
+                        {changeValue(c.field, c.from)}{" "}
+                        <span aria-hidden="true">→</span>
+                        <span class="sr-only"> {t("to")} </span>{" "}
+                        {changeValue(c.field, c.to)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {e.reason && (
+                  <p class="trail-reason">
+                    <span>{t("Reason")}:</span> {e.reason}
+                  </p>
+                )}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section class="panel p-6" aria-labelledby="split-heading">
+        <h2 id="split-heading">{t("Where the money went")}</h2>
+        {live || split.reversed ? (
+          <>
+            <div
+              class="split-bar"
+              data-reversed={split.reversed ? "true" : undefined}
+              role="img"
+              aria-label={
+                split.reversed
+                  ? t("Payment reversed")
+                  : fill(
+                      "{applied} applied to invoices, {credit} credited to the account",
+                      {
+                        applied: money(split.applied),
+                        credit: money(split.credit),
+                      }
+                    )
+              }
+            >
+              <span
+                class="split-invoice"
+                style={`width:${barWidth(split.applied)}%`}
+              />
+              <span
+                class="split-credit"
+                style={`width:${barWidth(split.credit)}%`}
+              />
+            </div>
+            <ul class="split-list">
+              {split.invoices.map((i) => (
+                <li data-reversed={i.reversed ? "true" : undefined}>
+                  <span class="split-key split-invoice" aria-hidden="true" />
+                  <a
+                    href={`${base}/periods/${i.periodId}/invoices/${i.invoiceId}`}
+                  >
+                    {t("Invoice")} {i.invoiceNumber}
+                    {i.reversed && ` (${t("reversed")})`}
+                  </a>
+                  <strong>{money(i.amount)}</strong>
+                </li>
+              ))}
+              {compareExact(creditShown, "0") > 0 && (
+                <li data-reversed={split.reversed ? "true" : undefined}>
+                  <span class="split-key split-credit" aria-hidden="true" />
+                  <span>
+                    {t("Credited to the dwelling account")}
+                    {split.reversed && ` (${t("reversed")})`}
+                  </span>
+                  <strong>{money(creditShown)}</strong>
+                </li>
+              )}
+            </ul>
+            {split.reversed && (
+              <p class="notice mt-4">
+                {t(
+                  "This payment was reversed. The amounts show what it did before it was cancelled."
+                )}
+              </p>
+            )}
+          </>
+        ) : (
+          <p class="text-body-sm text-muted mt-3">
+            {t("This payment has not been applied yet.")}{" "}
+            <a href={`${base}/payments#review`}>{t("Review it on Payments")}</a>
+          </p>
+        )}
+      </section>
+    </div>
+
+    {entries.length > 0 && (
+      <section class="panel p-6" aria-labelledby="entries-heading">
+        <h2 id="entries-heading">{t("Account entries")}</h2>
+        <p class="text-body-sm text-muted">
+          {t(
+            "The ledger lines this payment created. Entries are never edited; a reversal is a new line."
+          )}
+        </p>
+        <div class="table-wrap stack-table mt-4">
+          <table class="w-full text-left text-body-sm">
+            <caption class="sr-only">{t("Account entries")}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t("Date")}</th>
+                {showDwelling && <th scope="col">{t("Dwelling")}</th>}
+                <th scope="col">{t("Entry")}</th>
+                <th scope="col" class="text-right">
+                  {t("Debit")}
+                </th>
+                <th scope="col" class="text-right">
+                  {t("Credit")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry) => (
+                <tr>
+                  <td class="whitespace-nowrap">
+                    {formatDate(entry.effectiveDate, locale)}
+                  </td>
+                  {showDwelling && <td>{entry.dwellingNumber}</td>}
+                  <td>
+                    <div>{t(entryTypeLabel[entry.type] ?? entry.type)}</div>
+                    {entry.reason && (
+                      <small class="text-muted">{entry.reason}</small>
+                    )}
+                  </td>
+                  <td class="text-right tabular-nums">
+                    {compareExact(entry.debit, "0") > 0
+                      ? money(entry.debit)
+                      : "—"}
+                  </td>
+                  <td class="text-right tabular-nums">
+                    {compareExact(entry.credit, "0") > 0
+                      ? money(entry.credit)
+                      : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )}
+  </div>
+</AdminLayout>
+
+<style>
+  [data-payment-trail] {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+  }
+  .title-row h1 {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .metric-text {
+    font-size: 1.25rem;
+    line-height: 1.6;
+  }
+  .struck {
+    color: var(--color-muted);
+    text-decoration: line-through;
+  }
+  .trail-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+  }
+  .panel h2 {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+  /* Chronology is the point, so the date is its own column and the rows are
+     ruled: nothing else is needed to show order. */
+  .trail {
+    margin-top: 1rem;
+  }
+  .trail > li {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1.75rem minmax(0, 1fr);
+    gap: 0 0.75rem;
+    padding-bottom: 1.125rem;
+    font-size: 0.875rem;
+  }
+  .trail > li:last-child {
+    padding-bottom: 0;
+  }
+  /* The rail says "then": it joins each step to the next. */
+  .trail > li:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    top: 1.75rem;
+    bottom: 0.125rem;
+    left: calc(0.875rem - 1px);
+    width: 2px;
+    background: var(--color-border);
+  }
+  .trail-icon {
+    display: grid;
+    width: 1.75rem;
+    height: 1.75rem;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--color-surface-hover);
+    color: var(--color-muted);
+  }
+  .trail > li[data-kind="APPLIED"] .trail-icon {
+    background: var(--color-badge-success-bg);
+    color: var(--color-badge-success-text);
+  }
+  .trail > li[data-kind="REVERSED"] .trail-icon,
+  .trail > li[data-kind="REJECTED"] .trail-icon {
+    background: var(--color-danger-surface);
+    color: var(--color-destructive);
+  }
+  .trail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.75rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .trail time {
+    font-variant-numeric: tabular-nums;
+  }
+  .trail-title {
+    font-weight: 600;
+  }
+  .trail-title a {
+    color: var(--color-primary);
+  }
+  .trail-title a:hover {
+    text-decoration: underline;
+  }
+  .trail li[data-kind="REVERSED"] .trail-title {
+    color: var(--color-destructive);
+  }
+  .trail-changes {
+    margin-top: 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .trail-reason {
+    margin-top: 0.375rem;
+    padding-left: 0.75rem;
+    border-left: 2px solid var(--color-border);
+    overflow-wrap: anywhere;
+  }
+  .trail-reason span {
+    color: var(--color-muted);
+  }
+  .split-bar {
+    display: flex;
+    height: 0.75rem;
+    margin-top: 1rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--color-surface-hover);
+  }
+  .split-bar[data-reversed="true"] {
+    opacity: 0.45;
+  }
+  .split-invoice {
+    background: var(--color-primary);
+  }
+  .split-credit {
+    background: var(--color-success);
+  }
+  .split-list {
+    display: grid;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+  .split-list li {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.625rem;
+    font-size: 0.875rem;
+  }
+  .split-list a {
+    color: var(--color-primary);
+  }
+  .split-list li[data-reversed="true"] :is(a, strong) {
+    color: var(--color-muted);
+    text-decoration: line-through;
+  }
+  .split-list a:hover {
+    text-decoration: underline;
+  }
+  .split-list strong {
+    font-variant-numeric: tabular-nums;
+  }
+  .split-key {
+    display: inline-block;
+    width: 0.625rem;
+    height: 0.625rem;
+    border-radius: 50%;
+  }
+  @media (max-width: 900px) {
+    .trail-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 540px) {
+    [data-payment-trail] {
+      width: calc(100vw - 2rem);
+    }
+  }
+</style>

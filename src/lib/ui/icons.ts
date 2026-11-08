@@ -23,6 +23,8 @@ export const ICONS = {
     '<path d="M8 9h8m-8 4h6m4-9a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-5l-5 3v-3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z" />',
   "adjustments-horizontal":
     '<path d="M12 6a2 2 0 1 0 4 0a2 2 0 1 0-4 0M4 6h8m4 0h4M6 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0m-2 0h2m4 0h10m-5 6a2 2 0 1 0 4 0a2 2 0 1 0-4 0M4 18h11m4 0h1" />',
+  logout:
+    '<path d="M14 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2m-5-4h12l-3-3m0 6l3-3" />',
   "help-circle":
     '<g><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0m9 5v.01" /><path d="M12 13.5a1.5 1.5 0 0 1 1-1.5a2.6 2.6 0 1 0-3-4" /></g>',
 
@@ -60,6 +62,10 @@ export const ICONS = {
   "arrow-left": '<path d="M5 12h14M5 12l6 6m-6-6l6-6" />',
   "arrow-right": '<path d="M5 12h14m-6 6l6-6m-6-6l6 6" />',
   "chevron-right": '<path d="m9 6l6 6l-6 6" />',
+  link: '<path d="M9 15l6-6m-4-3l.463-.536a5 5 0 0 1 7.071 7.072L18 13m-5 5l-.397.534a5.07 5.07 0 0 1-7.127 0a4.97 4.97 0 0 1 0-7.071L6 11" />',
+  "arrow-back-up": '<path d="M9 14L4 9l5-5m-5 5h11a5.5 5.5 0 0 1 0 11h-4" />',
+  "circle-x":
+    '<path d="m10 10l4 4m0-4l-4 4M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0" />',
   x: '<path d="M18 6L6 18M6 6l12 12" />',
   eye: '<g><path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0" /><path d="M21 12q-3.6 6-9 6t-9-6q3.6-6 9-6t9 6" /></g>',
   lock: '<g><path d="M5 13a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z" /><path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0-2 0m-3-5V7a4 4 0 1 1 8 0v4" /></g>',

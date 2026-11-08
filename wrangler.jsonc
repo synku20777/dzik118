@@ -39,9 +39,9 @@
   // just requests that call renderPdf) -- see src/lib/pdf/render.ts for the
   // full diagnosis. Real Cloudflare deploys are unaffected; this is a local
   // sandbox limitation only.
-  // "browser": {
-  //   "binding": "BROWSER",
-  // },
+  "browser": {
+    "binding": "BROWSER",
+  },
   // Phase L (Automation/audit, spec Section 32): billing-overdue-scan,
   // auto-invoice-generate, auto-invoice-send all run from one daily tick.
   // 02:15 UTC keeps it well clear of any organization's local midnight
@@ -56,7 +56,7 @@
       "id": "935a51fab52f464db770b6232c5dd9d1",
       // Local dev only: wrangler dev/preview needs this to boot without a live
       // Cloudflare account. Matches .env.example DATABASE_URL. Not used in production.
-      "localConnectionString": "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+      // "localConnectionString": "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
     },
   ],
   // Native platform rate limiting (spec Section 15.1: "endpoint

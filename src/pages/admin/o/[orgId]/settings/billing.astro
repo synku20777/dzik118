@@ -62,13 +62,12 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
   title={`Billing settings - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Settings"), href: `/admin/o/${organizationId}/settings` },
+    { label: t("Billing") },
+  ]}
 >
   <div class="billing-settings-page">
-    <a href={settingsHref} class="back-link">
-      <span aria-hidden="true">←</span>
-      {t("Settings")}
-    </a>
-
     <PageHeader
       title={t("Billing")}
       description={t(
@@ -557,15 +556,6 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
     display: grid;
     gap: 1.25rem;
   }
-  .back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: fit-content;
-    color: var(--color-muted);
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
   .settings-help {
     display: inline-flex;
     align-items: center;
@@ -643,7 +633,6 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
   .billing-field select {
     width: 100%;
     padding: 0.75rem 0.75rem;
-    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     /* background-color, not the background shorthand -- the shorthand
        resets background-image to none, wiping out the global select
@@ -660,12 +649,6 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
     background-color: var(--color-surface-hover);
     color: var(--color-muted);
     cursor: not-allowed;
-  }
-  .billing-field input:focus-visible,
-  .billing-field select:focus-visible {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px var(--color-focus-ring);
   }
   .billing-field-hint {
     margin-top: 0.5rem;
@@ -903,5 +886,8 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
     .billing-subfield {
       padding-left: 0;
     }
+  }
+  .billing-field select {
+    padding-inline-end: 2.25rem;
   }
 </style>

@@ -114,6 +114,10 @@ const presetItems = [
   organizationId={organizationId}
   organizationName={organization.name}
   archived={!!organization.archivedAt}
+  breadcrumbs={[
+    { label: t("Setup"), href: `/admin/o/${organizationId}/setup` },
+    { label: t("Charges") },
+  ]}
 >
   <SetupLayout
     title={t("Charges")}
@@ -230,7 +234,7 @@ const presetItems = [
                           type="checkbox"
                           id={`${preset.key}Enabled`}
                           name={`${preset.key}Enabled`}
-                          class="mt-1 h-4 w-4 rounded border-border"
+                          class="mt-1 h-4 w-4 rounded border-(--color-input-border)"
                         />
                         <div>
                           <label
@@ -267,7 +271,7 @@ const presetItems = [
                             pattern="\d{1,10}([.,]\d{1,4})?"
                             placeholder="0.00"
                             aria-describedby={`${preset.key}Price-error`}
-                            class="w-full rounded-control border border-border px-3 py-2 text-body-sm bg-surface text-foreground"
+                            class="w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm bg-surface text-foreground"
                           />
                           <FieldError
                             name={`${preset.key}Price`}
@@ -290,7 +294,7 @@ const presetItems = [
                             pattern="\d{1,3}([.,]\d{1,4})?"
                             value="0"
                             aria-describedby={`${preset.key}Vat-error`}
-                            class="w-full rounded-control border border-border px-3 py-2 text-body-sm bg-surface text-foreground"
+                            class="w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm bg-surface text-foreground"
                           />
                           <FieldError
                             name={`${preset.key}Vat`}

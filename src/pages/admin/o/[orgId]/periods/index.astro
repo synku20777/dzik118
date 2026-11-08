@@ -61,13 +61,9 @@ const pageHref = (p: number) => {
   title={`Periods - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[{ label: t("Periods") }]}
 >
   <div class="space-y-6">
-    <nav class="breadcrumb" aria-label={t("Breadcrumb")}>
-      <a href={`/admin/o/${organizationId}/dashboard`}>{t("Dashboard")}</a>
-      <span aria-hidden="true">›</span>
-      <span aria-current="page">{t("Periods")}</span>
-    </nav>
     <PageHeader
       title={t("Periods")}
       description={t(
@@ -228,7 +224,7 @@ const pageHref = (p: number) => {
             aria-describedby="year-error"
             type="number"
             required
-            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
           />
           <FieldError name="year" error={createResult?.error} />
         </div>
@@ -244,7 +240,7 @@ const pageHref = (p: number) => {
             min="1"
             max="12"
             required
-            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
           />
           <FieldError name="month" error={createResult?.error} />
         </div>
@@ -264,7 +260,7 @@ const pageHref = (p: number) => {
             aria-describedby="startsOn-error"
             type="date"
             required
-            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
           />
           <FieldError name="startsOn" error={createResult?.error} />
         </div>
@@ -278,7 +274,7 @@ const pageHref = (p: number) => {
             aria-describedby="endsOn-error"
             type="date"
             required
-            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
           />
           <FieldError name="endsOn" error={createResult?.error} />
         </div>
@@ -294,7 +290,7 @@ const pageHref = (p: number) => {
             name="readingDeadline"
             aria-describedby="readingDeadline-error"
             type="date"
-            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
           />
           <FieldError name="readingDeadline" error={createResult?.error} />
         </div>
@@ -315,7 +311,7 @@ const pageHref = (p: number) => {
             aria-describedby="invoiceIssueDate-error"
             type="date"
             required
-            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
           />
           <FieldError name="invoiceIssueDate" error={createResult?.error} />
         </div>
@@ -332,7 +328,7 @@ const pageHref = (p: number) => {
             aria-describedby="invoiceDueDate-error"
             type="date"
             required
-            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
           />
           <FieldError name="invoiceDueDate" error={createResult?.error} />
         </div>

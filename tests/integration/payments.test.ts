@@ -48,6 +48,10 @@ import {
   getDwellingAccountBalance,
   getInvoiceAllocatedAmount,
 } from "../../src/domain/accounts/ledger";
+import {
+  matchTransactionToInvoice,
+  updateUnmatchedTransaction,
+} from "../../src/domain/payments/manual";
 
 let db: Db;
 let seedAdminId: string;
@@ -419,6 +423,35 @@ describe("confirmMatch / rejectMatch", () => {
     await expect(
       confirmMatch(db, org.id, proposedMatch.id, seedAdminId)
     ).rejects.toBeInstanceOf(ConflictError);
+
+    expect(
+      (await listUnmatchedTransactions(db, org.id)).map((tx) => tx.id)
+    ).toContain(proposedMatch.transactionId);
+    await updateUnmatchedTransaction(
+      db,
+      org.id,
+      proposedMatch.transactionId,
+      {
+        amount: invoice.total,
+        bookingDate: "2026-07-20",
+        reference: invoice.invoiceNumber,
+        payerName: "Corrected payer",
+        reason: "Correct the payer",
+      },
+      seedAdminId
+    );
+    const rematched = await matchTransactionToInvoice(
+      db,
+      org.id,
+      proposedMatch.transactionId,
+      invoice.id,
+      seedAdminId
+    );
+    expect(rematched.status).toBe("CONFIRMED");
+    expect(rematched.id).toBe(proposedMatch.id);
+    expect(
+      (await listUnmatchedTransactions(db, org.id)).map((tx) => tx.id)
+    ).not.toContain(proposedMatch.transactionId);
 
     await cleanupOrg(org.id);
   });

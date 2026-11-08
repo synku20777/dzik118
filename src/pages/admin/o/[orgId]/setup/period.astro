@@ -72,6 +72,10 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
   title={`${t("First billing period")} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Setup"), href: `/admin/o/${organizationId}/setup` },
+    { label: t("First billing period") },
+  ]}
 >
   <SetupLayout
     title={t("First billing period")}
@@ -168,7 +172,7 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
                   required
                   value={defaultYear}
                   aria-describedby="year-error"
-                  class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                  class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
                 />
                 <FieldError name="year" error={result?.error} />
               </div>
@@ -190,7 +194,7 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
                   required
                   value={defaultMonth}
                   aria-describedby="month-error"
-                  class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                  class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
                 />
                 <FieldError name="month" error={result?.error} />
               </div>
@@ -217,7 +221,7 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
                   required
                   value={defaultStartsOn}
                   aria-describedby="startsOn-error"
-                  class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                  class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
                 />
                 <FieldError name="startsOn" error={result?.error} />
               </div>
@@ -236,7 +240,7 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
                   required
                   value={defaultEndsOn}
                   aria-describedby="endsOn-error"
-                  class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                  class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
                 />
                 <FieldError name="endsOn" error={result?.error} />
               </div>
@@ -255,7 +259,7 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
                 type="date"
                 value=""
                 aria-describedby="readingDeadline-error"
-                class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground sm:w-1/2"
+                class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground sm:w-1/2"
               />
               <FieldError name="readingDeadline" error={result?.error} />
             </div>
@@ -281,7 +285,7 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
                   required
                   value={defaultInvoiceIssueDate}
                   aria-describedby="invoiceIssueDate-error"
-                  class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                  class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
                 />
                 <FieldError name="invoiceIssueDate" error={result?.error} />
               </div>
@@ -300,7 +304,7 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
                   required
                   value={defaultInvoiceDueDate}
                   aria-describedby="invoiceDueDate-error"
-                  class="mt-1 block w-full rounded-control border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                  class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
                 />
                 <FieldError name="invoiceDueDate" error={result?.error} />
               </div>

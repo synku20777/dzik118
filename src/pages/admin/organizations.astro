@@ -35,7 +35,10 @@ const active = organizations.filter((o) => !o.archivedAt);
 const archived = organizations.filter((o) => o.archivedAt);
 ---
 
-<AdminLayout title="Organizations - Namkopa">
+<AdminLayout
+  title="Organizations - Namkopa"
+  breadcrumbs={[{ label: t("Your organizations") }]}
+>
   <div class="space-y-8">
     <section>
       <h1 class="text-h2 text-foreground">{t("Your organizations")}</h1>
@@ -87,7 +90,7 @@ const archived = organizations.filter((o) => o.archivedAt);
             id="name"
             name="name"
             required
-            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
           />
         </div>
         <div>
@@ -98,7 +101,7 @@ const archived = organizations.filter((o) => o.archivedAt);
             id="addressLine1"
             name="addressLine1"
             required
-            class="mt-1 w-full rounded-control border border-border px-3 py-2 text-body-sm"
+            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
           />
         </div>
         <button type="submit" class="btn-primary">

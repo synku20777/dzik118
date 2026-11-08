@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import tokenSource from "../styles/global.css?raw";
 import AppNavigation from "../components/ui/AppNavigation.astro";
 import EmptyState from "../components/ui/EmptyState.astro";
 import Icon from "../components/ui/Icon.astro";
@@ -10,68 +11,42 @@ import PageHeader from "../components/ui/PageHeader.astro";
 import BrandMark from "../components/ui/BrandMark.astro";
 import StatusBadge from "../components/ui/StatusBadge.astro";
 import ThemeToggle from "../components/ui/ThemeToggle.astro";
+import Tooltips from "../components/ui/Tooltips.astro";
+import OrganizationSwitcher from "../components/ui/OrganizationSwitcher.astro";
 
 Astro.response.headers.set("X-Robots-Tag", "noindex, nofollow");
 
-const routes = [
-  "/",
-  "/login",
-  "/unauthorized",
-  "/admin",
-  "/admin/organizations",
-  "/admin/o/[orgId]/dashboard",
-  "/admin/o/[orgId]/periods",
-  "/admin/o/[orgId]/periods/[periodId]",
-  "/admin/o/[orgId]/periods/[periodId]/dwellings/[dwellingId]",
-  "/admin/o/[orgId]/periods/[periodId]/invoices/[invoiceId]",
-  "/admin/o/[orgId]/dwellings",
-  "/admin/o/[orgId]/dwellings/import",
-  "/admin/o/[orgId]/dwellings/[dwellingId]",
-  "/admin/o/[orgId]/payments",
-  "/admin/o/[orgId]/payments/import",
-  "/admin/o/[orgId]/payments/imports/[importId]",
-  "/admin/o/[orgId]/messages",
-  "/admin/o/[orgId]/settings",
-  "/admin/o/[orgId]/settings/organization",
-  "/admin/o/[orgId]/settings/billing",
-  "/admin/o/[orgId]/settings/rules",
-  "/admin/o/[orgId]/settings/users",
-  "/admin/o/[orgId]/settings/data",
-  "/admin/o/[orgId]/settings/invoice-template",
-  "/admin/o/[orgId]/guide",
-  "/admin/o/[orgId]/audit",
-  "/portal",
-  "/portal/dwellings",
-  "/portal/dwellings/[dwellingId]",
-  "/portal/dwellings/[dwellingId]/invoices",
-  "/portal/dwellings/[dwellingId]/messages",
-  "/portal/invoices/[invoiceId]",
-  "/portal/profile",
-  "/design-system",
-];
+// Build-time inventories come from the repository, not a hand-maintained total.
+const routes = Object.keys(import.meta.glob("./**/*.astro"))
+  .map((path) => path.replace(/^\.\//, "/").replace(/(?:\/index)?\.astro$/, ""))
+  .map((path) => path || "/")
+  .sort();
+const components = Object.keys(import.meta.glob("../components/ui/*.astro"))
+  .map((path) => path.split("/").pop()!.replace(".astro", ""))
+  .sort();
 
 const colors = [
-  ["Canvas", "--color-canvas", "#F7F4EE"],
-  ["Surface", "--color-surface", "#FFFCF7"],
-  ["Surface hover", "--color-surface-hover", "#EEE8DE"],
-  ["Foreground", "--color-foreground", "#17242B"],
-  ["Muted", "--color-muted", "#58666C"],
-  ["Border", "--color-border", "#D5CEC2"],
-  ["Input border", "--color-input-border", "#8F887E"],
-  ["Primary", "--color-primary", "#274B5B"],
-  ["Primary hover", "--color-primary-hover", "#35677A"],
-  ["Secondary", "--color-secondary", "#2F736D"],
-  ["Success", "--color-success", "#1F5955"],
-  ["Warning", "--color-warning", "#7C470F"],
-  ["Destructive", "--color-destructive", "#783529"],
-  ["Positive secondary", "--color-positive-secondary", "#4F5D3A"],
-  ["Info", "--color-info", "#274B5B"],
-  ["Chart 1", "--chart-1", "#35677A"],
-  ["Chart 2", "--chart-2", "#2F736D"],
-  ["Chart 3", "--chart-3", "#C17B26"],
-  ["Chart 4", "--chart-4", "#9A493A"],
-  ["Chart 5", "--chart-5", "#4F5D3A"],
-  ["Chart 6", "--chart-6", "#58666C"],
+  ["Canvas", "--color-canvas"],
+  ["Surface", "--color-surface"],
+  ["Surface hover", "--color-surface-hover"],
+  ["Foreground", "--color-foreground"],
+  ["Muted", "--color-muted"],
+  ["Border", "--color-border"],
+  ["Input border", "--color-input-border"],
+  ["Primary", "--color-primary"],
+  ["Primary hover", "--color-primary-hover"],
+  ["Secondary", "--color-secondary"],
+  ["Success", "--color-success"],
+  ["Warning", "--color-warning"],
+  ["Destructive", "--color-destructive"],
+  ["Positive secondary", "--color-positive-secondary"],
+  ["Info", "--color-info"],
+  ["Chart 1", "--chart-1"],
+  ["Chart 2", "--chart-2"],
+  ["Chart 3", "--chart-3"],
+  ["Chart 4", "--chart-4"],
+  ["Chart 5", "--chart-5"],
+  ["Chart 6", "--chart-6"],
 ] as const;
 
 const typeScale = [
@@ -107,85 +82,12 @@ const states = [
   "Loading",
 ];
 const sourceTokens = [
-  ...colors.map((color) => color[1]),
-  "--color-destructive-hover-bg",
-  "--color-destructive-hover",
-  "--color-focus-ring",
-  "--color-backdrop",
-  "--color-control-thumb",
-  "--color-on-primary",
-  "--shadow-control",
-  "--color-meter-cold-bg",
-  "--color-meter-cold-text",
-  "--color-meter-hot-bg",
-  "--color-meter-hot-text",
-  "--color-meter-electricity-bg",
-  "--color-meter-electricity-text",
-  "--color-meter-gas-bg",
-  "--color-meter-gas-text",
-  "--color-meter-heat-bg",
-  "--color-meter-heat-text",
-  "--color-badge-neutral-bg",
-  "--color-badge-neutral-text",
-  "--color-badge-info-bg",
-  "--color-badge-info-text",
-  "--color-badge-success-bg",
-  "--color-badge-success-text",
-  "--color-badge-warning-bg",
-  "--color-badge-warning-text",
-  "--color-badge-danger-bg",
-  "--color-badge-danger-text",
-  "--color-notice-bg",
-  "--color-notice-text",
-  "--color-notice-warning-bg",
-  "--color-notice-warning-text",
-  "--color-notice-danger-bg",
-  "--color-notice-danger-text",
-  "--color-table-th-bg",
-  "--color-org-context-bg",
-  "--color-nav-active-bg",
-  "--color-danger-surface",
-  "--color-success-surface",
-  "--color-info-surface",
-  "--chart-grid",
-  "--radius-badge",
-  "--radius-input",
-  "--radius-control",
-  "--radius-panel",
-  "--shadow-panel",
-  "--font-sans",
-  "--font-display",
-  "--elevation-1",
-  "--elevation-2",
-  "--elevation-overlay",
-  "--shadow-drawer",
-  "--icon-size-xs",
-  "--icon-size-sm",
-  "--icon-size-md",
-  "--icon-size-lg",
-  "--icon-stroke",
-];
-
-function channel(value: number) {
-  const n = value / 255;
-  return n <= 0.03928 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
-}
-function luminance(hex: string) {
-  const value = hex.replace("#", "");
-  return (
-    0.2126 * channel(parseInt(value.slice(0, 2), 16)) +
-    0.7152 * channel(parseInt(value.slice(2, 4), 16)) +
-    0.0722 * channel(parseInt(value.slice(4, 6), 16))
-  );
-}
-function contrast(a: string, b: string) {
-  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return ((light + 0.05) / (dark + 0.05)).toFixed(2);
-}
-function rgb(hex: string) {
-  const value = hex.replace("#", "");
-  return `${parseInt(value.slice(0, 2), 16)}, ${parseInt(value.slice(2, 4), 16)}, ${parseInt(value.slice(4, 6), 16)}`;
-}
+  ...new Set(
+    [...tokenSource.matchAll(/^\s*(--[\w-]+)\s*:/gm)]
+      .map((match) => match[1])
+      .filter((token) => !token.startsWith("--lightningcss-"))
+  ),
+].sort();
 ---
 
 <!doctype html>
@@ -197,7 +99,18 @@ function rgb(hex: string) {
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" content="#F7F4EE" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Riga Design System · Namkopa</title>
+    <script is:inline>
+      try {
+        const theme = localStorage.getItem("color-scheme");
+        if (theme === "dark" || theme === "light") {
+          document.documentElement.dataset.theme = theme;
+          document.querySelector('meta[name="color-scheme"]').content = theme;
+        }
+      } catch {
+        /* Storage is optional. */
+      }
+    </script>
+    <title>Namkopa Design System</title>
   </head>
   <body>
     <a class="skip-link" href="#main-content">
@@ -206,7 +119,7 @@ function rgb(hex: string) {
     <header class="ds-topbar">
       <a class="brand" href="#overview">
         <BrandMark />
-        Riga system
+        Namkopa
       </a>
       <div class="ds-top-actions">
         <span class="status-badge" data-tone="success">
@@ -231,8 +144,8 @@ function rgb(hex: string) {
           <a href="#audit">Audit</a>
         </nav>
         <p class="ds-side-note">
-          Generated from 34 page routes, 12 UI components, and the runtime CSS
-          contract.
+          Inventories are derived from repository source. Specimens use the same
+          CSS contract as the product.
         </p>
       </aside>
 
@@ -250,7 +163,7 @@ function rgb(hex: string) {
           <dl class="ds-stats">
             <div>
               <dt>Page routes</dt>
-              <dd>34</dd>
+              <dd>{routes.length}</dd>
             </div>
             <div>
               <dt>Source tokens</dt>
@@ -258,7 +171,7 @@ function rgb(hex: string) {
             </div>
             <div>
               <dt>UI components</dt>
-              <dd>12</dd>
+              <dd>{components.length}</dd>
             </div>
             <div>
               <dt>External UI deps</dt>
@@ -272,15 +185,16 @@ function rgb(hex: string) {
             <p class="eyebrow">Foundation</p>
             <h2>Color ledger</h2>
             <p>
-              Light-theme raw values. Theme-aware swatches resolve the same CSS
-              variables live.
+              Values and contrast ratios resolve from the rendered CSS and
+              update with the theme. Decorative borders are not text colors.
             </p>
           </header>
           <div class="color-grid">
-            {colors.map(([name, variable, value]) => (
+            {colors.map(([name, variable]) => (
               <article class="swatch">
                 <div
                   class="swatch-color"
+                  data-swatch={variable}
                   style={`background:var(${variable})`}
                   aria-label={`${name} color swatch`}
                 />
@@ -288,17 +202,15 @@ function rgb(hex: string) {
                   <>
                     <h3>{name}</h3>
                     <code>{variable}</code>
-                    <p>
-                      {value} · rgb({rgb(value)})
-                    </p>
+                    <p data-color-value={variable}>Resolving current theme…</p>
                   </>
                   <div class="contrast-row">
                     <>
                       <span title="Contrast against canvas">
-                        C {contrast(value, "#F7F4EE")}:1
+                        <span data-contrast-canvas={variable}>—</span>
                       </span>
                       <span title="Contrast against surface">
-                        S {contrast(value, "#FFFCF7")}:1
+                        <span data-contrast-surface={variable}>—</span>
                       </span>
                     </>
                   </div>
@@ -343,7 +255,7 @@ function rgb(hex: string) {
             <article class="type-row type-display">
               <div>
                 <strong>Display</strong>
-                <code>40px / 46px · 600</code>
+                <code>40px / 46px · 700</code>
               </div>
               <p
                 class="font-display"
@@ -462,6 +374,41 @@ function rgb(hex: string) {
                   </>
                 </div>
               ))}
+            </div>
+            <div
+              class="component-row button-variants"
+              aria-label="Button variants and sizes"
+            >
+              <button type="button" class="btn-secondary">
+                Cancel changes
+              </button>
+              <button type="button" class="btn-danger">
+                Remove resident
+              </button>
+              <button type="button" class="btn-ghost">
+                View details
+              </button>
+              <button type="button" class="btn-secondary btn-sm">
+                Compact action
+              </button>
+              <button type="button" class="btn-primary btn-lg">
+                Create billing period
+              </button>
+              <button
+                type="button"
+                class="icon-btn icon-btn-danger"
+                aria-label="Remove example"
+              >
+                <Icon name="trash" size="sm" />
+              </button>
+              <button
+                type="button"
+                class="icon-btn"
+                aria-label="Unavailable action"
+                disabled
+              >
+                <Icon name="plus" size="sm" />
+              </button>
             </div>
           </article>
 
@@ -587,6 +534,7 @@ function rgb(hex: string) {
             </div>
             <div class="embedded-panel">
               <PageHeader
+                headingLevel="h3"
                 accent
                 title="Billing periods"
                 description="Prepare, issue, and reconcile monthly invoices."
@@ -623,6 +571,36 @@ function rgb(hex: string) {
               </p>
             </details>
           </article>
+          <article class="component-block">
+            <div class="component-heading">
+              <div>
+                <h3>OrganizationSwitcher</h3>
+                <p>
+                  In-flow disclosure remains usable inside a narrow scrolling
+                  sidebar.
+                </p>
+              </div>
+            </div>
+            <div class="organization-specimen">
+              <OrganizationSwitcher
+                organizationId="example-1"
+                organizationName="Brīvības ielas namu biedrība"
+                organizations={[
+                  {
+                    id: "example-1",
+                    name: "Brīvības ielas namu biedrība",
+                    archivedAt: null,
+                  },
+                  {
+                    id: "example-2",
+                    name: "Товарищество собственников жилого дома",
+                    archivedAt: null,
+                  },
+                ]}
+                residentAccess={true}
+              />
+            </div>
+          </article>
         </section>
 
         <section id="shells" class="ds-section">
@@ -637,37 +615,37 @@ function rgb(hex: string) {
           <div class="shell-grid">
             <article>
               <h3>Admin workspace</h3>
-              <div class="wireframe admin-wire">
+              <div class="wireframe admin-wire" inert aria-hidden="true">
                 <aside>
                   <span></span>
                   <AppNavigation organizationId="specimen" />
                 </aside>
-                <main>
+                <div class="wire-content">
                   <i></i>
                   <i></i>
                   <i></i>
                   <b></b>
-                </main>
+                </div>
               </div>
             </article>
             <article>
               <h3>Resident portal</h3>
-              <div class="wireframe resident-wire">
+              <div class="wireframe resident-wire" inert aria-hidden="true">
                 <header>
                   <span></span>
                   <span></span>
                 </header>
                 <nav></nav>
-                <main>
+                <div class="wire-content">
                   <i></i>
                   <b></b>
                   <b></b>
-                </main>
+                </div>
               </div>
             </article>
             <article>
               <h3>Authentication</h3>
-              <div class="wireframe auth-wire">
+              <div class="wireframe auth-wire" inert aria-hidden="true">
                 <div>
                   <Ornament />
                   <i></i>
@@ -687,29 +665,27 @@ function rgb(hex: string) {
           </header>
           <div class="audit-grid">
             <article>
-              <strong>Token completeness</strong>
-              <span>
-                {sourceTokens.length}/{sourceTokens.length}
-              </span>
+              <strong>Source token inventory</strong>
+              <span>{sourceTokens.length} declared</span>
               <p>
-                All source-level color, type, geometry, elevation, chart, and
-                icon tokens are represented here or in the registry below.
+                Names are extracted from global.css at build time. A declaration
+                count is an inventory, not an accessibility certification.
               </p>
             </article>
             <article>
-              <strong>Component coverage</strong>
-              <span>10/12</span>
+              <strong>Component inventory</strong>
+              <span>{components.length} files</span>
               <p>
-                10 reusable components render directly. AdminContextDrawer
-                remains data-bound; its patterns are covered without booting
-                action clients.
+                The source inventory includes data-bound components. Only the
+                specimens above are rendered; live workflows need separate
+                tests.
               </p>
             </article>
             <article>
               <strong>Layout fidelity</strong>
-              <span data-audit-layout>Pending runtime</span>
+              <span>See automated checks</span>
               <p>
-                Desktop, tablet, and 390px overflow plus sticky navigation are
+                Desktop, tablet, and 320px overflow plus sticky navigation are
                 checked by Playwright.
               </p>
             </article>
@@ -745,6 +721,16 @@ function rgb(hex: string) {
               ))}
             </ul>
           </details>
+          <details class="disclosure">
+            <summary>Component source inventory ({components.length})</summary>
+            <ul class="route-list">
+              {components.map((name) => (
+                <li>
+                  <code>{name}.astro</code>
+                </li>
+              ))}
+            </ul>
+          </details>
           <div class="drift-panel">
             <h3>Drift status</h3>
             <ul>
@@ -757,8 +743,9 @@ function rgb(hex: string) {
                 utilities directly.
               </li>
               <li>
-                <strong>Resolved:</strong> local type, spacing, and ordinary
-                radii follow named scales.
+                <strong>Contract:</strong> shared controls use semantic color,
+                geometry, feedback, and sizing tokens. Page-specific styles
+                still require review.
               </li>
               <li>
                 <strong>Expected:</strong> printable invoice/email HTML uses
@@ -776,34 +763,86 @@ function rgb(hex: string) {
       initTheme();
       document.addEventListener("astro:page-load", initTheme);
 
-      const rootStyle = getComputedStyle(document.documentElement);
-      document
-        .querySelectorAll<HTMLElement>("[data-token-value]")
-        .forEach((el) => {
-          el.textContent =
-            rootStyle.getPropertyValue(el.dataset.tokenValue!).trim() ||
-            "Defined by theme";
-        });
-      document.querySelector<HTMLElement>("[data-audit-layout]")!.textContent =
-        document.documentElement.scrollWidth <= window.innerWidth
-          ? "No overflow"
-          : "Overflow found";
+      function updateTokenReadout() {
+        const rootStyle = getComputedStyle(document.documentElement);
+        document
+          .querySelectorAll<HTMLElement>("[data-token-value]")
+          .forEach((el) => {
+            el.textContent =
+              rootStyle.getPropertyValue(el.dataset.tokenValue!).trim() ||
+              "Not emitted in this build";
+          });
+        const probe = document.createElement("span");
+        probe.hidden = true;
+        document.body.appendChild(probe);
+        const resolve = (token: string) => {
+          probe.style.backgroundColor = `var(${token})`;
+          return getComputedStyle(probe).backgroundColor;
+        };
+        const luminance = (color: string) => {
+          const channels = color
+            .match(/[\d.]+/g)!
+            .slice(0, 3)
+            .map(Number)
+            .map((n) => {
+              const v = n / 255;
+              return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+            });
+          return (
+            channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+          );
+        };
+        const ratio = (a: string, b: string) => {
+          const values = [luminance(a), luminance(b)];
+          return (
+            (Math.max(...values) + 0.05) /
+            (Math.min(...values) + 0.05)
+          ).toFixed(2);
+        };
+        const canvas = resolve("--color-canvas");
+        const surface = resolve("--color-surface");
+        document
+          .querySelectorAll<HTMLElement>("[data-color-value]")
+          .forEach((el) => {
+            const token = el.dataset.colorValue!;
+            const value = resolve(token);
+            el.textContent = value;
+            const swatch = el.closest(".swatch")!;
+            swatch.querySelector("[data-contrast-canvas]")!.textContent =
+              `C ${ratio(value, canvas)}:1`;
+            swatch.querySelector("[data-contrast-surface]")!.textContent =
+              `S ${ratio(value, surface)}:1`;
+          });
+        probe.remove();
+      }
+      updateTokenReadout();
+      new MutationObserver(updateTokenReadout).observe(
+        document.documentElement,
+        {
+          attributes: true,
+          attributeFilter: ["data-theme"],
+        }
+      );
+      window
+        .matchMedia("(prefers-color-scheme: dark)")
+        .addEventListener("change", updateTokenReadout);
 
       document
         .querySelectorAll<HTMLButtonElement>("[data-copy]")
         .forEach((button) => {
           button.addEventListener("click", async () => {
-            await navigator.clipboard.writeText(button.dataset.copy!);
             const status = document.querySelector<HTMLElement>("#copy-status")!;
-            status.textContent = "Snippet copied";
-            const label = button.textContent;
-            button.textContent = "Copied";
-            window.setTimeout(() => {
-              button.textContent = label;
-            }, 1200);
+            try {
+              await navigator.clipboard.writeText(button.dataset.copy!);
+              status.textContent = "Snippet copied";
+            } catch {
+              status.textContent =
+                "Clipboard unavailable. Copy the example from the page.";
+            }
           });
         });
     </script>
+    <Tooltips />
   </body>
 </html>
 
@@ -830,6 +869,7 @@ function rgb(hex: string) {
   }
   .ds-top-actions {
     display: flex;
+    flex-shrink: 0;
     align-items: center;
     gap: 0.75rem;
   }
@@ -840,7 +880,8 @@ function rgb(hex: string) {
   .ds-sidebar {
     position: sticky;
     top: 4.25rem;
-    height: calc(100vh - 4.25rem);
+    height: calc(100dvh - 4.25rem);
+    overflow-y: auto;
     padding: 2rem 1.5rem;
     border-right: 1px solid var(--color-border);
     background: var(--color-surface);
@@ -860,8 +901,7 @@ function rgb(hex: string) {
     color: var(--color-foreground);
   }
   .ds-side-note {
-    position: absolute;
-    inset: auto 1.5rem 1.5rem;
+    margin-top: 2rem;
     color: var(--color-muted);
     font-size: 0.75rem;
     line-height: 1.45;
@@ -1022,7 +1062,6 @@ function rgb(hex: string) {
   .ds-panel,
   .component-block {
     min-width: 0;
-    overflow: hidden;
     padding: 1.5rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
@@ -1083,6 +1122,7 @@ function rgb(hex: string) {
   }
   .component-heading {
     display: flex;
+    flex-wrap: wrap;
     align-items: start;
     justify-content: space-between;
     gap: 1rem;
@@ -1094,8 +1134,8 @@ function rgb(hex: string) {
     font-size: 0.875rem;
   }
   .copy-button {
-    min-height: 2.25rem;
-    padding: 0.4rem 0.75rem;
+    min-height: var(--control-size-md);
+    padding: var(--space-2) var(--space-3);
     border: 1px solid var(--color-border);
     border-radius: 0.5rem;
     background: var(--color-surface);
@@ -1107,7 +1147,7 @@ function rgb(hex: string) {
   }
   .state-grid {
     display: grid;
-    grid-template-columns: repeat(6, minmax(8.5rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
     gap: 0.75rem;
     max-width: 100%;
     overflow-x: auto;
@@ -1129,11 +1169,10 @@ function rgb(hex: string) {
     background: var(--color-primary-hover);
   }
   [data-preview-state="active"] {
-    background: var(--color-primary-hover);
-    transform: translateY(1px);
+    background: var(--color-primary-active);
   }
   [data-preview-state="focus-visible"] {
-    outline: 3px solid var(--color-primary-hover);
+    outline: 2px solid var(--color-focus-ring);
     outline-offset: 3px;
   }
   .form-grid {
@@ -1147,7 +1186,7 @@ function rgb(hex: string) {
     font-size: 0.8125rem;
     font-weight: 600;
   }
-  .form-grid input,
+  .form-grid input:not([type="checkbox"]):not([type="radio"]),
   .form-grid select {
     width: 100%;
     padding: 0.6rem 0.75rem;
@@ -1156,6 +1195,7 @@ function rgb(hex: string) {
   .check-row {
     display: flex;
     align-items: center;
+    min-height: var(--control-size-md);
     gap: 0.5rem;
   }
   .field-error {
@@ -1163,13 +1203,24 @@ function rgb(hex: string) {
     font-size: 0.75rem;
     font-weight: 400;
   }
-  [aria-invalid="true"] {
-    border-color: var(--color-destructive);
-  }
   .component-row {
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
+  }
+  .button-variants {
+    margin-top: var(--space-6);
+    align-items: center;
+  }
+  .organization-specimen {
+    width: 15rem;
+    max-width: 100%;
+    /* The menu floats, so the specimen keeps room for it to open into. */
+    min-height: 17rem;
+    max-height: 20rem;
+    overflow: auto;
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
   }
   .component-pair {
     display: grid;
@@ -1236,16 +1287,16 @@ function rgb(hex: string) {
     width: 0.45rem;
     height: 0.45rem;
   }
-  .admin-wire main {
+  .admin-wire .wire-content {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 0.5rem;
     padding: 1rem;
   }
-  .admin-wire main i {
+  .admin-wire .wire-content i {
     height: 2.6rem;
   }
-  .admin-wire main b {
+  .admin-wire .wire-content b {
     grid-column: 1 / -1;
   }
   .resident-wire {
@@ -1266,16 +1317,16 @@ function rgb(hex: string) {
     height: 0.35rem;
     margin: 0.8rem 0;
   }
-  .resident-wire main {
+  .resident-wire .wire-content {
     display: grid;
     gap: 0.5rem;
   }
-  .resident-wire main i {
+  .resident-wire .wire-content i {
     width: 48%;
     height: 1rem;
     background: var(--color-primary);
   }
-  .resident-wire main b {
+  .resident-wire .wire-content b {
     height: 3rem;
   }
   .auth-wire {
@@ -1413,9 +1464,18 @@ function rgb(hex: string) {
       font-size: clamp(3rem, 17vw, 4.5rem);
     }
   }
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+    .ds-topbar {
+      background: var(--color-surface);
+      backdrop-filter: none;
+    }
+  }
   @media (prefers-reduced-motion: reduce) {
     :global(html) {
       scroll-behavior: auto;
     }
+  }
+  .form-grid select {
+    padding-inline-end: 2.25rem;
   }
 </style>

@@ -24,12 +24,17 @@ import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
 import EmptyState from "../../../../../components/ui/EmptyState.astro";
 import AdminContextDrawer from "../../../../../components/ui/AdminContextDrawer.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
+import {
+  collectionShare,
+  formatCollectionShare,
+} from "../../../../../lib/ui/dashboard-collection";
 import type { IconName } from "../../../../../lib/ui/icons";
 import {
   entityLabel,
   fill,
   formatMoney as baseFormatMoney,
   formatNumber,
+  formatDate,
   formatPeriod,
   plural,
   translate,
@@ -214,14 +219,14 @@ const actionHref = summary
         ? readingsUrl.pathname + readingsUrl.search
         : `${workbenchPath}?status=MISSING_DATA`,
       GENERATE_INVOICES: `${workbenchPath}?status=READY`,
-      SEND_INVOICES: `${workbenchPath}?status=DRAFT`,
+      SEND_INVOICES: `${workbenchPath}?status=UNSENT`,
       REVIEW_PAYMENTS: `${base}/payments`,
       CREATE_NEXT_PERIOD: `${base}/periods#create-period`,
       ALL_DONE: workbenchPath,
     }[summary.nextAction.key]
   : null;
 
-type ProgressState = "done" | "current" | "unavailable";
+type ProgressState = "done" | "current" | "in-progress" | "unavailable";
 const currentProgressIndex = summary
   ? {
       ENTER_READINGS: 0,
@@ -262,12 +267,12 @@ const progressSteps = summary
       },
     ].map((step, index) => ({
       ...step,
-      state: (currentProgressIndex < 0
+      state: (step.total > 0 && step.done >= step.total
         ? "done"
-        : index < currentProgressIndex
-          ? "done"
-          : index === currentProgressIndex
-            ? "current"
+        : index === currentProgressIndex
+          ? "current"
+          : step.done > 0
+            ? "in-progress"
             : "unavailable") as ProgressState,
     }))
   : [];
@@ -275,25 +280,20 @@ const progressStateText: Record<ProgressState, string> = {
   done: t("Done"),
   current: t("Now"),
   unavailable: t("Waiting"),
+  "in-progress": t("In progress"),
 };
 const progressStateIcon: Record<ProgressState, IconName> = {
   done: "check",
   current: "clock",
   unavailable: "dots",
+  "in-progress": "clock",
 };
 
-// dd.mm.yyyy for overdue details; dd.mm. for the quiet deadline under a step.
-const shortDate = (value: string) =>
-  new Intl.DateTimeFormat(locale, {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(value));
+const shortDate = (value: string) => formatDate(value, locale);
 const dayMonth = (value: string) =>
   new Intl.DateTimeFormat(locale, {
     day: "2-digit",
-    month: "2-digit",
+    month: "short",
     timeZone: "UTC",
   }).format(new Date(value));
 
@@ -312,13 +312,13 @@ const manualAdjustment = summary
   : "0.00";
 const hasManualAdjustment = Number(manualAdjustment) !== 0;
 
-function formatMoney(
-  value: string,
-  currency: string,
-  _displayLocale: typeof locale = locale
-): string {
+function formatMoney(value: string, currency: string): string {
   return baseFormatMoney(value, currency, locale, true);
 }
+
+const collectionRatio = summary
+  ? collectionShare(summary.totalPaid, summary.amountDue)
+  : null;
 
 type MissingItem =
   | { label: string | null; meterType: string; reason?: "NO_READING" }
@@ -457,7 +457,7 @@ if (readyToSendCount && summary?.nextAction.key !== "SEND_INVOICES") {
       "{n} invoice is ready to send.",
       "{n} invoices are ready to send."
     ),
-    href: `${workbenchPath}?status=DRAFT`,
+    href: `${workbenchPath}?status=UNSENT`,
     actionLabel: "Send invoices",
     tone: "info",
     icon: "send",
@@ -486,7 +486,7 @@ if (
 function attentionPriority(row: AttentionRow): number {
   if (row.kind === "case") return row.item.status === "OVERDUE" ? 2 : 3;
   if (row.key === "delivery") return 0;
-  if (row.key === "unmatched") return 1;
+  if (row.key === "unmatched" || row.key === "proposed") return 1;
   return 4;
 }
 
@@ -564,6 +564,7 @@ function readingsHref(
   title={t("Dashboard") + (organization ? " - " + organization.name : "")}
   organizationId={organizationId}
   organizationName={organization?.name}
+  breadcrumbs={[]}
 >
   {loadError || !organization ? (
     <section class="dashboard-error panel" role="alert">
@@ -571,6 +572,9 @@ function readingsHref(
       <div>
         <h1>{t("The overview could not be loaded.")}</h1>
         <p>{t("Try again in a moment, or open the billing periods.")}</p>
+        <a class="btn-secondary" href={Astro.url.pathname + Astro.url.search}>
+          {t("Try again")}
+        </a>
         <a class="btn-secondary" href={`${base}/periods`}>
           {t("Billing periods")}
         </a>
@@ -638,7 +642,6 @@ function readingsHref(
         <div class="space-y-6">
           <header class="page-header">
             <div>
-              <p class="eyebrow">{organization.name}</p>
               <h1>{t("Dashboard")}</h1>
               <p class="page-description">
                 {t("Monitor billing, payments and work requiring attention.")}
@@ -672,37 +675,41 @@ function readingsHref(
             )}
             workbenchPath={workbenchPath}
             refreshSelectors={[
+              ".dashboard-metrics",
               ".dashboard-month-status",
-              ".dashboard-money",
               ".dashboard-attention",
               ".dashboard-more",
             ]}
           />
 
           <header class="dashboard-header">
-            <div class="dashboard-title-row">
-              <h1 class="font-display">
-                {formatPeriod(
-                  summary.period.year,
-                  summary.period.month,
-                  locale
-                )}
-              </h1>
-              <StatusBadge status={summary.period.status} />
-              {(summary.period.status === "LOCKED" ||
-                !summary.isNewestPeriod) && (
-                <p class="dashboard-period-context">
-                  <Icon
-                    name={summary.period.status === "LOCKED" ? "lock" : "clock"}
-                    size="xs"
-                  />
-                  {t(
-                    !summary.isNewestPeriod
-                      ? "You are viewing an earlier month."
-                      : "This month is closed."
+            <div class="dashboard-heading">
+              <div class="dashboard-title-row">
+                <h1 class="font-display">
+                  {formatPeriod(
+                    summary.period.year,
+                    summary.period.month,
+                    locale
                   )}
-                </p>
-              )}
+                </h1>
+                <StatusBadge status={summary.period.status} />
+                {(summary.period.status === "LOCKED" ||
+                  !summary.isNewestPeriod) && (
+                  <p class="dashboard-period-context">
+                    <Icon
+                      name={
+                        summary.period.status === "LOCKED" ? "lock" : "clock"
+                      }
+                      size="xs"
+                    />
+                    {t(
+                      !summary.isNewestPeriod
+                        ? "You are viewing an earlier month."
+                        : "This month is closed."
+                    )}
+                  </p>
+                )}
+              </div>
             </div>
             <nav
               class="dashboard-period-nav"
@@ -743,7 +750,8 @@ function readingsHref(
                   <Icon name="arrow-right" size="xs" />
                 </a>
               ) : (
-                <span aria-disabled="true" aria-label={t("Next period")}>
+                <span aria-disabled="true">
+                  <span class="sr-only">{t("Next period")}</span>
                   <span class="period-label-full" aria-hidden="true">
                     {t("Next period")}
                   </span>
@@ -756,6 +764,277 @@ function readingsHref(
             </nav>
           </header>
 
+          <section class="dashboard-metrics" aria-label={t("Overview")}>
+            <div
+              class="dashboard-metric dashboard-collection panel"
+              data-metric="collection"
+            >
+              <div class="collection-head">
+                <span class="metric-label">{t("Received in payments")}</span>
+                <details class="info-tip money-breakdown" data-dismiss>
+                  <summary
+                    class="icon-btn icon-btn-sm"
+                    aria-label={t("Invoice breakdown")}
+                  >
+                    <Icon name="info-circle" size="sm" />
+                  </summary>
+                  <div class="info-tip-panel">
+                    <dl aria-label={t("Money this month")}>
+                      <div>
+                        <dt>
+                          <span class="money-operator" aria-hidden="true" />
+                          <span>{t("This month's invoices")}</span>
+                        </dt>
+                        <dd>
+                          {formatMoney(
+                            summary.currentCharges,
+                            organization.currency
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <span class="money-operator" aria-hidden="true">
+                            +
+                          </span>
+                          <span>{t("Previous debt")}</span>
+                        </dt>
+                        <dd>
+                          {formatMoney(
+                            summary.carriedOutstanding,
+                            organization.currency
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <span class="money-operator" aria-hidden="true">
+                            −
+                          </span>
+                          <span>{t("Previous overpayment")}</span>
+                        </dt>
+                        <dd>
+                          {formatMoney(
+                            summary.creditsApplied,
+                            organization.currency
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>
+                          <span class="money-operator" aria-hidden="true">
+                            +
+                          </span>
+                          <span>{t("Late fees")}</span>
+                        </dt>
+                        <dd>
+                          {formatMoney(summary.lateFees, organization.currency)}
+                        </dd>
+                      </div>
+                      {hasManualAdjustment && (
+                        <div>
+                          <dt>
+                            <span class="money-operator" aria-hidden="true" />
+                            <span>{t("Manual adjustment")}</span>
+                          </dt>
+                          <dd>
+                            {formatMoney(
+                              manualAdjustment,
+                              organization.currency
+                            )}
+                          </dd>
+                        </div>
+                      )}
+                      <div class="money-total">
+                        <dt>
+                          <span class="money-operator" aria-hidden="true">
+                            =
+                          </span>
+                          <span>{t("Total to pay")}</span>
+                        </dt>
+                        <dd>
+                          {formatMoney(
+                            summary.amountDue,
+                            organization.currency
+                          )}
+                        </dd>
+                      </div>
+                      <div class="money-split">
+                        <dt>
+                          <span class="money-operator" aria-hidden="true" />
+                          <span>{t("Received in payments")}</span>
+                        </dt>
+                        <dd class="money-received">
+                          {formatMoney(
+                            summary.totalPaid,
+                            organization.currency
+                          )}
+                        </dd>
+                      </div>
+                      <div
+                        class="money-split"
+                        data-tone={
+                          summary.caseStatusCounts.OVERDUE > 0
+                            ? "danger"
+                            : undefined
+                        }
+                      >
+                        <dt>
+                          <span class="money-operator" aria-hidden="true" />
+                          <span>
+                            {summary.caseStatusCounts.OVERDUE > 0 && (
+                              <Icon name="alert-triangle" size="xs" />
+                            )}
+                            {t("Still unpaid")}
+                          </span>
+                        </dt>
+                        <dd>
+                          {formatMoney(
+                            summary.totalOutstanding,
+                            organization.currency
+                          )}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </details>
+              </div>
+              <figure class="collection-overview">
+                <div class="collection-hero">
+                  <a
+                    class="collection-link"
+                    href={`${base}/payments?view=CONFIRMED`}
+                  >
+                    <strong class="collection-received">
+                      {formatMoney(summary.totalPaid, organization.currency)}
+                    </strong>
+                  </a>
+                  <span
+                    class="collection-share"
+                    data-complete={
+                      collectionRatio !== null && collectionRatio >= 1
+                        ? ""
+                        : undefined
+                    }
+                  >
+                    {formatCollectionShare(collectionRatio, locale)}
+                  </span>
+                </div>
+                <div
+                  class="collection-bar"
+                  role="img"
+                  aria-label={
+                    collectionRatio === null
+                      ? t("No amount due")
+                      : fill(t("{share} of {total} received"), {
+                          share: formatCollectionShare(collectionRatio, locale),
+                          total: formatMoney(
+                            summary.amountDue,
+                            organization.currency
+                          ),
+                        })
+                  }
+                >
+                  <span style={`width:${(collectionRatio ?? 0) * 100}%`} />
+                </div>
+                <figcaption class="collection-foot">
+                  {collectionRatio === null ? (
+                    <span>{t("No amount due")}</span>
+                  ) : (
+                    <span>
+                      {t("of total to pay")}{" "}
+                      <span class="collection-total">
+                        {formatMoney(summary.amountDue, organization.currency)}
+                      </span>
+                    </span>
+                  )}
+                  {Number(summary.totalOutstanding) > 0 && (
+                    <a
+                      class="collection-unpaid"
+                      data-metric="unpaid"
+                      data-tone={
+                        summary.caseStatusCounts.OVERDUE ? "danger" : undefined
+                      }
+                      href={workbenchPath}
+                    >
+                      {summary.caseStatusCounts.OVERDUE > 0 && (
+                        <Icon name="alert-triangle" size="xs" />
+                      )}
+                      {t("Still unpaid")}
+                      {summary.caseStatusCounts.OVERDUE > 0 && (
+                        <span class="sr-only"> ({t("Overdue")})</span>
+                      )}
+                      <strong>
+                        {formatMoney(
+                          summary.totalOutstanding,
+                          organization.currency
+                        )}
+                      </strong>
+                    </a>
+                  )}
+                </figcaption>
+              </figure>
+              {readyToSendCount > 0 && (
+                <p class="collection-note">
+                  {t("Includes invoices that are not sent yet.")}
+                </p>
+              )}
+            </div>
+            <a
+              class="dashboard-metric dashboard-collection panel"
+              data-metric="readings"
+              href={`${workbenchPath}?status=MISSING_DATA`}
+            >
+              <span class="metric-label">{t("Readings")}</span>
+              <div class="collection-hero">
+                <strong class="collection-received">
+                  {formatNumber(String(summary.progress.readingsDone), locale)}
+                  <span class="metric-denominator">
+                    {" "}
+                    /{" "}
+                    {formatNumber(
+                      String(summary.progress.dwellingsTotal),
+                      locale
+                    )}
+                  </span>
+                </strong>
+                <span class="collection-share">
+                  {formatCollectionShare(
+                    summary.progress.dwellingsTotal
+                      ? summary.progress.readingsDone /
+                          summary.progress.dwellingsTotal
+                      : null,
+                    locale
+                  )}
+                </span>
+              </div>
+              <div class="metric-bar" aria-hidden="true">
+                <span
+                  style={`width:${
+                    summary.progress.dwellingsTotal
+                      ? (summary.progress.readingsDone /
+                          summary.progress.dwellingsTotal) *
+                        100
+                      : 0
+                  }%`}
+                />
+              </div>
+              <span class="metric-foot">
+                {summary.progress.dwellingsTotal -
+                  summary.progress.readingsDone >
+                0
+                  ? fill(t("{count} still to enter"), {
+                      count: String(
+                        summary.progress.dwellingsTotal -
+                          summary.progress.readingsDone
+                      ),
+                    })
+                  : t("All readings are in")}
+                <Icon name="arrow-right" size="xs" />
+              </span>
+            </a>
+          </section>
+
           <section
             class="dashboard-month-status panel"
             aria-labelledby="month-progress-title"
@@ -764,7 +1043,12 @@ function readingsHref(
               {t("Month progress")}
             </h2>
             <div class="month-status-lead">
-              <p class="month-status-sentence">{nextActionSentence(summary)}</p>
+              <div>
+                <p class="next-step-label">{t("Next step")}</p>
+                <p class="month-status-sentence">
+                  {nextActionSentence(summary)}
+                </p>
+              </div>
               {summary.nextAction.key === "ALL_DONE" ? (
                 <a class="month-status-link" href={actionHref!}>
                   {t(actionLabel!)}
@@ -806,7 +1090,10 @@ function readingsHref(
 
             <ol class="month-progress" aria-label={t("Month progress")}>
               {progressSteps.map((step) => (
-                <li data-state={step.state}>
+                <li
+                  data-state={step.state}
+                  style={`--step-progress:${step.total ? Math.min(100, (step.done / step.total) * 100) : 0}%`}
+                >
                   <span class="progress-marker" aria-hidden="true">
                     <Icon name={progressStateIcon[step.state]} size="xs" />
                   </span>
@@ -840,380 +1127,222 @@ function readingsHref(
             </ol>
           </section>
 
-          <div class="dashboard-body-wrap">
-            <div class="dashboard-body">
-              <section class="dashboard-money" aria-labelledby="money-title">
-                <div class="dashboard-section-heading">
-                  <h2 id="money-title">{t("Money this month")}</h2>
+          <div class="dashboard-body">
+            <section
+              class="dashboard-attention panel"
+              aria-labelledby="dashboard-attention-title"
+            >
+              <div class="dashboard-section-heading">
+                <div>
+                  <h2 id="dashboard-attention-title">{t("Needs attention")}</h2>
+                  <p>{attentionItemCount}</p>
                 </div>
-                <div class="money-reconciliation panel">
-                  <dl
-                    aria-label={t("Money this month")}
-                    style={`--eq-rows:${hasManualAdjustment ? 5 : 4}`}
-                  >
-                    <div>
-                      <dt>
-                        <span class="money-operator" aria-hidden="true" />
-                        <span>{t("This month's invoices")}</span>
-                      </dt>
-                      <dd>
-                        {formatMoney(
-                          summary.currentCharges,
-                          organization.currency,
-                          locale
-                        )}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>
-                        <span class="money-operator" aria-hidden="true">
-                          +
-                        </span>
-                        <span>{t("Previous debt")}</span>
-                      </dt>
-                      <dd>
-                        {formatMoney(
-                          summary.carriedOutstanding,
-                          organization.currency,
-                          locale
-                        )}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>
-                        <span class="money-operator" aria-hidden="true">
-                          −
-                        </span>
-                        <span>{t("Previous overpayment")}</span>
-                      </dt>
-                      <dd>
-                        {formatMoney(
-                          summary.creditsApplied,
-                          organization.currency,
-                          locale
-                        )}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>
-                        <span class="money-operator" aria-hidden="true">
-                          +
-                        </span>
-                        <span>{t("Late fees")}</span>
-                      </dt>
-                      <dd>
-                        {formatMoney(
-                          summary.lateFees,
-                          organization.currency,
-                          locale
-                        )}
-                      </dd>
-                    </div>
-                    {hasManualAdjustment && (
-                      <div>
-                        <dt>
-                          <span class="money-operator" aria-hidden="true" />
-                          <span>{t("Manual adjustment")}</span>
-                        </dt>
-                        <dd>
-                          {formatMoney(
-                            manualAdjustment,
-                            organization.currency,
-                            locale
-                          )}
-                        </dd>
-                      </div>
-                    )}
-                    <div class="money-total">
-                      <dt>
-                        <span class="money-operator" aria-hidden="true">
-                          =
-                        </span>
-                        <span>{t("Total to pay")}</span>
-                      </dt>
-                      <dd>
-                        {formatMoney(
-                          summary.amountDue,
-                          organization.currency,
-                          locale
-                        )}
-                      </dd>
-                    </div>
-                    <div class="money-split">
-                      <dt>
-                        <span class="money-operator" aria-hidden="true" />
-                        <span>{t("Received in payments")}</span>
-                      </dt>
-                      <dd class="money-received">
-                        {formatMoney(
-                          summary.totalPaid,
-                          organization.currency,
-                          locale
-                        )}
-                      </dd>
-                    </div>
-                    <div
-                      class="money-split"
-                      data-tone={
-                        summary.caseStatusCounts.OVERDUE > 0
-                          ? "danger"
-                          : undefined
-                      }
-                    >
-                      <dt>
-                        <span class="money-operator" aria-hidden="true" />
-                        <span>
-                          {summary.caseStatusCounts.OVERDUE > 0 && (
-                            <Icon name="alert-triangle" size="xs" />
-                          )}
-                          {t("Still unpaid")}
-                        </span>
-                      </dt>
-                      <dd>
-                        {formatMoney(
-                          summary.totalOutstanding,
-                          organization.currency,
-                          locale
-                        )}
-                      </dd>
-                    </div>
-                  </dl>
-                  <p class="money-note">
-                    {t("Includes invoices that are not sent yet.")}
-                  </p>
-                </div>
-              </section>
+              </div>
 
-              <section
-                class="dashboard-attention"
-                aria-labelledby="dashboard-attention-title"
-              >
-                <div class="dashboard-section-heading">
-                  <div>
-                    <h2 id="dashboard-attention-title">
-                      {t("Needs attention")}
-                    </h2>
-                    <p>{attentionItemCount}</p>
-                  </div>
-                  {attentionRows.length > visibleAttentionRows.length &&
-                    !showAllAttention && (
-                      <a
-                        href={attentionAllHref}
-                        aria-label={fill(t("Show all ({n})"), {
-                          n: attentionItemCount,
-                        })}
+              {visibleAttentionRows.length === 0 ? (
+                <EmptyState title={t("Nothing needs attention right now.")} />
+              ) : (
+                <div
+                  class:list={[
+                    "attention-list",
+                    { "is-expanded": showAllAttention },
+                  ]}
+                >
+                  {attentionGroups.map((group, groupIndex) => {
+                    const heading =
+                      group.key === "urgent" ? null : groupHeading[group.key];
+                    const hiddenCount = hiddenInGroup(
+                      group.key,
+                      group.rows.length
+                    );
+                    return (
+                      <div
+                        class:list={[
+                          "attention-group",
+                          { "attention-extra": group.start >= 3 },
+                        ]}
                       >
-                        {fill(t("Show all ({n})"), { n: attentionItemCount })}
-                        <Icon name="arrow-right" size="xs" />
-                      </a>
-                    )}
-                </div>
-
-                {visibleAttentionRows.length === 0 ? (
-                  <EmptyState title={t("Nothing needs attention right now.")} />
-                ) : (
-                  <div
-                    class:list={[
-                      "attention-list panel",
-                      { "is-expanded": showAllAttention },
-                    ]}
-                  >
-                    {attentionGroups.map((group, groupIndex) => {
-                      const heading =
-                        group.key === "urgent" ? null : groupHeading[group.key];
-                      const hiddenCount = hiddenInGroup(
-                        group.key,
-                        group.rows.length
-                      );
-                      return (
-                        <div
-                          class:list={[
-                            "attention-group",
-                            { "attention-extra": group.start >= 3 },
-                          ]}
-                        >
-                          {heading && (
-                            <h3
-                              class="attention-group-heading"
-                              id={`attention-group-${group.key}`}
-                              data-tone={heading.tone}
-                            >
-                              {heading.icon && (
-                                <span
-                                  class="attention-group-icon"
-                                  aria-hidden="true"
-                                >
-                                  <Icon name={heading.icon} size="xs" />
-                                </span>
-                              )}
-                              {heading.label}
-                              {hiddenCount === 0 && (
-                                <span class="attention-group-count">
-                                  {groupTotal(group.key)}
-                                </span>
-                              )}
-                            </h3>
-                          )}
-                          <div
-                            role="list"
-                            aria-labelledby={
-                              heading
-                                ? `attention-group-${group.key}`
-                                : "dashboard-attention-title"
-                            }
+                        {heading && (
+                          <h3
+                            class="attention-group-heading"
+                            id={`attention-group-${group.key}`}
+                            data-tone={heading.tone}
                           >
-                            {group.rows.map((row, rowIndex) =>
-                              row.kind === "case" ? (
-                                <article
-                                  class:list={[
-                                    "attention-row",
-                                    {
-                                      "attention-extra":
-                                        group.start + rowIndex >= 3,
-                                    },
-                                  ]}
-                                  role="listitem"
-                                >
-                                  <div class="attention-row-main">
-                                    <div class="attention-heading">
-                                      <a
-                                        href={`${base}/dwellings/${row.item.dwellingId}`}
-                                      >
-                                        {t("Dwelling")}{" "}
-                                        {row.item.dwellingNumber}
-                                      </a>
-                                    </div>
-                                    {row.item.status === "OVERDUE" ? (
-                                      <p class="attention-details">
-                                        <strong>
-                                          {formatMoney(
-                                            row.item.overdueAmount ?? "0.00",
-                                            organization!.currency,
-                                            locale
+                            {heading.icon && (
+                              <span
+                                class="attention-group-icon"
+                                aria-hidden="true"
+                              >
+                                <Icon name={heading.icon} size="xs" />
+                              </span>
+                            )}
+                            {heading.label}
+                            {hiddenCount === 0 && (
+                              <span class="attention-group-count">
+                                {groupTotal(group.key)}
+                              </span>
+                            )}
+                          </h3>
+                        )}
+                        <div
+                          role="list"
+                          aria-labelledby={
+                            heading
+                              ? `attention-group-${group.key}`
+                              : "dashboard-attention-title"
+                          }
+                        >
+                          {group.rows.map((row) =>
+                            row.kind === "case" ? (
+                              <article class="attention-row" role="listitem">
+                                <div class="attention-row-main">
+                                  <div class="attention-heading">
+                                    <a
+                                      href={`${base}/dwellings/${row.item.dwellingId}`}
+                                    >
+                                      {t("Dwelling")} {row.item.dwellingNumber}
+                                    </a>
+                                  </div>
+                                  {row.item.status === "OVERDUE" ? (
+                                    <p class="attention-details">
+                                      <strong>
+                                        {formatMoney(
+                                          row.item.overdueAmount ?? "0.00",
+                                          organization!.currency
+                                        )}
+                                      </strong>
+                                      {row.item.dueDate && (
+                                        <span>
+                                          {fill(t("Due {date}"), {
+                                            date: shortDate(row.item.dueDate),
+                                          })}
+                                        </span>
+                                      )}
+                                      {row.item.daysLate !== null && (
+                                        <span>
+                                          {plural(
+                                            locale,
+                                            row.item.daysLate,
+                                            "{n} day late",
+                                            "{n} days late"
                                           )}
-                                        </strong>
-                                        {row.item.dueDate && (
-                                          <span>
-                                            {fill(t("Due {date}"), {
-                                              date: shortDate(row.item.dueDate),
-                                            })}
-                                          </span>
+                                        </span>
+                                      )}
+                                    </p>
+                                  ) : (
+                                    <p
+                                      class="attention-reason"
+                                      data-tip={
+                                        missingReasons(row.item.missingData) ||
+                                        undefined
+                                      }
+                                      data-tip-clipped={
+                                        missingReasons(row.item.missingData) ===
+                                        missingReasons(row.item.missingData, 2)
+                                          ? ""
+                                          : undefined
+                                      }
+                                    >
+                                      {missingReasons(
+                                        row.item.missingData,
+                                        2
+                                      ) ||
+                                        t(
+                                          "Readings are required before generating an invoice."
                                         )}
-                                        {row.item.daysLate !== null && (
-                                          <span>
-                                            {plural(
-                                              locale,
-                                              row.item.daysLate,
-                                              "{n} day late",
-                                              "{n} days late"
-                                            )}
-                                          </span>
-                                        )}
-                                      </p>
-                                    ) : (
-                                      <p
-                                        class="attention-reason"
-                                        title={
-                                          missingReasons(
-                                            row.item.missingData
-                                          ) || undefined
-                                        }
-                                        aria-label={
-                                          missingReasons(
-                                            row.item.missingData
-                                          ) ||
-                                          t(
-                                            "Readings are required before generating an invoice."
-                                          )
-                                        }
-                                      >
-                                        {missingReasons(
+                                      {missingReasons(row.item.missingData) !==
+                                        missingReasons(
                                           row.item.missingData,
                                           2
-                                        ) ||
-                                          t(
-                                            "Readings are required before generating an invoice."
-                                          )}
-                                      </p>
-                                    )}
-                                  </div>
-                                  {row.item.status === "MISSING_DATA" &&
-                                  summary.period.status !== "LOCKED" ? (
-                                    <a
-                                      class="attention-action"
-                                      href={readingsHref(row.item)}
-                                      data-open-drawer="readings"
-                                      data-dwelling-id={row.item.dwellingId}
-                                      aria-haspopup="dialog"
-                                      aria-controls="admin-context-drawer"
-                                    >
-                                      {t("Enter readings")}
-                                      <Icon name="arrow-right" size="xs" />
-                                    </a>
-                                  ) : (
-                                    <a
-                                      class="attention-action"
-                                      href={`${base}/payments`}
-                                    >
-                                      {t("Review payments")}
-                                      <Icon name="arrow-right" size="xs" />
-                                    </a>
+                                        ) && (
+                                        <span class="sr-only">
+                                          {" "}
+                                          {missingReasons(row.item.missingData)}
+                                        </span>
+                                      )}
+                                    </p>
                                   )}
-                                </article>
-                              ) : (
-                                <article
-                                  class:list={[
-                                    "attention-row attention-summary-row",
-                                    {
-                                      "attention-extra":
-                                        group.start + rowIndex >= 3,
-                                    },
-                                  ]}
-                                  data-tone={row.tone}
-                                  role="listitem"
-                                >
-                                  <span
-                                    class="attention-summary-icon"
-                                    aria-hidden="true"
-                                  >
-                                    <Icon name={row.icon} size="sm" />
-                                  </span>
-                                  <p>{row.label}</p>
-                                  <a class="attention-action" href={row.href}>
-                                    {t(row.actionLabel)}
-                                    <Icon name="arrow-right" size="xs" />
-                                  </a>
-                                </article>
-                              )
-                            )}
-                            {groupIndex === attentionGroups.length - 1 &&
-                              hiddenAttentionCount > 0 && (
-                                <div class="attention-more-row" role="listitem">
-                                  <span>
-                                    {fill(t("+{n} more"), {
-                                      n: hiddenAttentionCount,
-                                    })}
-                                  </span>
-                                  <a href={attentionAllHref}>
-                                    {fill(t("Show all ({n})"), {
-                                      n: attentionItemCount,
-                                    })}
-                                    <Icon name="arrow-right" size="xs" />
-                                  </a>
                                 </div>
-                              )}
-                          </div>
+                                {row.item.status === "MISSING_DATA" &&
+                                summary.period.status !== "LOCKED" ? (
+                                  <a
+                                    class="attention-action"
+                                    href={readingsHref(row.item)}
+                                    data-open-drawer="readings"
+                                    data-dwelling-id={row.item.dwellingId}
+                                    aria-haspopup="dialog"
+                                    aria-controls="admin-context-drawer"
+                                  >
+                                    {t("Enter readings")}
+                                    <Icon name="arrow-right" size="xs" />
+                                  </a>
+                                ) : row.item.status === "OVERDUE" ? (
+                                  <a
+                                    class="attention-action"
+                                    href={`${base}/payments?q=${encodeURIComponent(row.item.dwellingNumber)}`}
+                                  >
+                                    {t("Review payments")}
+                                    <Icon name="arrow-right" size="xs" />
+                                  </a>
+                                ) : (
+                                  <a
+                                    class="attention-action"
+                                    href={`${workbenchPath}?status=MISSING_DATA`}
+                                  >
+                                    {t("Open workbench")}
+                                    <Icon name="arrow-right" size="xs" />
+                                  </a>
+                                )}
+                              </article>
+                            ) : (
+                              <article
+                                class="attention-row attention-summary-row"
+                                data-tone={row.tone}
+                                role="listitem"
+                              >
+                                <span
+                                  class="attention-summary-icon"
+                                  aria-hidden="true"
+                                >
+                                  <Icon name={row.icon} size="sm" />
+                                </span>
+                                <p>{row.label}</p>
+                                <a class="attention-action" href={row.href}>
+                                  {t(row.actionLabel)}
+                                  <Icon name="arrow-right" size="xs" />
+                                </a>
+                              </article>
+                            )
+                          )}
+                          {groupIndex === attentionGroups.length - 1 &&
+                            hiddenAttentionCount > 0 && (
+                              <div class="attention-more-row" role="listitem">
+                                <span>
+                                  {fill(t("+{n} more"), {
+                                    n: hiddenAttentionCount,
+                                  })}
+                                </span>
+                                <a href={attentionAllHref}>
+                                  {fill(t("Show all ({n})"), {
+                                    n: attentionItemCount,
+                                  })}
+                                  <Icon name="arrow-right" size="xs" />
+                                </a>
+                              </div>
+                            )}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           </div>
 
           <details class="dashboard-more panel">
-            <summary>{t("Additional information")}</summary>
+            <summary class="chevron-toggle chevron-toggle-end">
+              {t("Additional information")}
+            </summary>
             <div class="dashboard-more-grid">
               {setupComplete && (
                 <section
@@ -1300,10 +1429,6 @@ function readingsHref(
 </AdminLayout>
 
 <style>
-  .dashboard-page {
-    display: grid;
-    gap: 2rem;
-  }
   .dashboard-error {
     display: flex;
     align-items: flex-start;
@@ -1414,261 +1539,622 @@ function readingsHref(
     color: var(--color-on-primary);
   }
 
-  /* One compact row: month + status on the left, month switcher on the right. */
-  .dashboard-header {
+  .dashboard-page {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.5rem 1.5rem;
+    gap: 1.5rem;
+    /* Starts on the breadcrumbs' left edge, like every other page. */
+    max-width: 94rem;
   }
-  /* Never wrap: a wrapped title is what made locked months taller than open ones. */
+  .dashboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .dashboard-heading {
+    min-width: 0;
+  }
   .dashboard-title-row {
     display: flex;
-    flex-wrap: nowrap;
     align-items: center;
-    gap: 0.25rem 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
     min-width: 0;
-    min-height: 2.75rem;
   }
   .dashboard-title-row h1 {
-    min-width: 0;
-    overflow: hidden;
     font-size: clamp(1.75rem, 2.6vw, 2.25rem);
-    line-height: 1.15;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .dashboard-title-row > :global(.status-badge) {
-    flex: 0 0 auto;
+    line-height: 1.2;
+    overflow-wrap: break-word;
   }
   .dashboard-period-context {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin-inline-start: 0.25rem;
+    gap: 0.375rem;
+    flex-basis: 100%;
     color: var(--color-muted);
-    font-size: 1rem;
-    line-height: 1.4;
-    white-space: nowrap;
+    font-size: 0.8125rem;
   }
-  /* Segmented previous / next month control. */
   .dashboard-period-nav {
-    display: inline-flex;
+    display: flex;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     background: var(--color-surface);
-    overflow: hidden;
   }
-  .dashboard-period-nav > a,
-  .dashboard-period-nav > span {
+  .dashboard-period-nav > * {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 0.375rem;
     min-height: 2.75rem;
-    padding: 0.5rem 0.875rem;
-    font-size: 1rem;
-    line-height: 1.4;
-    white-space: nowrap;
-  }
-  /* With the sidebar, ~1024px leaves the title only a few px of slack: take it
-     from the switcher's padding first so the month name is never ellipsised. */
-  @media (max-width: 70rem) {
-    .dashboard-period-nav > a,
-    .dashboard-period-nav > span {
-      padding-inline: 0.625rem;
-    }
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
   }
   .dashboard-period-nav > * + * {
     border-inline-start: 1px solid var(--color-border);
   }
-  .dashboard-period-nav > a {
+  .dashboard-period-nav > :first-child {
+    border-start-start-radius: var(--radius-control);
+    border-end-start-radius: var(--radius-control);
+  }
+  .dashboard-period-nav > :last-child {
+    border-start-end-radius: var(--radius-control);
+    border-end-end-radius: var(--radius-control);
+  }
+  .dashboard-attention :global(.empty-state) {
+    border: 0;
+  }
+  .dashboard-period-nav a {
     color: var(--color-primary);
     font-weight: 600;
   }
-  .dashboard-period-nav > a:hover {
+  .dashboard-period-nav a:hover {
     background: var(--color-surface-hover);
   }
-  .dashboard-period-nav > span {
+  .dashboard-period-nav [aria-disabled] {
     color: var(--color-muted);
-    background: var(--color-background);
-    cursor: not-allowed;
-    opacity: 0.72;
-    user-select: none;
-  }
-  .dashboard-period-nav > .period-context-compact {
+    background: var(--color-canvas);
     cursor: default;
-    opacity: 1;
-  }
-  .dashboard-period-nav > :last-child {
-    justify-content: flex-end;
-    text-align: end;
   }
   .period-label-mobile {
     display: none;
   }
-
+  .dashboard-metrics {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 1rem;
+  }
+  /* Collection: what has come in, as one figure and one bar. Received leads;
+     what is still unpaid is the rest of the same bar, so it is not a card. */
+  .dashboard-metric.dashboard-collection {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+  }
+  .collection-head {
+    padding-right: 2.5rem;
+  }
+  .collection-overview {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+  }
+  .collection-hero {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .collection-link {
+    min-width: 0;
+    color: inherit;
+    text-decoration: none;
+  }
+  .collection-link:hover strong {
+    text-decoration: underline;
+  }
+  .dashboard-collection .collection-received {
+    font-size: clamp(2rem, 3.4vw, 2.75rem);
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+  /* A share is neutral until it is complete; only then is it good news. */
+  .collection-share {
+    color: var(--color-foreground);
+    font-size: 1.25rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .collection-share[data-complete] {
+    color: var(--color-success);
+  }
+  .metric-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .collection-bar {
+    height: 0.625rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--color-surface-hover);
+  }
+  .collection-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--color-success);
+  }
+  /* The same bar on the Readings card, in the primary colour: progress, not
+     money. */
+  .metric-bar {
+    grid-column: 1 / -1;
+    height: 0.625rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--color-surface-hover);
+  }
+  .metric-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--color-primary);
+  }
+  .collection-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .collection-total {
+    color: var(--color-foreground);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .collection-unpaid {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.375rem;
+    color: inherit;
+    text-decoration: none;
+  }
+  .collection-unpaid:hover {
+    text-decoration: underline;
+  }
+  .dashboard-collection .collection-unpaid strong {
+    grid-column: auto;
+    color: var(--color-foreground);
+    font-size: 0.9375rem;
+    letter-spacing: 0;
+  }
+  .collection-unpaid[data-tone="danger"],
+  .collection-unpaid[data-tone="danger"] strong {
+    color: var(--color-destructive);
+  }
+  .collection-unpaid :global(svg) {
+    align-self: center;
+  }
+  @media (pointer: coarse) {
+    .collection-unpaid,
+    .collection-link {
+      min-height: 2.75rem;
+      align-items: center;
+    }
+  }
+  .collection-note {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+  @media (forced-colors: active) {
+    .collection-bar,
+    .metric-bar {
+      outline: 1px solid CanvasText;
+    }
+    .collection-bar > span,
+    .metric-bar > span {
+      background: Highlight;
+    }
+  }
+  .dashboard-metric {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-content: start;
+    gap: 0.5rem;
+    padding: 1.25rem;
+    text-decoration: none;
+    min-width: 0;
+  }
+  a.dashboard-metric:hover {
+    border-color: var(--color-input-border);
+  }
+  .metric-label {
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+    line-height: 1.4;
+  }
+  .dashboard-metric strong {
+    grid-column: 1 / -1;
+    font-size: clamp(1.3rem, 2vw, 1.875rem);
+    line-height: 1.2;
+    letter-spacing: -0.025em;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .metric-denominator {
+    color: var(--color-muted);
+    font-size: 0.7em;
+    font-weight: 500;
+  }
   .dashboard-month-status {
-    padding: 1.75rem 1.75rem 1.25rem;
+    padding: 1.25rem 1.5rem;
   }
   .month-status-lead {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.75rem 1.5rem;
+    gap: 1rem;
+  }
+  .next-step-label {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 0.375rem;
+  }
+  .month-status-sentence {
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.4;
   }
   .month-status-lead .btn-primary {
-    flex: 0 0 auto;
-    min-width: max-content;
-    white-space: nowrap;
-  }
-  .dashboard-section-heading h2,
-  .dashboard-more h2,
-  .money-reconciliation h2 {
-    font-size: 1.25rem;
-    line-height: 1.4;
-    font-weight: 650;
-  }
-  /* The one focal point of the band. */
-  .month-status-sentence {
-    min-width: 0;
-    font-size: 1.375rem;
-    line-height: 1.25;
-    font-weight: 600;
-    color: var(--color-foreground);
+    flex-shrink: 0;
+    font-size: 0.875rem;
   }
   .month-status-link,
-  .dashboard-section-heading > a,
   .attention-action {
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
     min-height: 2.75rem;
     color: var(--color-primary);
-    font-size: 1rem;
+    font-size: 0.8125rem;
     font-weight: 600;
-    text-decoration: underline;
-    text-decoration-color: var(--color-border);
-    text-underline-offset: 0.25em;
   }
   .month-status-link:hover,
-  .dashboard-section-heading > a:hover,
   .attention-action:hover {
-    color: var(--color-primary-hover);
-    text-decoration-color: currentColor;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
   }
   .month-progress {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0;
-    margin: 1.75rem 0 0;
-    padding: 0;
+    gap: 1rem;
+    margin-top: 1.25rem;
     list-style: none;
+    padding: 0;
   }
-  /* Icon + label on line one, "X of Y" and the step's deadline on line two, so
-     no step is wider than its column even in Latvian or Russian at 1024px. */
   .month-progress li {
     position: relative;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: 0.125rem 0.625rem;
-    min-width: 0;
-    padding: 1rem 1rem 0.5rem 0;
+    align-items: start;
+    gap: 0.25rem 0.5rem;
+    padding-top: 0.875rem;
     border-top: 2px solid var(--color-border);
+    min-width: 0;
+  }
+  .month-progress li::before {
+    content: "";
+    position: absolute;
+    inset-block-start: -2px;
+    inset-inline-start: 0;
+    height: 2px;
+    width: var(--step-progress);
+    background: var(--color-primary);
+  }
+  .month-progress li[data-state="done"]::before {
+    background: var(--color-success);
+  }
+  .progress-marker {
+    display: grid;
+    place-items: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    background: var(--color-badge-neutral-bg);
+    color: var(--color-muted);
+  }
+  [data-state="done"] .progress-marker {
+    background: var(--color-badge-success-bg);
+    color: var(--color-success);
+  }
+  [data-state="current"] .progress-marker {
+    background: var(--color-nav-active-bg);
+    color: var(--color-primary);
+  }
+  .progress-label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.5;
+    overflow-wrap: break-word;
+  }
+  .progress-now {
+    display: block;
+    color: var(--color-primary);
+    font-size: 0.75rem;
   }
   .progress-detail {
     grid-column: 2;
     display: flex;
     flex-wrap: wrap;
-    gap: 0 0.75rem;
+    gap: 0.125rem 0.5rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
   }
-  .month-progress li[data-state="done"] {
-    border-top-color: var(--color-success);
-  }
-  .month-progress li[data-state="current"] {
-    border-top-color: var(--color-primary);
-  }
-  .month-progress li + li {
-    padding-left: 1rem;
-  }
-  @media (max-width: 45rem) {
-    .month-progress li + li {
-      padding-left: 0;
-    }
-  }
-  /* Four columns only fit when the band is wide; at ~1024px (680px band) the
-     Russian step labels broke mid-word, so go 2x2 there. */
-  .dashboard-month-status {
-    container-type: inline-size;
-  }
-  @container (max-width: 47.999rem) {
-    .month-progress {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .month-progress {
-      row-gap: 0.75rem;
-    }
-    .month-progress li {
-      padding: 0.875rem 0.5rem 0.375rem 0;
-    }
-    .month-progress li + li {
-      padding-left: 0;
-    }
-    .month-progress li:nth-child(even) {
-      padding-left: 0.75rem;
-    }
-    .progress-detail {
-      grid-column: 1 / -1;
-    }
-  }
-  .progress-marker {
+  .dashboard-body {
     display: grid;
-    place-items: center;
-    width: 1.5rem;
-    height: 1.5rem;
-    border-radius: 50%;
-    background: var(--color-badge-neutral-bg);
-    color: var(--color-badge-neutral-text);
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
   }
-  [data-state="done"] .progress-marker {
-    background: var(--color-badge-success-bg);
-    color: var(--color-badge-success-text);
+  .dashboard-attention {
+    min-width: 0;
   }
-  [data-state="current"] .progress-marker {
-    background: var(--color-badge-info-bg);
-    color: var(--color-badge-info-text);
+  .dashboard-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--color-border);
   }
-  .progress-label,
-  .progress-count,
-  .progress-deadline {
-    font-size: 1rem;
+  .dashboard-section-heading > div {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+  }
+  .dashboard-section-heading h2,
+  .dashboard-more h2 {
+    font-size: 0.9375rem;
+    font-weight: 650;
     line-height: 1.5;
   }
-  .progress-label {
-    min-width: 0;
-    font-weight: 600;
-    hyphens: manual;
-    overflow-wrap: normal;
-    word-break: normal;
-  }
-  /* Only the current step says so out loud; done and waiting steps are carried
-     by their icon, with the state still read out to screen readers. */
-  .progress-now {
-    margin-inline-start: 0.5rem;
-    color: var(--color-primary);
-    font-weight: 600;
-    white-space: nowrap;
-  }
-  .progress-count,
-  .progress-deadline {
+  .dashboard-section-heading p {
+    display: grid;
+    place-items: center;
+    min-width: 1.5rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: var(--radius-badge);
+    font-size: 0.75rem;
+    background: var(--color-surface-hover);
     color: var(--color-muted);
+  }
+  .attention-list {
+    padding-block: 0.5rem;
+  }
+  .attention-group + .attention-group {
+    border-top: 1px solid var(--color-border);
+  }
+  .attention-group-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem 0.25rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .attention-group-icon {
+    display: flex;
+    color: var(--color-warning);
+  }
+  .attention-group-heading[data-tone="danger"] .attention-group-icon {
+    color: var(--color-destructive);
+  }
+  .attention-group-count {
+    margin-inline-start: auto;
     font-variant-numeric: tabular-nums;
-    white-space: nowrap;
+  }
+  .attention-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.25rem 1rem;
+    padding: 0.5rem 1.5rem;
+    min-height: 4.5rem;
+  }
+  .attention-row + .attention-row {
+    border-top: 1px solid var(--color-border);
+  }
+  .attention-row-main {
+    min-width: 0;
+  }
+  .attention-heading > a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    color: var(--color-foreground);
+    font-size: 0.875rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .attention-heading > a:hover {
+    color: var(--color-primary);
+    text-decoration: underline;
+  }
+  .attention-reason,
+  .attention-details {
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .attention-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .attention-details strong {
+    color: var(--color-destructive);
+  }
+  .attention-reason {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .attention-summary-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .attention-summary-row > p {
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .attention-summary-icon {
+    display: grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    color: var(--color-primary);
+    background: var(--color-nav-active-bg);
+    border-radius: var(--radius-control);
+  }
+  .attention-summary-row[data-tone="danger"] .attention-summary-icon {
+    color: var(--color-destructive);
+    background: var(--color-badge-danger-bg);
+  }
+  .attention-summary-row[data-tone="warning"] .attention-summary-icon {
+    color: var(--color-warning);
+    background: var(--color-badge-warning-bg);
+  }
+  .attention-more-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-top: 1px solid var(--color-border);
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+  .attention-more-row a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 2.75rem;
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+  /* The invoice breakdown is a popover on the collection card, not a panel. */
+  .info-tip {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+  }
+  .info-tip > summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  .info-tip > summary::-webkit-details-marker {
+    display: none;
+  }
+  .info-tip-panel {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    width: min(23rem, 85vw);
+    padding: 0.75rem 1.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow: var(--elevation-1);
+  }
+  .money-breakdown dl > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.625rem 0;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+  }
+  .money-breakdown dl > div + div {
+    border-top: 1px solid var(--color-border);
+  }
+  .money-breakdown dt {
+    display: flex;
+    align-items: baseline;
+    gap: 0.375rem;
+    color: var(--color-muted);
+  }
+  .money-breakdown dt :global(svg) {
+    display: inline-block;
+    vertical-align: -2px;
+  }
+  .money-operator {
+    flex: 0 0 0.75rem;
+    text-align: center;
+  }
+  .money-breakdown dd {
+    text-align: end;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .money-total {
+    font-weight: 700;
+  }
+  .money-total dd {
+    font-size: 1rem;
+  }
+  .money-received {
+    color: var(--color-success);
+  }
+  .money-split[data-tone="danger"] {
+    color: var(--color-destructive);
+  }
+  .dashboard-more {
+    padding: 0;
+  }
+  .dashboard-more > summary {
+    min-height: 3.5rem;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    list-style: none;
+    cursor: pointer;
+  }
+  .dashboard-more-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem;
+    padding: 1.5rem;
+    border-top: 1px solid var(--color-border);
+  }
+  .dashboard-more h2 {
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
   .dashboard-readiness {
     grid-column: 1 / -1;
-    font-size: 1rem;
-    line-height: 1.5;
   }
   .dashboard-readiness ul {
     display: flex;
@@ -1681,492 +2167,88 @@ function readingsHref(
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
-    padding: 0.25rem 0.5rem;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.75rem;
+    background: var(--color-badge-warning-bg);
+    color: var(--color-warning);
     border-radius: var(--radius-badge);
-    background: var(--color-badge-warning-bg);
-    color: var(--color-badge-warning-text);
-    font-weight: 600;
   }
-  .dashboard-readiness li[data-ready="true"] {
+  .dashboard-readiness [data-ready="true"] {
     background: var(--color-badge-success-bg);
-    color: var(--color-badge-success-text);
-  }
-
-  .dashboard-section-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    min-height: 2rem;
-    margin-bottom: 0.75rem;
-  }
-  .dashboard-section-heading > div {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.5rem 1rem;
-  }
-  .dashboard-section-heading p {
-    color: var(--color-muted);
-    font-size: 1rem;
-    line-height: 1.5;
-  }
-  /* Body: needs-attention first (what to do), money beside it on wide screens.
-     A container query is used because the sidebar eats the viewport width. */
-  .dashboard-body-wrap {
-    container-type: inline-size;
-  }
-  .dashboard-body {
-    display: grid;
-    gap: 2.25rem;
-    align-items: start;
-  }
-  .dashboard-attention {
-    order: 1;
-  }
-  .dashboard-money {
-    order: 2;
-  }
-  /* At 1024px the sidebar leaves a narrow main column. Keep the action list
-     first; the compact two-column ledger remains available immediately below. */
-  @container (min-width: 42rem) and (max-width: 55.999rem) {
-    /* Two columns: the sum on the left, the total and what is paid on the
-       right. Each row keeps a full-width label/number pair, so nothing overlaps. */
-    .dashboard-body .money-reconciliation dl {
-      display: grid;
-      grid-auto-flow: column;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      grid-template-rows: repeat(var(--eq-rows, 4), auto);
-      column-gap: 2.5rem;
-    }
-    .dashboard-body .money-reconciliation dl > div {
-      padding-block: 0.625rem;
-    }
-    .dashboard-body .money-reconciliation .money-total {
-      margin-top: 0;
-      padding-block: 0.625rem;
-      border-top: 0;
-    }
-    .dashboard-body .money-total dd {
-      font-size: 1.5rem;
-    }
-  }
-  @container (min-width: 56rem) {
-    .dashboard-body {
-      grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
-      gap: 2.75rem;
-    }
-    .dashboard-attention {
-      grid-column: 1;
-      grid-row: 1;
-    }
-    .dashboard-money {
-      grid-column: 2;
-      grid-row: 1;
-    }
-    .attention-row:not(.attention-summary-row) {
-      grid-template-columns: minmax(0, 1fr) minmax(11rem, max-content);
-      grid-template-rows: auto auto;
-    }
-    .attention-row:not(.attention-summary-row) .attention-row-main {
-      display: contents;
-    }
-    .attention-row:not(.attention-summary-row) .attention-heading {
-      grid-column: 1;
-      grid-row: 1;
-    }
-    .attention-row:not(.attention-summary-row) .attention-details,
-    .attention-row:not(.attention-summary-row) .attention-reason {
-      grid-column: 1;
-      grid-row: 2;
-    }
-    .attention-row:not(.attention-summary-row) > .attention-action {
-      grid-column: 2;
-      grid-row: 1;
-      justify-self: end;
-    }
-    .attention-details {
-      flex-wrap: nowrap;
-    }
-    .attention-row:not(.attention-summary-row) .attention-reason {
-      -webkit-line-clamp: 1;
-    }
-  }
-
-  /* One column of Excel-style figures that adds up to the total. */
-  .money-reconciliation {
-    padding: 1.75rem 1.75rem 1.25rem;
-  }
-  .money-reconciliation dl > div {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: baseline;
-    gap: 1rem;
-    padding: 0.875rem 0;
-    font-size: 1rem;
-    line-height: 1.5;
-  }
-  .money-reconciliation dl > div + div {
-    border-top: 1px solid var(--color-border);
-  }
-  .money-reconciliation dt {
-    display: grid;
-    grid-template-columns: 1.25rem minmax(0, 1fr);
-    align-items: baseline;
-    gap: 0.25rem;
-    color: var(--color-muted);
-  }
-  .money-operator {
-    width: 1.25rem;
-    color: currentColor;
-    font-variant-numeric: tabular-nums;
-    font-weight: 700;
-    text-align: center;
-  }
-  /* An empty operator has no baseline, which dropped its label ~5px low. */
-  .money-operator:empty::before {
-    content: "\200b";
-  }
-  /* Icon + label share the label cell instead of claiming the operator column. */
-  .money-reconciliation dt > span:last-child {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-  }
-  .money-reconciliation dd {
-    text-align: right;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  .money-reconciliation .money-total {
-    margin-top: 0.5rem;
-    padding-block: 1.125rem;
-    border-top: 2px solid var(--color-foreground);
-    color: var(--color-foreground);
-    font-weight: 700;
-  }
-  .money-reconciliation .money-total dt {
-    color: inherit;
-  }
-  .money-total dd {
-    font-size: 1.75rem;
-    line-height: 1.2;
-    font-weight: 700;
-  }
-  .money-received {
     color: var(--color-success);
-  }
-  .money-split[data-tone="danger"] dt,
-  .money-split[data-tone="danger"] dd {
-    color: var(--color-destructive);
-  }
-  .money-note {
-    padding: 1rem 0 0.25rem;
-    border-top: 1px solid var(--color-border);
-    color: var(--color-muted);
-    font-size: 1rem;
-    line-height: 1.5;
-  }
-
-  .attention-list {
-    overflow: hidden;
-    padding-block: 1rem;
-  }
-  .attention-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0 1.5rem;
-    min-height: 5rem;
-    padding: 0.5rem 1.75rem;
-    border-bottom: 1px solid var(--color-border);
-  }
-  /* Rows hairline-separate inside a group; groups hairline-separate each other. */
-  .attention-group > [role="list"] > .attention-row:last-child {
-    border-bottom: 0;
-  }
-  .attention-group + .attention-group {
-    margin-top: 2rem;
-    border-top: 0;
-  }
-  .attention-group-heading {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    min-height: 2rem;
-    padding: 0 1.75rem 0.75rem;
-    font-size: 1rem;
-    line-height: 1.5;
-    font-weight: 600;
-  }
-  .attention-group-icon {
-    display: grid;
-    place-items: center;
-    width: 1.5rem;
-    height: 1.5rem;
-    border-radius: 50%;
-    background: var(--color-badge-warning-bg);
-    color: var(--color-badge-warning-text);
-  }
-  .attention-group-heading[data-tone="danger"] .attention-group-icon {
-    background: var(--color-badge-danger-bg);
-    color: var(--color-badge-danger-text);
-  }
-  .attention-group-count {
-    color: var(--color-muted);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-  /* The idle save chip (44px, fixed bottom-right) sat on the action arrow at
-     ~1024px: keep row actions clear of the viewport's right edge there. */
-  @media (min-width: 45.01rem) and (max-width: 70rem) {
-    .attention-row {
-      padding-inline-end: 3rem;
-    }
-  }
-  .attention-row-main {
-    min-width: 0;
-  }
-  .attention-row:not(.attention-summary-row) > .attention-action {
-    white-space: nowrap;
-  }
-  /* Dwelling and status form line one; overdue figures form line two. */
-  .attention-heading {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0 0.75rem;
-  }
-  .attention-heading > a {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2.75rem;
-    padding-inline: 0.25rem;
-    color: var(--color-foreground);
-    font-size: 1rem;
-    font-weight: 650;
-    text-decoration: underline;
-    text-decoration-color: var(--color-border);
-    text-underline-offset: 0.2em;
-  }
-  .attention-reason,
-  .attention-summary-row > p {
-    color: var(--color-muted);
-    font-size: 1rem;
-    line-height: 1.5;
-    overflow-wrap: anywhere;
-  }
-  /* Amount, due date and days late are separate items: gaps, no separator glyphs,
-     so a wrapped line never starts with a stray mark. */
-  .attention-details {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0 0.75rem;
-    margin-top: 0;
-    padding-inline-start: 0.25rem;
-    color: var(--color-muted);
-  }
-  .attention-details > * {
-    white-space: nowrap;
-  }
-  .attention-details strong {
-    color: var(--color-destructive);
-    font-variant-numeric: tabular-nums;
-  }
-  .attention-reason {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    margin-top: 0;
-    padding-inline-start: 0.25rem;
-    overflow: hidden;
-  }
-  .attention-more-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    min-height: 3.5rem;
-    padding-inline: 1.75rem;
-    color: var(--color-muted);
-    font-size: 1rem;
-    line-height: 1.5;
-  }
-  .attention-more-row > a {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    min-height: 2.75rem;
-    color: var(--color-primary);
-    font-weight: 600;
-    text-decoration: underline;
-    text-decoration-color: var(--color-border);
-    text-underline-offset: 0.25em;
-  }
-  .attention-more-row > a:hover {
-    color: var(--color-primary-hover);
-    text-decoration-color: currentColor;
-  }
-  .attention-summary-row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-  }
-  .attention-summary-row > p {
-    padding-block: 0.5rem;
-    color: var(--color-foreground);
-  }
-  .attention-summary-icon {
-    display: grid;
-    place-items: center;
-    width: 2rem;
-    height: 2rem;
-    border-radius: 50%;
-    background: var(--color-badge-info-bg);
-    color: var(--color-badge-info-text);
-  }
-  .attention-summary-row[data-tone="warning"] .attention-summary-icon {
-    background: var(--color-badge-warning-bg);
-    color: var(--color-badge-warning-text);
-  }
-  .attention-summary-row[data-tone="danger"] .attention-summary-icon {
-    background: var(--color-badge-danger-bg);
-    color: var(--color-badge-danger-text);
-  }
-
-  .dashboard-more {
-    padding: 0;
-  }
-  .dashboard-more > summary {
-    display: flex;
-    align-items: center;
-    min-height: 2.75rem;
-    padding: 1.25rem 1.75rem;
-    font-size: 1rem;
-    font-weight: 650;
-    list-style: none;
-  }
-  .dashboard-more > summary::-webkit-details-marker {
-    display: none;
-  }
-  .dashboard-more > summary::before {
-    content: "+";
-    display: grid;
-    place-items: center;
-    width: 1.5rem;
-    margin-inline-end: 0.625rem;
-    color: var(--color-primary);
-    font-size: 1.25rem;
-  }
-  .dashboard-more[open] > summary::before {
-    content: "−";
-  }
-  .dashboard-more-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 2.5rem 3rem;
-    padding: 0 1.75rem 2rem;
-    border-top: 1px solid var(--color-border);
-  }
-  .dashboard-more-grid > section {
-    min-width: 0;
-    padding-top: 1.75rem;
-  }
-  .dashboard-more h2 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-  }
-  .dashboard-status-list {
-    display: grid;
   }
   .dashboard-status-list > a {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.75rem;
-    min-height: 3rem;
-    padding: 0.5rem 0.75rem;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0.5rem;
     border-radius: var(--radius-control);
-    font-size: 1rem;
   }
   .dashboard-status-list > a:hover {
     background: var(--color-surface-hover);
   }
-  .dashboard-status-list > a > span:last-child {
+  .dashboard-status-list > a > span {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-weight: 650;
+    font-size: 0.875rem;
     font-variant-numeric: tabular-nums;
   }
   .consumption-list > div {
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    padding: 1rem 0;
+    padding: 0.75rem 0;
     border-bottom: 1px solid var(--color-border);
-    font-size: 1rem;
-    line-height: 1.5;
+    font-size: 0.875rem;
   }
   .consumption-list dt,
   .carried-readings-note {
     color: var(--color-muted);
   }
   .consumption-list dd {
-    font-weight: 650;
     font-variant-numeric: tabular-nums;
+    font-weight: 600;
   }
   .carried-readings-note {
     margin-top: 0.75rem;
-    font-size: 1rem;
-    line-height: 1.5;
+    font-size: 0.75rem;
   }
-
-  /* With the sidebar, five setup steps leave ~75px of text each at ~1024px. */
-  @media (max-width: 70rem) {
-    .setup-banner-steps {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+  @media (max-width: 75rem) {
+    .dashboard-metrics {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-  }
-
-  @media (max-width: 80rem) {
-    .dashboard-period-context {
-      display: none;
-    }
-  }
-
-  @media (max-width: 45rem) {
-    .dashboard-page {
-      gap: 1.75rem;
-    }
-    .dashboard-setup {
+    .dashboard-body {
       grid-template-columns: minmax(0, 1fr);
-      padding: 1.25rem;
+    }
+  }
+  @media (max-width: 45rem) {
+    .dashboard-metrics {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    /* A very large amount shrinks and may wrap rather than run off the card. */
+    .dashboard-collection .collection-received {
+      font-size: clamp(1.5rem, 8vw, 2rem);
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .dashboard-page {
       gap: 1rem;
     }
-    .setup-banner-steps {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 0.25rem;
-    }
-    .setup-banner-continue {
-      grid-area: auto;
-      width: 100%;
-    }
     .dashboard-header {
-      grid-template-columns: minmax(0, 1fr);
+      align-items: stretch;
+      flex-direction: column;
     }
     .dashboard-period-nav {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    /* Keep both halves at the same control height; the disabled next action uses
-       its short label while retaining the full accessible name. */
-    .dashboard-period-nav > a,
-    .dashboard-period-nav > span {
-      padding-inline: 0.625rem;
-      line-height: 1.2;
-      white-space: nowrap;
+    .dashboard-period-nav > * {
+      min-width: 0;
+      font-size: 0.75rem;
+      overflow-wrap: break-word;
     }
     .period-label-full {
       display: none;
@@ -2174,21 +2256,18 @@ function readingsHref(
     .period-label-mobile {
       display: inline;
     }
-    .dashboard-period-nav > a > :global(svg),
-    .dashboard-period-nav > span > :global(svg) {
-      flex: 0 0 auto;
+    .dashboard-metrics {
+      gap: 0.75rem;
     }
-    .dashboard-period-nav > :last-child {
-      justify-content: flex-end;
+    .dashboard-metric,
+    .dashboard-metric.dashboard-collection {
+      padding: 1rem;
+    }
+    .dashboard-metric strong {
+      font-size: 1.3rem;
     }
     .dashboard-month-status {
-      padding: 1.25rem 1.25rem 0.75rem;
-    }
-    .dashboard-more > summary {
-      padding-inline: 1.25rem;
-    }
-    .dashboard-more-grid {
-      padding-inline: 1.25rem;
+      padding: 1.25rem;
     }
     .month-status-lead {
       align-items: stretch;
@@ -2200,53 +2279,51 @@ function readingsHref(
     .month-progress {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    .dashboard-more-grid {
-      grid-template-columns: minmax(0, 1fr);
+    .progress-detail {
+      grid-column: 1 / -1;
     }
-    .month-progress {
-      margin-top: 1.25rem;
-    }
-    .month-progress li {
-      padding: 0.875rem 0.5rem 0.375rem 0;
-    }
-    .month-progress li:nth-child(even) {
-      padding-left: 0.75rem;
-    }
-    .progress-now {
-      display: block;
-      margin-inline-start: 0;
-    }
-    .dashboard-readiness ul {
-      align-items: flex-start;
-      flex-direction: column;
-    }
-    .dashboard-section-heading {
-      flex-wrap: wrap;
-      gap: 0 0.5rem;
-    }
-    .money-reconciliation {
-      padding: 1.25rem 1.25rem 1rem;
-    }
-    .attention-row {
-      grid-template-columns: minmax(0, 1fr);
-      padding: 0.5rem 1.25rem;
-    }
+    .dashboard-section-heading,
+    .attention-row,
     .attention-group-heading,
     .attention-more-row {
       padding-inline: 1.25rem;
     }
-    .attention-details {
-      white-space: normal;
-    }
-    .attention-summary-row {
-      grid-template-columns: auto minmax(0, 1fr);
-      gap: 0 0.75rem;
-    }
-    .attention-summary-row > .attention-action {
-      grid-column: 2;
+    .attention-row {
+      grid-template-columns: minmax(0, 1fr);
     }
     .attention-action {
       justify-self: start;
+    }
+    .attention-summary-row {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+    .attention-summary-row .attention-action {
+      grid-column: 2;
+    }
+    .dashboard-more-grid {
+      grid-template-columns: minmax(0, 1fr);
+      padding: 1.25rem;
+    }
+    .dashboard-setup {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .setup-banner-steps {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .setup-banner-continue {
+      grid-area: auto;
+    }
+  }
+  @media (min-width: 45.01rem) and (max-width: 68rem) {
+    .month-progress {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .dashboard-metric {
+      transition:
+        border-color var(--duration-fast) ease,
+        background-color var(--duration-fast) ease;
     }
   }
 </style>

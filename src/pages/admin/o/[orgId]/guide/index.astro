@@ -254,15 +254,11 @@ const statuses = [
   title={`${t("Admin guide")} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[{ label: t("Admin guide") }]}
 >
   <div class="guide-layout">
     <article class="min-w-0">
       <div class="guide-hero">
-        <nav class="breadcrumb" aria-label={t("Breadcrumb")}>
-          <a href={`/admin/o/${organizationId}/dashboard`}>{t("Dashboard")}</a>
-          <span aria-hidden="true">›</span>
-          <span aria-current="page">{t("Admin guide")}</span>
-        </nav>
         <PageHeader
           title={t("Admin guide")}
           description={t(

@@ -393,11 +393,22 @@ const badge = (source: MappingSource, field: string | null) =>
   title={`${balances ? "Import opening balances" : metersKind ? "Import meter readings" : "Import dwellings"} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Settings"), href: `/admin/o/${organizationId}/settings` },
+    {
+      label: t("Migration Center"),
+      href: `/admin/o/${organizationId}/migration`,
+    },
+    {
+      label: balances
+        ? t("Import opening balances")
+        : metersKind
+          ? t("Import meter readings")
+          : t("Import dwellings"),
+    },
+  ]}
 >
   <div class="space-y-6">
-    <a href={base} class="back-link">
-      ← {t("Migration Center")}
-    </a>
     <h1 class="font-display text-h2 text-foreground">
       {balances
         ? t("Import opening balances")
@@ -471,7 +482,7 @@ const badge = (source: MappingSource, field: string | null) =>
             id="pasted"
             name="pasted"
             rows="6"
-            class="mt-1 w-full rounded-control border border-border px-3 py-2 font-mono text-body-sm"
+            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 font-mono text-body-sm"
           />
         </div>
         <div>
@@ -481,7 +492,7 @@ const badge = (source: MappingSource, field: string | null) =>
           <select
             id="encoding"
             name="encoding"
-            class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+            class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
           >
             <option value="auto">{t("Detect automatically")}</option>
             {SUPPORTED_ENCODINGS.map((e) => (
@@ -578,7 +589,7 @@ const badge = (source: MappingSource, field: string | null) =>
                     <select
                       id={`field_${i}`}
                       name={`field_${i}`}
-                      class="rounded-control border border-border px-3 py-2 text-body-sm"
+                      class="rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                     >
                       <option value="" selected={fieldOf(i) == null}>
                         {t("Ignore this column")}
@@ -610,7 +621,7 @@ const badge = (source: MappingSource, field: string | null) =>
             <select
               id="mode"
               name="mode"
-              class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+              class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
             >
               <option value="create" selected={mode === "create"}>
                 {t("Create only. Existing numbers stay unchanged.")}
@@ -636,7 +647,7 @@ const badge = (source: MappingSource, field: string | null) =>
                 required
                 max={today}
                 value={balanceDate}
-                class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+                class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
               />
               <p class="mt-1 text-body-sm text-muted">
                 {t(
@@ -651,7 +662,7 @@ const badge = (source: MappingSource, field: string | null) =>
               <select
                 id="sign"
                 name="sign"
-                class="mt-1 rounded-control border border-border px-3 py-2 text-body-sm"
+                class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
               >
                 <option
                   value="POSITIVE_OWES"

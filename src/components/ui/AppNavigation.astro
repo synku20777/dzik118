@@ -42,25 +42,16 @@ const links: Array<[string, string, IconName]> = [
       </a>
     );
   })}
+  <hr class="nav-divider" />
+  <a
+    href={`/admin/o/${organizationId}/guide`}
+    aria-current={
+      Astro.url.pathname.startsWith(`/admin/o/${organizationId}/guide`)
+        ? "page"
+        : undefined
+    }
+  >
+    <Icon name="help-circle" class="nav-icon" />
+    {translate(locale, "Admin guide")}
+  </a>
 </nav>
-
-<hr class="mt-5 border-border" />
-
-<a
-  class:list={[
-    "mt-3 flex items-center gap-3 rounded-control px-3 py-3 text-sm font-medium text-muted hover:text-primary",
-    {
-      "bg-info-surface text-primary":
-        Astro.url.pathname === `/admin/o/${organizationId}/guide`,
-    },
-  ]}
-  href={`/admin/o/${organizationId}/guide`}
-  aria-current={
-    Astro.url.pathname === `/admin/o/${organizationId}/guide`
-      ? "page"
-      : undefined
-  }
->
-  <Icon name="help-circle" class="nav-icon" />
-  {translate(locale, "Admin guide")}
-</a>

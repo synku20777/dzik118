@@ -54,15 +54,12 @@ try {
   title={`Import - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Payments"), href: `/admin/o/${organizationId}/payments` },
+    { label: bankImport.originalFilename },
+  ]}
 >
   <div class="space-y-6">
-    <a
-      href={`/admin/o/${organizationId}/payments`}
-      class="text-sm text-muted hover:underline"
-    >
-      ← {t("Payments")}
-    </a>
-
     <div>
       <h1 class="text-xl font-bold text-foreground">
         {bankImport.originalFilename}

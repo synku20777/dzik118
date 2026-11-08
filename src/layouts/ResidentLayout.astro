@@ -3,6 +3,7 @@ import "../styles/global.css";
 import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
 import ThemeToggle from "../components/ui/ThemeToggle.astro";
 import BrandMark from "../components/ui/BrandMark.astro";
+import Tooltips from "../components/ui/Tooltips.astro";
 import { translate, uiLocale } from "../lib/ui/i18n";
 interface Props {
   title?: string;
@@ -88,6 +89,7 @@ const base = "/portal/dwellings/" + dwellingId;
       )}
       <slot />
     </main>
+    <Tooltips />
     <script>
       import "../lib/ui/forms";
       import { onPageLoad } from "../lib/ui/page-lifecycle";

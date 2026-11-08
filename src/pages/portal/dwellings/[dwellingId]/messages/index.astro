@@ -106,7 +106,7 @@ const conversations = await withRequestDb((db) =>
               type="text"
               required
               placeholder={t("What's this about?")}
-              class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
             />
           </div>
           <div>
@@ -118,7 +118,7 @@ const conversations = await withRequestDb((db) =>
               name="body"
               required
               rows="3"
-              class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
             ></textarea>
           </div>
           <button type="submit" class="btn-primary w-full sm:w-auto">
@@ -169,7 +169,7 @@ const conversations = await withRequestDb((db) =>
                   name="body"
                   required
                   rows="2"
-                  class="mt-1 w-full rounded-control border border-border px-3 py-2 text-sm"
+                  class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
                 />
                 <button type="submit" class="btn-primary w-full sm:w-auto">
                   {t("Reply")}

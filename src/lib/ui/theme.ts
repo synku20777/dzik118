@@ -73,8 +73,8 @@ export function updateToggleButtons(theme?: "light" | "dark") {
         ? button.dataset.labelLight
         : button.dataset.labelDark;
       if (!label) return;
+      // The tooltip reads the aria-label when it shows (see tooltip.ts).
       button.setAttribute("aria-label", label);
-      button.setAttribute("title", label);
     });
 }
 

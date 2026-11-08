@@ -26,11 +26,11 @@ The app follows the site's specification.
   - The period workbench heading is 32px to 44px. It is 700 from 900px
     (56.25rem).
   - The Organization heading is at most 33.6px. It is 600.
-- **Letter-spacing +0.03em on all sans text**, at every size and weight. The
-  value is one token, `--tracking-sans`. A universal rule in the Tailwind base
-  layer applies it to each element, because an `em` value on `body` inherits as
-  a fixed length. Form controls are in the rule, because preflight gives them
-  `letter-spacing: inherit`.
+- **Size-specific sans spacing** (updated 2026-11-07): body and controls use
+  neutral `--tracking-sans: 0`; caption/label roles use
+  `--tracking-small: 0.01em`; sans headings use `--tracking-heading: -0.02em`.
+  The previous universal +0.03em widened translated labels and dense tables.
+  Explicit tracking utilities and display spacing still take precedence.
 - **Display and monospace text keep their own spacing:** `.font-display` is
   -0.015em, `.brand` is -0.01em, and `.font-mono` is normal.
 - **Fonts are in the repository** (`src/fonts`, with each license file). No
@@ -45,11 +45,11 @@ The app follows the site's specification.
 
 - The site puts -0.015em on every `h1` and `h2`, because all of them are
   Fraunces there. In the app most `h1` and `h2` are sans. So the app puts the
-  display spacing on `.font-display`, and sans headings get +0.03em like all
-  other sans text.
+  display spacing on `.font-display`, and sans headings use their own
+  `--tracking-heading` token.
 - An explicit `letter-spacing` or `tracking-*` still wins, as the specification
-  says. The app keeps its existing values: uppercase eyebrows and breadcrumbs
-  (0.08em to 0.12em), and the large sans numbers on the dashboard and the
+  says. The app keeps its existing values: eyebrows (0.02em) and uppercase breadcrumbs
+  (0.08em), and the large sans numbers on the dashboard and the
   resident invoice (-0.025em and -0.03em).
 - The app has no `.text-display` class and no large Fraunces numbers.
 - The fonts are copied files, not an npm package. `npm install` of the package
@@ -58,7 +58,8 @@ The app follows the site's specification.
 
 ## Layout changes that the wider font needed
 
-Switzer is wider than Source Sans 3, and the letter-spacing adds more width. A
+At the time of the font migration, Switzer and +0.03em tracking were wider than
+Source Sans 3. A
 before-and-after test of 216 page views found these places. All are fixed.
 
 | Place | Change |
@@ -83,10 +84,9 @@ has one.
   matches Fraunces is an open item.
 - **Switzer license.** Switzer uses the Fontshare Free Font License
   (`src/fonts/Switzer-FFL.txt`). Review the terms for this use before launch.
-- **Letter-spacing in dense screens.** 0.03em was chosen by eye on the
-  marketing site. Tables and forms in the app are denser. They fit, but
-  `--tracking-sans` is the one value to change if they look too loose (0.02em
-  is a tighter value).
+- **Letter-spacing in dense screens.** The app now uses size-specific
+  tracking for its denser forms and translated controls. Font families,
+  Fraunces axes, and the site's display identity are preserved.
 - **Three buttons wrap onto two lines** where they did not before (two on the
   Messages page on a phone, one on the workbench on a tablet). They stay inside
   the page.

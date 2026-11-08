@@ -178,12 +178,42 @@ onPageLoad(() => {
     dialog.close();
     currentForm = null;
     dirtySnapshot = null;
+    const closedParams = openParams;
     openParams = null;
     if (!options.fromPopstate) {
       history.pushState(null, "", clearedUrl());
     }
     if (returnFocusTo && document.contains(returnFocusTo)) {
       returnFocusTo.focus();
+    } else if (closedParams) {
+      // A successful save replaces the queue, detaching its original trigger.
+      // Prefer its replacement; if the resolved row leaves the current filter,
+      // return to the queue heading rather than dropping focus onto the body.
+      const triggers = [
+        ...document.querySelectorAll<HTMLElement>(
+          "[data-open-drawer][data-dwelling-id]"
+        ),
+      ];
+      const sameDwelling = triggers.filter(
+        (el) => el.dataset.dwellingId === closedParams.dwellingId
+      );
+      const replacement =
+        sameDwelling.find(
+          (el) =>
+            el.dataset.openDrawer === closedParams.kind &&
+            el.dataset.focus === returnFocusTo?.dataset.focus
+        ) ??
+        sameDwelling[0] ??
+        document.querySelector<HTMLElement>(
+          `tr[data-dwelling-id="${CSS.escape(closedParams.dwellingId)}"] .next-action :is(a,button):not(:disabled)`
+        ) ??
+        document.querySelector<HTMLElement>("#queue-heading") ??
+        document.querySelector<HTMLElement>(".dashboard-attention h2") ??
+        document.querySelector<HTMLElement>("h1");
+      if (replacement) {
+        if (replacement.matches("h1,h2,h3")) replacement.tabIndex = -1;
+        replacement.focus();
+      }
     }
     returnFocusTo = null;
     window.setTimeout(() => {
@@ -806,6 +836,7 @@ onPageLoad(() => {
         const updated = fresh.querySelector(selector);
         if (current && updated) current.replaceWith(updated);
       }
+      document.dispatchEvent(new Event("workbench:refreshed"));
       document.getElementById("workbench-announcer")?.replaceChildren(message);
     } finally {
       closeDrawer();
@@ -896,7 +927,9 @@ onPageLoad(() => {
       history.pushState(null, "", drawerUrl(kind, dwellingId, focus));
       void openDrawer(kind, dwellingId, focus, trigger);
     },
-    { signal: controller.signal }
+    // Intercept before ClientRouter's document bubble listener starts a
+    // navigation to the fallback URL and later reopens a dismissed drawer.
+    { signal: controller.signal, capture: true }
   );
 
   closeButton.addEventListener("click", () => requestClose());

@@ -31,7 +31,7 @@ const onlyOne = invoices.length + dwellings.length === 1;
 // click, reload after the POST) is refused instead of paying twice.
 const submissionId = crypto.randomUUID();
 const field =
-  "mt-1 w-full rounded-control border border-border px-3 py-1.5 text-sm";
+  "mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-1.5 text-sm";
 const label = "block text-sm font-medium text-foreground";
 ---
 

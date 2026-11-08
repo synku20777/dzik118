@@ -20,7 +20,7 @@ const ordered = [...organizations].sort(
 ---
 
 <details class="organization-switcher" name="organization-switcher">
-  <summary class="organization-trigger" title={t("Switch organization")}>
+  <summary class="organization-trigger" data-tip={t("Switch organization")}>
     <span class="organization-symbol">
       <Icon name="building" size="sm" />
     </span>
@@ -129,20 +129,23 @@ const ordered = [...organizations].sort(
     transform: rotate(90deg);
     color: var(--color-muted);
   }
-  .organization-switcher[open] .organization-chevron {
+  .organization-switcher[open]:not([data-closing]) .organization-chevron {
     transform: rotate(-90deg);
   }
   .organization-menu {
+    /* Floats over the navigation instead of pushing it down. It spans exactly
+       the trigger's width (left/right 0), so the scrolling sidebar or drawer
+       does not clip it or its focus rings. */
     position: absolute;
-    inset-inline-start: 0;
-    top: calc(100% + 0.5rem);
     z-index: 30;
-    width: min(19rem, calc(100vw - 3rem));
+    top: calc(100% + var(--space-2));
+    left: 0;
+    right: 0;
     padding: 0.375rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
     background: var(--color-surface);
-    box-shadow: var(--elevation-1);
+    box-shadow: var(--elevation-2);
   }
   .organization-options {
     list-style: none;
@@ -185,13 +188,49 @@ const ordered = [...organizations].sort(
   .organization-menu-actions {
     padding-top: 0.375rem;
   }
+  /* Motion answers the person's action: the trigger sinks when pressed, the
+     chevron turns, and the menu eases in as it opens. */
+  @media (prefers-reduced-motion: no-preference) {
+    .organization-trigger {
+      transition:
+        background-color var(--duration-fast) ease,
+        transform var(--duration-feedback) var(--ease-standard);
+    }
+    .organization-trigger:active {
+      transform: scale(0.985);
+    }
+    .organization-chevron {
+      transition: transform var(--duration-panel) var(--ease-standard);
+    }
+    /* In: a little slower, settling past rest. Out: quicker and straight, so
+       closing never makes the person wait (bindOrganizationSwitcher keeps the
+       menu open until this animation ends). */
+    .organization-menu {
+      transform-origin: top;
+      animation: organization-menu-in 260ms cubic-bezier(0.22, 1.2, 0.36, 1)
+        both;
+    }
+    .organization-switcher[data-closing] .organization-menu {
+      animation: organization-menu-out 140ms ease-in both;
+    }
+    .organization-menu a {
+      transition: background-color var(--duration-fast) ease;
+    }
+  }
+  @keyframes organization-menu-in {
+    from {
+      opacity: 0;
+      transform: translateY(-8px) scale(0.96);
+    }
+  }
+  @keyframes organization-menu-out {
+    to {
+      opacity: 0;
+      transform: translateY(-6px) scale(0.97);
+    }
+  }
   .organization-options + .organization-menu-actions {
     margin-top: 0.375rem;
     border-top: 1px solid var(--color-border);
-  }
-  @media (max-width: 63.99rem) {
-    .organization-menu {
-      width: 100%;
-    }
   }
 </style>

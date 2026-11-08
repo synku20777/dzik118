@@ -15,6 +15,7 @@ import { invoices } from "../../db/schema/invoices";
 import { getApplicableRulesForDwelling } from "../billing/rules";
 import { wasMeterActiveDuringPeriod } from "./case-readiness";
 import { findPreviousValue } from "./readings";
+import { caseMatchesStatus, type CaseStatusFilter } from "./case-filter";
 
 // Spec Section 27's required default sort: status priority first, then
 // natural dwelling number. Sorted client-side (post-fetch) rather than with
@@ -42,7 +43,7 @@ function compareDwellingNumbers(a: string, b: string): number {
 
 export interface ListCasesForPeriodOptions {
   search?: string;
-  statusFilter?: (typeof billingCaseStatusEnum.enumValues)[number];
+  statusFilter?: CaseStatusFilter;
 }
 
 export async function listCasesForPeriod(
@@ -86,7 +87,7 @@ export async function listCasesForPeriod(
 
   const search = options.search?.trim().toLowerCase();
   const filtered = rows.filter((row) => {
-    if (options.statusFilter && row.status !== options.statusFilter) {
+    if (!caseMatchesStatus(row.status, options.statusFilter)) {
       return false;
     }
     if (search && !row.dwellingNumber.toLowerCase().includes(search)) {

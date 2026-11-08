@@ -43,6 +43,10 @@ const dateFormat = new Intl.DateTimeFormat(locale, {
   title={`Migration Center - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Settings"), href: `/admin/o/${organizationId}/settings` },
+    { label: t("Migration Center") },
+  ]}
 >
   <div class="space-y-6">
     <h1 class="font-display text-h2 text-foreground">

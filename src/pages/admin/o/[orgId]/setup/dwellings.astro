@@ -232,6 +232,10 @@ const hasErrors =
   organizationId={organizationId}
   organizationName={organization.name}
   archived={!!organization.archivedAt}
+  breadcrumbs={[
+    { label: t("Setup"), href: `/admin/o/${organizationId}/setup` },
+    { label: t("Dwellings") },
+  ]}
 >
   <SetupLayout
     title={t("Dwellings")}
@@ -309,7 +313,7 @@ const hasErrors =
             required
             rows="4"
             aria-describedby="numbers-help"
-            class="mt-2 w-full rounded-control border border-border bg-surface px-3 py-2 text-body-sm"
+            class="mt-2 w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-body-sm"
             set:text={numbersInput}
           />
         </div>
@@ -326,7 +330,7 @@ const hasErrors =
               <select
                 id="defaultType"
                 name="defaultType"
-                class="mt-1 w-full rounded-control border border-border bg-surface px-3 py-2 text-body-sm"
+                class="mt-1 w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-body-sm"
               >
                 {DWELLING_TYPES.map((typeVal) => (
                   <option
@@ -350,7 +354,7 @@ const hasErrors =
                 inputmode="decimal"
                 value={defaultAreaInput}
                 placeholder="0.00"
-                class="mt-1 w-full rounded-control border border-border bg-surface px-3 py-2 text-body-sm"
+                class="mt-1 w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-body-sm"
               />
             </div>
 
@@ -368,7 +372,7 @@ const hasErrors =
                 inputmode="numeric"
                 value={defaultResidentsInput}
                 placeholder="0"
-                class="mt-1 w-full rounded-control border border-border bg-surface px-3 py-2 text-body-sm"
+                class="mt-1 w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-body-sm"
               />
             </div>
           </div>
@@ -439,7 +443,7 @@ const hasErrors =
                           row.errors.length > 0 ? `row-err-${index}` : undefined
                         }
                         aria-invalid={row.errors.length > 0 || undefined}
-                        class="w-full min-w-20 rounded-control border border-border bg-surface px-3 py-1.5 text-body-sm"
+                        class="w-full min-w-20 rounded-control border border-(--color-input-border) bg-surface px-3 py-1.5 text-body-sm"
                       />
                     </td>
                     <td class="px-4 py-2">
@@ -449,7 +453,7 @@ const hasErrors =
                       <select
                         id={`row-type-${index}`}
                         name="type"
-                        class="w-full min-w-28 rounded-control border border-border bg-surface px-3 py-1.5 text-body-sm"
+                        class="w-full min-w-28 rounded-control border border-(--color-input-border) bg-surface px-3 py-1.5 text-body-sm"
                       >
                         {DWELLING_TYPES.map((typeVal) => (
                           <option
@@ -471,7 +475,7 @@ const hasErrors =
                         inputmode="decimal"
                         name="areaM2"
                         value={row.areaM2}
-                        class="w-full min-w-20 rounded-control border border-border bg-surface px-3 py-1.5 text-body-sm"
+                        class="w-full min-w-20 rounded-control border border-(--color-input-border) bg-surface px-3 py-1.5 text-body-sm"
                       />
                     </td>
                     <td class="px-4 py-2">
@@ -484,7 +488,7 @@ const hasErrors =
                         inputmode="numeric"
                         name="residentCount"
                         value={row.residentCount}
-                        class="w-full min-w-20 rounded-control border border-border bg-surface px-3 py-1.5 text-body-sm"
+                        class="w-full min-w-20 rounded-control border border-(--color-input-border) bg-surface px-3 py-1.5 text-body-sm"
                       />
                     </td>
                     <td class="px-4 py-2 text-destructive">

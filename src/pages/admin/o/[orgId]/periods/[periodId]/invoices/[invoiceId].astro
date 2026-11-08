@@ -14,6 +14,7 @@ import {
   formatDate,
   formatMoney,
   friendlyActionErrorMessage,
+  formatPeriod,
 } from "../../../../../../../lib/ui/i18n";
 import { invoiceStatusBadge } from "../../../../../../../lib/ui/invoice-status";
 const locale = uiLocale(Astro.cookies, Astro.url);
@@ -200,18 +201,18 @@ const overrideStatuses: string[] = [
   title={`${invoice.invoiceNumber} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[
+    { label: t("Periods"), href: `/admin/o/${organizationId}/periods` },
+    {
+      label: formatPeriod(period.year, period.month, locale),
+      href: `/admin/o/${organizationId}/periods/${periodId}`,
+    },
+    { label: `${t("Invoice")} ${invoice.invoiceNumber}` },
+  ]}
 >
   <div class="space-y-6">
-    <a
-      href={`/admin/o/${organizationId}/periods/${periodId}`}
-      class="text-sm text-muted hover:underline"
-    >
-      ← {t("Period")} {period.year}-{String(period.month).padStart(2, "0")}
-    </a>
-
     <div class="flex flex-wrap items-start justify-between gap-4">
       <div>
-        <p class="text-sm font-semibold text-muted">{t("Invoice")}</p>
         <h1 class="text-xl font-bold text-foreground">
           {invoice.invoiceNumber}
           <span class="ml-2 text-sm font-normal text-muted">
@@ -770,11 +771,17 @@ const overrideStatuses: string[] = [
                       d.method === "PAPER" && !d.isInitialPaperDispatch ? (
                         <span
                           class="text-muted"
-                          title={t(
+                          data-tip={t(
                             "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch."
                           )}
                         >
                           {t("Paper (unverified legacy record)")}
+                          <span class="sr-only">
+                            {" "}
+                            {t(
+                              "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch."
+                            )}
+                          </span>
                         </span>
                       ) : (
                         <span class="text-success">
@@ -881,9 +888,8 @@ const overrideStatuses: string[] = [
   .invoice-doc-locale-select {
     padding: 0.3rem 0.5rem;
     font-size: 0.8125rem;
-    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
-    background: var(--color-surface);
+    background-color: var(--color-surface);
     color: var(--color-foreground);
   }
   .invoice-preview-frame-wrap {
@@ -899,5 +905,8 @@ const overrideStatuses: string[] = [
     background: #fff;
     border: 1px solid var(--color-border);
     border-radius: 0.25rem;
+  }
+  .invoice-doc-locale-select {
+    padding-inline-end: 2.25rem;
   }
 </style>

@@ -100,13 +100,9 @@ const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
   title={`Settings - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
+  breadcrumbs={[{ label: t("Settings") }]}
 >
   <div class="space-y-6">
-    <nav class="breadcrumb" aria-label={t("Breadcrumb")}>
-      <a href={`/admin/o/${organizationId}/dashboard`}>{t("Dashboard")}</a>
-      <span aria-hidden="true">›</span>
-      <span aria-current="page">{t("Settings")}</span>
-    </nav>
     <PageHeader
       title={t("Settings")}
       description={t("Configure your organization, billing and access.")}
@@ -221,6 +217,19 @@ const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
     flex: 0 0 auto;
     color: var(--color-muted);
     font-size: 1.25rem;
+  }
+  /* The chevron leans toward where the card goes. */
+  @media (prefers-reduced-motion: no-preference) {
+    .settings-card-chevron {
+      transition:
+        transform var(--duration-normal) var(--ease-standard),
+        color var(--duration-fast) ease;
+    }
+    .settings-card:hover .settings-card-chevron,
+    .settings-card:focus-visible .settings-card-chevron {
+      transform: translateX(3px);
+      color: var(--color-foreground);
+    }
   }
 
   @media (max-width: 767px) {

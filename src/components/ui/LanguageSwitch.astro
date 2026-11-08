@@ -1,5 +1,5 @@
 ---
-import { uiLocale, type Locale } from "../../lib/ui/i18n";
+import { translate, uiLocale, type Locale } from "../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 
 const options: { code: Locale; label: string; ariaLabel: string }[] = [
@@ -15,32 +15,25 @@ function hrefFor(code: Locale) {
 }
 ---
 
-<span class="flex items-center gap-0.5 text-xs font-semibold">
-  {options.map((option, index) => (
-    <>
-      {index > 0 && (
-        <span aria-hidden="true" class="text-border">
-          ·
-        </span>
-      )}
-      {option.code === locale ? (
-        <span
-          aria-current="true"
-          lang={option.code}
-          class="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-control bg-surface-hover px-1.5 py-0.5 text-foreground"
-        >
-          {option.label}
-        </span>
-      ) : (
-        <a
-          href={hrefFor(option.code)}
-          class="min-h-[44px] min-w-[44px] inline-flex items-center justify-center px-1.5 py-0.5 text-muted hover:text-foreground hover:underline"
-          lang={option.code}
-          aria-label={option.ariaLabel}
-        >
-          {option.label}
-        </a>
-      )}
-    </>
-  ))}
+<span
+  class="lang-switch"
+  role="group"
+  aria-label={translate(locale, "Language")}
+>
+  {options.map((option) =>
+    option.code === locale ? (
+      <span aria-current="true" lang={option.code} data-tip={option.ariaLabel}>
+        {option.label}
+      </span>
+    ) : (
+      <a
+        href={hrefFor(option.code)}
+        lang={option.code}
+        aria-label={option.ariaLabel}
+        data-tip={option.ariaLabel}
+      >
+        {option.label}
+      </a>
+    )
+  )}
 </span>

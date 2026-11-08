@@ -68,7 +68,7 @@ const [dwellings, displayName] = await withRequestDb((db) =>
               maxlength="100"
               required
               value={nameResult?.data?.displayName ?? displayName ?? ""}
-              class="w-full rounded-control border border-border px-3 py-2 sm:w-72"
+              class="w-full rounded-control border border-(--color-input-border) px-3 py-2 sm:w-72"
             />
             <button type="submit" class="btn-primary">
               {t("Save")}
