@@ -39,6 +39,18 @@ if (result?.data) {
   return Astro.redirect(`/admin/o/${organizationId}/setup/charges`);
 }
 
+// After a rejected save, show what was typed, not the stored values.
+let submitted: FormData | null = null;
+if (result?.error) {
+  try {
+    submitted = await Astro.request.formData();
+  } catch {
+    submitted = null;
+  }
+}
+const val = (name: string, fallback: string | number) =>
+  submitted ? String(submitted.get(name) ?? "") : fallback;
+
 const { organization, progress, firstPeriod } = await withRequestDb(
   async (db) => {
     const organization = await getOrganization(db, organizationId);
@@ -66,6 +78,9 @@ const dueDateUtc = new Date(
   issueDateUtc.getTime() + defaultDueDays * 86_400_000
 );
 const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
+// A locked or incomplete first period is fixed on the period page.
+const needsPeriodPage =
+  progress.firstPeriodLocked || progress.dwellingsWithoutCase > 0;
 ---
 
 <AdminLayout
@@ -87,7 +102,7 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
     steps={progress.steps}
   >
     {firstPeriod ? (
-      <div class="space-y-6 max-w-3xl">
+      <div class="space-y-6">
         {progress.firstPeriodLocked && (
           <p class="notice notice-warning" role="alert">
             {t(
@@ -96,7 +111,14 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
           </p>
         )}
 
-        <div class="rounded-panel border border-border bg-surface p-6 space-y-4">
+        {progress.dwellingsWithoutCase > 0 && (
+          <p class="notice notice-warning" role="status">
+            {t("Dwellings not in the first period")}:{" "}
+            <strong>{progress.dwellingsWithoutCase}</strong>
+          </p>
+        )}
+
+        <div class="panel p-6 space-y-4">
           <h2 class="text-base font-semibold text-foreground">
             {t("Your first billing period")}
           </h2>
@@ -111,9 +133,9 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
             <div class="pt-2">
               <a
                 href={`/admin/o/${organizationId}/periods/${firstPeriod.id}`}
-                class="btn-secondary btn-sm inline-flex items-center gap-2"
+                class={`${needsPeriodPage ? "btn-primary" : "btn-secondary"} btn-sm inline-flex items-center gap-2`}
               >
-                {t("Open period")} →
+                {t("Open period")}
               </a>
             </div>
           </div>
@@ -128,14 +150,14 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
           </a>
           <a
             href={`/admin/o/${organizationId}/setup/charges`}
-            class="btn-primary"
+            class={needsPeriodPage ? "btn-secondary" : "btn-primary"}
           >
             {t("Continue")}
           </a>
         </div>
       </div>
     ) : (
-      <div class="space-y-6 max-w-3xl">
+      <div class="space-y-6">
         {result?.error && (
           <p class="notice notice-danger" role="alert">
             {friendlyActionErrorMessage(result.error, locale)}
@@ -145,9 +167,12 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
         <form
           method="POST"
           action={actions.periods.create}
-          class="rounded-panel border border-border bg-surface p-6 space-y-6"
+          class="panel p-6 space-y-6"
         >
           <input type="hidden" name="organizationId" value={organizationId} />
+          <p class="setup-required-note">
+            {t("Fields marked * are required.")}
+          </p>
 
           <fieldset class="space-y-4">
             <legend class="text-base font-semibold text-foreground">
@@ -170,7 +195,7 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
                   min="2000"
                   max="2200"
                   required
-                  value={defaultYear}
+                  value={val("year", defaultYear)}
                   aria-describedby="year-error"
                   class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
                 />
@@ -192,7 +217,7 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
                   min="1"
                   max="12"
                   required
-                  value={defaultMonth}
+                  value={val("month", defaultMonth)}
                   aria-describedby="month-error"
                   class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
                 />
@@ -219,7 +244,7 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
                   name="startsOn"
                   type="date"
                   required
-                  value={defaultStartsOn}
+                  value={val("startsOn", defaultStartsOn)}
                   aria-describedby="startsOn-error"
                   class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
                 />
@@ -238,7 +263,7 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
                   name="endsOn"
                   type="date"
                   required
-                  value={defaultEndsOn}
+                  value={val("endsOn", defaultEndsOn)}
                   aria-describedby="endsOn-error"
                   class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
                 />
@@ -257,9 +282,9 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
                 id="readingDeadline"
                 name="readingDeadline"
                 type="date"
-                value=""
+                value={val("readingDeadline", "")}
                 aria-describedby="readingDeadline-error"
-                class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground sm:w-1/2"
+                class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
               />
               <FieldError name="readingDeadline" error={result?.error} />
             </div>
@@ -283,7 +308,7 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
                   name="invoiceIssueDate"
                   type="date"
                   required
-                  value={defaultInvoiceIssueDate}
+                  value={val("invoiceIssueDate", defaultInvoiceIssueDate)}
                   aria-describedby="invoiceIssueDate-error"
                   class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
                 />
@@ -302,7 +327,7 @@ const defaultInvoiceDueDate = dueDateUtc.toISOString().slice(0, 10);
                   name="invoiceDueDate"
                   type="date"
                   required
-                  value={defaultInvoiceDueDate}
+                  value={val("invoiceDueDate", defaultInvoiceDueDate)}
                   aria-describedby="invoiceDueDate-error"
                   class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
                 />

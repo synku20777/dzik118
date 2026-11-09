@@ -19,6 +19,27 @@ const { title, description, ...steps } = Astro.props;
   </div>
 </div>
 
+<script>
+  import { onPageLoad } from "../../lib/ui/page-lifecycle";
+  // Mark each field that has an error, and start the user on the first one.
+  onPageLoad(() => {
+    const errors = document.querySelectorAll<HTMLElement>(
+      '.setup-content [id$="-error"]'
+    );
+    const fields = [...errors]
+      .map((error) => {
+        const name = error.id.slice(0, -6);
+        return (
+          document.getElementById(name) ??
+          document.getElementById(`meter-${name}`)
+        );
+      })
+      .filter((field): field is HTMLElement => field !== null);
+    for (const field of fields) field.setAttribute("aria-invalid", "true");
+    fields[0]?.focus();
+  });
+</script>
+
 <style is:global>
   .setup-page {
     max-width: 76rem;
@@ -40,6 +61,37 @@ const { title, description, ...steps } = Astro.props;
   }
   .setup-content {
     min-width: 0;
+    max-width: 52rem;
+  }
+  /* A legend heads its section; it never sits on a border. */
+  .setup-page legend:not(.sr-only) {
+    float: left;
+    width: 100%;
+    padding: 0;
+  }
+  .setup-page legend:not(.sr-only) + * {
+    clear: both;
+  }
+  /* Required fields carry a mark; forms say what it means. */
+  .setup-page label:has(+ :required)::after,
+  .setup-page label:has(+ p + :required)::after {
+    content: " *";
+    color: var(--color-destructive);
+  }
+  .setup-page .setup-required-note {
+    color: var(--color-muted);
+    font-size: 0.8125rem;
+  }
+  .setup-page input[type="file"]::file-selector-button {
+    margin-right: 0.75rem;
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--color-input-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-foreground);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
   }
   .setup-page .setup-actions {
     display: flex;
@@ -58,6 +110,45 @@ const { title, description, ...steps } = Astro.props;
   .setup-page .setup-preset {
     min-width: 0;
   }
+  /* Secondary tasks fold away so the main one comes first. */
+  .setup-page .setup-fold.panel {
+    padding: 0;
+  }
+  .setup-fold > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+  }
+  .setup-fold > summary::-webkit-details-marker {
+    display: none;
+  }
+  .setup-fold > summary::after {
+    content: "›";
+    color: var(--color-muted);
+    font-size: 1.25rem;
+    transition: transform var(--duration-normal) var(--ease-standard);
+  }
+  .setup-fold[open] > summary::after {
+    transform: rotate(90deg);
+  }
+  .setup-fold-body {
+    display: grid;
+    gap: 1rem;
+    padding: 0 1.5rem 1.5rem;
+  }
+  @media (max-width: 40rem) {
+    .setup-fold > summary {
+      padding: 1rem;
+    }
+    .setup-fold-body {
+      padding: 0 1rem 1rem;
+    }
+  }
   .setup-page .setup-preset:has(input[type="checkbox"]:checked) {
     background: var(--color-nav-active-bg);
   }
@@ -68,6 +159,24 @@ const { title, description, ...steps } = Astro.props;
   .setup-page .setup-preset-fields:disabled {
     opacity: 0.5;
   }
+  @media (prefers-reduced-motion: no-preference) {
+    .setup-page .setup-preset {
+      transition: background-color var(--duration-fast) ease;
+    }
+    .setup-page .setup-preset-fields {
+      transition: opacity var(--duration-normal) var(--ease-standard);
+    }
+    /* Results and errors ease in so a change is noticed. */
+    .setup-content :is([role="status"], [role="alert"]) {
+      animation: setup-reveal var(--duration-normal) var(--ease-standard) both;
+    }
+  }
+  @keyframes setup-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+  }
   .setup-page .setup-preset-fields {
     border: 0;
     padding: 0;
@@ -77,6 +186,46 @@ const { title, description, ...steps } = Astro.props;
     .setup-workspace {
       grid-template-columns: minmax(0, 1fr);
       gap: 1.5rem;
+    }
+  }
+  /* Phones: a reading is one compact row, not a five-line card. */
+  @media (max-width: 639px) {
+    .setup-readings.stack-table tr {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) 7rem;
+      align-items: center;
+      column-gap: 0.75rem;
+      padding: 0.625rem 0.875rem;
+    }
+    .setup-readings.stack-table td {
+      display: block !important;
+      grid-column: 1;
+      padding: 0 !important;
+      text-align: left;
+      overflow-wrap: anywhere;
+    }
+    .setup-readings.stack-table td::before {
+      display: none !important;
+    }
+    .setup-readings.stack-table td:first-child {
+      font-weight: 600;
+    }
+    .setup-readings.stack-table td:nth-child(3) {
+      color: var(--color-muted);
+      font-size: 0.8125rem;
+    }
+    .setup-readings.stack-table td:nth-child(4) {
+      grid-column: 2;
+      text-align: right;
+      color: var(--color-muted);
+      font-size: 0.8125rem;
+    }
+    .setup-readings.stack-table td:nth-child(5) {
+      grid-column: 2;
+      grid-row: 1 / 3;
+    }
+    .setup-readings.stack-table td:nth-child(5) input[type="text"] {
+      width: 100%;
     }
   }
   @media (max-width: 40rem) {

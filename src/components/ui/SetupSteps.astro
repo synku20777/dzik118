@@ -52,21 +52,32 @@ const stepItems = [
   },
 ];
 const completedCount = Object.values(steps).filter(Boolean).length;
+const currentTitle = stepItems.find((step) => step.key === current)?.title;
 ---
 
 <nav class="setup-trail" aria-label={t("Setup steps")}>
   <div class="setup-trail-heading text-body-sm">
-    <span class="font-medium text-foreground">{t("Setup steps")}</span>
+    <span class="setup-trail-label font-medium text-foreground">
+      {t("Setup steps")}
+    </span>
+    <span class="setup-trail-current font-medium text-foreground">
+      {currentTitle}
+    </span>
     <span class="text-muted">
       {completedCount} / 5 {t("Done").toLocaleLowerCase(locale)}
     </span>
   </div>
-  <progress
+  <div
     class="setup-progress"
-    value={completedCount}
-    max="5"
+    role="progressbar"
     aria-label={t("Setup complete")}
-  ></progress>
+    aria-valuemin="0"
+    aria-valuemax="5"
+    aria-valuenow={completedCount}
+    aria-valuetext={`${completedCount} / 5`}
+  >
+    <span style={`transform: scaleX(${completedCount / 5})`}></span>
+  </div>
   <ol class="setup-steps">
     {stepItems.map((step, index) => {
       const isCurrent = step.key === current;
@@ -107,25 +118,36 @@ const completedCount = Object.values(steps).filter(Boolean).length;
     gap: 0.5rem;
   }
   .setup-progress {
-    display: block;
-    appearance: none;
-    width: 100%;
     height: 0.25rem;
-    border: 0;
     border-radius: 1rem;
     overflow: hidden;
     margin: 0.875rem 0 1.25rem;
     background: var(--color-border);
-    color: var(--color-success);
   }
-  .setup-progress::-webkit-progress-bar {
-    background: var(--color-border);
-  }
-  .setup-progress::-webkit-progress-value {
+  .setup-progress > span {
+    display: block;
+    height: 100%;
     background: var(--color-success);
+    transform-origin: left;
   }
-  .setup-progress::-moz-progress-bar {
-    background: var(--color-success);
+  .setup-trail-current {
+    display: none;
+  }
+  /* The bar fills up to the current value on arrival. */
+  @media (prefers-reduced-motion: no-preference) {
+    .setup-progress > span {
+      animation: setup-fill var(--duration-panel) var(--ease-standard) both;
+    }
+    .setup-step-link {
+      transition:
+        background-color var(--duration-fast) ease,
+        color var(--duration-fast) ease;
+    }
+  }
+  @keyframes setup-fill {
+    from {
+      transform: scaleX(0);
+    }
   }
   .setup-steps {
     list-style: none;
@@ -186,13 +208,29 @@ const completedCount = Object.values(steps).filter(Boolean).length;
       margin-bottom: 0.75rem;
     }
   }
-  @media (max-width: 35rem) {
+  /* Phones: one row of step circles, the current title in the heading. */
+  @media (max-width: 40rem) {
+    .setup-trail-label {
+      display: none;
+    }
+    .setup-trail-current {
+      display: inline;
+    }
     .setup-steps {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 0;
     }
     .setup-step-link {
-      padding: 0.625rem 0.5rem;
-      gap: 0.5rem;
+      justify-content: center;
+      min-height: 2.75rem;
+      padding: 0.25rem;
+    }
+    .step-title {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
     }
   }
 </style>

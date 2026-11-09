@@ -2081,6 +2081,7 @@ const lv: Record<string, string> = {
   "Setup navigation": "Iestatīšanas navigācija",
   "Back to review": "Atpakaļ uz pārskatu",
   "Skip for now": "Pagaidām izlaist",
+  "Fields marked * are required.": "Lauki ar * ir obligāti.",
   "Address line 1": "Adreses 1. rinda",
   "Address line 2": "Adreses 2. rinda",
   "Needed before invoices are prepared":
@@ -4386,6 +4387,7 @@ const ru: Record<string, string> = {
   "Setup navigation": "Навигация по настройке",
   "Back to review": "Назад к обзору",
   "Skip for now": "Пока пропустить",
+  "Fields marked * are required.": "Поля со знаком * обязательны.",
   "Address line 1": "Строка адреса 1",
   "Address line 2": "Строка адреса 2",
   "Needed before invoices are prepared": "Необходимо до подготовки счетов",

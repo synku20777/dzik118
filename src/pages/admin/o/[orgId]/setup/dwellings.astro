@@ -249,7 +249,7 @@ const hasErrors =
     <header class="space-y-2">
       <div class="flex flex-wrap items-center justify-between gap-3 text-body-sm text-muted">
         <p>
-          {t("Current dwellings:")}
+          {t("Current dwellings:")}{" "}
           <span class="font-medium text-foreground">
             {progress.dwellingCount}
           </span>
@@ -261,7 +261,7 @@ const hasErrors =
             {t("View all dwellings")}
           </a>
         </p>
-        <p class="flex items-center gap-1.5">
+        <p class="flex flex-wrap items-center gap-x-1.5">
           <span>{t("Have a spreadsheet?")}</span>
           <a
             href={`/admin/o/${organizationId}/dwellings/import`}
@@ -269,7 +269,9 @@ const hasErrors =
           >
             {t("Upload a CSV file")}
           </a>
-          <span aria-hidden="true">·</span>
+          <span aria-hidden="true" class="hidden sm:inline">
+            ·
+          </span>
           <a
             href={`/admin/o/${organizationId}/setup/templates/dwellings.csv`}
             download
@@ -294,11 +296,9 @@ const hasErrors =
     )}
 
     {step === "range" && (
-      <form
-        method="POST"
-        class="space-y-6 rounded-panel border border-border bg-surface p-6 max-w-3xl"
-      >
+      <form method="POST" class="panel space-y-6 p-6">
         <input type="hidden" name="step" value="preview" />
+        <p class="setup-required-note">{t("Fields marked * are required.")}</p>
 
         <div>
           <label class="block text-label text-foreground" for="numbers">
@@ -379,7 +379,10 @@ const hasErrors =
         </fieldset>
 
         <div>
-          <button type="submit" class="btn-primary">
+          <button
+            type="submit"
+            class={progress.steps.dwellings ? "btn-secondary" : "btn-primary"}
+          >
             {t("Preview dwellings")}
           </button>
         </div>
@@ -540,7 +543,7 @@ const hasErrors =
     )}
 
     {step === "result" && (
-      <div class="space-y-4 rounded-panel border border-border bg-surface p-6">
+      <div class="panel space-y-4 p-6">
         {replayedMessage ? (
           <p class="notice notice-warning" role="status">
             {replayedMessage}
@@ -570,9 +573,17 @@ const hasErrors =
       </a>
       <a
         href={`/admin/o/${organizationId}/setup/period`}
-        class={progress.steps.dwellings ? "btn-primary" : "btn-secondary"}
+        class={
+          progress.steps.dwellings && step !== "preview"
+            ? "btn-primary"
+            : "btn-secondary"
+        }
       >
-        {t(progress.steps.dwellings ? "Continue" : "Skip for now")}
+        {t(
+          progress.steps.dwellings && step !== "preview"
+            ? "Continue"
+            : "Skip for now"
+        )}
       </a>
     </footer>
   </SetupLayout>

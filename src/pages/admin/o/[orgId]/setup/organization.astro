@@ -32,6 +32,18 @@ if (result?.data) {
   return Astro.redirect(`/admin/o/${organizationId}/setup/dwellings`);
 }
 
+// After a rejected save, show what was typed, not the stored values.
+let submitted: FormData | null = null;
+if (result?.error) {
+  try {
+    submitted = await Astro.request.formData();
+  } catch {
+    submitted = null;
+  }
+}
+const val = (name: string, fallback: string | number) =>
+  submitted ? String(submitted.get(name) ?? "") : fallback;
+
 const { organization, progress } = await withRequestDb(async (db) => {
   const organization = await getOrganization(db, organizationId);
   return {
@@ -68,7 +80,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
     <form
       method="POST"
       action={actions.organizations.update}
-      class="rounded-panel border border-border bg-surface p-6 space-y-6 max-w-3xl"
+      class="panel p-6 space-y-6"
     >
       <input type="hidden" name="organizationId" value={organizationId} />
       {(
@@ -80,6 +92,8 @@ const { organization, progress } = await withRequestDb(async (db) => {
       ).map((name) => (
         <input type="hidden" name={name} value={String(organization[name])} />
       ))}
+
+      <p class="setup-required-note">{t("Fields marked * are required.")}</p>
 
       <fieldset class="space-y-4">
         <legend class="text-base font-semibold text-foreground">
@@ -96,7 +110,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
             type="text"
             required
             aria-describedby="name-error"
-            value={organization.name}
+            value={val("name", organization.name)}
             class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
           />
           <FieldError name="name" error={result?.error} />
@@ -115,7 +129,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
             type="text"
             required
             aria-describedby="addressLine1-error"
-            value={organization.addressLine1}
+            value={val("addressLine1", organization.addressLine1)}
             class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
           />
           <FieldError name="addressLine1" error={result?.error} />
@@ -133,7 +147,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
             name="addressLine2"
             type="text"
             aria-describedby="addressLine2-error"
-            value={organization.addressLine2 ?? ""}
+            value={val("addressLine2", organization.addressLine2 ?? "")}
             class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
           />
           <FieldError name="addressLine2" error={result?.error} />
@@ -149,7 +163,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
               name="city"
               type="text"
               aria-describedby="city-error"
-              value={organization.city ?? ""}
+              value={val("city", organization.city ?? "")}
               class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="city" error={result?.error} />
@@ -167,7 +181,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
               name="postalCode"
               type="text"
               aria-describedby="postalCode-error"
-              value={organization.postalCode ?? ""}
+              value={val("postalCode", organization.postalCode ?? "")}
               class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="postalCode" error={result?.error} />
@@ -187,7 +201,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
               name="email"
               type="email"
               aria-describedby="email-error"
-              value={organization.email ?? ""}
+              value={val("email", organization.email ?? "")}
               class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="email" error={result?.error} />
@@ -205,7 +219,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
               name="phone"
               type="tel"
               aria-describedby="phone-error"
-              value={organization.phone ?? ""}
+              value={val("phone", organization.phone ?? "")}
               class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="phone" error={result?.error} />
@@ -236,7 +250,10 @@ const { organization, progress } = await withRequestDb(async (db) => {
               name="registrationNumber"
               type="text"
               aria-describedby="registrationNumber-error"
-              value={organization.registrationNumber ?? ""}
+              value={val(
+                "registrationNumber",
+                organization.registrationNumber ?? ""
+              )}
               class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="registrationNumber" error={result?.error} />
@@ -254,7 +271,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
               name="vatNumber"
               type="text"
               aria-describedby="vatNumber-error"
-              value={organization.vatNumber ?? ""}
+              value={val("vatNumber", organization.vatNumber ?? "")}
               class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="vatNumber" error={result?.error} />
@@ -274,7 +291,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
               name="bankName"
               type="text"
               aria-describedby="bankName-error"
-              value={organization.bankName ?? ""}
+              value={val("bankName", organization.bankName ?? "")}
               class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="bankName" error={result?.error} />
@@ -289,26 +306,28 @@ const { organization, progress } = await withRequestDb(async (db) => {
               name="iban"
               type="text"
               aria-describedby="iban-error"
-              value={organization.iban ?? ""}
+              value={val("iban", organization.iban ?? "")}
               class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
             />
             <FieldError name="iban" error={result?.error} />
           </div>
         </div>
 
-        <div>
-          <label for="bic" class="block text-sm font-medium text-foreground">
-            {t("BIC")}
-          </label>
-          <input
-            id="bic"
-            name="bic"
-            type="text"
-            aria-describedby="bic-error"
-            value={organization.bic ?? ""}
-            class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground sm:w-1/2"
-          />
-          <FieldError name="bic" error={result?.error} />
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label for="bic" class="block text-sm font-medium text-foreground">
+              {t("BIC")}
+            </label>
+            <input
+              id="bic"
+              name="bic"
+              type="text"
+              aria-describedby="bic-error"
+              value={val("bic", organization.bic ?? "")}
+              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
+            />
+            <FieldError name="bic" error={result?.error} />
+          </div>
         </div>
       </fieldset>
 
@@ -319,11 +338,18 @@ const { organization, progress } = await withRequestDb(async (db) => {
         <div class="flex items-center gap-3">
           <a
             href={`/admin/o/${organizationId}/setup/dwellings`}
-            class="btn-secondary"
+            class={
+              progress.steps.organization ? "btn-primary" : "btn-secondary"
+            }
           >
-            {t("Skip for now")}
+            {t(progress.steps.organization ? "Continue" : "Skip for now")}
           </a>
-          <button type="submit" class="btn-primary">
+          <button
+            type="submit"
+            class={
+              progress.steps.organization ? "btn-secondary" : "btn-primary"
+            }
+          >
             {t("Save and continue")}
           </button>
         </div>

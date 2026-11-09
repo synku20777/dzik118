@@ -64,6 +64,17 @@ if (result?.data) {
   }
 }
 
+// After a rejected save, keep what was typed.
+let submitted: FormData | null = null;
+if (result?.error) {
+  try {
+    submitted = await Astro.request.formData();
+  } catch {
+    submitted = null;
+  }
+}
+const typed = (name: string) => String(submitted?.get(name) ?? "");
+
 const actionOutcomes = (result?.data as ChargePresetResult[] | undefined) ?? [];
 
 const presetItems = [
@@ -149,10 +160,7 @@ const presetItems = [
         )}
 
         {actionOutcomes.length > 0 && (
-          <div
-            class="rounded-panel border border-border bg-surface p-4 space-y-2"
-            role="status"
-          >
+          <div class="panel p-4 space-y-2" role="status">
             <ul class="space-y-1.5 text-body-sm">
               {actionOutcomes.map((item) => {
                 const itemPreset = presetItems.find((p) => p.key === item.key);
@@ -205,7 +213,7 @@ const presetItems = [
               const isExisting = Boolean(existingRule);
 
               return (
-                <fieldset class="setup-preset rounded-panel border border-border bg-surface p-5">
+                <fieldset class="setup-preset panel p-5">
                   <legend class="sr-only">{preset.title}</legend>
                   {isExisting ? (
                     <div class="space-y-2">
@@ -234,6 +242,7 @@ const presetItems = [
                           type="checkbox"
                           id={`${preset.key}Enabled`}
                           name={`${preset.key}Enabled`}
+                          checked={typed(`${preset.key}Enabled`) !== ""}
                           class="mt-1 h-4 w-4 rounded border-(--color-input-border)"
                         />
                         <div>
@@ -254,7 +263,6 @@ const presetItems = [
                       </div>
 
                       <fieldset class="setup-preset-fields grid grid-cols-2 gap-3">
-                        <legend class="sr-only">{preset.title}</legend>
                         <div>
                           <label
                             for={`${preset.key}Price`}
@@ -269,6 +277,7 @@ const presetItems = [
                             name={`${preset.key}Price`}
                             inputmode="decimal"
                             pattern="\d{1,10}([.,]\d{1,4})?"
+                            value={typed(`${preset.key}Price`)}
                             placeholder="0.00"
                             aria-describedby={`${preset.key}Price-error`}
                             class="w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm bg-surface text-foreground"
@@ -292,7 +301,7 @@ const presetItems = [
                             name={`${preset.key}Vat`}
                             inputmode="decimal"
                             pattern="\d{1,3}([.,]\d{1,4})?"
-                            value="0"
+                            value={typed(`${preset.key}Vat`) || "0"}
                             aria-describedby={`${preset.key}Vat-error`}
                             class="w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm bg-surface text-foreground"
                           />
@@ -310,7 +319,11 @@ const presetItems = [
           </div>
 
           <div>
-            <button type="submit" class="btn-primary" data-charge-submit>
+            <button
+              type="submit"
+              class={progress.steps.charges ? "btn-secondary" : "btn-primary"}
+              data-charge-submit
+            >
               {t("Add charges")}
             </button>
           </div>
