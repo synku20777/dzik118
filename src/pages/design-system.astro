@@ -519,6 +519,13 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
               </button>
               <button
                 type="button"
+                class="icon-btn icon-btn-sm"
+                aria-label="Compact icon action"
+              >
+                <Icon name="plus" size="sm" />
+              </button>
+              <button
+                type="button"
                 class="icon-btn"
                 aria-label="Unavailable action"
                 disabled
@@ -543,39 +550,50 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
               </button>
             </div>
             <div class="form-grid">
-              <label>
-                Billing email
+              <div>
+                <label class="field-label" for="specimen-email">
+                  Billing email
+                </label>
                 <input
                   id="specimen-email"
                   name="specimen-email"
                   type="email"
                   autocomplete="email"
                   placeholder="name@example.com"
+                  aria-describedby="specimen-email-hint"
                 />
-              </label>
-              <label>
-                Billing cycle
-                <select name="cycle">
+                <p id="specimen-email-hint" class="field-hint">
+                  Invoices are sent here.
+                </p>
+              </div>
+              <div>
+                <label class="field-label" for="specimen-cycle">
+                  Billing cycle
+                </label>
+                <select id="specimen-cycle" name="cycle">
                   <option>Monthly</option>
                   <option>Quarterly</option>
                 </select>
-              </label>
+              </div>
               <label class="check-row">
                 <input type="checkbox" name="reminders" checked /> Send
                 reminders
               </label>
-              <label>
-                Invalid reference
+              <div>
+                <label class="field-label" for="specimen-reference">
+                  Invoice reference
+                </label>
                 <input
+                  id="specimen-reference"
                   name="reference"
                   aria-invalid="true"
                   aria-describedby="reference-error"
                   value="PB-"
                 />
-                <span id="reference-error" class="field-error">
+                <p id="reference-error" class="field-error">
                   Use a complete invoice reference.
-                </span>
-              </label>
+                </p>
+              </div>
             </div>
           </article>
 
@@ -1336,11 +1354,9 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1.25rem;
   }
-  .form-grid label:not(.check-row) {
+  .form-grid > div {
     display: grid;
-    gap: 0.4rem;
-    font-size: var(--text-sm);
-    font-weight: 600;
+    gap: var(--gap-label);
   }
   .form-grid input:not([type="checkbox"]):not([type="radio"]),
   .form-grid select {
@@ -1353,11 +1369,6 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
     align-items: center;
     min-height: var(--control-size-md);
     gap: 0.5rem;
-  }
-  .field-error {
-    color: var(--color-destructive);
-    font-size: var(--text-xs);
-    font-weight: 400;
   }
   .component-row {
     display: flex;

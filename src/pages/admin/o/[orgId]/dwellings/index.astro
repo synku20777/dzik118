@@ -115,7 +115,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
     </PageHeader>
     <form method="GET" class="filter-bar" data-instant-filter>
       <div>
-        <label class="block text-label text-foreground" for="search">
+        <label class="field-label" for="search">
           {t("Search")}
         </label>
         <input
@@ -128,7 +128,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
         />
       </div>
       <div>
-        <label class="block text-label" for="type-filter">
+        <label class="field-label" for="type-filter">
           {t("Type")}
         </label>
         <select
@@ -145,7 +145,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
         </select>
       </div>
       <div>
-        <label class="block text-label" for="status-filter">
+        <label class="field-label" for="status-filter">
           {t("Status")}
         </label>
         <select
@@ -349,7 +349,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
       >
         <input type="hidden" name="organizationId" value={organizationId} />
         <div class="col-span-2">
-          <label class="block text-sm font-medium text-foreground" for="number">
+          <label class="field-label" for="number">
             {t("Number")}
           </label>
           <input
@@ -362,7 +362,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
           <FieldError name="number" error={createResult?.error} />
         </div>
         <div>
-          <label class="block text-sm font-medium text-foreground" for="type">
+          <label class="field-label" for="type">
             {t("Type")}
           </label>
           <select
@@ -380,7 +380,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
           <FieldError name="type" error={createResult?.error} />
         </div>
         <div>
-          <label class="block text-sm font-medium text-foreground" for="areaM2">
+          <label class="field-label" for="areaM2">
             {t("Area (m²)")}
           </label>
           <input

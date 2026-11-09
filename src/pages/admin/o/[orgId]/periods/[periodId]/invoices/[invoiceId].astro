@@ -586,7 +586,7 @@ const overrideStatuses: string[] = [
               />
               <input type="hidden" name="invoiceId" value={invoice.id} />
               <div>
-                <label class="block text-label" for="late-fee-amount">
+                <label class="field-label" for="late-fee-amount">
                   {t("New late fee amount")}
                 </label>
                 <input
@@ -599,7 +599,7 @@ const overrideStatuses: string[] = [
                 />
               </div>
               <div>
-                <label class="block text-label" for="late-fee-reason">
+                <label class="field-label" for="late-fee-reason">
                   {t("Reason")}
                 </label>
                 <select
@@ -625,7 +625,7 @@ const overrideStatuses: string[] = [
                 </select>
               </div>
               <div class="col-span-2">
-                <label class="block text-label" for="late-fee-note">
+                <label class="field-label" for="late-fee-note">
                   {t("Note (required when the reason is Other)")}
                 </label>
                 <textarea id="late-fee-note" name="note" class="mt-1 w-full" />
@@ -655,7 +655,7 @@ const overrideStatuses: string[] = [
             <input type="hidden" name="organizationId" value={organizationId} />
             <input type="hidden" name="invoiceId" value={invoice.id} />
             <div>
-              <label class="block text-label" for="manual-adjustment-amount">
+              <label class="field-label" for="manual-adjustment-amount">
                 {t("Adjustment amount")}
               </label>
               <input
@@ -668,7 +668,7 @@ const overrideStatuses: string[] = [
               />
             </div>
             <div>
-              <label class="block text-label" for="manual-adjustment-reason">
+              <label class="field-label" for="manual-adjustment-reason">
                 {t("Reason")}
               </label>
               <input
@@ -679,7 +679,7 @@ const overrideStatuses: string[] = [
               />
             </div>
             <div class="col-span-2">
-              <label class="block text-label" for="manual-adjustment-note">
+              <label class="field-label" for="manual-adjustment-note">
                 {t("Note")}
               </label>
               <textarea
@@ -825,7 +825,7 @@ const overrideStatuses: string[] = [
         <input type="hidden" name="organizationId" value={organizationId} />
         <input type="hidden" name="caseId" value={invoice.billingCaseId} />
         <div>
-          <label class="block text-label" for="override-status-select">
+          <label class="field-label" for="override-status-select">
             {t("New status")}
           </label>
           <select
@@ -849,7 +849,7 @@ const overrideStatuses: string[] = [
           </select>
         </div>
         <div>
-          <label class="block text-label" for="override-status-reason">
+          <label class="field-label" for="override-status-reason">
             {t("Reason")}
           </label>
           <input

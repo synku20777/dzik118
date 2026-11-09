@@ -168,18 +168,179 @@ colors in step with the palette by hand.
 
 ## Components
 
-| Primitive | Contract |
-| --- | --- |
-| Buttons | `btn-primary`, `btn-secondary`, `btn-danger`, `btn-ghost`; default, `btn-sm`, `btn-lg`. Use a native button for actions and a link for navigation. |
-| Button states | Hover and press feedback only for enabled controls; `disabled` for native disabling; `aria-busy` describes work in progress. The caller owns duplicate-submit prevention and recovery. |
-| Disabled links | Prefer omitting the link when there is no destination. Styling `aria-disabled` alone does not prevent activation; the caller must suppress navigation. |
-| Sizes | Default/icon/theme/close controls use `--control-size-md` (44px); large uses 48px. Compact buttons use 36px for precise pointers and expand to 44px for coarse pointers. |
-| Form fields | Default 44px minimum height, readable border, placeholder, focus and invalid states. Supply a persistent label and text describing any error. |
-| StatusBadge | Pass a domain `status`. The shared mapping supplies text, semantic tone and a decorative icon, so state is not communicated by color alone. |
-| KpiCard | `label`, `value`, optional `hint`, `tone` and `icon`. Values use tabular figures; it is a summary, not an implicit clickable card. |
-| PageHeader | `title`, optional description/eyebrow/display/accent and action slot. Defaults to `h1`; use `headingLevel` when embedding within another screen. |
-| EmptyState | Supply a useful title, explanation and recovery/create action in the slot. Ornament is reserved for significant first-use states. |
-| Drawer | Native modal dialog with a named heading, scrollable body, close control and wrapping footer actions. Preserve focus return, Escape and unsaved-edit handling in its controller. |
+Components are CSS classes in `src/styles/global.css` (`@layer components`)
+plus the Astro components in `src/components/ui/`. Stay class-based: add an
+Astro wrapper only when a pattern carries logic (a status mapping, translated
+labels, a controller), not to wrap one element.
+
+### Shared rules
+
+- **States.** Every interactive component defines default, hover, active
+  (press), `:focus-visible`, disabled and, where work happens, busy. Hover and
+  press apply only to enabled controls. Press changes color, never position.
+- **Touch.** The minimum target is 44px (`--control-size-md`). Compact (36px)
+  controls expand to 44px under `@media (pointer: coarse)`.
+- **Focus.** A 2px `--color-focus-ring` outline from the base layer. Do not
+  remove it; do not rely on color alone for any state.
+- **Names.** Icon-only controls need `aria-label`; the shared tooltip shows it.
+  Use sentence case and the verb for the action ("Save changes", then "Saved").
+- **Disabled.** Prefer omitting an action with no destination. A disabled link
+  needs `aria-disabled="true"` and the caller must suppress navigation.
+
+### Button
+
+`btn-primary` (the one main action of a view), `btn-secondary`, `btn-danger`
+(destructive and irreversible), `btn-ghost` (low emphasis). Sizes: default
+44px, `btn-sm` 36px (44px on coarse pointers), `btn-lg` 48px.
+
+- States: hover and active fill per variant; `disabled` or `aria-disabled`
+  at 45% opacity; `aria-busy="true"` sets the progress cursor. The caller owns
+  duplicate-submit prevention.
+- Use a `<button>` for actions and an `<a>` for navigation.
+- Do: one `btn-primary` per view region. Don't: stack two primaries, or use
+  `btn-danger` for a confirm that is not destructive.
+
+### Icon button
+
+`icon-btn` (44px), `icon-btn-sm` (36px, 44px on coarse pointers),
+`icon-btn-danger` (hover and press tint to destructive). Always `aria-label`.
+Don't use it for an action that has room for a visible label.
+
+### Button group
+
+`ButtonGroup` (`label?`, `class?`) joins related `btn-*` links, buttons or a
+`<details>` menu into one control with `role="group"`. Name the group when its
+purpose is not clear from the buttons.
+
+### Form field
+
+Parts: `field-label`, the control, optional `field-hint`, optional
+`FieldError` (`error`, `name`) which renders `field-error` with
+`id="<name>-error"` and `role="alert"`.
+
+- Controls (input, select, textarea) are styled by the base layer: 44px
+  minimum height, `--color-input-border`, `--radius-input`, placeholder in
+  muted. Checkbox and radio are 16px with an `accent-color` of primary; wrap them in a
+  label whose row is at least 44px tall.
+- States: focus (border to primary plus the 2px outline), invalid
+  (`aria-invalid="true"`, border to destructive, survives focus), disabled
+  (`--color-surface-hover` fill, muted text).
+- Accessibility: every control has a persistent visible label (placeholder is
+  not a label). Link hint and error with `aria-describedby`. Put fields on
+  canvas or surface (see the input-border note under Color).
+- Don't hide the error behind color: always include text that says what to fix.
+
+### Status badge
+
+`StatusBadge` (`status`: a domain status). The mapping in
+`src/lib/ui/invoice-status.ts` supplies label, tone and icon; the markup is
+`status-badge` with `data-tone` of neutral, info, success, warning or danger.
+Colors are the `--tone-*` pair. State is carried by icon and text, never color
+alone; forced-colors mode draws a system-color outline.
+
+### Notice
+
+`notice` (info), `notice notice-warning`, `notice notice-danger` on a `<p>` or
+`<div>`. Tone pair from `--tone-*`.
+
+- Accessibility: add `role="alert"` for a danger notice that appears after an
+  action, `role="status"` for other notices that appear after an action. A
+  notice present at page load needs no role. Say what happened and what to do.
+- Don't use a notice for a validation message next to a field (use
+  `field-error`) or for transient confirmation (use MutationStatus).
+
+### Panel, metrics and KPI
+
+- `panel` is the default container: surface, 1px border, `--radius-panel`,
+  flat. Pad it with `--pad-panel` (`p-6`) or `--pad-panel-compact` (`p-4`).
+- `table-wrap` is a panel that scrolls horizontally.
+- `metric-strip` with `metric`, `metric-label`, `metric-value`, `metric-note`
+  (`--metrics` sets the column count, default 4; 2 columns below `md`);
+  `data-tone` of success or warning colors the value. One surface, dividers
+  between figures.
+- `KpiCard` (`label`, `value`, `tone?`, `icon?`, `hint?`): a summary figure with
+  tabular numerals; not clickable.
+- Don't add a shadow to a panel; don't nest a panel in a panel.
+
+### Data table
+
+A `<table>` inside `table-wrap`: header cell `th` (semibold, no wrap, tinted
+`--color-table-th-bg`), tabular figures, right-aligned numbers.
+
+- Add `stack-table` to the wrapper to render each row as a labelled card below
+  `sm`; the script copies column headers into `data-label`.
+- Clickable rows: `row-link` on the `<tr>`, `row-link-target` on the one `<a>`
+  that owns the row, `row-link-above` on independent controls inside the row.
+- States: row hover tint, `:focus-within` outline.
+- Accessibility: headers are `th`; give wide tables a caption or heading; never
+  use a table for layout.
+
+### Page header and breadcrumbs
+
+`PageHeader` (`title`, `headingLevel` h1 default, `description?`, `eyebrow?`,
+`display?`, `accent?`) with an actions slot (`page-actions`). `display` selects
+the Fraunces treatment for period and month headings only. `Breadcrumbs`
+(`items`: `{ label, href? }`, last crumb has no `href`) is rendered once by the
+admin layout, so pages only declare their trail. It is a `<nav>` named
+"Breadcrumb" and marks the current page with `aria-current="page"`.
+
+### Tabs and filter bar
+
+`tabs` is a row of links to sibling views; the current one carries
+`aria-current="page"`. Hover tints the others. These are navigation, not
+`role="tab"` widgets. `filter-bar` groups labelled filter controls on a panel
+surface and wraps; fields flex to at least 9rem and fill the width below `sm`.
+
+### Empty state
+
+`EmptyState` (`title`, `description?`, `ornament?`, `class?`) plus a slot for
+the next action. Say what is missing and give the action that fixes it. Reserve
+`ornament` for significant first-use screens.
+
+### Disclosure
+
+`disclosure` on a `<details>`: bordered panel whose `<summary>` is at least
+44px tall with a rotating chevron. Native keyboard operation; no script. Use for
+optional detail, not for navigation.
+
+### Tooltip
+
+One shared tooltip (`installTooltips`, included once per layout) shows for
+`[data-tip]`, clipped text (`data-tip-clipped`) and `.icon-btn[aria-label]`,
+on pointer hover and keyboard focus after 400ms. Touch has no tooltip, so the
+text must never be the only place information lives. Don't add one to a control
+with a visible label.
+
+### Drawer
+
+`AdminContextDrawer` and `.context-drawer`: a native modal `<dialog>` that
+slides from the right (full width below `md`), with a named heading, scrollable
+body, close button (`context-drawer-close`) and wrapping footer actions.
+Uses `--elevation-modal-side` and `--color-surface-raised`. Focus returns to the
+trigger; Escape closes; unsaved edits are the controller's job.
+
+### Mutation status
+
+`MutationStatus` renders the saving, saved and needs-attention toasts and the
+recent-changes panel for admin actions (ADR 0005). Messages are translated
+strings; retry and check-again are offered for failed or unconfirmed changes.
+Live region semantics belong to the component; pages only register mutations.
+
+### Navigation chrome
+
+`AppNavigation` (`organizationId`, `unreadMessages?`) is the single sidebar nav
+with `aria-current="page"` and an unread badge. `OrganizationSwitcher`
+(`organizationId?`, `organizationName?`, `organizations`, `residentAccess`) is a
+disclosure menu at the top of the sidebar; Escape closes it. `ThemeToggle`
+(`data-theme-toggle`) and `LanguageSwitch` sit in the account block. Below `lg`
+the same nav lives in the mobile drawer.
+
+### Setup wizard
+
+`SetupLayout` (`title`, `description?`, plus the step props) wraps a step in the
+guided setup; `SetupSteps` (`organizationId`, `current`, `steps`) shows the
+trail: complete, current and upcoming steps are distinguished by icon and text
+as well as color. On phones the trail compacts to the current step.
 
 ## Patterns
 

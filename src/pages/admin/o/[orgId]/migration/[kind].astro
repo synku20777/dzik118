@@ -463,7 +463,7 @@ const badge = (source: MappingSource, field: string | null) =>
           </p>
         )}
         <div>
-          <label class="block text-label text-foreground" for="file">
+          <label class="field-label" for="file">
             {t("CSV file")}
           </label>
           <input
@@ -475,7 +475,7 @@ const badge = (source: MappingSource, field: string | null) =>
           />
         </div>
         <div>
-          <label class="block text-label text-foreground" for="pasted">
+          <label class="field-label" for="pasted">
             {t("Or paste the cells here")}
           </label>
           <textarea
@@ -486,7 +486,7 @@ const badge = (source: MappingSource, field: string | null) =>
           />
         </div>
         <div>
-          <label class="block text-label text-foreground" for="encoding">
+          <label class="field-label" for="encoding">
             {t("File encoding")}
           </label>
           <select
@@ -615,7 +615,7 @@ const badge = (source: MappingSource, field: string | null) =>
         </div>
         {!balances && (
           <div>
-            <label class="block text-label text-foreground" for="mode">
+            <label class="field-label" for="mode">
               {t("Mode")}
             </label>
             <select
@@ -637,7 +637,7 @@ const badge = (source: MappingSource, field: string | null) =>
         {balances && (
           <div class="grid gap-4 sm:grid-cols-2">
             <div>
-              <label class="block text-label text-foreground" for="balanceDate">
+              <label class="field-label" for="balanceDate">
                 {t("Balance date")}
               </label>
               <input
@@ -656,7 +656,7 @@ const badge = (source: MappingSource, field: string | null) =>
               </p>
             </div>
             <div>
-              <label class="block text-label text-foreground" for="sign">
+              <label class="field-label" for="sign">
                 {t("Positive amounts mean")}
               </label>
               <select

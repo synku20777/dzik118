@@ -850,6 +850,18 @@ textarea:disabled {
     height: 1.125rem;
     flex-shrink: 0;
   }
+  /* Compact icon button for dense rows, like .btn-sm: 36px for precise
+     pointers, 44px for coarse ones. */
+  .icon-btn-sm {
+    width: var(--control-size-sm);
+    height: var(--control-size-sm);
+  }
+  @media (pointer: coarse) {
+    .icon-btn-sm {
+      width: var(--control-size-md);
+      height: var(--control-size-md);
+    }
+  }
   .icon-btn-danger:where(:not(:disabled):not([aria-disabled="true"])):hover {
     background: var(--color-destructive-hover-bg);
     color: var(--color-destructive);
@@ -1288,6 +1300,27 @@ textarea:disabled {
     font-weight: 650;
     margin-bottom: 1rem;
   }
+  /* Form field parts. The control itself is styled by the base layer; the
+     label, hint and error text come from these classes. Link hint and error
+     to the control with aria-describedby (FieldError renders id="<name>-error"). */
+  .field-label {
+    display: block;
+    color: var(--color-foreground);
+    letter-spacing: var(--tracking-small);
+    font-size: var(--text-sm);
+    line-height: 1.125rem;
+    font-weight: 600;
+  }
+  .field-hint {
+    margin-top: var(--gap-label);
+    color: var(--color-muted);
+    font-size: var(--text-sm);
+  }
+  .field-error {
+    margin-top: var(--gap-label);
+    color: var(--color-destructive);
+    font-size: var(--text-sm);
+  }
   .filter-bar {
     display: flex;
     flex-wrap: wrap;
@@ -1310,6 +1343,10 @@ textarea:disabled {
     font-size: var(--text-sm);
     color: var(--color-muted);
     border-radius: var(--radius-control);
+  }
+  .tabs a:not([aria-current="page"]):hover {
+    color: var(--color-foreground);
+    background: var(--color-surface-hover);
   }
   .tabs a[aria-current="page"] {
     color: var(--color-primary);
@@ -1720,6 +1757,7 @@ textarea:disabled {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    min-height: var(--control-size-md);
     font-weight: 600;
     font-size: var(--text-sm);
     cursor: pointer;

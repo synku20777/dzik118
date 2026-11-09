@@ -96,7 +96,7 @@ const conversations = await withRequestDb((db) =>
           <div>
             <label
               for="subject"
-              class="block text-sm font-medium text-foreground"
+              class="field-label"
             >
               {t("Subject")}
             </label>
@@ -110,7 +110,7 @@ const conversations = await withRequestDb((db) =>
             />
           </div>
           <div>
-            <label for="body" class="block text-sm font-medium text-foreground">
+            <label for="body" class="field-label">
               {t("Message")}
             </label>
             <textarea

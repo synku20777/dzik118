@@ -108,7 +108,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
 
     <form method="GET" class="flex flex-wrap items-end gap-3">
       <div>
-        <label class="block text-sm font-medium text-foreground" for="action">
+        <label class="field-label" for="action">
           {t("Action")}
         </label>
         <select
@@ -128,7 +128,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
       </div>
       <div>
         <label
-          class="block text-sm font-medium text-foreground"
+          class="field-label"
           for="entityType"
         >
           {t("Entity type")}
@@ -149,7 +149,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
         </select>
       </div>
       <div>
-        <label class="block text-sm font-medium text-foreground" for="actor">
+        <label class="field-label" for="actor">
           {t("Actor")}
         </label>
         <select
@@ -168,7 +168,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
         </select>
       </div>
       <div>
-        <label class="block text-sm font-medium text-foreground" for="from">
+        <label class="field-label" for="from">
           {t("From date")}
         </label>
         <input
@@ -180,7 +180,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
         />
       </div>
       <div>
-        <label class="block text-sm font-medium text-foreground" for="to">
+        <label class="field-label" for="to">
           {t("To date")}
         </label>
         <input

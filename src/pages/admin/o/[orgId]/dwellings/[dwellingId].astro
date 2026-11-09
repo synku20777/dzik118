@@ -458,7 +458,7 @@ function meterCaption(
                   />
                   <input type="hidden" name="dwellingId" value={dwellingId} />
                   <div class="col-span-2">
-                    <label class="block text-label" for="billingName">
+                    <label class="field-label" for="billingName">
                       {t("Billing name")}
                     </label>
                     <input
@@ -470,7 +470,7 @@ function meterCaption(
                   </div>
                   <div>
                     <label
-                      class="block text-label text-foreground"
+                      class="field-label"
                       for="occupantName"
                     >
                       {t("Occupant name")}
@@ -484,7 +484,7 @@ function meterCaption(
                   </div>
                   <div>
                     <label
-                      class="block text-label text-foreground"
+                      class="field-label"
                       for="areaM2"
                     >
                       {t("Area (m²)")}
@@ -501,7 +501,7 @@ function meterCaption(
                   </div>
                   <div>
                     <label
-                      class="block text-label text-foreground"
+                      class="field-label"
                       for="residentCount"
                     >
                       {t("Resident count")}
@@ -517,7 +517,7 @@ function meterCaption(
                   </div>
                   <div>
                     <label
-                      class="block text-label text-foreground"
+                      class="field-label"
                       for="billingEmail"
                     >
                       {t("Billing email")}
@@ -532,7 +532,7 @@ function meterCaption(
                   </div>
                   <div class="col-span-2">
                     <label
-                      class="block text-label text-foreground"
+                      class="field-label"
                       for="billingAddress"
                     >
                       {t("Billing address")}
@@ -661,7 +661,7 @@ function meterCaption(
                     />
                     <div>
                       <label
-                        class="block text-label"
+                        class="field-label"
                         for="adjustment-direction"
                       >
                         {t("Type")}
@@ -676,7 +676,7 @@ function meterCaption(
                       </select>
                     </div>
                     <div>
-                      <label class="block text-label" for="adjustment-amount">
+                      <label class="field-label" for="adjustment-amount">
                         {t("Amount")}
                       </label>
                       <input
@@ -688,7 +688,7 @@ function meterCaption(
                       />
                     </div>
                     <div>
-                      <label class="block text-label" for="adjustment-date">
+                      <label class="field-label" for="adjustment-date">
                         {t("Date")}
                       </label>
                       <input
@@ -700,7 +700,7 @@ function meterCaption(
                       />
                     </div>
                     <div>
-                      <label class="block text-label" for="adjustment-reason">
+                      <label class="field-label" for="adjustment-reason">
                         {t("Reason")}
                       </label>
                       <input
@@ -711,7 +711,7 @@ function meterCaption(
                       />
                     </div>
                     <div class="col-span-2">
-                      <label class="block text-label" for="adjustment-note">
+                      <label class="field-label" for="adjustment-note">
                         {t("Note")}
                       </label>
                       <textarea
@@ -1244,7 +1244,7 @@ function meterCaption(
                   />
                   <input type="hidden" name="dwellingId" value={dwellingId} />
                   <div>
-                    <label class="block text-label text-foreground" for="type">
+                    <label class="field-label" for="type">
                       {t("Type")}
                     </label>
                     <select
@@ -1258,7 +1258,7 @@ function meterCaption(
                     </select>
                   </div>
                   <div>
-                    <label class="block text-label text-foreground" for="unit">
+                    <label class="field-label" for="unit">
                       {t("Unit")}
                     </label>
                     <input
@@ -1271,7 +1271,7 @@ function meterCaption(
                   </div>
                   <div>
                     <label
-                      class="block text-label text-foreground"
+                      class="field-label"
                       for="serialNumber"
                     >
                       {t("Serial number")}
@@ -1283,7 +1283,7 @@ function meterCaption(
                     />
                   </div>
                   <div>
-                    <label class="block text-label text-foreground" for="label">
+                    <label class="field-label" for="label">
                       {t("Label")}
                     </label>
                     <input
@@ -1399,7 +1399,7 @@ function meterCaption(
                             <input type="hidden" name="meterId" value={m.id} />
                             <div>
                               <label
-                                class="block text-label text-foreground"
+                                class="field-label"
                                 for={`meter-serial-${m.id}`}
                               >
                                 {t("Serial number")}
@@ -1413,7 +1413,7 @@ function meterCaption(
                             </div>
                             <div>
                               <label
-                                class="block text-label text-foreground"
+                                class="field-label"
                                 for={`meter-label-${m.id}`}
                               >
                                 {t("Label")}
@@ -1427,7 +1427,7 @@ function meterCaption(
                             </div>
                             <div>
                               <label
-                                class="block text-label text-foreground"
+                                class="field-label"
                                 for={`meter-unit-${m.id}`}
                               >
                                 {t("Unit")}
@@ -1442,7 +1442,7 @@ function meterCaption(
                             </div>
                             <div>
                               <label
-                                class="block text-label text-foreground"
+                                class="field-label"
                                 for={`meter-installed-${m.id}`}
                               >
                                 {t("Installed on")}
@@ -1628,7 +1628,7 @@ function meterCaption(
               <input type="hidden" name="dwellingId" value={dwellingId} />
               <div>
                 <label
-                  class="block text-label text-foreground"
+                  class="field-label"
                   for="dwelling-type"
                 >
                   {t("Type")}
@@ -1646,7 +1646,7 @@ function meterCaption(
                 </select>
               </div>
               <div class="col-span-2">
-                <label class="block text-label text-foreground" for="notes">
+                <label class="field-label" for="notes">
                   {t("Notes")}
                 </label>
                 <textarea
