@@ -442,7 +442,7 @@ const statuses = [
   .guide-section-intro > p:last-child {
     margin-top: 1.25rem;
     color: var(--color-muted);
-    font-size: 1rem;
+    font-size: var(--text-base);
     line-height: 1.75;
   }
 
@@ -452,7 +452,7 @@ const statuses = [
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
     background: var(--color-surface);
-    box-shadow: var(--shadow-panel);
+    box-shadow: var(--elevation-flat);
   }
 
   .guide-shot img {
@@ -476,7 +476,7 @@ const statuses = [
 
   .guide-section-intro h2 {
     margin-top: 0.5rem;
-    font-size: clamp(1.75rem, 4vw, 2.5rem);
+    font-size: var(--text-display-lg);
     font-weight: 700;
     letter-spacing: -0.035em;
   }
@@ -497,7 +497,7 @@ const statuses = [
   .guide-number {
     padding-top: 0.25rem;
     color: var(--color-primary);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     font-weight: 700;
     letter-spacing: 0.12em;
   }
@@ -507,7 +507,7 @@ const statuses = [
   }
 
   .guide-copy h3 {
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
     font-weight: 650;
     letter-spacing: -0.02em;
   }
@@ -520,7 +520,7 @@ const statuses = [
 
   .guide-copy .guide-ready {
     color: var(--color-success);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 600;
   }
 
@@ -528,7 +528,7 @@ const statuses = [
     display: inline-block;
     margin-top: 1rem;
     color: var(--color-primary);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 650;
   }
 
@@ -550,7 +550,7 @@ const statuses = [
 
   .status-guide dd {
     color: var(--color-muted);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     line-height: 1.6;
   }
 
@@ -558,7 +558,7 @@ const statuses = [
     display: none;
   }
 
-  @media (min-width: 640px) {
+  @media (width >= 40rem) {
     .guide-step {
       grid-template-columns: 3rem minmax(0, 1fr);
       gap: 0 1.5rem;
@@ -570,7 +570,7 @@ const statuses = [
     }
   }
 
-  @media (min-width: 1280px) {
+  @media (width >= 70rem) {
     .guide-layout {
       grid-template-columns: minmax(0, 1fr) 15rem;
     }
@@ -590,7 +590,7 @@ const statuses = [
     .guide-toc a {
       padding: 0.5rem 0;
       color: var(--color-muted);
-      font-size: 0.8125rem;
+      font-size: var(--text-sm);
       line-height: 1.35;
     }
 

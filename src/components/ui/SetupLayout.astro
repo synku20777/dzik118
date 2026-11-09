@@ -80,7 +80,7 @@ const { title, description, ...steps } = Astro.props;
   }
   .setup-page .setup-required-note {
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .setup-page input[type="file"]::file-selector-button {
     margin-right: 0.75rem;
@@ -130,7 +130,7 @@ const { title, description, ...steps } = Astro.props;
   .setup-fold > summary::after {
     content: "›";
     color: var(--color-muted);
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
     transition: transform var(--duration-normal) var(--ease-standard);
   }
   .setup-fold[open] > summary::after {
@@ -141,7 +141,7 @@ const { title, description, ...steps } = Astro.props;
     gap: 1rem;
     padding: 0 1.5rem 1.5rem;
   }
-  @media (max-width: 40rem) {
+  @media (width < 40rem) {
     .setup-fold > summary {
       padding: 1rem;
     }
@@ -182,14 +182,14 @@ const { title, description, ...steps } = Astro.props;
     padding: 0;
     margin: 0;
   }
-  @media (max-width: 70rem) {
+  @media (width < 70rem) {
     .setup-workspace {
       grid-template-columns: minmax(0, 1fr);
       gap: 1.5rem;
     }
   }
   /* Phones: a reading is one compact row, not a five-line card. */
-  @media (max-width: 639px) {
+  @media (width < 40rem) {
     .setup-readings.stack-table tr {
       display: grid !important;
       grid-template-columns: minmax(0, 1fr) 7rem;
@@ -212,13 +212,13 @@ const { title, description, ...steps } = Astro.props;
     }
     .setup-readings.stack-table td:nth-child(3) {
       color: var(--color-muted);
-      font-size: 0.8125rem;
+      font-size: var(--text-sm);
     }
     .setup-readings.stack-table td:nth-child(4) {
       grid-column: 2;
       text-align: right;
       color: var(--color-muted);
-      font-size: 0.8125rem;
+      font-size: var(--text-sm);
     }
     .setup-readings.stack-table td:nth-child(5) {
       grid-column: 2;
@@ -228,7 +228,7 @@ const { title, description, ...steps } = Astro.props;
       width: 100%;
     }
   }
-  @media (max-width: 40rem) {
+  @media (width < 40rem) {
     .setup-page .panel,
     .setup-page .rounded-panel.border {
       padding: 1rem;

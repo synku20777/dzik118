@@ -1045,7 +1045,7 @@ const imports = [...rawImports].reverse();
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
     background: var(--color-surface);
-    box-shadow: var(--shadow-panel);
+    box-shadow: var(--elevation-flat);
   }
   .calm {
     padding: 1.25rem 1.5rem;
@@ -1057,16 +1057,16 @@ const imports = [...rawImports].reverse();
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 1rem;
+    font-size: var(--text-base);
     font-weight: 700;
   }
   .count {
     min-width: 1.25rem;
     padding: 0 0.375rem;
     border-radius: 999px;
-    background: var(--color-badge-warning-bg);
-    color: var(--color-badge-warning-text);
-    font-size: 0.75rem;
+    background: var(--tone-warning-bg);
+    color: var(--tone-warning-text);
+    font-size: var(--text-xs);
     font-variant-numeric: tabular-nums;
     line-height: 1.25rem;
     text-align: center;
@@ -1082,7 +1082,7 @@ const imports = [...rawImports].reverse();
   td label {
     display: block;
     margin-bottom: 0.25rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 500;
   }
   .filters :is(select, input) {
@@ -1108,7 +1108,7 @@ const imports = [...rawImports].reverse();
   .result-note {
     margin-bottom: 0.5rem;
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   td.text-right,
   th.text-right {
@@ -1136,7 +1136,7 @@ const imports = [...rawImports].reverse();
      then who paid and the status, then what it paid and when; actions close
      the card. Labels are dropped: the content explains itself, except
      "Applied to", which has no unit to say what it is. */
-  @media (max-width: 639px) {
+  @media (width < 40rem) {
     .history-table tr[data-status] {
       display: grid !important;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -1160,7 +1160,7 @@ const imports = [...rawImports].reverse();
     }
     .history-table td[data-col="dwelling"] {
       grid-area: dwelling;
-      font-size: 1rem;
+      font-size: var(--text-base);
     }
     /* "Dwelling 4", not a bare 4: the label is the only thing saying what the
        number is. */
@@ -1172,12 +1172,12 @@ const imports = [...rawImports].reverse();
       color: inherit;
     }
     .history-table td[data-col="status"] :global(.status-badge) {
-      font-size: 0.75rem;
+      font-size: var(--text-xs);
     }
     .history-table td[data-col="amount"] {
       grid-area: amount;
       justify-self: end;
-      font-size: 1.125rem;
+      font-size: var(--text-lg);
       font-weight: 700;
     }
     .history-table td[data-col="from"] {
@@ -1190,7 +1190,7 @@ const imports = [...rawImports].reverse();
     .history-table td[data-col="applied"] {
       grid-area: applied;
       color: var(--color-muted);
-      font-size: 0.8125rem;
+      font-size: var(--text-sm);
     }
     .history-table td[data-col="applied"]::before {
       display: inline !important;
@@ -1202,7 +1202,7 @@ const imports = [...rawImports].reverse();
       grid-area: date;
       justify-self: end;
       color: var(--color-muted);
-      font-size: 0.8125rem;
+      font-size: var(--text-sm);
     }
     .history-table td[data-col="actions"] {
       grid-area: actions;
@@ -1213,7 +1213,7 @@ const imports = [...rawImports].reverse();
   }
   /* On a phone the filters are a form: fields take the full row, the two dates
      share one, and Apply spans. */
-  @media (max-width: 639px) {
+  @media (width < 40rem) {
     .filters > div {
       flex: 1 1 100%;
     }

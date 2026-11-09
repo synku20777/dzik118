@@ -205,8 +205,8 @@ const config = {
     padding: 1rem;
     margin-bottom: 1.25rem;
     border-radius: var(--radius-panel);
-    background: var(--color-notice-bg);
-    color: var(--color-notice-text);
+    background: var(--tone-info-bg);
+    color: var(--tone-info-text);
   }
   .drawer-info-icon {
     display: grid;
@@ -217,22 +217,22 @@ const config = {
     border-radius: 50%;
     background: var(--color-primary);
     color: var(--color-on-primary);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     font-weight: 700;
     font-style: italic;
   }
   .drawer-info-title {
     font-weight: 650;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
   }
   .drawer-info-text {
     margin-top: 0.25rem;
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
     opacity: 0.85;
   }
   .drawer-info-banner[data-tone="warning"] {
-    background: var(--color-notice-warning-bg);
-    color: var(--color-notice-warning-text);
+    background: var(--tone-warning-bg);
+    color: var(--tone-warning-text);
   }
   .drawer-info-banner[data-tone="warning"] .drawer-info-icon {
     background: var(--color-warning);
@@ -265,7 +265,7 @@ const config = {
     flex: 0 0 auto;
     place-items: center;
     border-radius: var(--radius-panel);
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
   }
   .drawer-meter-icon svg {
     width: 1.25rem;
@@ -292,22 +292,22 @@ const config = {
     color: var(--color-meter-heat-text);
   }
   .drawer-meter-icon[data-meter-type="OTHER"] {
-    background: var(--color-badge-neutral-bg);
+    background: var(--tone-neutral-bg);
   }
   /* Manual billing-rule input row (workbench-drawer.ts renderReadingsBody) --
      reuses the meter-row icon chip shape for visual consistency, neutral
      since there's no per-rule color the way there is per meter type. */
   .drawer-meter-icon[data-meter-type="MANUAL"] {
-    background: var(--color-badge-neutral-bg);
+    background: var(--tone-neutral-bg);
   }
   .drawer-meter-name {
-    font-size: 1rem;
+    font-size: var(--text-base);
     font-weight: 700;
   }
   .drawer-meter-sub {
     margin-top: 0.25rem;
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .drawer-resident-card {
     display: flex;
@@ -333,7 +333,7 @@ const config = {
     flex: 0 0 auto;
     place-items: center;
     border-radius: var(--radius-panel);
-    background: var(--color-badge-neutral-bg);
+    background: var(--tone-neutral-bg);
     color: var(--color-muted);
   }
   .drawer-resident-icon svg {
@@ -342,17 +342,17 @@ const config = {
   }
   .drawer-resident-eyebrow {
     color: var(--color-muted);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     font-weight: 600;
   }
   .drawer-resident-name {
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 650;
   }
   .drawer-resident-address {
     margin-top: 0.25rem;
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .drawer-field-row {
     margin-top: 1rem;
@@ -363,7 +363,7 @@ const config = {
   .drawer-field-row-label {
     display: block;
     margin-bottom: 0.5rem;
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
     font-weight: 600;
     color: var(--color-muted);
   }
@@ -375,7 +375,7 @@ const config = {
   .drawer-field-unit {
     flex: 0 0 auto;
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .drawer-readonly-box,
   .drawer-input-box {
@@ -386,7 +386,7 @@ const config = {
     border-width: 1px;
     border-style: solid;
     border-radius: var(--radius-control);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-variant-numeric: tabular-nums;
     font-family: inherit;
     box-sizing: border-box;
@@ -407,7 +407,7 @@ const config = {
     min-height: 5.5rem;
     padding: 0.75rem 0.75rem;
     border-radius: var(--radius-control);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-family: inherit;
     resize: vertical;
     box-sizing: border-box;
@@ -421,19 +421,19 @@ const config = {
   .drawer-field-label {
     display: block;
     margin-bottom: 0.5rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 600;
     color: var(--color-foreground);
   }
   .drawer-field-error {
     margin-top: 0.5rem;
     color: var(--color-destructive);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .drawer-section-heading {
     margin-top: 1.5rem;
     margin-bottom: 0.75rem;
-    font-size: 1rem;
+    font-size: var(--text-base);
     font-weight: 650;
   }
   .drawer-section-heading:first-of-type {

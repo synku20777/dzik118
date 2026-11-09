@@ -376,7 +376,7 @@ const sourceLabel = (e: (typeof ledger.entries)[number]) =>
   .filters label {
     display: block;
     margin-bottom: 0.25rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 500;
   }
   .filters :is(select, input) {
@@ -384,7 +384,7 @@ const sourceLabel = (e: (typeof ledger.entries)[number]) =>
   }
   .clear-filters {
     color: var(--color-primary);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
   }
   .clear-filters:hover {
     text-decoration: underline;
@@ -392,7 +392,7 @@ const sourceLabel = (e: (typeof ledger.entries)[number]) =>
   .result-note {
     margin-bottom: 0.5rem;
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .link {
     color: var(--color-primary);
@@ -409,7 +409,7 @@ const sourceLabel = (e: (typeof ledger.entries)[number]) =>
   }
   /* On a phone the filters are a form: fields take the full row, the two dates
      share one, and Apply spans. */
-  @media (max-width: 639px) {
+  @media (width < 40rem) {
     .filters > div {
       flex: 1 1 100%;
     }

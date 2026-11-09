@@ -425,7 +425,7 @@ const entryTypeLabel: Record<string, string> = {
     overflow-wrap: anywhere;
   }
   .metric-text {
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
     line-height: 1.6;
   }
   .struck {
@@ -439,7 +439,7 @@ const entryTypeLabel: Record<string, string> = {
     align-items: start;
   }
   .panel h2 {
-    font-size: 1rem;
+    font-size: var(--text-base);
     font-weight: 700;
   }
   /* Chronology is the point, so the date is its own column and the rows are
@@ -453,7 +453,7 @@ const entryTypeLabel: Record<string, string> = {
     grid-template-columns: 1.75rem minmax(0, 1fr);
     gap: 0 0.75rem;
     padding-bottom: 1.125rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
   }
   .trail > li:last-child {
     padding-bottom: 0;
@@ -478,8 +478,8 @@ const entryTypeLabel: Record<string, string> = {
     color: var(--color-muted);
   }
   .trail > li[data-kind="APPLIED"] .trail-icon {
-    background: var(--color-badge-success-bg);
-    color: var(--color-badge-success-text);
+    background: var(--tone-success-bg);
+    color: var(--tone-success-text);
   }
   .trail > li[data-kind="REVERSED"] .trail-icon,
   .trail > li[data-kind="REJECTED"] .trail-icon {
@@ -491,7 +491,7 @@ const entryTypeLabel: Record<string, string> = {
     flex-wrap: wrap;
     gap: 0 0.75rem;
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .trail time {
     font-variant-numeric: tabular-nums;
@@ -511,7 +511,7 @@ const entryTypeLabel: Record<string, string> = {
   .trail-changes {
     margin-top: 0.25rem;
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
     font-variant-numeric: tabular-nums;
   }
   .trail-reason {
@@ -550,7 +550,7 @@ const entryTypeLabel: Record<string, string> = {
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.625rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
   }
   .split-list a {
     color: var(--color-primary);
@@ -571,12 +571,12 @@ const entryTypeLabel: Record<string, string> = {
     height: 0.625rem;
     border-radius: 50%;
   }
-  @media (max-width: 900px) {
+  @media (width < 48rem) {
     .trail-grid {
       grid-template-columns: minmax(0, 1fr);
     }
   }
-  @media (max-width: 540px) {
+  @media (width < 40rem) {
     [data-payment-trail] {
       width: calc(100vw - 2rem);
     }

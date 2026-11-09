@@ -70,8 +70,217 @@
    names are kept as-is (only their values change) so every component
    that already references them picks up the new palette for free.
    --------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   Namkopa design tokens (docs/product/DESIGN_SYSTEM.md, "Tokens").
+   Three tiers, each referencing only the tier above it:
+
+     1. --palette-*   raw Riga colors. Never used by a component.
+     2. semantic      --color-*, --tone-*, --elevation-*, --text-*, --gap-*...
+                      what a component should ask for.
+     3. component     --color-meter-*: domain names (cold, hot, gas...) that
+                      alias a tone, so a meter chip matches its meaning.
+
+   Palette names: limestone/paper = light structure, ink = light text,
+   night/bone = dark structure and text, daugava = action, verdigris =
+   success, amber = warning, brick = danger, pine = positive-secondary.
+   --------------------------------------------------------------------- */
 :root {
   color-scheme: light dark;
+
+  /* Tier 1: palette. Unlayered :root, not @theme, so Tailwind does not
+     generate utilities for them. */
+  --palette-paper: #fffcf7;
+  --palette-limestone-50: #f7f4ee;
+  --palette-limestone-75: #f1ede4;
+  --palette-limestone-100: #eee8de;
+  --palette-limestone-300: #d5cec2;
+  --palette-stone-500: #8f887e;
+  --palette-ink-900: #17242b;
+  --palette-ink-500: #58666c;
+
+  --palette-daugava-100: #e4ecee;
+  --palette-daugava-200: #bfd1d7;
+  --palette-daugava-300: #a9c2cb;
+  --palette-daugava-400: #99b6c0;
+  --palette-daugava-600: #35677a;
+  --palette-daugava-700: #274b5b;
+  --palette-daugava-900: #1d3a47;
+
+  --palette-verdigris-100: #e3efec;
+  --palette-verdigris-200: #bfd8d1;
+  --palette-verdigris-600: #2f736d;
+  --palette-verdigris-700: #1f5955;
+
+  --palette-amber-100: #f3e6d1;
+  --palette-amber-200: #e8c99a;
+  --palette-amber-500: #c17b26;
+  --palette-amber-700: #7c470f;
+
+  --palette-brick-100: #f1ded9;
+  --palette-brick-200: #e5c2ba;
+  --palette-brick-300: #d8ad9f;
+  --palette-brick-400: #cc9c8e;
+  --palette-brick-600: #9a493a;
+  --palette-brick-700: #783529;
+  --palette-brick-900: #612b21;
+
+  --palette-pine-100: #e7eadf;
+  --palette-pine-200: #cbd1bc;
+  --palette-pine-400: #9dab88;
+  --palette-pine-600: #4f5d3a;
+
+  --palette-night-950: #0e1517;
+  --palette-night-900: #151f21;
+  --palette-night-850: #1a2528;
+  --palette-night-800: #1e2b2e;
+  --palette-night-700: #3d4a4d;
+  --palette-night-600: #718083;
+  --palette-night-300: #b7c0bd;
+  --palette-bone-100: #f2eee6;
+
+  /* Tier 2: semantic colors that Tailwind has no utility for. The ones with
+     utilities (canvas, surface, foreground...) live in @theme below. */
+  --color-surface-hover: light-dark(
+    var(--palette-limestone-100),
+    var(--palette-night-800)
+  );
+  /* Dark surfaces cannot show depth with shadows, so raised surfaces get
+     one step lighter. Light mode keeps the paper surface. */
+  --color-surface-raised: light-dark(
+    var(--palette-paper),
+    var(--palette-night-800)
+  );
+  --color-primary-hover: light-dark(
+    var(--palette-daugava-600),
+    var(--palette-daugava-300)
+  );
+  --color-primary-active: light-dark(
+    var(--palette-daugava-900),
+    var(--palette-daugava-400)
+  );
+  --color-destructive-hover: light-dark(
+    var(--palette-brick-600),
+    var(--palette-brick-300)
+  );
+  --color-destructive-active: light-dark(
+    var(--palette-brick-900),
+    var(--palette-brick-400)
+  );
+  --color-destructive-hover-bg: light-dark(
+    color-mix(in srgb, var(--palette-brick-700) 8%, transparent),
+    color-mix(in srgb, var(--palette-brick-200) 15%, transparent)
+  );
+  /* Form inputs get a deeper border than --color-border's card/table
+     hairlines so the field edge stays visible (WCAG 1.4.11). */
+  --color-input-border: light-dark(
+    var(--palette-stone-500),
+    var(--palette-night-600)
+  );
+  --color-focus-ring: light-dark(
+    var(--palette-daugava-700),
+    var(--palette-daugava-200)
+  );
+  --color-on-primary: light-dark(var(--palette-paper), var(--palette-ink-900));
+  --color-backdrop: rgb(9 15 27 / 55%);
+  --color-control-thumb: var(--palette-paper);
+  --color-table-th-bg: light-dark(
+    var(--palette-limestone-75),
+    var(--palette-night-850)
+  );
+  --color-org-context-bg: var(--color-table-th-bg);
+  --color-nav-active-bg: var(--tone-info-bg);
+
+  /* Tones: one background/text pair per meaning, shared by badges, notices
+     and meter chips so the same meaning always looks the same. */
+  --tone-neutral-bg: light-dark(
+    var(--palette-limestone-100),
+    var(--palette-night-800)
+  );
+  --tone-neutral-text: light-dark(
+    var(--palette-ink-500),
+    var(--palette-night-300)
+  );
+  --tone-info-bg: light-dark(
+    var(--palette-daugava-100),
+    color-mix(in srgb, var(--palette-daugava-200) 16%, transparent)
+  );
+  --tone-info-text: light-dark(
+    var(--palette-daugava-700),
+    var(--palette-daugava-200)
+  );
+  --tone-success-bg: light-dark(
+    var(--palette-verdigris-100),
+    color-mix(in srgb, var(--palette-verdigris-200) 18%, transparent)
+  );
+  --tone-success-text: light-dark(
+    var(--palette-verdigris-700),
+    var(--palette-verdigris-200)
+  );
+  --tone-warning-bg: light-dark(
+    var(--palette-amber-100),
+    color-mix(in srgb, var(--palette-amber-200) 18%, transparent)
+  );
+  --tone-warning-text: light-dark(
+    var(--palette-amber-700),
+    var(--palette-amber-200)
+  );
+  --tone-danger-bg: light-dark(
+    var(--palette-brick-100),
+    color-mix(in srgb, var(--palette-brick-200) 18%, transparent)
+  );
+  --tone-danger-text: light-dark(
+    var(--palette-brick-700),
+    var(--palette-brick-200)
+  );
+  --tone-positive-bg: light-dark(
+    var(--palette-pine-100),
+    color-mix(in srgb, var(--palette-pine-200) 16%, transparent)
+  );
+  --tone-positive-text: light-dark(
+    var(--palette-pine-600),
+    var(--palette-pine-200)
+  );
+
+  /* Utility meters keep quick recognition without Tailwind's saturated
+     palette: cold = info, hot = danger, electricity = warning, gas =
+     positive, heat = success. */
+  --color-meter-cold-bg: var(--tone-info-bg);
+  --color-meter-cold-text: var(--tone-info-text);
+  --color-meter-hot-bg: var(--tone-danger-bg);
+  --color-meter-hot-text: var(--tone-danger-text);
+  --color-meter-electricity-bg: var(--tone-warning-bg);
+  --color-meter-electricity-text: var(--tone-warning-text);
+  --color-meter-gas-bg: var(--tone-positive-bg);
+  --color-meter-gas-text: var(--tone-positive-text);
+  --color-meter-heat-bg: var(--tone-success-bg);
+  --color-meter-heat-text: var(--tone-success-text);
+
+  /* Spacing: Tailwind's --spacing (0.25rem) is the single source. These are
+     aliases for CSS written outside utility classes. */
+  --space-1: calc(var(--spacing) * 1);
+  --space-2: calc(var(--spacing) * 2);
+  --space-3: calc(var(--spacing) * 3);
+  --space-4: calc(var(--spacing) * 4);
+  --space-5: calc(var(--spacing) * 5);
+  --space-6: calc(var(--spacing) * 6);
+  --space-7: calc(var(--spacing) * 7);
+  --space-8: calc(var(--spacing) * 8);
+  --space-10: calc(var(--spacing) * 10);
+  --space-12: calc(var(--spacing) * 12);
+  --space-16: calc(var(--spacing) * 16);
+
+  /* Semantic layout spacing. Screens ask for these instead of picking a
+     number, so a rhythm change is one edit. */
+  --gap-field: var(--space-4); /* between form fields */
+  --gap-label: var(--space-1); /* label to its control */
+  --gap-section: var(--space-6); /* between panels and page sections */
+  --pad-panel: var(--space-6); /* inside an ordinary panel */
+  --pad-panel-compact: var(--space-4); /* inside a dense panel or card */
+  --gutter: var(--space-4); /* page edge; grows at sm and lg, see below */
+
+  --control-size-sm: 2.25rem;
+  --control-size-md: 2.75rem;
+  --control-size-lg: 3rem;
 
   /* Body copy stays neutral; small labels and headings have their own
      optical spacing so translated UI is not needlessly widened. */
@@ -81,77 +290,11 @@
   --tracking-display: -0.015em;
   --font-regular-weight: 400;
 
-  --space-1: 0.25rem;
-  --space-2: 0.5rem;
-  --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-6: 1.5rem;
-  --space-8: 2rem;
-  --space-12: 3rem;
-  --space-16: 4rem;
-  --control-size-sm: 2.25rem;
-  --control-size-md: 2.75rem;
-  --control-size-lg: 3rem;
   --duration-feedback: 100ms;
   --duration-fast: 140ms;
   --duration-normal: 180ms;
   --duration-panel: 220ms;
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
-
-  --color-surface-hover: light-dark(#eee8de, #1e2b2e);
-  --color-primary-hover: light-dark(#35677a, #a9c2cb);
-  --color-secondary: light-dark(#2f736d, #bfd8d1);
-  --color-destructive-hover-bg: light-dark(
-    rgba(120, 53, 41, 0.08),
-    rgba(229, 194, 186, 0.15)
-  );
-  --color-destructive-hover: light-dark(#9a493a, #d8ad9f);
-  --color-positive-secondary: light-dark(#4f5d3a, #9dab88);
-  /* Section 8 gives form inputs their own (slightly deeper) border tone,
-     distinct from --color-border's card/table hairlines. */
-  --color-input-border: light-dark(#8f887e, #718083);
-  --color-focus-ring: light-dark(#274b5b, #bfd1d7);
-  --color-primary-active: light-dark(#1d3a47, #99b6c0);
-  --color-destructive-active: light-dark(#612b21, #cc9c8e);
-  --color-backdrop: rgb(9 15 27 / 55%);
-  --color-control-thumb: #fffcf7;
-  --color-on-primary: light-dark(#fffcf7, #17242b);
-  --shadow-control: 0 1px 2px rgb(23 36 43 / 25%);
-
-  /* Muted categorical accents. These preserve quick meter recognition
-     without importing Tailwind's saturated product palette. */
-  --color-meter-cold-bg: light-dark(#e4ecee, rgb(191 209 215 / 16%));
-  --color-meter-cold-text: light-dark(#274b5b, #bfd1d7);
-  --color-meter-hot-bg: light-dark(#f1ded9, rgb(229 194 186 / 18%));
-  --color-meter-hot-text: light-dark(#783529, #e5c2ba);
-  --color-meter-electricity-bg: light-dark(#f3e6d1, rgb(232 201 154 / 18%));
-  --color-meter-electricity-text: light-dark(#7c470f, #e8c99a);
-  --color-meter-gas-bg: light-dark(#e7eadf, rgb(203 209 188 / 16%));
-  --color-meter-gas-text: light-dark(#4f5d3a, #cbd1bc);
-  --color-meter-heat-bg: light-dark(#e3efec, rgb(191 216 209 / 18%));
-  --color-meter-heat-text: light-dark(#1f5955, #bfd8d1);
-
-  --color-badge-neutral-bg: light-dark(#eee8de, #1e2b2e);
-  --color-badge-neutral-text: light-dark(#58666c, #b7c0bd);
-  --color-badge-info-bg: light-dark(#e4ecee, rgba(191, 209, 215, 0.16));
-  --color-badge-info-text: light-dark(#274b5b, #bfd1d7);
-  --color-badge-success-bg: light-dark(#e3efec, rgba(191, 216, 209, 0.18));
-  --color-badge-success-text: light-dark(#1f5955, #bfd8d1);
-  --color-badge-warning-bg: light-dark(#f3e6d1, rgba(232, 201, 154, 0.18));
-  --color-badge-warning-text: light-dark(#7c470f, #e8c99a);
-  --color-badge-danger-bg: light-dark(#f1ded9, rgba(229, 194, 186, 0.18));
-  --color-badge-danger-text: light-dark(#783529, #e5c2ba);
-
-  --color-notice-bg: light-dark(#e4ecee, rgba(191, 209, 215, 0.12));
-  --color-notice-text: light-dark(#274b5b, #bfd1d7);
-  --color-notice-warning-bg: light-dark(#f3e6d1, rgba(232, 201, 154, 0.14));
-  --color-notice-warning-text: light-dark(#7c470f, #e8c99a);
-  --color-notice-danger-bg: light-dark(#f1ded9, rgba(229, 194, 186, 0.14));
-  --color-notice-danger-text: light-dark(#783529, #e5c2ba);
-
-  --color-table-th-bg: light-dark(#f1ede4, #1a2528);
-  --color-org-context-bg: light-dark(#f1ede4, #1a2528);
-  --color-nav-active-bg: light-dark(#e4ecee, rgba(191, 209, 215, 0.16));
 
   /* Tabler Icons (Outline) system -- see src/components/ui/Icon.astro.
      Sizes keep the original 24x24 viewBox even when displayed smaller. */
@@ -161,146 +304,171 @@
   --icon-size-lg: 24px;
   --icon-stroke: 1.75;
 
-  /* Section 18 chart sequence -- not yet consumed by a chart component,
-     defined ahead of need since the palette is part of the spec. */
-  --chart-1: #35677a;
-  --chart-2: #2f736d;
-  --chart-3: #c17b26;
-  --chart-4: #9a493a;
-  --chart-5: #4f5d3a;
-  --chart-6: #58666c;
-  --chart-grid: light-dark(#d5cec2, #3d4a4d);
+  /* Chart sequence, defined ahead of need. */
+  --chart-1: var(--palette-daugava-600);
+  --chart-2: var(--palette-verdigris-600);
+  --chart-3: var(--palette-amber-500);
+  --chart-4: var(--palette-brick-600);
+  --chart-5: var(--palette-pine-600);
+  --chart-6: var(--palette-ink-500);
+  --chart-grid: light-dark(
+    var(--palette-limestone-300),
+    var(--palette-night-700)
+  );
+
+  /* Elevation: four named levels. Light mode uses soft shadows; dark mode
+     (blocks below) swaps them for a hairline ring because shadows are
+     invisible on near-black surfaces. */
+  --elevation-flat: none; /* panels, tables, cards: the default */
+  --elevation-raised:
+    0 1px 2px rgb(23 36 43 / 5%), 0 4px 12px rgb(23 36 43 / 4%); /* toolbars, toasts */
+  --elevation-overlay:
+    0 2px 4px rgb(23 36 43 / 6%), 0 12px 28px rgb(23 36 43 / 8%); /* menus, tooltips, popovers */
+  --elevation-modal:
+    0 8px 20px rgb(23 36 43 / 10%), 0 30px 80px rgb(23 36 43 / 14%); /* dialogs, floating panels */
+  --elevation-modal-side:
+    -8px 0 20px rgb(23 36 43 / 10%), -30px 0 80px rgb(23 36 43 / 14%); /* drawers */
+  --shadow-control: 0 1px 2px rgb(23 36 43 / 25%);
 }
 
+/* Explicit theme choice (data-theme) and the OS preference both set the
+   lightningcss light-dark() switch; color-scheme alone is not enough in
+   browsers where lightningcss lowered light-dark(). */
 :root[data-theme="dark"] {
   color-scheme: dark;
   --lightningcss-light: ;
   --lightningcss-dark: initial;
-  --color-canvas: #0e1517;
-  --color-surface: #151f21;
-  --color-surface-hover: #1e2b2e;
-  --color-foreground: #f2eee6;
-  --color-muted: #b7c0bd;
-  --color-border: #3d4a4d;
-  --color-primary: #bfd1d7;
-  --color-primary-hover: #a9c2cb;
-  --color-secondary: #bfd8d1;
-  --color-success: #bfd8d1;
-  --color-warning: #e8c99a;
-  --color-destructive: #e5c2ba;
-  --color-destructive-hover-bg: rgba(229, 194, 186, 0.15);
-  --color-destructive-hover: #d8ad9f;
-  --color-positive-secondary: #9dab88;
-  --color-input-border: #718083;
-  --color-info: #bfd1d7;
-  --shadow-panel: none;
-
-  --color-badge-neutral-bg: #1e2b2e;
-  --color-badge-neutral-text: #b7c0bd;
-  --color-badge-info-bg: rgba(191, 209, 215, 0.16);
-  --color-badge-info-text: #bfd1d7;
-  --color-badge-success-bg: rgba(191, 216, 209, 0.18);
-  --color-badge-success-text: #bfd8d1;
-  --color-badge-warning-bg: rgba(232, 201, 154, 0.18);
-  --color-badge-warning-text: #e8c99a;
-  --color-badge-danger-bg: rgba(229, 194, 186, 0.18);
-  --color-badge-danger-text: #e5c2ba;
-
-  --color-notice-bg: rgba(191, 209, 215, 0.12);
-  --color-notice-text: #bfd1d7;
-  --color-notice-warning-bg: rgba(232, 201, 154, 0.14);
-  --color-notice-warning-text: #e8c99a;
-  --color-notice-danger-bg: rgba(229, 194, 186, 0.14);
-  --color-notice-danger-text: #e5c2ba;
-
-  --color-table-th-bg: #1a2528;
-  --color-org-context-bg: #1a2528;
-  --color-nav-active-bg: rgba(191, 209, 215, 0.16);
 }
-
 :root[data-theme="light"] {
   color-scheme: light;
   --lightningcss-light: initial;
   --lightningcss-dark: ;
-  --color-canvas: #f7f4ee;
-  --color-surface: #fffcf7;
-  --color-surface-hover: #eee8de;
-  --color-foreground: #17242b;
-  --color-muted: #58666c;
-  --color-border: #d5cec2;
-  --color-primary: #274b5b;
-  --color-primary-hover: #35677a;
-  --color-secondary: #2f736d;
-  --color-success: #1f5955;
-  --color-warning: #7c470f;
-  --color-destructive: #783529;
-  --color-destructive-hover-bg: rgba(120, 53, 41, 0.08);
-  --color-destructive-hover: #9a493a;
-  --color-positive-secondary: #4f5d3a;
-  --color-input-border: #8f887e;
-  --color-info: #274b5b;
-  --shadow-panel: none;
+}
+:root[data-theme="dark"] {
+  --elevation-raised: 0 0 0 1px var(--color-border);
+  --elevation-overlay:
+    0 0 0 1px var(--color-border), 0 8px 24px rgb(0 0 0 / 35%);
+  --elevation-modal:
+    0 0 0 1px var(--color-border), 0 24px 64px rgb(0 0 0 / 55%);
+  --elevation-modal-side:
+    -1px 0 0 var(--color-border), -24px 0 64px rgb(0 0 0 / 55%);
+  --shadow-control: 0 1px 2px rgb(0 0 0 / 40%);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --elevation-raised: 0 0 0 1px var(--color-border);
+    --elevation-overlay:
+      0 0 0 1px var(--color-border), 0 8px 24px rgb(0 0 0 / 35%);
+    --elevation-modal:
+      0 0 0 1px var(--color-border), 0 24px 64px rgb(0 0 0 / 55%);
+    --elevation-modal-side:
+      -1px 0 0 var(--color-border), -24px 0 64px rgb(0 0 0 / 55%);
+    --shadow-control: 0 1px 2px rgb(0 0 0 / 40%);
+  }
+}
 
-  --color-badge-neutral-bg: #eee8de;
-  --color-badge-neutral-text: #58666c;
-  --color-badge-info-bg: #e4ecee;
-  --color-badge-info-text: #274b5b;
-  --color-badge-success-bg: #e3efec;
-  --color-badge-success-text: #1f5955;
-  --color-badge-warning-bg: #f3e6d1;
-  --color-badge-warning-text: #7c470f;
-  --color-badge-danger-bg: #f1ded9;
-  --color-badge-danger-text: #783529;
-
-  --color-notice-bg: #e4ecee;
-  --color-notice-text: #274b5b;
-  --color-notice-warning-bg: #f3e6d1;
-  --color-notice-warning-text: #7c470f;
-  --color-notice-danger-bg: #f1ded9;
-  --color-notice-danger-text: #783529;
-
-  --color-table-th-bg: #f1ede4;
-  --color-org-context-bg: #f1ede4;
-  --color-nav-active-bg: #e4ecee;
+/* Gutter grows with the viewport: 16px, 24px from sm, fluid from lg. */
+@media (width >= 40rem) {
+  :root {
+    --gutter: var(--space-6);
+  }
+}
+@media (width >= 70rem) {
+  :root {
+    --gutter: clamp(1.25rem, 3vw, 3rem);
+  }
 }
 
 @theme {
-  --color-canvas: light-dark(#f7f4ee, #0e1517);
-  --color-surface: light-dark(#fffcf7, #151f21);
-  --color-foreground: light-dark(#17242b, #f2eee6);
-  --color-muted: light-dark(#58666c, #b7c0bd);
-  --color-border: light-dark(#d5cec2, #3d4a4d);
-  --color-primary: light-dark(#274b5b, #bfd1d7);
-  --color-secondary: light-dark(#2f736d, #bfd8d1);
-  --color-success: light-dark(#1f5955, #bfd8d1);
-  --color-warning: light-dark(#7c470f, #e8c99a);
-  --color-destructive: light-dark(#783529, #e5c2ba);
-  --color-positive-secondary: light-dark(#4f5d3a, #9dab88);
-  --color-info: light-dark(#274b5b, #bfd1d7);
-  --color-danger-surface: var(--color-notice-danger-bg);
-  --color-success-surface: var(--color-badge-success-bg);
-  --color-info-surface: var(--color-notice-bg);
+  --breakpoint-sm: 40rem; /* phone to tablet: tables stop stacking */
+  --breakpoint-md: 48rem; /* tablet: two-up layouts, drawers stop being full width */
+  --breakpoint-lg: 70rem; /* desktop: persistent sidebar, wide tables */
+  --breakpoint-xl: initial;
+  --breakpoint-2xl: initial;
+
+  --spacing: 0.25rem;
+
+  /* Type scale. xs..2xl keep Tailwind's sizes so text-sm etc. are unchanged;
+     the display steps are fluid and serve headings and key figures. Always
+     use a step; do not write a font-size literal. */
+  --text-xs: 0.75rem; /* captions, counters, fine print */
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem; /* labels, table cells, dense UI, small buttons */
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem; /* body, buttons, inputs */
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem; /* subheads, drawer titles */
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.25rem; /* section titles */
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --text-display-sm: clamp(1.5rem, 2.4vw, 2rem); /* page titles, key figures */
+  --text-display-sm--line-height: 1.2;
+  --text-display-md: clamp(1.75rem, 3vw, 2.25rem); /* feature figures */
+  --text-display-md--line-height: 1.15;
+  --text-display-lg: clamp(
+    1.85rem,
+    3.2vw,
+    2.5rem
+  ); /* Fraunces headlines, amount due */
+  --text-display-lg--line-height: 1.1;
+
+  --color-canvas: light-dark(
+    var(--palette-limestone-50),
+    var(--palette-night-950)
+  );
+  --color-surface: light-dark(var(--palette-paper), var(--palette-night-900));
+  --color-foreground: light-dark(
+    var(--palette-ink-900),
+    var(--palette-bone-100)
+  );
+  --color-muted: light-dark(var(--palette-ink-500), var(--palette-night-300));
+  --color-border: light-dark(
+    var(--palette-limestone-300),
+    var(--palette-night-700)
+  );
+  --color-primary: light-dark(
+    var(--palette-daugava-700),
+    var(--palette-daugava-200)
+  );
+  --color-secondary: light-dark(
+    var(--palette-verdigris-600),
+    var(--palette-verdigris-200)
+  );
+  --color-success: light-dark(
+    var(--palette-verdigris-700),
+    var(--palette-verdigris-200)
+  );
+  --color-warning: light-dark(
+    var(--palette-amber-700),
+    var(--palette-amber-200)
+  );
+  --color-destructive: light-dark(
+    var(--palette-brick-700),
+    var(--palette-brick-200)
+  );
+  --color-positive-secondary: light-dark(
+    var(--palette-pine-600),
+    var(--palette-pine-400)
+  );
+  --color-info: light-dark(
+    var(--palette-daugava-700),
+    var(--palette-daugava-200)
+  );
+  --color-danger-surface: var(--tone-danger-bg);
+  --color-success-surface: var(--tone-success-bg);
+  --color-info-surface: var(--tone-info-bg);
   --radius-badge: 0.3125rem;
   --radius-input: 0.4375rem;
   --radius-control: 0.5rem;
-  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9l6 6l6-6'/%3E%3C/svg%3E");
   --radius-panel: 0.625rem;
-  --shadow-panel: none;
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9l6 6l6-6'/%3E%3C/svg%3E");
   --font-sans:
     "Switzer", "Overused Grotesk", "Segoe UI", ui-sans-serif, system-ui,
     sans-serif;
   --font-display:
     "Fraunces Variable", "Fraunces", Georgia, "Times New Roman", serif;
-
-  /* Section 6.2 elevation tokens. Reserved for menus/toolbars (1), raised
-     contextual elements (2), and drawers/modals (overlay) -- ordinary
-     cards and tables stay at elevation-0 (--shadow-panel: none above). */
-  --elevation-1: 0 1px 2px rgb(23 36 43 / 5%), 0 4px 12px rgb(23 36 43 / 4%);
-  --elevation-2: 0 2px 4px rgb(23 36 43 / 6%), 0 12px 28px rgb(23 36 43 / 8%);
-  --elevation-overlay:
-    0 8px 20px rgb(23 36 43 / 10%), 0 30px 80px rgb(23 36 43 / 14%);
-  --shadow-drawer:
-    -8px 0 20px rgb(23 36 43 / 10%), -30px 0 80px rgb(23 36 43 / 14%);
 }
 @layer base {
   body {
@@ -450,40 +618,40 @@ textarea:disabled {
 @layer components {
   .text-caption {
     letter-spacing: var(--tracking-small);
-    font-size: 0.75rem; /* 12px */
+    font-size: var(--text-xs); /* 12px */
     line-height: 1rem; /* 16px */
     font-weight: 500;
   }
   .text-label {
     letter-spacing: var(--tracking-small);
-    font-size: 0.8125rem; /* 13px */
+    font-size: var(--text-sm); /* 13px */
     line-height: 1.125rem; /* 18px */
     font-weight: 600;
   }
   .text-body-sm {
-    font-size: 0.875rem; /* 14px */
+    font-size: var(--text-sm); /* 14px */
     line-height: 1.25rem; /* 20px */
     font-weight: var(--font-regular-weight);
   }
   .text-body {
-    font-size: 1rem; /* 16px */
+    font-size: var(--text-base); /* 16px */
     line-height: 1.5rem; /* 24px */
     font-weight: var(--font-regular-weight);
   }
   .text-ui-strong {
-    font-size: 1rem; /* 16px */
+    font-size: var(--text-base); /* 16px */
     line-height: 1.375rem; /* 22px */
     font-weight: 600;
   }
   .text-h3 {
     letter-spacing: var(--tracking-heading);
-    font-size: 1.25rem; /* 20px */
+    font-size: var(--text-xl); /* 20px */
     line-height: 1.625rem; /* 26px */
     font-weight: 600;
   }
   .text-h2 {
     letter-spacing: var(--tracking-heading);
-    font-size: 1.75rem; /* 28px */
+    font-size: var(--text-display-sm); /* 28px */
     line-height: 2.125rem; /* 34px */
     font-weight: 600;
   }
@@ -571,7 +739,7 @@ textarea:disabled {
     min-height: var(--control-size-md);
     border-radius: var(--radius-control);
     padding: var(--space-2) var(--space-4);
-    font-size: 1rem;
+    font-size: var(--text-base);
     font-weight: 600;
     line-height: 1.4;
     text-decoration: none;
@@ -659,7 +827,7 @@ textarea:disabled {
   .btn-sm {
     min-height: var(--control-size-sm);
     padding: var(--space-2) var(--space-3);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .btn-lg {
     min-height: var(--control-size-lg);
@@ -737,7 +905,7 @@ textarea:disabled {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
-    box-shadow: var(--shadow-panel);
+    box-shadow: var(--elevation-flat);
   }
   .table-wrap {
     overflow-x: auto;
@@ -764,12 +932,12 @@ textarea:disabled {
   }
   .metric-label {
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
     font-weight: 550;
   }
   .metric-value {
     margin: 0;
-    font-size: clamp(1.5rem, 2.2vw, 2rem);
+    font-size: var(--text-display-sm);
     font-weight: 600;
     line-height: 1.2;
     font-variant-numeric: tabular-nums;
@@ -777,7 +945,7 @@ textarea:disabled {
   }
   .metric-note {
     color: var(--color-muted);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
   }
   .metric[data-tone="success"] .metric-value {
     color: var(--color-success);
@@ -785,7 +953,7 @@ textarea:disabled {
   .metric[data-tone="warning"] .metric-value {
     color: var(--color-warning);
   }
-  @media (max-width: 900px) {
+  @media (width < 48rem) {
     .metric-strip {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -796,18 +964,9 @@ textarea:disabled {
       border-top: 1px solid var(--color-border);
     }
   }
-  @media (max-width: 540px) {
+  @media (width < 40rem) {
     .metric {
       padding: 1rem;
-    }
-  }
-  @media (max-width: 359px) {
-    .metric-strip {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .metric + .metric {
-      border-top: 1px solid var(--color-border);
-      border-left: 0;
     }
   }
   .page-header {
@@ -824,7 +983,7 @@ textarea:disabled {
     letter-spacing: var(--tracking-heading);
     overflow-wrap: break-word;
     min-width: 0;
-    font-size: clamp(1.65rem, 2.4vw, 2rem);
+    font-size: var(--text-display-sm);
     font-weight: 700;
     line-height: 1.2;
   }
@@ -834,19 +993,19 @@ textarea:disabled {
      keep the plain Switzer treatment above. */
   .page-header :is(h1, h2, h3).font-display {
     letter-spacing: var(--tracking-display);
-    font-size: clamp(1.85rem, 3.2vw, 2.5rem);
+    font-size: var(--text-display-lg);
     font-weight: 600;
     line-height: 1.15;
   }
   /* 3.2vw passes 36px at 1125px (70.3125rem): Fraunces is 700 above 36px. */
-  @media (min-width: 70.3125rem) {
+  @media (width >= 70rem) {
     .page-header :is(h1, h2, h3).font-display {
       font-weight: 700;
     }
   }
   .eyebrow {
     color: var(--color-muted);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     letter-spacing: 0.02em;
     font-weight: 600;
     margin-bottom: 0.75rem;
@@ -894,7 +1053,7 @@ textarea:disabled {
     position: relative;
     z-index: 1;
   }
-  @media (max-width: 639px) {
+  @media (width < 40rem) {
     .btn-group {
       flex-direction: column;
       width: 100%;
@@ -971,7 +1130,7 @@ textarea:disabled {
     align-items: center;
     gap: 0.125rem 0.25rem;
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .crumbs li {
     display: inline-flex;
@@ -1002,7 +1161,7 @@ textarea:disabled {
   }
   .page-description {
     color: var(--color-muted);
-    font-size: 1rem;
+    font-size: var(--text-base);
     line-height: 1.5;
     margin-top: 0.75rem;
     max-width: 42rem;
@@ -1021,7 +1180,7 @@ textarea:disabled {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
-    box-shadow: var(--shadow-panel);
+    box-shadow: var(--elevation-flat);
     min-width: 0;
   }
   .kpi-icon {
@@ -1032,7 +1191,7 @@ textarea:disabled {
     width: 2.75rem;
     height: 2.75rem;
     border-radius: var(--radius-panel);
-    background: var(--color-badge-neutral-bg);
+    background: var(--tone-neutral-bg);
     color: var(--color-muted);
   }
   .kpi-icon svg {
@@ -1046,7 +1205,7 @@ textarea:disabled {
   }
   .kpi-label {
     color: var(--color-muted);
-    font-size: 1rem;
+    font-size: var(--text-base);
     line-height: 1.5;
     font-weight: 500;
     overflow-wrap: normal;
@@ -1054,7 +1213,7 @@ textarea:disabled {
   }
   .kpi-value {
     margin-top: 0.5rem;
-    font-size: clamp(1.5rem, 2.5vw, 2rem);
+    font-size: var(--text-display-sm);
     letter-spacing: -0.025em;
     line-height: 1.25;
     font-weight: 650;
@@ -1065,22 +1224,22 @@ textarea:disabled {
     color: var(--color-success);
   }
   .kpi[data-tone="success"] .kpi-icon {
-    color: var(--color-badge-success-text);
-    background: var(--color-badge-success-bg);
+    color: var(--tone-success-text);
+    background: var(--tone-success-bg);
   }
   .kpi[data-tone="warning"] .kpi-value {
     color: var(--color-warning);
   }
   .kpi[data-tone="warning"] .kpi-icon {
-    color: var(--color-badge-warning-text);
-    background: var(--color-badge-warning-bg);
+    color: var(--tone-warning-text);
+    background: var(--tone-warning-bg);
   }
   .kpi[data-tone="danger"] .kpi-value {
     color: var(--color-destructive);
   }
   .kpi[data-tone="danger"] .kpi-icon {
-    color: var(--color-badge-danger-text);
-    background: var(--color-badge-danger-bg);
+    color: var(--tone-danger-text);
+    background: var(--tone-danger-bg);
   }
   .status-badge {
     display: inline-flex;
@@ -1089,27 +1248,27 @@ textarea:disabled {
     white-space: nowrap;
     border-radius: var(--radius-badge);
     padding: 0.25rem 0.5rem;
-    font-size: 0.9375rem;
+    font-size: var(--text-base);
     font-weight: 600;
     line-height: 1.4;
-    background: var(--color-badge-neutral-bg);
-    color: var(--color-badge-neutral-text);
+    background: var(--tone-neutral-bg);
+    color: var(--tone-neutral-text);
   }
   .status-badge[data-tone="info"] {
-    background: var(--color-badge-info-bg);
-    color: var(--color-badge-info-text);
+    background: var(--tone-info-bg);
+    color: var(--tone-info-text);
   }
   .status-badge[data-tone="success"] {
-    background: var(--color-badge-success-bg);
-    color: var(--color-badge-success-text);
+    background: var(--tone-success-bg);
+    color: var(--tone-success-text);
   }
   .status-badge[data-tone="warning"] {
-    background: var(--color-badge-warning-bg);
-    color: var(--color-badge-warning-text);
+    background: var(--tone-warning-bg);
+    color: var(--tone-warning-text);
   }
   .status-badge[data-tone="danger"] {
-    background: var(--color-badge-danger-bg);
-    color: var(--color-badge-danger-text);
+    background: var(--tone-danger-bg);
+    color: var(--tone-danger-text);
   }
   .empty-state {
     padding: 3rem 1.5rem;
@@ -1121,21 +1280,21 @@ textarea:disabled {
   .notice {
     padding: 1rem;
     border-radius: var(--radius-panel);
-    background: var(--color-notice-bg);
-    color: var(--color-notice-text);
-    font-size: 0.875rem;
+    background: var(--tone-info-bg);
+    color: var(--tone-info-text);
+    font-size: var(--text-sm);
     line-height: 1.6;
   }
   .notice-warning {
-    background: var(--color-notice-warning-bg);
-    color: var(--color-notice-warning-text);
+    background: var(--tone-warning-bg);
+    color: var(--tone-warning-text);
   }
   .notice-danger {
-    background: var(--color-notice-danger-bg);
-    color: var(--color-notice-danger-text);
+    background: var(--tone-danger-bg);
+    color: var(--tone-danger-text);
   }
   .section-title {
-    font-size: 1rem;
+    font-size: var(--text-base);
     font-weight: 650;
     margin-bottom: 1rem;
   }
@@ -1158,7 +1317,7 @@ textarea:disabled {
   }
   .tabs a {
     padding: 0.75rem 1rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     color: var(--color-muted);
     border-radius: var(--radius-control);
   }
@@ -1186,7 +1345,7 @@ textarea:disabled {
     align-items: center;
     gap: 0.75rem;
     font-family: var(--font-display);
-    font-size: 1rem;
+    font-size: var(--text-base);
     font-weight: 600;
     letter-spacing: -0.01em;
   }
@@ -1230,7 +1389,7 @@ textarea:disabled {
     gap: 0.75rem;
     padding: 0.75rem;
     border-radius: var(--radius-control);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     color: var(--color-muted);
   }
   /* Unread counter on the Messages item. Pushed to the end of the row. */
@@ -1241,7 +1400,7 @@ textarea:disabled {
     border-radius: 999px;
     background: var(--color-primary);
     color: var(--color-on-primary);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     font-weight: 700;
     line-height: 1.25rem;
     text-align: center;
@@ -1322,7 +1481,7 @@ textarea:disabled {
   .account {
     display: grid;
     gap: 0.75rem;
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .account-id {
     display: flex;
@@ -1341,7 +1500,7 @@ textarea:disabled {
     border-radius: 999px;
     background: var(--color-nav-active-bg);
     color: var(--color-primary);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     font-weight: 700;
   }
   .account-email {
@@ -1368,7 +1527,7 @@ textarea:disabled {
     background: transparent;
     color: var(--color-muted);
     font: inherit;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     text-align: left;
     cursor: pointer;
   }
@@ -1401,7 +1560,7 @@ textarea:disabled {
     border-radius: var(--radius-control);
     background: var(--color-surface);
     box-shadow: 0 0 0 1px var(--color-border);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     font-weight: 600;
   }
   .lang-switch > * {
@@ -1444,7 +1603,7 @@ textarea:disabled {
   .admin-content {
     margin-left: 15rem;
     min-width: 0;
-    padding: 2rem clamp(1.25rem, 3vw, 3rem);
+    padding: var(--space-8) var(--gutter);
     padding-bottom: 6rem;
     max-width: 110rem;
   }
@@ -1468,7 +1627,7 @@ textarea:disabled {
   .resident-content {
     max-width: 50rem;
     margin: auto;
-    padding: 1.75rem 1.25rem 3rem;
+    padding: 1.75rem var(--gutter) 3rem;
   }
   .resident-content > div {
     padding: 0;
@@ -1478,7 +1637,7 @@ textarea:disabled {
     display: flex;
     flex-wrap: wrap;
     gap: 1.25rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     border-bottom: 1px solid var(--color-border);
     padding-bottom: 0.75rem;
     margin-bottom: 1.5rem;
@@ -1505,13 +1664,13 @@ textarea:disabled {
     margin-bottom: 2rem;
   }
   .invoice-parties h2 {
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     font-weight: 600;
     color: var(--color-muted);
     margin-bottom: 0.75rem;
   }
   .invoice-parties p {
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     line-height: 1.8;
     overflow-wrap: anywhere;
   }
@@ -1524,13 +1683,13 @@ textarea:disabled {
     justify-content: space-between;
     gap: 1rem;
     padding: 0.5rem 0;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
   }
   .invoice-totals > .invoice-total-due {
     border-top: 1px solid var(--color-border);
     margin-top: 0.5rem;
     padding-top: 1rem;
-    font-size: 1.2rem;
+    font-size: var(--text-xl);
     font-weight: 700;
   }
   .current-invoice {
@@ -1540,7 +1699,7 @@ textarea:disabled {
     background: var(--color-surface);
   }
   .current-invoice .amount {
-    font-size: clamp(1.8rem, 6vw, 2.4rem);
+    font-size: var(--text-display-lg);
     font-weight: 700;
     letter-spacing: -0.03em;
     overflow-wrap: anywhere;
@@ -1572,7 +1731,7 @@ textarea:disabled {
     align-items: center;
     gap: 0.5rem;
     font-weight: 600;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     cursor: pointer;
     list-style: none;
   }
@@ -1606,7 +1765,7 @@ textarea:disabled {
 }
 .app-content h1 {
   letter-spacing: var(--tracking-heading);
-  font-size: clamp(1.65rem, 2.4vw, 2rem);
+  font-size: var(--text-display-sm);
   line-height: 1.25;
   font-weight: 700;
 }
@@ -1614,19 +1773,19 @@ textarea:disabled {
    .page-header :is(h1, h2, h3).font-display above. */
 .app-content h1.font-display {
   letter-spacing: var(--tracking-display);
-  font-size: clamp(1.85rem, 3.2vw, 2.5rem);
+  font-size: var(--text-display-lg);
   line-height: 1.15;
   font-weight: 600;
 }
 /* Same 36px cut as .page-header :is(h1, h2, h3).font-display above. */
-@media (min-width: 70.3125rem) {
+@media (width >= 70rem) {
   .app-content h1.font-display {
     font-weight: 700;
   }
 }
 .app-content th {
   padding: 0.75rem 1rem;
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   color: var(--color-muted);
   background: var(--color-table-th-bg);
 }
@@ -1637,7 +1796,7 @@ textarea:disabled {
 }
 /* Tablet widths: the sans font is wider than the old one, so tables keep
    their fit with tighter side padding. Phones use the stacked table layout. */
-@media (min-width: 40rem) and (max-width: 70rem) {
+@media (40rem <= width < 70rem) {
   .app-content th,
   .app-content td {
     padding-inline: 0.625rem;
@@ -1656,7 +1815,7 @@ textarea:disabled {
 }
 .app-content .rounded-panel.border {
   border-color: var(--color-border);
-  box-shadow: var(--shadow-panel);
+  box-shadow: var(--elevation-flat);
 }
 .app-content .flex.items-center.justify-between {
   gap: 0.75rem;
@@ -1702,7 +1861,7 @@ textarea:disabled {
   /* Directional variant of --elevation-overlay (Section 6.2) -- same
      ink-based shadow color/intensity, offset toward the page instead of
      downward since this panel is anchored to the right edge. */
-  box-shadow: var(--shadow-drawer);
+  box-shadow: var(--elevation-modal-side);
 }
 .context-drawer::backdrop {
   background: var(--color-backdrop);
@@ -1766,7 +1925,7 @@ html:has(.context-drawer:modal) {
 }
 .context-drawer-eyebrow {
   color: var(--color-muted);
-  font-size: 0.75rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -1780,13 +1939,13 @@ html:has(.context-drawer:modal) {
   margin-top: 0.25rem;
 }
 .context-drawer-title {
-  font-size: 1.125rem;
+  font-size: var(--text-lg);
   font-weight: 750;
 }
 .context-drawer-meta {
   margin-top: 0.5rem;
   color: var(--color-muted);
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
 }
 .context-drawer-body {
   flex: 1 1 auto;
@@ -1807,18 +1966,18 @@ html:has(.context-drawer:modal) {
 .context-drawer-footer:empty {
   display: none;
 }
-@media (max-width: 767px) {
+@media (width < 48rem) {
   .context-drawer {
     width: 100vw;
   }
 }
-@media (max-width: 1023px) {
+@media (width < 70rem) {
   .admin-sidebar {
     display: none;
   }
   .admin-content {
     margin-left: 0;
-    padding: 1.5rem;
+    padding: var(--space-6) var(--gutter);
     padding-bottom: 6rem;
   }
   .admin-mobile {
@@ -1842,9 +2001,9 @@ html:has(.context-drawer:modal) {
     padding-top: 1rem;
   }
 }
-@media (max-width: 639px) {
+@media (width < 40rem) {
   .admin-content {
-    padding: 1.25rem 1rem;
+    padding: 1.25rem var(--gutter);
     padding-bottom: 6rem;
   }
   .admin-mobile {
@@ -1874,7 +2033,7 @@ html:has(.context-drawer:modal) {
     gap: 1.25rem;
   }
   .resident-content {
-    padding: 1.5rem 1rem 3rem;
+    padding: 1.5rem var(--gutter) 3rem;
   }
   .app-content th,
   .app-content td {
@@ -1902,8 +2061,8 @@ html:has(.context-drawer:modal) {
   border-radius: var(--radius-control);
   background: var(--color-foreground);
   color: var(--color-surface);
-  box-shadow: var(--elevation-2);
-  font-size: 0.75rem;
+  box-shadow: var(--elevation-overlay);
+  font-size: var(--text-xs);
   font-weight: 500;
   line-height: 1.4;
   text-wrap: pretty;
@@ -2021,7 +2180,7 @@ html:has(.context-drawer:modal) {
 /* Phones: `.stack-table` wrappers render each row as a labelled card
    (labels come from stack-tables.ts). Unlayered + !important on the
    structural bits so page-scoped table styles (min-width, borders) lose. */
-@media (max-width: 639px) {
+@media (width < 40rem) {
   .stack-table {
     overflow: visible;
     border: 0;
@@ -2069,7 +2228,7 @@ html:has(.context-drawer:modal) {
     content: attr(data-label);
     flex: none;
     color: var(--color-muted);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     font-weight: 600;
     text-align: left;
   }

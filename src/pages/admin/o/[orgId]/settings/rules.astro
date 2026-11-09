@@ -1405,7 +1405,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     place-items: center;
     border-radius: 50%;
     border: 1.5px solid currentColor;
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     font-weight: 700;
     line-height: 1;
   }
@@ -1430,7 +1430,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
   }
   .rule-status-dot {
     width: 0.5rem;
@@ -1460,7 +1460,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .row-menu summary {
     display: grid;
@@ -1487,7 +1487,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     background: var(--color-surface);
-    box-shadow: var(--elevation-1);
+    box-shadow: var(--elevation-raised);
   }
   .row-menu button {
     display: block;
@@ -1495,7 +1495,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     padding: 0.5rem 0.75rem;
     border-radius: var(--radius-badge);
     color: var(--color-destructive);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     text-align: left;
   }
   .row-menu button:hover {
@@ -1511,7 +1511,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   }
   .rule-field label {
     margin-bottom: 0.5rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 600;
   }
   .rule-field input,
@@ -1526,7 +1526,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     background-color: var(--color-surface);
     color: var(--color-foreground);
     font: inherit;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     box-sizing: border-box;
   }
   .rule-field input:focus-visible,
@@ -1538,12 +1538,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   .rule-field-hint {
     margin-top: 0.5rem;
     color: var(--color-muted);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
   }
   .rule-field-error {
     margin-top: 0.5rem;
     color: var(--color-destructive);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
   }
   .rule-field input[aria-invalid="true"],
   .rule-field select[aria-invalid="true"] {
@@ -1565,8 +1565,8 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     gap: 0.75rem;
     padding: 1rem;
     border-radius: var(--radius-panel);
-    background: var(--color-notice-bg);
-    color: var(--color-notice-text);
+    background: var(--tone-info-bg);
+    color: var(--tone-info-text);
   }
   .rule-info-icon {
     display: grid;
@@ -1577,17 +1577,17 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     border-radius: 50%;
     background: var(--color-primary);
     color: var(--color-on-primary);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     font-weight: 700;
     font-style: italic;
   }
   .rule-info-title {
     font-weight: 650;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
   }
   .rule-info-banner p:not(.rule-info-title) {
     margin-top: 0.25rem;
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
     line-height: 1.5;
   }
   .rule-tips {
@@ -1597,7 +1597,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     background: var(--color-surface);
   }
   .rule-tips h3 {
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 700;
   }
   .rule-tip {
@@ -1612,7 +1612,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     height: 2rem;
     place-items: center;
     border-radius: 50%;
-    background: var(--color-badge-neutral-bg);
+    background: var(--tone-neutral-bg);
     color: var(--color-muted);
   }
   .rule-tip-icon svg {
@@ -1624,17 +1624,17 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     color: var(--color-meter-cold-text);
   }
   .rule-tip-title {
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 650;
   }
   .rule-tip p:not(.rule-tip-title) {
     margin-top: 0.25rem;
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
     line-height: 1.5;
   }
 
-  @media (max-width: 640px) {
+  @media (width < 40rem) {
     .rule-field-row,
     .rule-field-row-3 {
       grid-template-columns: 1fr;
@@ -1662,7 +1662,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   .drawer-section-heading {
     margin-top: 1.5rem;
     margin-bottom: 0.75rem;
-    font-size: 1rem;
+    font-size: var(--text-base);
     font-weight: 650;
   }
   .drawer-section-heading:first-of-type {
@@ -1674,7 +1674,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     min-height: 4.5rem;
     padding: 0.75rem;
     border-radius: var(--radius-control);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-family: inherit;
     resize: vertical;
     box-sizing: border-box;
@@ -1709,12 +1709,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   }
   .tariff-scope-option strong {
     display: block;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
   }
   .tariff-scope-option p {
     margin-top: 0.15rem;
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .tariff-dwelling-actions {
     display: flex;
@@ -1726,7 +1726,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   .tariff-dwelling-actions span {
     margin-left: auto;
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .tariff-dwelling-list {
     display: grid;
@@ -1744,7 +1744,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     gap: 0.5rem;
     padding: 0.375rem 0.5rem;
     border-radius: var(--radius-control);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
   }
   .tariff-dwelling-row:hover {
     background: var(--color-surface-hover);

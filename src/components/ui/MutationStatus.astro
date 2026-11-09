@@ -276,7 +276,7 @@ const strings = {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
     background: var(--color-surface);
-    box-shadow: var(--elevation-1);
+    box-shadow: var(--elevation-raised);
   }
   .mutation-item[data-status="error"] {
     border-color: var(--color-destructive);
@@ -305,17 +305,17 @@ const strings = {
   }
   .mutation-item-copy strong {
     overflow: hidden;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .mutation-item-copy small {
     color: var(--color-muted);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
   }
   .mutation-dismiss {
     color: var(--color-muted);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     text-decoration: underline;
   }
   .mutation-item-actions {
@@ -324,7 +324,7 @@ const strings = {
   }
   .mutation-retry {
     color: var(--color-primary);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     font-weight: 650;
   }
   .mutation-activity {
@@ -339,9 +339,9 @@ const strings = {
     border: 1px solid var(--color-border);
     border-radius: 999px;
     background: var(--color-surface);
-    box-shadow: var(--elevation-1);
+    box-shadow: var(--elevation-raised);
     color: var(--color-foreground);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
     font-weight: 650;
     list-style: none;
     cursor: pointer;
@@ -384,11 +384,11 @@ const strings = {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
     background: var(--color-surface);
-    box-shadow: var(--elevation-1);
+    box-shadow: var(--elevation-raised);
   }
   .mutation-panel h2 {
     margin-bottom: 0.75rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 700;
   }
   .mutation-panel [data-mutation-list] {
@@ -406,7 +406,7 @@ const strings = {
   }
   /* On phones the idle pill would sit over form fields and row actions;
      only show the indicator while something is saving or has failed. */
-  @media (max-width: 40rem) {
+  @media (width < 40rem) {
     #mutation-status:not([data-state="pending"]):not([data-state="error"])
       .mutation-activity {
       display: none;

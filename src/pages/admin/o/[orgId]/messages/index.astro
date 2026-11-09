@@ -861,7 +861,7 @@ const conversationStatusMap = Object.fromEntries(
   }
   .messages-tabs a {
     padding: 0.75rem 1rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 600;
     color: var(--color-muted);
     border-radius: var(--radius-control);
@@ -914,7 +914,7 @@ const conversationStatusMap = Object.fromEntries(
     min-width: 0;
     gap: 0.5rem;
     font-weight: 650;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
   }
   .messages-house-icon {
     width: 1rem;
@@ -932,12 +932,12 @@ const conversationStatusMap = Object.fromEntries(
   .messages-list-item-subject {
     margin-top: 0.5rem;
     font-weight: 650;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
   }
   .messages-list-item-occupant {
     margin-top: 0.25rem;
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .messages-list-item-foot {
     display: grid;
@@ -955,17 +955,17 @@ const conversationStatusMap = Object.fromEntries(
     line-clamp: 2;
     overflow-wrap: anywhere;
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .messages-list-item-date {
     color: var(--color-muted);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
   }
   .messages-empty {
     padding: 3rem 1.5rem;
     text-align: center;
     color: var(--color-muted);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
   }
   .messages-detail-pane {
     display: grid;
@@ -982,7 +982,7 @@ const conversationStatusMap = Object.fromEntries(
     gap: 0.75rem;
   }
   .messages-detail-header h2 {
-    font-size: 1.125rem;
+    font-size: var(--text-lg);
     font-weight: 700;
     flex: 1 1 auto;
     min-width: 0;
@@ -1004,7 +1004,7 @@ const conversationStatusMap = Object.fromEntries(
     flex: 0 0 auto;
     place-items: center;
     border-radius: var(--radius-panel);
-    background: var(--color-badge-neutral-bg);
+    background: var(--tone-neutral-bg);
     color: var(--color-muted);
   }
   .messages-dwelling-icon svg {
@@ -1012,13 +1012,13 @@ const conversationStatusMap = Object.fromEntries(
     height: 1.15rem;
   }
   .messages-dwelling-card-title {
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 650;
   }
   .messages-dwelling-card-sub {
     margin-top: 0.25rem;
     color: var(--color-muted);
-    font-size: 0.8125rem;
+    font-size: var(--text-sm);
   }
   .messages-actions {
     display: flex;
@@ -1036,7 +1036,7 @@ const conversationStatusMap = Object.fromEntries(
     border-top: 1px solid var(--color-border);
   }
   .messages-reply h3 {
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 700;
   }
   .messages-reply textarea {
@@ -1045,7 +1045,7 @@ const conversationStatusMap = Object.fromEntries(
     padding: 0.75rem 0.75rem;
     border-radius: var(--radius-control);
     font: inherit;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     resize: vertical;
     box-sizing: border-box;
   }
@@ -1058,14 +1058,14 @@ const conversationStatusMap = Object.fromEntries(
     padding-top: 1rem;
     border-top: 1px solid var(--color-border);
     color: var(--color-muted);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
   }
   .messages-new {
     display: grid;
     gap: 1rem;
   }
   .messages-new h2 {
-    font-size: 1.125rem;
+    font-size: var(--text-lg);
     font-weight: 700;
   }
   .messages-new-form {
@@ -1075,7 +1075,7 @@ const conversationStatusMap = Object.fromEntries(
   .messages-new-form label {
     display: block;
     margin-bottom: 0.5rem;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     font-weight: 600;
   }
   .messages-new-form select,
@@ -1085,7 +1085,7 @@ const conversationStatusMap = Object.fromEntries(
     padding: 0.75rem 0.75rem;
     border-radius: var(--radius-control);
     font: inherit;
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     box-sizing: border-box;
   }
   .messages-new-form textarea {
@@ -1120,7 +1120,7 @@ const conversationStatusMap = Object.fromEntries(
     border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     background: var(--color-surface);
-    box-shadow: var(--elevation-1);
+    box-shadow: var(--elevation-raised);
   }
   .row-menu a {
     display: block;
@@ -1128,14 +1128,14 @@ const conversationStatusMap = Object.fromEntries(
     padding: 0.5rem 0.75rem;
     border-radius: var(--radius-badge);
     color: var(--color-foreground);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     text-align: left;
   }
   .row-menu a:hover {
     background: var(--color-surface-hover);
   }
 
-  @media (max-width: 900px) {
+  @media (width < 48rem) {
     .messages-split {
       grid-template-columns: 1fr;
     }
@@ -1168,9 +1168,9 @@ const conversationStatusMap = Object.fromEntries(
     flex: 0 0 auto;
     place-items: center;
     border-radius: 50%;
-    background: var(--color-badge-neutral-bg);
+    background: var(--tone-neutral-bg);
     color: var(--color-muted);
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     font-weight: 700;
   }
   .message-avatar[data-role="ADMIN"] {
@@ -1190,14 +1190,14 @@ const conversationStatusMap = Object.fromEntries(
   .message-meta {
     display: flex;
     gap: 0.5rem;
-    font-size: 0.75rem;
+    font-size: var(--text-xs);
     color: var(--color-muted);
   }
   .message-bubble {
     padding: 0.75rem 1rem;
     border-radius: var(--radius-panel);
     background: var(--color-surface-hover);
-    font-size: 0.875rem;
+    font-size: var(--text-sm);
     line-height: 1.55;
     white-space: pre-wrap;
     overflow-wrap: anywhere;

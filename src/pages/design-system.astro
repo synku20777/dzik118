@@ -51,12 +51,12 @@ const colors = [
 
 const typeScale = [
   ["Caption", "text-caption", "12px", "16px", "500"],
-  ["Label", "text-label", "13px", "18px", "600"],
+  ["Label", "text-label", "14px", "18px", "600"],
   ["Body small", "text-body-sm", "14px", "20px", "400"],
   ["Body", "text-body", "16px", "24px", "400"],
   ["UI strong", "text-ui-strong", "16px", "22px", "600"],
   ["Heading 3", "text-h3", "20px", "26px", "600"],
-  ["Heading 2", "text-h2", "28px", "34px", "600"],
+  ["Heading 2", "text-h2", "24–32px", "34px", "600"],
 ] as const;
 
 const spacing = [0, 4, 8, 12, 16, 24, 32, 48, 64, 96];
@@ -67,10 +67,27 @@ const radii = [
   ["Panel", "10px"],
 ] as const;
 const elevations = [
-  ["0 · panel", "--shadow-panel", "none"],
-  ["1 · menu", "--elevation-1", "var(--elevation-1)"],
-  ["2 · raised", "--elevation-2", "var(--elevation-2)"],
-  ["Overlay", "--elevation-overlay", "var(--elevation-overlay)"],
+  ["Flat · panels, tables", "--elevation-flat"],
+  ["Raised · toolbars, toasts", "--elevation-raised"],
+  ["Overlay · menus, tooltips", "--elevation-overlay"],
+  ["Modal · dialogs, drawers", "--elevation-modal"],
+] as const;
+const textTokens = [
+  ["xs", "Captions, counters, fine print"],
+  ["sm", "Labels, table cells, dense UI"],
+  ["base", "Body, buttons, inputs"],
+  ["lg", "Subheads, drawer titles"],
+  ["xl", "Section titles"],
+  ["2xl", "Large section titles"],
+  ["display-sm", "Page titles, key figures"],
+  ["display-md", "Feature figures"],
+  ["display-lg", "Fraunces headlines, amount due"],
+] as const;
+const tones = ["neutral", "info", "success", "warning", "danger", "positive"];
+const breakpoints = [
+  ["sm", "40rem", "Tables stop stacking; page gutter grows to 24px"],
+  ["md", "48rem", "Two-up layouts; drawers stop being full width"],
+  ["lg", "70rem", "Persistent sidebar; fluid gutter; wide tables"],
 ] as const;
 
 const states = [
@@ -88,6 +105,7 @@ const sourceTokens = [
       .filter((token) => !token.startsWith("--lightningcss-"))
   ),
 ].sort();
+const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
 ---
 
 <!doctype html>
@@ -218,6 +236,37 @@ const sourceTokens = [
               </article>
             ))}
           </div>
+          <h3 class="ds-subhead">Tones</h3>
+          <p>
+            One background and text pair per meaning, shared by badges, notices
+            and meter chips. Components reference <code>--tone-*</code>.
+          </p>
+          <div class="tone-grid">
+            {tones.map((tone) => (
+              <span
+                class="tone-chip"
+                style={`background:var(--tone-${tone}-bg);color:var(--tone-${tone}-text)`}
+              >
+                {tone}
+              </span>
+            ))}
+          </div>
+          <h3 class="ds-subhead">Palette</h3>
+          <p>
+            Tier 1 primitives. Semantic tokens reference these; components never
+            do.
+          </p>
+          <div class="palette-grid">
+            {palette.map((variable) => (
+              <div class="palette-chip">
+                <span
+                  style={`background:var(${variable})`}
+                  data-palette={variable}
+                />
+                <code>{variable.replace("--palette-", "")}</code>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section id="typography" class="ds-section">
@@ -267,6 +316,22 @@ const sourceTokens = [
               </p>
             </article>
           </div>
+          <h3 class="ds-subhead">Size tokens</h3>
+          <p>
+            Use a <code>--text-*</code> step; do not write a font-size literal.
+            The display steps are fluid.
+          </p>
+          <div class="type-stack">
+            {textTokens.map(([step, use]) => (
+              <article class="type-row" data-text-token={step}>
+                <div>
+                  <strong>{step}</strong>
+                  <code>--text-{step}</code>
+                </div>
+                <p style={`font-size:var(--text-${step})`}>{use}</p>
+              </article>
+            ))}
+          </div>
         </section>
 
         <section id="geometry" class="ds-section">
@@ -279,6 +344,56 @@ const sourceTokens = [
             </p>
           </header>
           <div class="geometry-grid">
+            <article class="ds-panel">
+              <h3>Breakpoints</h3>
+              <dl class="bp-list">
+                {breakpoints.map(([name, width, use]) => (
+                  <div>
+                    <dt>
+                      <code>
+                        {name} · {width}
+                      </code>
+                    </dt>
+                    <dd>{use}</dd>
+                  </div>
+                ))}
+              </dl>
+            </article>
+            <article class="ds-panel">
+              <h3>Layout spacing</h3>
+              <dl class="bp-list">
+                <div>
+                  <dt>
+                    <code>--gap-label</code>
+                  </dt>
+                  <dd>Label to its control · 4px</dd>
+                </div>
+                <div>
+                  <dt>
+                    <code>--gap-field</code>
+                  </dt>
+                  <dd>Between form fields · 16px</dd>
+                </div>
+                <div>
+                  <dt>
+                    <code>--gap-section</code>
+                  </dt>
+                  <dd>Between panels and sections · 24px</dd>
+                </div>
+                <div>
+                  <dt>
+                    <code>--pad-panel</code>
+                  </dt>
+                  <dd>Inside a panel · 24px (compact 16px)</dd>
+                </div>
+                <div>
+                  <dt>
+                    <code>--gutter</code>
+                  </dt>
+                  <dd>Page edge · 16px, 24px from sm, fluid from lg</dd>
+                </div>
+              </dl>
+            </article>
             <article class="ds-panel">
               <h3>Spacing</h3>
               <div class="space-scale">
@@ -318,12 +433,13 @@ const sourceTokens = [
             <h2>Elevation</h2>
             <p>
               Ordinary panels remain flat. Shadow appears only when hierarchy or
-              overlap requires it.
+              overlap requires it. In dark mode shadows give way to a hairline
+              border on a lighter surface.
             </p>
           </header>
           <div class="elevation-grid">
-            {elevations.map(([name, variable, value]) => (
-              <article style={`box-shadow:${value}`}>
+            {elevations.map(([name, variable]) => (
+              <article style={`box-shadow:var(${variable})`}>
                 <>
                   <strong>{name}</strong>
                   <code>{variable}</code>
@@ -1026,8 +1142,8 @@ const sourceTokens = [
   .contrast-row span {
     padding: 0.2rem 0.4rem;
     border-radius: 0.3rem;
-    background: var(--color-badge-neutral-bg);
-    color: var(--color-badge-neutral-text);
+    background: var(--tone-neutral-bg);
+    color: var(--tone-neutral-text);
     font-size: 0.7rem;
     font-variant-numeric: tabular-nums;
   }
@@ -1098,6 +1214,46 @@ const sourceTokens = [
     height: 4rem;
     border: 1px solid var(--color-border);
     background: var(--color-nav-active-bg);
+  }
+  .ds-subhead {
+    margin-top: var(--space-8);
+    font-size: var(--text-lg);
+    font-weight: 600;
+  }
+  .tone-grid,
+  .palette-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+  .tone-chip {
+    border-radius: var(--radius-badge);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+  .palette-chip {
+    display: grid;
+    gap: var(--space-1);
+  }
+  .palette-chip span {
+    height: 2.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-badge);
+  }
+  .palette-chip code {
+    font-size: var(--text-xs);
+    overflow-wrap: anywhere;
+  }
+  .bp-list {
+    display: grid;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+  }
+  .bp-list dd {
+    color: var(--color-muted);
+    font-size: var(--text-sm);
   }
   .elevation-grid {
     display: grid;
@@ -1394,8 +1550,8 @@ const sourceTokens = [
   .drift-panel {
     margin-top: 1rem;
     padding: 1.5rem;
-    background: var(--color-notice-warning-bg);
-    color: var(--color-notice-warning-text);
+    background: var(--tone-warning-bg);
+    color: var(--tone-warning-text);
   }
   .drift-panel ul {
     margin: 0.75rem 0 0 1.1rem;
@@ -1403,7 +1559,7 @@ const sourceTokens = [
     gap: 0.4rem;
     font-size: 0.875rem;
   }
-  @media (max-width: 1023px) {
+  @media (width < 70rem) {
     .ds-shell {
       grid-template-columns: 1fr;
     }
@@ -1422,7 +1578,7 @@ const sourceTokens = [
       grid-template-columns: 1fr 1fr;
     }
   }
-  @media (max-width: 639px) {
+  @media (width < 40rem) {
     .ds-topbar {
       padding: 0 1rem;
     }
