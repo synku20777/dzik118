@@ -52,25 +52,6 @@
 }
 
 /* ---------------------------------------------------------------------
-   Riga design system (docs/product/UI_SPECIFICATION.md,
-   docs/product/FULL_DESIGN_SPECIFICATION.md). Foundation palette, for
-   reference -- these hex values feed the semantic tokens below, they are
-   not used directly in components:
-     limestone-50  #F7F4EE   limestone-100 #EEE8DE   limestone-300 #D5CEC2
-     ink-900       #17242B
-     daugava-700   #274B5B   daugava-600   #35677A
-     verdigris-700 #1F5955   verdigris-600 #2F736D   verdigris-200 #BFD8D1
-     brick-700     #783529   brick-600     #9A493A   brick-200     #E5C2BA
-     amber-700     #7C470F   amber-500     #C17B26   amber-200     #E8C99A
-     pine-700      #38452B   pine-600      #4F5D3A   pine-200      #CBD1BC
-     night-950     #0E1517   night-900     #151F21   night-800     #1E2B2E
-   Semantic mapping: Daugava = action/navigation, Verdigris = success,
-   Amber = warning, Brick = danger, Pine = positive-secondary state,
-   Limestone = structure/neutral surfaces. Existing --color-* variable
-   names are kept as-is (only their values change) so every component
-   that already references them picks up the new palette for free.
-   --------------------------------------------------------------------- */
-/* ---------------------------------------------------------------------
    Namkopa design tokens (docs/product/DESIGN_SYSTEM.md, "Tokens").
    Three tiers, each referencing only the tier above it:
 
@@ -129,6 +110,16 @@
   --palette-pine-400: #9dab88;
   --palette-pine-600: #4f5d3a;
 
+  /* Alpha tints for dark-mode fills. Literals rather than a color mix, so
+     browsers without color-mix still get a translucent fill. */
+  --palette-daugava-200-a16: rgb(191 209 215 / 16%);
+  --palette-verdigris-200-a18: rgb(191 216 209 / 18%);
+  --palette-amber-200-a18: rgb(232 201 154 / 18%);
+  --palette-brick-200-a18: rgb(229 194 186 / 18%);
+  --palette-brick-200-a15: rgb(229 194 186 / 15%);
+  --palette-brick-700-a08: rgb(120 53 41 / 8%);
+  --palette-pine-200-a16: rgb(203 209 188 / 16%);
+
   --palette-night-950: #0e1517;
   --palette-night-900: #151f21;
   --palette-night-850: #1a2528;
@@ -167,8 +158,8 @@
     var(--palette-brick-400)
   );
   --color-destructive-hover-bg: light-dark(
-    color-mix(in srgb, var(--palette-brick-700) 8%, transparent),
-    color-mix(in srgb, var(--palette-brick-200) 15%, transparent)
+    var(--palette-brick-700-a08),
+    var(--palette-brick-200-a15)
   );
   /* Form inputs get a deeper border than --color-border's card/table
      hairlines so the field edge stays visible (WCAG 1.4.11). */
@@ -202,7 +193,7 @@
   );
   --tone-info-bg: light-dark(
     var(--palette-daugava-100),
-    color-mix(in srgb, var(--palette-daugava-200) 16%, transparent)
+    var(--palette-daugava-200-a16)
   );
   --tone-info-text: light-dark(
     var(--palette-daugava-700),
@@ -210,7 +201,7 @@
   );
   --tone-success-bg: light-dark(
     var(--palette-verdigris-100),
-    color-mix(in srgb, var(--palette-verdigris-200) 18%, transparent)
+    var(--palette-verdigris-200-a18)
   );
   --tone-success-text: light-dark(
     var(--palette-verdigris-700),
@@ -218,7 +209,7 @@
   );
   --tone-warning-bg: light-dark(
     var(--palette-amber-100),
-    color-mix(in srgb, var(--palette-amber-200) 18%, transparent)
+    var(--palette-amber-200-a18)
   );
   --tone-warning-text: light-dark(
     var(--palette-amber-700),
@@ -226,7 +217,7 @@
   );
   --tone-danger-bg: light-dark(
     var(--palette-brick-100),
-    color-mix(in srgb, var(--palette-brick-200) 18%, transparent)
+    var(--palette-brick-200-a18)
   );
   --tone-danger-text: light-dark(
     var(--palette-brick-700),
@@ -234,7 +225,7 @@
   );
   --tone-positive-bg: light-dark(
     var(--palette-pine-100),
-    color-mix(in srgb, var(--palette-pine-200) 16%, transparent)
+    var(--palette-pine-200-a16)
   );
   --tone-positive-text: light-dark(
     var(--palette-pine-600),
@@ -305,12 +296,15 @@
   --icon-stroke: 1.75;
 
   /* Chart sequence, defined ahead of need. */
-  --chart-1: var(--palette-daugava-600);
-  --chart-2: var(--palette-verdigris-600);
-  --chart-3: var(--palette-amber-500);
-  --chart-4: var(--palette-brick-600);
-  --chart-5: var(--palette-pine-600);
-  --chart-6: var(--palette-ink-500);
+  --chart-1: light-dark(var(--palette-daugava-600), var(--palette-daugava-200));
+  --chart-2: light-dark(
+    var(--palette-verdigris-600),
+    var(--palette-verdigris-200)
+  );
+  --chart-3: light-dark(var(--palette-amber-500), var(--palette-amber-200));
+  --chart-4: light-dark(var(--palette-brick-600), var(--palette-brick-200));
+  --chart-5: light-dark(var(--palette-pine-600), var(--palette-pine-400));
+  --chart-6: light-dark(var(--palette-ink-500), var(--palette-night-300));
   --chart-grid: light-dark(
     var(--palette-limestone-300),
     var(--palette-night-700)
@@ -331,18 +325,14 @@
   --shadow-control: 0 1px 2px rgb(23 36 43 / 25%);
 }
 
-/* Explicit theme choice (data-theme) and the OS preference both set the
-   lightningcss light-dark() switch; color-scheme alone is not enough in
-   browsers where lightningcss lowered light-dark(). */
+/* An explicit theme choice sets color-scheme; light-dark() (and lightningcss's
+   lowering of it) follows. Nothing else is redeclared per theme except
+   elevation, which light-dark() cannot express. */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --lightningcss-light: ;
-  --lightningcss-dark: initial;
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --lightningcss-light: initial;
-  --lightningcss-dark: ;
 }
 :root[data-theme="dark"] {
   --elevation-raised: 0 0 0 1px var(--color-border);
@@ -375,7 +365,7 @@
 }
 @media (width >= 70rem) {
   :root {
-    --gutter: clamp(1.25rem, 3vw, 3rem);
+    --gutter: clamp(1.5rem, 3vw, 3rem);
   }
 }
 
@@ -624,7 +614,7 @@ textarea:disabled {
   }
   .text-label {
     letter-spacing: var(--tracking-small);
-    font-size: var(--text-sm); /* 13px */
+    font-size: var(--text-sm);
     line-height: 1.125rem; /* 18px */
     font-weight: 600;
   }
@@ -651,8 +641,8 @@ textarea:disabled {
   }
   .text-h2 {
     letter-spacing: var(--tracking-heading);
-    font-size: var(--text-display-sm); /* 28px */
-    line-height: 2.125rem; /* 34px */
+    font-size: var(--text-display-sm);
+    line-height: var(--text-display-sm--line-height);
     font-weight: 600;
   }
   /* Section 4.2: Fraunces, used only at the specific display moments the
@@ -911,8 +901,8 @@ textarea:disabled {
     overflow-x: auto;
   }
   /* One surface, a few figures with dividers: the same construction as the
-     Current Month finances and the dwelling summary. Two columns on a phone,
-     one below 360px. */
+     Current Month finances and the dwelling summary. Two columns below md,
+     four from md. */
   .metric-strip {
     display: grid;
     grid-template-columns: repeat(var(--metrics, 4), minmax(0, 1fr));
@@ -1856,7 +1846,7 @@ textarea:disabled {
   padding: 0;
   border: 0;
   border-inline-start: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background: var(--color-surface-raised);
   color: var(--color-foreground);
   /* Directional variant of --elevation-overlay (Section 6.2) -- same
      ink-based shadow color/intensity, offset toward the page instead of

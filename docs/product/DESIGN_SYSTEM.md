@@ -33,12 +33,12 @@ and bone (dark structure and text), daugava (action and navigation), verdigris
 | `--color-canvas` | Page background. |
 | `--color-surface` | Panels, tables, fields, menus. |
 | `--color-surface-hover` | Hover and disabled-field fill. |
-| `--color-surface-raised` | Surface of raised, overlay and modal elements. Equal to surface in light mode, one step lighter in dark mode, where shadows cannot show depth. |
+| `--color-surface-raised` | Background of elevated surfaces: toasts, menus, popovers, dialogs, drawers (tooltips and the bulk-action toolbar keep their own fill). Equal to surface in light mode, one step lighter in dark mode, where shadows cannot show depth. |
 | `--color-foreground` / `--color-muted` | Text, and secondary text. Muted keeps 4.5:1 on canvas and surface. |
 | `--color-border` | Panel, table and divider hairlines. |
-| `--color-input-border` | Field boundary. Deeper than `--color-border` so a field edge meets 3:1 (WCAG 1.4.11). Never `border-border` on a field. |
+| `--color-input-border` | Field boundary. Deeper than `--color-border` so a field edge meets 3:1 (WCAG 1.4.11) on canvas and surface. Place fields on those two; on `--color-surface-hover` or table headers the edge falls to about 2.9:1. Never `border-border` on a field. |
 | `--color-primary` (+ `-hover`, `-active`, `--color-on-primary`) | Actions, links, navigation. In dark mode primary is a pale tint, so `--color-on-primary` is dark. |
-| `--color-secondary`, `--color-success`, `--color-warning`, `--color-destructive` (+ hover, active) | Meaning colors for text and fills. |
+| `--color-secondary`, `--color-success`, `--color-warning`, `--color-destructive` | Meaning colors for text and fills. Only destructive has `-hover` and `-active` variants. |
 | `--color-positive-secondary` | Quiet positive state (pine), for example gas meters and credits. |
 | `--color-focus-ring` | Opaque focus outline. |
 | `--color-backdrop` | Scrim behind dialogs and drawers. |
@@ -46,8 +46,8 @@ and bone (dark structure and text), daugava (action and navigation), verdigris
 Tones are one background and text pair per meaning: `--tone-neutral`,
 `-info`, `-success`, `-warning`, `-danger`, `-positive`, each with `-bg` and
 `-text`. Badges, notices, meter chips and nav highlights all use them, so the
-same meaning always looks the same. In dark mode the background is the palette
-tint at 16 to 18% alpha over the surface. Color never carries state alone:
+same meaning always looks the same. In dark mode the background is a palette
+tint (`--palette-*-a16` to `-a18`, RGBA literals) over the surface. Color never carries state alone:
 badges add an icon and text, notices add a heading or icon.
 
 Replaced names: `--color-badge-*` and `--color-notice-*` became `--tone-*`.
@@ -84,8 +84,9 @@ Rules:
 - Numbers in tables and figures use tabular figures.
 - Line length stays under 80 characters for body copy.
 
-Known exception: the `/design-system` page's own hero lockup uses bespoke
-`clamp()` sizes because it is illustration, not product UI.
+Known exception: the `/design-system` page's own illustration (hero lockup, the
+stat figure and the miniature shell diagrams) uses bespoke sizes because it is
+illustration, not product UI.
 
 ### Spacing
 
@@ -103,7 +104,7 @@ Semantic layout tokens name the rhythm, so screens stop choosing numbers:
 | `--gap-section` | 24px | Between panels and page sections. |
 | `--pad-panel` | 24px | Inside an ordinary panel. |
 | `--pad-panel-compact` | 16px | Inside a dense panel or card. |
-| `--gutter` | 16px; 24px from `sm`; fluid 20 to 48px from `lg` | Page edge padding. |
+| `--gutter` | 16px; 24px from `sm`; fluid 34 to 48px from `lg` | Page edge padding. |
 
 Control heights: `--control-size-sm` 36px (expands to 44px on coarse
 pointers), `--control-size-md` 44px, `--control-size-lg` 48px.
@@ -153,8 +154,9 @@ Outline at `--icon-stroke` 1.75 and sizes `--icon-size-xs` 16, `-sm` 18, `-md`
 ### Theming
 
 Themes apply to the document root through `data-theme` or the system preference.
-`:root[data-theme]` sets `color-scheme` and the lightningcss `light-dark()`
-switch; it does not redeclare colors. Nested theme containers are outside the
+`:root[data-theme]` sets `color-scheme` only (lightningcss derives its
+`light-dark()` fallback from it); it does not redeclare colors. Chart colors
+(`--chart-1` to `-6`) use `light-dark()` so they hold 3:1 on either surface. Nested theme containers are outside the
 contract.
 
 ### Exceptions
