@@ -131,16 +131,6 @@
 
   /* Tier 2: semantic colors that Tailwind has no utility for. The ones with
      utilities (canvas, surface, foreground...) live in @theme below. */
-  --color-surface-hover: light-dark(
-    var(--palette-limestone-100),
-    var(--palette-night-800)
-  );
-  /* Dark surfaces cannot show depth with shadows, so raised surfaces get
-     one step lighter. Light mode keeps the paper surface. */
-  --color-surface-raised: light-dark(
-    var(--palette-paper),
-    var(--palette-night-800)
-  );
   --color-primary-hover: light-dark(
     var(--palette-daugava-600),
     var(--palette-daugava-300)
@@ -416,6 +406,16 @@
     var(--palette-night-950)
   );
   --color-surface: light-dark(var(--palette-paper), var(--palette-night-900));
+  --color-surface-hover: light-dark(
+    var(--palette-limestone-100),
+    var(--palette-night-800)
+  );
+  /* Dark surfaces cannot show depth with shadows, so raised surfaces get
+     one step lighter. Light mode keeps the paper surface. */
+  --color-surface-raised: light-dark(
+    var(--palette-paper),
+    var(--palette-night-800)
+  );
   --color-foreground: light-dark(
     var(--palette-ink-900),
     var(--palette-bone-100)
