@@ -372,6 +372,14 @@ const presetItems = [
     align-items: start;
     gap: 0.75rem;
   }
+  /* On touch the title is the checkbox's 44px target. */
+  @media (pointer: coarse) {
+    .setup-charge-choice label {
+      display: inline-flex;
+      align-items: center;
+      min-height: var(--control-size-md);
+    }
+  }
   .setup-charge-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(12rem, 0.8fr);

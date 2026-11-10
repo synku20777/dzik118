@@ -269,6 +269,13 @@
   --pad-panel-compact: var(--space-4); /* inside a dense panel or card */
   --gutter: var(--space-4); /* page edge; grows at sm and lg, see below */
 
+  /* Page widths: where a screen stops growing. */
+  --width-narrow: 28rem; /* auth card, single-purpose forms */
+  --width-reading: 50rem; /* resident column, prose pages */
+  --width-wizard: 76rem; /* guided setup */
+  --width-content: 94rem; /* dashboard and standard admin pages */
+  --width-shell: 110rem; /* outer cap of the admin content area */
+
   --control-size-sm: 2.25rem;
   --control-size-md: 2.75rem;
   --control-size-lg: 3rem;
@@ -1104,6 +1111,12 @@ textarea:disabled {
     -webkit-mask: var(--chevron) center / contain no-repeat;
     mask: var(--chevron) center / contain no-repeat;
   }
+  /* A text toggle is a control: 44px tall on touch. */
+  @media (pointer: coarse) {
+    summary.chevron-toggle {
+      min-height: var(--control-size-md);
+    }
+  }
   summary.chevron-toggle-end {
     display: flex;
     justify-content: space-between;
@@ -1637,7 +1650,7 @@ textarea:disabled {
     min-width: 0;
     padding: var(--space-8) var(--gutter);
     padding-bottom: 6rem;
-    max-width: 110rem;
+    max-width: var(--width-shell);
   }
   .admin-mobile {
     display: none;
@@ -1647,7 +1660,7 @@ textarea:disabled {
     border-bottom: 1px solid var(--color-border);
   }
   .resident-header > div {
-    max-width: 50rem;
+    max-width: var(--width-reading);
     margin: auto;
     padding: 1rem 1.25rem;
     display: flex;
@@ -1657,7 +1670,7 @@ textarea:disabled {
     flex-wrap: wrap;
   }
   .resident-content {
-    max-width: 50rem;
+    max-width: var(--width-reading);
     margin: auto;
     padding: 1.75rem var(--gutter) 3rem;
   }

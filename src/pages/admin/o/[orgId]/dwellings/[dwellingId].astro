@@ -410,243 +410,47 @@ function meterCaption(
       </button>
     </div>
 
-    <div class="dwelling-grid" data-panel-group>
-      <div class="dwelling-main">
-        <section class="panel p-6" data-panel="overview">
-          <div class="card-header">
-            <div>
-              <h2>{t("Basic information")}</h2>
-              <p class="text-body-sm text-muted">
-                {t("Core information about this dwelling.")}
-              </p>
-            </div>
-            <details
-              class="edit-disclosure"
-              id="basic-info-details"
-              open={!!updateResult?.error}
-            >
-              <summary class="btn-secondary">
-                <Icon name="pencil" size="sm" />
-                {t("Edit")}
-              </summary>
-              <div class="edit-disclosure-panel">
-                {updateResult?.error && (
-                  <p class="notice notice-danger" role="alert">
-                    {friendlyActionErrorMessage(updateResult.error, locale)}
-                  </p>
-                )}
-                <form
-                  method="POST"
-                  action={actions.dwellings.update}
-                  id="basic-info-form"
-                  class="mt-4 grid grid-cols-2 gap-3"
-                  data-saving-label={t("Saving…")}
-                  data-pending-label={t("Saving dwelling information…")}
-                  data-success-label={t("Changes saved")}
-                  data-error-label={t("Could not save dwelling information")}
-                  data-generic-error={t(
-                    "Something went wrong. Please try again."
-                  )}
-                  data-reconcile-error={t(
-                    "Saved, but the view could not be updated"
-                  )}
-                >
-                  <input
-                    type="hidden"
-                    name="organizationId"
-                    value={organizationId}
-                  />
-                  <input type="hidden" name="dwellingId" value={dwellingId} />
-                  <div class="col-span-2">
-                    <label class="field-label" for="billingName">
-                      {t("Billing name")}
-                    </label>
-                    <input
-                      id="billingName"
-                      name="billingName"
-                      value={dwelling.billingName ?? ""}
-                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      class="field-label"
-                      for="occupantName"
-                    >
-                      {t("Occupant name")}
-                    </label>
-                    <input
-                      id="occupantName"
-                      name="occupantName"
-                      value={dwelling.occupantName ?? ""}
-                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      class="field-label"
-                      for="areaM2"
-                    >
-                      {t("Area (m²)")}
-                    </label>
-                    <input
-                      id="areaM2"
-                      name="areaM2"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={dwelling.areaM2}
-                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      class="field-label"
-                      for="residentCount"
-                    >
-                      {t("Resident count")}
-                    </label>
-                    <input
-                      id="residentCount"
-                      name="residentCount"
-                      type="number"
-                      min="0"
-                      value={dwelling.residentCount}
-                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      class="field-label"
-                      for="billingEmail"
-                    >
-                      {t("Billing email")}
-                    </label>
-                    <input
-                      id="billingEmail"
-                      name="billingEmail"
-                      type="email"
-                      value={dwelling.billingEmail ?? ""}
-                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                    />
-                  </div>
-                  <div class="col-span-2">
-                    <label
-                      class="field-label"
-                      for="billingAddress"
-                    >
-                      {t("Billing address")}
-                    </label>
-                    <input
-                      id="billingAddress"
-                      name="billingAddress"
-                      value={dwelling.billingAddress ?? ""}
-                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                    />
-                  </div>
-                  <div class="col-span-2 flex gap-2">
-                    <button type="submit" class="btn-primary">
-                      {t("Save")}
-                    </button>
-                  </div>
-                </form>
+    <div class="dwelling-grid-host">
+      <div class="dwelling-grid" data-panel-group>
+        <div class="dwelling-main">
+          <section class="panel p-6" data-panel="overview">
+            <div class="card-header">
+              <div>
+                <h2>{t("Basic information")}</h2>
+                <p class="text-body-sm text-muted">
+                  {t("Core information about this dwelling.")}
+                </p>
               </div>
-            </details>
-          </div>
-          <dl class="detail-list">
-            <div>
-              <dt>{t("Occupant name")}</dt>
-              <dd data-field="occupantName">{dwelling.occupantName ?? "—"}</dd>
-            </div>
-            <div>
-              <dt>{t("Billing name")}</dt>
-              <dd data-field="billingName">{dwelling.billingName ?? "—"}</dd>
-            </div>
-            <div>
-              <dt>{t("Billing email")}</dt>
-              <dd data-field="billingEmail">{dwelling.billingEmail ?? "—"}</dd>
-            </div>
-            <div>
-              <dt>{t("Billing address")}</dt>
-              <dd data-field="billingAddress">
-                {dwelling.billingAddress ?? "—"}
-              </dd>
-            </div>
-            <div>
-              <dt>{t("Area (m²)")}</dt>
-              <dd data-field="areaM2">{dwelling.areaM2}</dd>
-            </div>
-            <div>
-              <dt>{t("Resident count")}</dt>
-              <dd data-field="residentCount">{dwelling.residentCount}</dd>
-            </div>
-          </dl>
-        </section>
-
-        <section
-          id="account-balance"
-          class="panel p-6"
-          data-panel="account-balance"
-        >
-          <div class="card-header">
-            <div>
-              <h2>{t("Account balance")}</h2>
-              <p class="text-body-sm text-muted">
-                {t("All adjustments and balance history.")}
-              </p>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <a
-                class="btn-secondary"
-                href={`${base}/payments/ledger?dwelling=${dwellingId}`}
-              >
-                {t("Full statement")}
-              </a>
               <details
                 class="edit-disclosure"
-                open={!!recordPaymentResult?.error}
+                id="basic-info-details"
+                open={!!updateResult?.error}
               >
                 <summary class="btn-secondary">
-                  <Icon name="plus" size="sm" />
-                  {t("Record a payment")}
-                </summary>
-                <div class="edit-disclosure-panel edit-disclosure-panel-left">
-                  {recordPaymentResult?.error && (
-                    <p class="notice notice-danger" role="alert">
-                      {friendlyActionErrorMessage(
-                        recordPaymentResult.error,
-                        locale
-                      )}
-                    </p>
-                  )}
-                  <ManualPaymentForm
-                    organizationId={organizationId}
-                    invoices={openInvoices}
-                    dwellings={paymentAccountTargets}
-                    today={todayInOrg}
-                    error={recordPaymentResult?.error}
-                    idPrefix="dwelling-payment"
-                  />
-                </div>
-              </details>
-              <details class="edit-disclosure" open={!!adjustmentResult?.error}>
-                <summary class="btn-secondary">
-                  <Icon name="plus" size="sm" />
-                  {t("Add adjustment")}
+                  <Icon name="pencil" size="sm" />
+                  {t("Edit")}
                 </summary>
                 <div class="edit-disclosure-panel">
-                  {adjustmentResult?.error && (
+                  {updateResult?.error && (
                     <p class="notice notice-danger" role="alert">
-                      {friendlyActionErrorMessage(
-                        adjustmentResult.error,
-                        locale
-                      )}
+                      {friendlyActionErrorMessage(updateResult.error, locale)}
                     </p>
                   )}
                   <form
                     method="POST"
-                    action={actions.accounts.createAdjustment}
+                    action={actions.dwellings.update}
+                    id="basic-info-form"
                     class="mt-4 grid grid-cols-2 gap-3"
+                    data-saving-label={t("Saving…")}
+                    data-pending-label={t("Saving dwelling information…")}
+                    data-success-label={t("Changes saved")}
+                    data-error-label={t("Could not save dwelling information")}
+                    data-generic-error={t(
+                      "Something went wrong. Please try again."
+                    )}
+                    data-reconcile-error={t(
+                      "Saved, but the view could not be updated"
+                    )}
                   >
                     <input
                       type="hidden"
@@ -654,515 +458,633 @@ function meterCaption(
                       value={organizationId}
                     />
                     <input type="hidden" name="dwellingId" value={dwellingId} />
-                    <input
-                      type="hidden"
-                      name="currency"
-                      value={organization.currency}
-                    />
-                    <div>
-                      <label
-                        class="field-label"
-                        for="adjustment-direction"
-                      >
-                        {t("Type")}
-                      </label>
-                      <select
-                        id="adjustment-direction"
-                        name="direction"
-                        class="mt-1 w-full"
-                      >
-                        <option value="CHARGE">{t("Charge adjustment")}</option>
-                        <option value="CREDIT">{t("Credit adjustment")}</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label class="field-label" for="adjustment-amount">
-                        {t("Amount")}
+                    <div class="col-span-2">
+                      <label class="field-label" for="billingName">
+                        {t("Billing name")}
                       </label>
                       <input
-                        id="adjustment-amount"
-                        name="amount"
-                        inputmode="decimal"
-                        required
-                        class="mt-1 w-full"
+                        id="billingName"
+                        name="billingName"
+                        value={dwelling.billingName ?? ""}
+                        class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                       />
                     </div>
                     <div>
-                      <label class="field-label" for="adjustment-date">
-                        {t("Date")}
+                      <label class="field-label" for="occupantName">
+                        {t("Occupant name")}
                       </label>
                       <input
-                        id="adjustment-date"
-                        name="effectiveDate"
-                        type="date"
-                        required
-                        class="mt-1 w-full"
+                        id="occupantName"
+                        name="occupantName"
+                        value={dwelling.occupantName ?? ""}
+                        class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                       />
                     </div>
                     <div>
-                      <label class="field-label" for="adjustment-reason">
-                        {t("Reason")}
+                      <label class="field-label" for="areaM2">
+                        {t("Area (m²)")}
                       </label>
                       <input
-                        id="adjustment-reason"
-                        name="reason"
-                        required
-                        class="mt-1 w-full"
+                        id="areaM2"
+                        name="areaM2"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={dwelling.areaM2}
+                        class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                      />
+                    </div>
+                    <div>
+                      <label class="field-label" for="residentCount">
+                        {t("Resident count")}
+                      </label>
+                      <input
+                        id="residentCount"
+                        name="residentCount"
+                        type="number"
+                        min="0"
+                        value={dwelling.residentCount}
+                        class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                      />
+                    </div>
+                    <div>
+                      <label class="field-label" for="billingEmail">
+                        {t("Billing email")}
+                      </label>
+                      <input
+                        id="billingEmail"
+                        name="billingEmail"
+                        type="email"
+                        value={dwelling.billingEmail ?? ""}
+                        class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
                       />
                     </div>
                     <div class="col-span-2">
-                      <label class="field-label" for="adjustment-note">
-                        {t("Note")}
+                      <label class="field-label" for="billingAddress">
+                        {t("Billing address")}
                       </label>
-                      <textarea
-                        id="adjustment-note"
-                        name="note"
-                        class="mt-1 w-full"
-                      ></textarea>
+                      <input
+                        id="billingAddress"
+                        name="billingAddress"
+                        value={dwelling.billingAddress ?? ""}
+                        class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                      />
                     </div>
-                    <div class="col-span-2">
-                      <button class="btn-secondary" type="submit">
-                        {t("Add adjustment")}
+                    <div class="col-span-2 flex gap-2">
+                      <button type="submit" class="btn-primary">
+                        {t("Save")}
                       </button>
                     </div>
                   </form>
                 </div>
               </details>
             </div>
-          </div>
-          {recordPaymentResult?.data && (
-            <p class="notice" role="status">
-              {t("Payment recorded.")}
-            </p>
-          )}
-          <dl class="balance-summary">
-            <div>
-              <dt>{t("Total debits")}</dt>
-              <dd>
-                {formatMoney(
-                  String(totals.debit),
-                  organization.currency,
-                  locale
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>{t("Total credits")}</dt>
-              <dd>
-                {formatMoney(
-                  String(totals.credit),
-                  organization.currency,
-                  locale
-                )}
-              </dd>
-            </div>
-          </dl>
-          {accountActivity.length > 0 ? (
-            <div
-              class="table-wrap stack-table mt-4"
-              role="region"
-              aria-label={t("Account activity")}
-              tabindex="0"
-            >
-              <table class="w-full text-body-sm">
-                <caption class="sr-only">{t("Account activity")}</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">{t("Date")}</th>
-                    <th scope="col">{t("Description")}</th>
-                    <th scope="col" class="text-right">
-                      {t("Debit")}
-                    </th>
-                    <th scope="col" class="text-right">
-                      {t("Credit")}
-                    </th>
-                    <th scope="col" class="text-right">
-                      {t("Balance")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {accountActivity
-                    .slice(-10)
-                    .reverse()
-                    .map((entry) => (
-                      <tr>
-                        <td>{formatDate(entry.effectiveDate, locale)}</td>
-                        <td>{entry.description ?? entry.type}</td>
-                        <td class="text-right">
-                          {entry.debit === "0.00"
-                            ? "—"
-                            : formatMoney(
-                                entry.debit,
-                                organization.currency,
-                                locale
-                              )}
-                        </td>
-                        <td class="text-right">
-                          {entry.credit === "0.00"
-                            ? "—"
-                            : formatMoney(
-                                entry.credit,
-                                organization.currency,
-                                locale
-                              )}
-                        </td>
-                        <td class="text-right">
-                          {formatMoney(
-                            entry.balance,
-                            organization.currency,
-                            locale
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyState
-              class="mt-4"
-              title={t("No account entries yet")}
-              description={t("Adjustments will appear here.")}
-            />
-          )}
-        </section>
-
-        <section id="tariffs" class="panel p-6" data-panel="tariffs">
-          <div class="card-header">
-            <div>
-              <h2>{t("Recurring tariffs")}</h2>
-              <p class="text-body-sm text-muted">
-                {t(
-                  "Recurring tariffs are configured and assigned from Tariffs & rules."
-                )}
-              </p>
-            </div>
-            <a
-              href={`${base}/settings/rules`}
-              class="btn-secondary shrink-0 whitespace-nowrap"
-            >
-              {t("View all tariffs")}
-            </a>
-          </div>
-          {currentTariffs.length === 0 ? (
-            <EmptyState
-              title={t("No recurring tariffs apply to this dwelling.")}
-            />
-          ) : (
-            <Fragment>
-              {automaticTariffs.length > 0 && (
-                <Fragment>
-                  <h3 class="tariff-group-heading">
-                    {t("Automatically applied")}
-                  </h3>
-                  <ul class="sidebar-item-list tariff-list">
-                    {automaticTariffs.map((rule) => (
-                      <li>
-                        <div class="sidebar-item-body">
-                          <strong>{rule.name}</strong>
-                          <p>{tariffPriceSummary(rule)}</p>
-                        </div>
-                        <a
-                          href={`${base}/settings/rules?edit=${rule.id}`}
-                          class="btn-secondary btn-sm"
-                        >
-                          {t("Edit tariff")}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </Fragment>
-              )}
-              {assignedTariffs.length > 0 && (
-                <Fragment>
-                  <h3 class="tariff-group-heading">
-                    {t("Assigned specifically")}
-                  </h3>
-                  <ul class="sidebar-item-list tariff-list">
-                    {assignedTariffs.map((rule) => (
-                      <li>
-                        <div class="sidebar-item-body">
-                          <strong>{rule.name}</strong>
-                          <p>{tariffPriceSummary(rule)}</p>
-                          <p>{tariffScopeReason(rule.applicationScope)}</p>
-                        </div>
-                        <a
-                          href={`${base}/settings/rules?edit=${rule.id}`}
-                          class="btn-secondary btn-sm"
-                        >
-                          {t("Edit tariff")}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </Fragment>
-              )}
-            </Fragment>
-          )}
-        </section>
-
-        <section id="messages" class="panel p-6" data-panel="messages">
-          <div class="card-header">
-            <div>
-              <h2>{t("Recent messages")}</h2>
-              <p class="text-body-sm text-muted">
-                {t("Latest messages with this dwelling.")}
-              </p>
-            </div>
-            <a
-              class="btn-secondary"
-              href={`${base}/messages?dwellingId=${dwellingId}`}
-            >
-              {t("View all")}
-            </a>
-          </div>
-          {recentMessages.length > 0 ? (
-            <ul class="message-preview-list">
-              {recentMessages.map((m) => (
-                <li>
-                  <p data-tip-clipped>{m.body}</p>
-                  <span>
-                    {formatDate(m.createdAt, locale, organization.timezone)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <EmptyState
-              class="mt-5"
-              title={t("No messages yet")}
-              description={t("Conversations with residents will appear here.")}
-            />
-          )}
-        </section>
-      </div>
-
-      <div class="dwelling-sidebar">
-        <section class="panel p-6" data-panel="overview">
-          <div class="card-header">
-            <div>
-              <h2>{t("Invoice delivery")}</h2>
-              <p class="text-body-sm text-muted">
-                {t("How this dwelling receives its invoices.")}
-              </p>
-            </div>
-          </div>
-          {deliveryResult?.error && (
-            <p class="notice notice-danger" role="alert">
-              {friendlyActionErrorMessage(deliveryResult.error, locale)}
-            </p>
-          )}
-          <form
-            method="POST"
-            action={actions.dwellings.updateInvoiceDelivery}
-            class="delivery-form"
-            data-delivery-form
-            data-saving-label={t("Saving…")}
-            data-pending-label={t("Saving delivery preferences…")}
-            data-success-label={t("Delivery preferences saved")}
-            data-error-label={t("Could not save delivery preferences")}
-            data-generic-error={t("Something went wrong. Please try again.")}
-            data-reconcile-error={t("Saved, but the view could not be updated")}
-            data-email-label={t("Email")}
-            data-paper-label={t("Paper")}
-            data-none-label={t("None")}
-          >
-            <input type="hidden" name="organizationId" value={organizationId} />
-            <input type="hidden" name="dwellingId" value={dwellingId} />
-            <ul class="delivery-list">
-              <li>
-                <label class="delivery-option">
-                  <span class="check-toggle">
-                    <input
-                      type="checkbox"
-                      name="invoiceByEmail"
-                      checked={dwelling.invoiceByEmail}
-                    />
-                    <span class="check-icon" aria-hidden="true">
-                      <Icon name="check" size="sm" />
-                    </span>
-                  </span>
-                  <span class="delivery-option-text">
-                    <strong>{t("Email")}</strong>
-                    <p>
-                      {dwelling.billingEmail
-                        ? `${t("Send invoices to")} ${dwelling.billingEmail}`
-                        : t("No billing email on file")}
-                    </p>
-                  </span>
-                </label>
-              </li>
-              <li>
-                <label class="delivery-option">
-                  <span class="check-toggle">
-                    <input
-                      type="checkbox"
-                      name="invoiceByPaper"
-                      checked={dwelling.invoiceByPaper}
-                    />
-                    <span class="check-icon" aria-hidden="true">
-                      <Icon name="check" size="sm" />
-                    </span>
-                  </span>
-                  <span class="delivery-option-text">
-                    <strong>{t("Paper")}</strong>
-                    <p>{t("Send a printed copy by mail")}</p>
-                  </span>
-                </label>
-              </li>
-            </ul>
-            <div class="pt-2">
-              <button
-                type="submit"
-                class="btn-primary"
-                disabled={!deliveryResult?.error}
-                data-delivery-save
-              >
-                {t("Save")}
-              </button>
-            </div>
-          </form>
-        </section>
-
-        <section id="residents" class="panel p-6" data-panel="residents">
-          <div class="card-header">
-            <div>
-              <h2>{t("Resident access")}</h2>
-              <p class="text-body-sm text-muted">
-                {t("People who can access their invoices and messages.")}
-              </p>
-            </div>
-            <details
-              class="edit-disclosure"
-              id="resident-details"
-              open={!!assignResult?.error || !!removeResult?.error}
-            >
-              <summary class="btn-secondary">
-                <Icon name="plus" size="sm" />
-                {t("Add resident")}
-              </summary>
-              <div class="edit-disclosure-panel">
-                {(assignResult?.error || removeResult?.error) && (
-                  <p class="notice notice-danger" role="alert">
-                    {friendlyActionErrorMessage(
-                      assignResult?.error ?? removeResult?.error,
-                      locale
-                    )}
-                  </p>
-                )}
-                <form
-                  method="POST"
-                  action={actions.dwellings.assignResident}
-                  id="resident-form"
-                  class="mt-4 flex gap-2"
-                  data-saving-label={t("Saving…")}
-                  data-pending-label={t("Adding resident…")}
-                  data-added-message={t("Resident added")}
-                  data-error-label={t("Could not add resident")}
-                  data-checking-label={t("Checking save status…")}
-                  data-unknown-label={t("Outcome not confirmed")}
-                  data-committed-missing={t(
-                    "The original change was saved, but the item is no longer present. The page has been refreshed."
-                  )}
-                  data-adding-label={t("Adding…")}
-                  data-already-has-access={t(
-                    "This resident already has access."
-                  )}
-                  data-generic-error={t(
-                    "Something went wrong. Please try again."
-                  )}
-                  data-remove-label={t("Remove")}
-                  data-removing-label={t("Removing resident…")}
-                  data-removed-label={t("Resident removed")}
-                  data-could-not-save={t("Could not save")}
-                  data-reconcile-error={t(
-                    "Saved, but the view could not be updated"
-                  )}
-                >
-                  <input
-                    type="hidden"
-                    name="organizationId"
-                    value={organizationId}
-                  />
-                  <input type="hidden" name="dwellingId" value={dwellingId} />
-                  <input
-                    aria-label={t("Email")}
-                    name="email"
-                    type="email"
-                    required
-                    placeholder="resident@example.com"
-                    class="flex-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                  />
-                  <button type="submit" class="btn-primary">
-                    {t("Assign")}
-                  </button>
-                </form>
+            <dl class="detail-list">
+              <div>
+                <dt>{t("Occupant name")}</dt>
+                <dd data-field="occupantName">
+                  {dwelling.occupantName ?? "—"}
+                </dd>
               </div>
-            </details>
-          </div>
-          {residentDisabledResult?.error && (
-            <p class="notice notice-danger" role="alert">
-              {friendlyActionErrorMessage(residentDisabledResult.error, locale)}
-            </p>
-          )}
-          <div
-            id="residents-list-region"
-            data-empty-title={t("No residents assigned.")}
+              <div>
+                <dt>{t("Billing name")}</dt>
+                <dd data-field="billingName">{dwelling.billingName ?? "—"}</dd>
+              </div>
+              <div>
+                <dt>{t("Billing email")}</dt>
+                <dd data-field="billingEmail">
+                  {dwelling.billingEmail ?? "—"}
+                </dd>
+              </div>
+              <div>
+                <dt>{t("Billing address")}</dt>
+                <dd data-field="billingAddress">
+                  {dwelling.billingAddress ?? "—"}
+                </dd>
+              </div>
+              <div>
+                <dt>{t("Area (m²)")}</dt>
+                <dd data-field="areaM2">{dwelling.areaM2}</dd>
+              </div>
+              <div>
+                <dt>{t("Resident count")}</dt>
+                <dd data-field="residentCount">{dwelling.residentCount}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section
+            id="account-balance"
+            class="panel p-6"
+            data-panel="account-balance"
           >
-            <ul class="sidebar-item-list" hidden={residents.length === 0}>
-              {residents.map((r) => (
-                <li data-user-id={r.userId}>
-                  <div class="sidebar-item-avatar" aria-hidden="true">
-                    {(r.displayName ?? r.email).charAt(0).toUpperCase()}
-                  </div>
-                  <div class="sidebar-item-body">
-                    <strong>{r.displayName ?? r.email}</strong>
-                    <p>{r.email}</p>
-                    {r.disabledAt && (
-                      <p class="text-sm text-muted">{t("Account disabled")}</p>
+            <div class="card-header">
+              <div>
+                <h2>{t("Account balance")}</h2>
+                <p class="text-body-sm text-muted">
+                  {t("All adjustments and balance history.")}
+                </p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <a
+                  class="btn-secondary"
+                  href={`${base}/payments/ledger?dwelling=${dwellingId}`}
+                >
+                  {t("Full statement")}
+                </a>
+                <details
+                  class="edit-disclosure"
+                  open={!!recordPaymentResult?.error}
+                >
+                  <summary class="btn-secondary">
+                    <Icon name="plus" size="sm" />
+                    {t("Record a payment")}
+                  </summary>
+                  <div class="edit-disclosure-panel edit-disclosure-panel-left">
+                    {recordPaymentResult?.error && (
+                      <p class="notice notice-danger" role="alert">
+                        {friendlyActionErrorMessage(
+                          recordPaymentResult.error,
+                          locale
+                        )}
+                      </p>
                     )}
+                    <ManualPaymentForm
+                      organizationId={organizationId}
+                      invoices={openInvoices}
+                      dwellings={paymentAccountTargets}
+                      today={todayInOrg}
+                      error={recordPaymentResult?.error}
+                      idPrefix="dwelling-payment"
+                    />
                   </div>
-                  <a
-                    href={`/api/v1/admin/o/${organizationId}/residents/${r.userId}/export`}
-                    class="sidebar-item-remove"
-                    download
-                  >
-                    {t("Export data")}
-                  </a>
-                  <form
-                    method="POST"
-                    action={actions.dwellings.setResidentDisabled}
-                  >
-                    <input
-                      type="hidden"
-                      name="organizationId"
-                      value={organizationId}
-                    />
-                    <input type="hidden" name="userId" value={r.userId} />
-                    <input
-                      type="hidden"
-                      name="disabled"
-                      value={r.disabledAt ? "false" : "true"}
-                    />
-                    <button
-                      type="submit"
-                      class="sidebar-item-remove"
-                      data-confirm={
-                        r.disabledAt
-                          ? undefined
-                          : t(
-                              "Disable this account? The person cannot sign in until you enable it again."
-                            )
-                      }
+                </details>
+                <details
+                  class="edit-disclosure"
+                  open={!!adjustmentResult?.error}
+                >
+                  <summary class="btn-secondary">
+                    <Icon name="plus" size="sm" />
+                    {t("Add adjustment")}
+                  </summary>
+                  <div class="edit-disclosure-panel">
+                    {adjustmentResult?.error && (
+                      <p class="notice notice-danger" role="alert">
+                        {friendlyActionErrorMessage(
+                          adjustmentResult.error,
+                          locale
+                        )}
+                      </p>
+                    )}
+                    <form
+                      method="POST"
+                      action={actions.accounts.createAdjustment}
+                      class="mt-4 grid grid-cols-2 gap-3"
                     >
-                      {r.disabledAt ? t("Enable") : t("Disable")}
-                    </button>
-                  </form>
+                      <input
+                        type="hidden"
+                        name="organizationId"
+                        value={organizationId}
+                      />
+                      <input
+                        type="hidden"
+                        name="dwellingId"
+                        value={dwellingId}
+                      />
+                      <input
+                        type="hidden"
+                        name="currency"
+                        value={organization.currency}
+                      />
+                      <div>
+                        <label class="field-label" for="adjustment-direction">
+                          {t("Type")}
+                        </label>
+                        <select
+                          id="adjustment-direction"
+                          name="direction"
+                          class="mt-1 w-full"
+                        >
+                          <option value="CHARGE">
+                            {t("Charge adjustment")}
+                          </option>
+                          <option value="CREDIT">
+                            {t("Credit adjustment")}
+                          </option>
+                        </select>
+                      </div>
+                      <div>
+                        <label class="field-label" for="adjustment-amount">
+                          {t("Amount")}
+                        </label>
+                        <input
+                          id="adjustment-amount"
+                          name="amount"
+                          inputmode="decimal"
+                          required
+                          class="mt-1 w-full"
+                        />
+                      </div>
+                      <div>
+                        <label class="field-label" for="adjustment-date">
+                          {t("Date")}
+                        </label>
+                        <input
+                          id="adjustment-date"
+                          name="effectiveDate"
+                          type="date"
+                          required
+                          class="mt-1 w-full"
+                        />
+                      </div>
+                      <div>
+                        <label class="field-label" for="adjustment-reason">
+                          {t("Reason")}
+                        </label>
+                        <input
+                          id="adjustment-reason"
+                          name="reason"
+                          required
+                          class="mt-1 w-full"
+                        />
+                      </div>
+                      <div class="col-span-2">
+                        <label class="field-label" for="adjustment-note">
+                          {t("Note")}
+                        </label>
+                        <textarea
+                          id="adjustment-note"
+                          name="note"
+                          class="mt-1 w-full"
+                        ></textarea>
+                      </div>
+                      <div class="col-span-2">
+                        <button class="btn-secondary" type="submit">
+                          {t("Add adjustment")}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </details>
+              </div>
+            </div>
+            {recordPaymentResult?.data && (
+              <p class="notice" role="status">
+                {t("Payment recorded.")}
+              </p>
+            )}
+            <dl class="balance-summary">
+              <div>
+                <dt>{t("Total debits")}</dt>
+                <dd>
+                  {formatMoney(
+                    String(totals.debit),
+                    organization.currency,
+                    locale
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>{t("Total credits")}</dt>
+                <dd>
+                  {formatMoney(
+                    String(totals.credit),
+                    organization.currency,
+                    locale
+                  )}
+                </dd>
+              </div>
+            </dl>
+            {accountActivity.length > 0 ? (
+              <div
+                class="table-wrap stack-table mt-4"
+                role="region"
+                aria-label={t("Account activity")}
+                tabindex="0"
+              >
+                <table class="w-full text-body-sm">
+                  <caption class="sr-only">{t("Account activity")}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">{t("Date")}</th>
+                      <th scope="col">{t("Description")}</th>
+                      <th scope="col" class="text-right">
+                        {t("Debit")}
+                      </th>
+                      <th scope="col" class="text-right">
+                        {t("Credit")}
+                      </th>
+                      <th scope="col" class="text-right">
+                        {t("Balance")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {accountActivity
+                      .slice(-10)
+                      .reverse()
+                      .map((entry) => (
+                        <tr>
+                          <td>{formatDate(entry.effectiveDate, locale)}</td>
+                          <td>{entry.description ?? entry.type}</td>
+                          <td class="text-right">
+                            {entry.debit === "0.00"
+                              ? "—"
+                              : formatMoney(
+                                  entry.debit,
+                                  organization.currency,
+                                  locale
+                                )}
+                          </td>
+                          <td class="text-right">
+                            {entry.credit === "0.00"
+                              ? "—"
+                              : formatMoney(
+                                  entry.credit,
+                                  organization.currency,
+                                  locale
+                                )}
+                          </td>
+                          <td class="text-right">
+                            {formatMoney(
+                              entry.balance,
+                              organization.currency,
+                              locale
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState
+                class="mt-4"
+                title={t("No account entries yet")}
+                description={t("Adjustments will appear here.")}
+              />
+            )}
+          </section>
+
+          <section id="tariffs" class="panel p-6" data-panel="tariffs">
+            <div class="card-header">
+              <div>
+                <h2>{t("Recurring tariffs")}</h2>
+                <p class="text-body-sm text-muted">
+                  {t(
+                    "Recurring tariffs are configured and assigned from Tariffs & rules."
+                  )}
+                </p>
+              </div>
+              <a
+                href={`${base}/settings/rules`}
+                class="btn-secondary shrink-0 whitespace-nowrap"
+              >
+                {t("View all tariffs")}
+              </a>
+            </div>
+            {currentTariffs.length === 0 ? (
+              <EmptyState
+                title={t("No recurring tariffs apply to this dwelling.")}
+              />
+            ) : (
+              <Fragment>
+                {automaticTariffs.length > 0 && (
+                  <Fragment>
+                    <h3 class="tariff-group-heading">
+                      {t("Automatically applied")}
+                    </h3>
+                    <ul class="sidebar-item-list tariff-list">
+                      {automaticTariffs.map((rule) => (
+                        <li>
+                          <div class="sidebar-item-body">
+                            <strong>{rule.name}</strong>
+                            <p>{tariffPriceSummary(rule)}</p>
+                          </div>
+                          <a
+                            href={`${base}/settings/rules?edit=${rule.id}`}
+                            class="btn-secondary btn-sm"
+                          >
+                            {t("Edit tariff")}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </Fragment>
+                )}
+                {assignedTariffs.length > 0 && (
+                  <Fragment>
+                    <h3 class="tariff-group-heading">
+                      {t("Assigned specifically")}
+                    </h3>
+                    <ul class="sidebar-item-list tariff-list">
+                      {assignedTariffs.map((rule) => (
+                        <li>
+                          <div class="sidebar-item-body">
+                            <strong>{rule.name}</strong>
+                            <p>{tariffPriceSummary(rule)}</p>
+                            <p>{tariffScopeReason(rule.applicationScope)}</p>
+                          </div>
+                          <a
+                            href={`${base}/settings/rules?edit=${rule.id}`}
+                            class="btn-secondary btn-sm"
+                          >
+                            {t("Edit tariff")}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </Fragment>
+                )}
+              </Fragment>
+            )}
+          </section>
+
+          <section id="messages" class="panel p-6" data-panel="messages">
+            <div class="card-header">
+              <div>
+                <h2>{t("Recent messages")}</h2>
+                <p class="text-body-sm text-muted">
+                  {t("Latest messages with this dwelling.")}
+                </p>
+              </div>
+              <a
+                class="btn-secondary"
+                href={`${base}/messages?dwellingId=${dwellingId}`}
+              >
+                {t("View all")}
+              </a>
+            </div>
+            {recentMessages.length > 0 ? (
+              <ul class="message-preview-list">
+                {recentMessages.map((m) => (
+                  <li>
+                    <p data-tip-clipped>{m.body}</p>
+                    <span>
+                      {formatDate(m.createdAt, locale, organization.timezone)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState
+                class="mt-5"
+                title={t("No messages yet")}
+                description={t(
+                  "Conversations with residents will appear here."
+                )}
+              />
+            )}
+          </section>
+        </div>
+
+        <div class="dwelling-sidebar">
+          <section class="panel p-6" data-panel="overview">
+            <div class="card-header">
+              <div>
+                <h2>{t("Invoice delivery")}</h2>
+                <p class="text-body-sm text-muted">
+                  {t("How this dwelling receives its invoices.")}
+                </p>
+              </div>
+            </div>
+            {deliveryResult?.error && (
+              <p class="notice notice-danger" role="alert">
+                {friendlyActionErrorMessage(deliveryResult.error, locale)}
+              </p>
+            )}
+            <form
+              method="POST"
+              action={actions.dwellings.updateInvoiceDelivery}
+              class="delivery-form"
+              data-delivery-form
+              data-saving-label={t("Saving…")}
+              data-pending-label={t("Saving delivery preferences…")}
+              data-success-label={t("Delivery preferences saved")}
+              data-error-label={t("Could not save delivery preferences")}
+              data-generic-error={t("Something went wrong. Please try again.")}
+              data-reconcile-error={t(
+                "Saved, but the view could not be updated"
+              )}
+              data-email-label={t("Email")}
+              data-paper-label={t("Paper")}
+              data-none-label={t("None")}
+            >
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="dwellingId" value={dwellingId} />
+              <ul class="delivery-list">
+                <li>
+                  <label class="delivery-option">
+                    <span class="check-toggle">
+                      <input
+                        type="checkbox"
+                        name="invoiceByEmail"
+                        checked={dwelling.invoiceByEmail}
+                      />
+                      <span class="check-icon" aria-hidden="true">
+                        <Icon name="check" size="sm" />
+                      </span>
+                    </span>
+                    <span class="delivery-option-text">
+                      <strong>{t("Email")}</strong>
+                      <p>
+                        {dwelling.billingEmail
+                          ? `${t("Send invoices to")} ${dwelling.billingEmail}`
+                          : t("No billing email on file")}
+                      </p>
+                    </span>
+                  </label>
+                </li>
+                <li>
+                  <label class="delivery-option">
+                    <span class="check-toggle">
+                      <input
+                        type="checkbox"
+                        name="invoiceByPaper"
+                        checked={dwelling.invoiceByPaper}
+                      />
+                      <span class="check-icon" aria-hidden="true">
+                        <Icon name="check" size="sm" />
+                      </span>
+                    </span>
+                    <span class="delivery-option-text">
+                      <strong>{t("Paper")}</strong>
+                      <p>{t("Send a printed copy by mail")}</p>
+                    </span>
+                  </label>
+                </li>
+              </ul>
+              <div class="pt-2">
+                <button
+                  type="submit"
+                  class="btn-primary"
+                  disabled={!deliveryResult?.error}
+                  data-delivery-save
+                >
+                  {t("Save")}
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section id="residents" class="panel p-6" data-panel="residents">
+            <div class="card-header">
+              <div>
+                <h2>{t("Resident access")}</h2>
+                <p class="text-body-sm text-muted">
+                  {t("People who can access their invoices and messages.")}
+                </p>
+              </div>
+              <details
+                class="edit-disclosure"
+                id="resident-details"
+                open={!!assignResult?.error || !!removeResult?.error}
+              >
+                <summary class="btn-secondary">
+                  <Icon name="plus" size="sm" />
+                  {t("Add resident")}
+                </summary>
+                <div class="edit-disclosure-panel">
+                  {(assignResult?.error || removeResult?.error) && (
+                    <p class="notice notice-danger" role="alert">
+                      {friendlyActionErrorMessage(
+                        assignResult?.error ?? removeResult?.error,
+                        locale
+                      )}
+                    </p>
+                  )}
                   <form
                     method="POST"
-                    action={actions.dwellings.removeResident}
-                    data-resident-remove-form
+                    action={actions.dwellings.assignResident}
+                    id="resident-form"
+                    class="mt-4 flex gap-2"
+                    data-saving-label={t("Saving…")}
+                    data-pending-label={t("Adding resident…")}
+                    data-added-message={t("Resident added")}
+                    data-error-label={t("Could not add resident")}
+                    data-checking-label={t("Checking save status…")}
+                    data-unknown-label={t("Outcome not confirmed")}
+                    data-committed-missing={t(
+                      "The original change was saved, but the item is no longer present. The page has been refreshed."
+                    )}
+                    data-adding-label={t("Adding…")}
+                    data-already-has-access={t(
+                      "This resident already has access."
+                    )}
+                    data-generic-error={t(
+                      "Something went wrong. Please try again."
+                    )}
+                    data-remove-label={t("Remove")}
+                    data-removing-label={t("Removing resident…")}
+                    data-removed-label={t("Resident removed")}
+                    data-could-not-save={t("Could not save")}
+                    data-reconcile-error={t(
+                      "Saved, but the view could not be updated"
+                    )}
                   >
                     <input
                       type="hidden"
@@ -1170,309 +1092,406 @@ function meterCaption(
                       value={organizationId}
                     />
                     <input type="hidden" name="dwellingId" value={dwellingId} />
-                    <input type="hidden" name="userId" value={r.userId} />
-                    <button
-                      type="submit"
-                      class="sidebar-item-remove"
-                      data-confirm={`${t("Remove")} ${r.email}?`}
-                    >
-                      {t("Remove")}
+                    <input
+                      aria-label={t("Email")}
+                      name="email"
+                      type="email"
+                      required
+                      placeholder="resident@example.com"
+                      class="flex-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                    />
+                    <button type="submit" class="btn-primary">
+                      {t("Assign")}
                     </button>
                   </form>
-                </li>
-              ))}
-            </ul>
-            <div id="residents-empty-state" hidden={residents.length > 0}>
-              <EmptyState title={t("No residents assigned.")} />
+                </div>
+              </details>
             </div>
-          </div>
-        </section>
-
-        <section id="meters" class="panel p-6" data-panel="meters">
-          <div class="card-header">
-            <div>
-              <h2>{t("Meters")}</h2>
-              <p class="text-body-sm text-muted">
-                {t("Water and other utility meters in this dwelling.")}
-              </p>
-            </div>
-            <details
-              class="edit-disclosure"
-              id="meter-details"
-              open={!!meterResult?.error}
-            >
-              <summary class="btn-secondary">
-                <Icon name="plus" size="sm" />
-                {t("Add meter")}
-              </summary>
-              <div class="edit-disclosure-panel">
-                {meterResult?.error && (
-                  <p class="notice notice-danger" role="alert">
-                    {friendlyActionErrorMessage(meterResult.error, locale)}
-                  </p>
+            {residentDisabledResult?.error && (
+              <p class="notice notice-danger" role="alert">
+                {friendlyActionErrorMessage(
+                  residentDisabledResult.error,
+                  locale
                 )}
-                <form
-                  method="POST"
-                  action={actions.meters.create}
-                  id="meter-form"
-                  class="mt-4 grid grid-cols-2 gap-3"
-                  data-saving-label={t("Saving…")}
-                  data-pending-label={t("Adding meter…")}
-                  data-added-message={t("Meter added")}
-                  data-error-label={t("Could not add meter")}
-                  data-checking-label={t("Checking save status…")}
-                  data-unknown-label={t("Outcome not confirmed")}
-                  data-committed-missing={t(
-                    "The original change was saved, but the item is no longer present. The page has been refreshed."
-                  )}
-                  data-generic-error={t(
-                    "Something went wrong. Please try again."
-                  )}
-                  data-archive-label={t("Archive")}
-                  data-archived-label={t("archived")}
-                  data-archiving-label={t("Archiving…")}
-                  data-archived-label-text={t("Archived")}
-                  data-could-not-save={t("Could not save")}
-                  data-reconcile-error={t(
-                    "Saved, but the view could not be updated"
-                  )}
-                >
-                  <input
-                    type="hidden"
-                    name="organizationId"
-                    value={organizationId}
-                  />
-                  <input type="hidden" name="dwellingId" value={dwellingId} />
-                  <div>
-                    <label class="field-label" for="type">
-                      {t("Type")}
-                    </label>
-                    <select
-                      id="type"
-                      name="type"
-                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                    >
-                      {meterTypeOptions.map((mt) => (
-                        <option value={mt}>{entityLabel(mt, locale)}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label class="field-label" for="unit">
-                      {t("Unit")}
-                    </label>
-                    <input
-                      id="unit"
-                      name="unit"
-                      required
-                      placeholder="m3"
-                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      class="field-label"
-                      for="serialNumber"
-                    >
-                      {t("Serial number")}
-                    </label>
-                    <input
-                      id="serialNumber"
-                      name="serialNumber"
-                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                    />
-                  </div>
-                  <div>
-                    <label class="field-label" for="label">
-                      {t("Label")}
-                    </label>
-                    <input
-                      id="label"
-                      name="label"
-                      class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                    />
-                  </div>
-                  <div class="col-span-2">
-                    <button type="submit" class="btn-primary">
-                      {t("Add meter")}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </details>
-          </div>
-          <div
-            class="meter-filters"
-            role="group"
-            aria-label={t("Filter meters")}
-          >
-            <button
-              type="button"
-              class="btn-secondary btn-sm"
-              data-meter-filter="active"
-              aria-pressed="true"
+              </p>
+            )}
+            <div
+              id="residents-list-region"
+              data-empty-title={t("No residents assigned.")}
             >
-              {t("Active")}
-            </button>
-            <button
-              type="button"
-              class="btn-secondary btn-sm"
-              data-meter-filter="archived"
-              aria-pressed="false"
-            >
-              {t("Archived")}
-            </button>
-          </div>
-          {meterUpdateResult?.error && (
-            <p class="notice notice-danger" role="alert">
-              {friendlyActionErrorMessage(meterUpdateResult.error, locale)}
-            </p>
-          )}
-          <div
-            id="meters-list-region"
-            data-empty-active={t("No active meters for this dwelling.")}
-            data-empty-archived={t("No archived meters for this dwelling.")}
-          >
-            <ul class="sidebar-item-list" hidden={activeMeterCount === 0}>
-              {meterList.map((m) => (
-                <li
-                  class="meter-row flex-wrap"
-                  data-meter-id={m.id}
-                  data-archived={m.archivedAt ? "true" : "false"}
-                  hidden={!!m.archivedAt}
-                >
-                  <div
-                    class="sidebar-item-icon"
-                    data-meter-type={m.type}
-                    aria-hidden="true"
-                  >
-                    {m.unit}
-                  </div>
-                  <div class="sidebar-item-body">
-                    <strong>
-                      {m.label ?? entityLabel(m.type, locale)}
-                      {m.archivedAt && ` (${t("archived")})`}
-                    </strong>
-                    <p>
-                      {meterCaption(
-                        m.label,
-                        entityLabel(m.type, locale),
-                        m.serialNumber
+              <ul class="sidebar-item-list" hidden={residents.length === 0}>
+                {residents.map((r) => (
+                  <li data-user-id={r.userId}>
+                    <div class="sidebar-item-avatar" aria-hidden="true">
+                      {(r.displayName ?? r.email).charAt(0).toUpperCase()}
+                    </div>
+                    <div class="sidebar-item-body">
+                      <strong>{r.displayName ?? r.email}</strong>
+                      <p>{r.email}</p>
+                      {r.disabledAt && (
+                        <p class="text-sm text-muted">
+                          {t("Account disabled")}
+                        </p>
                       )}
-                      <span class="sr-only"> ({m.unit})</span>
-                    </p>
-                  </div>
-                  {!m.archivedAt && (
-                    <>
-                      <form
-                        method="POST"
-                        action={actions.meters.archive}
-                        data-meter-archive-form
+                    </div>
+                    <a
+                      href={`/api/v1/admin/o/${organizationId}/residents/${r.userId}/export`}
+                      class="sidebar-item-remove"
+                      download
+                    >
+                      {t("Export data")}
+                    </a>
+                    <form
+                      method="POST"
+                      action={actions.dwellings.setResidentDisabled}
+                    >
+                      <input
+                        type="hidden"
+                        name="organizationId"
+                        value={organizationId}
+                      />
+                      <input type="hidden" name="userId" value={r.userId} />
+                      <input
+                        type="hidden"
+                        name="disabled"
+                        value={r.disabledAt ? "false" : "true"}
+                      />
+                      <button
+                        type="submit"
+                        class="sidebar-item-remove"
+                        data-confirm={
+                          r.disabledAt
+                            ? undefined
+                            : t(
+                                "Disable this account? The person cannot sign in until you enable it again."
+                              )
+                        }
                       >
-                        <input
-                          type="hidden"
-                          name="organizationId"
-                          value={organizationId}
-                        />
-                        <input type="hidden" name="meterId" value={m.id} />
-                        <button
-                          type="submit"
-                          class="sidebar-item-remove"
-                          data-confirm={`${t("Archive")} ${m.label ?? entityLabel(m.type, locale)}?`}
-                        >
-                          {t("Archive")}
-                        </button>
-                      </form>
-                      <div class="w-full mt-2">
-                        <details class="meter-edit">
-                          <summary class="chevron-toggle">{t("Edit")}</summary>
-                          <form
-                            method="POST"
-                            action={actions.meters.update}
-                            class="mt-2 grid grid-cols-2 gap-2"
-                          >
-                            <input
-                              type="hidden"
-                              name="organizationId"
-                              value={organizationId}
-                            />
-                            <input type="hidden" name="meterId" value={m.id} />
-                            <div>
-                              <label
-                                class="field-label"
-                                for={`meter-serial-${m.id}`}
-                              >
-                                {t("Serial number")}
-                              </label>
-                              <input
-                                id={`meter-serial-${m.id}`}
-                                name="serialNumber"
-                                value={m.serialNumber ?? ""}
-                                class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                              />
-                            </div>
-                            <div>
-                              <label
-                                class="field-label"
-                                for={`meter-label-${m.id}`}
-                              >
-                                {t("Label")}
-                              </label>
-                              <input
-                                id={`meter-label-${m.id}`}
-                                name="label"
-                                value={m.label ?? ""}
-                                class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                              />
-                            </div>
-                            <div>
-                              <label
-                                class="field-label"
-                                for={`meter-unit-${m.id}`}
-                              >
-                                {t("Unit")}
-                              </label>
-                              <input
-                                id={`meter-unit-${m.id}`}
-                                name="unit"
-                                required
-                                value={m.unit}
-                                class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                              />
-                            </div>
-                            <div>
-                              <label
-                                class="field-label"
-                                for={`meter-installed-${m.id}`}
-                              >
-                                {t("Installed on")}
-                              </label>
-                              <input
-                                type="date"
-                                id={`meter-installed-${m.id}`}
-                                name="installedAt"
-                                value={m.installedAt ?? ""}
-                                class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-                              />
-                            </div>
-                            <div class="col-span-2">
-                              <button type="submit" class="btn-primary">
-                                {t("Save changes")}
-                              </button>
-                            </div>
-                          </form>
-                        </details>
-                      </div>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-            <div id="meters-empty-state" hidden={activeMeterCount > 0}>
-              <EmptyState title={t("No active meters for this dwelling.")} />
+                        {r.disabledAt ? t("Enable") : t("Disable")}
+                      </button>
+                    </form>
+                    <form
+                      method="POST"
+                      action={actions.dwellings.removeResident}
+                      data-resident-remove-form
+                    >
+                      <input
+                        type="hidden"
+                        name="organizationId"
+                        value={organizationId}
+                      />
+                      <input
+                        type="hidden"
+                        name="dwellingId"
+                        value={dwellingId}
+                      />
+                      <input type="hidden" name="userId" value={r.userId} />
+                      <button
+                        type="submit"
+                        class="sidebar-item-remove"
+                        data-confirm={`${t("Remove")} ${r.email}?`}
+                      >
+                        {t("Remove")}
+                      </button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+              <div id="residents-empty-state" hidden={residents.length > 0}>
+                <EmptyState title={t("No residents assigned.")} />
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+
+          <section id="meters" class="panel p-6" data-panel="meters">
+            <div class="card-header">
+              <div>
+                <h2>{t("Meters")}</h2>
+                <p class="text-body-sm text-muted">
+                  {t("Water and other utility meters in this dwelling.")}
+                </p>
+              </div>
+              <details
+                class="edit-disclosure"
+                id="meter-details"
+                open={!!meterResult?.error}
+              >
+                <summary class="btn-secondary">
+                  <Icon name="plus" size="sm" />
+                  {t("Add meter")}
+                </summary>
+                <div class="edit-disclosure-panel">
+                  {meterResult?.error && (
+                    <p class="notice notice-danger" role="alert">
+                      {friendlyActionErrorMessage(meterResult.error, locale)}
+                    </p>
+                  )}
+                  <form
+                    method="POST"
+                    action={actions.meters.create}
+                    id="meter-form"
+                    class="mt-4 grid grid-cols-2 gap-3"
+                    data-saving-label={t("Saving…")}
+                    data-pending-label={t("Adding meter…")}
+                    data-added-message={t("Meter added")}
+                    data-error-label={t("Could not add meter")}
+                    data-checking-label={t("Checking save status…")}
+                    data-unknown-label={t("Outcome not confirmed")}
+                    data-committed-missing={t(
+                      "The original change was saved, but the item is no longer present. The page has been refreshed."
+                    )}
+                    data-generic-error={t(
+                      "Something went wrong. Please try again."
+                    )}
+                    data-archive-label={t("Archive")}
+                    data-archived-label={t("archived")}
+                    data-archiving-label={t("Archiving…")}
+                    data-archived-label-text={t("Archived")}
+                    data-could-not-save={t("Could not save")}
+                    data-reconcile-error={t(
+                      "Saved, but the view could not be updated"
+                    )}
+                  >
+                    <input
+                      type="hidden"
+                      name="organizationId"
+                      value={organizationId}
+                    />
+                    <input type="hidden" name="dwellingId" value={dwellingId} />
+                    <div>
+                      <label class="field-label" for="type">
+                        {t("Type")}
+                      </label>
+                      <select
+                        id="type"
+                        name="type"
+                        class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                      >
+                        {meterTypeOptions.map((mt) => (
+                          <option value={mt}>{entityLabel(mt, locale)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label class="field-label" for="unit">
+                        {t("Unit")}
+                      </label>
+                      <input
+                        id="unit"
+                        name="unit"
+                        required
+                        placeholder="m3"
+                        class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                      />
+                    </div>
+                    <div>
+                      <label class="field-label" for="serialNumber">
+                        {t("Serial number")}
+                      </label>
+                      <input
+                        id="serialNumber"
+                        name="serialNumber"
+                        class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                      />
+                    </div>
+                    <div>
+                      <label class="field-label" for="label">
+                        {t("Label")}
+                      </label>
+                      <input
+                        id="label"
+                        name="label"
+                        class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                      />
+                    </div>
+                    <div class="col-span-2">
+                      <button type="submit" class="btn-primary">
+                        {t("Add meter")}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </details>
+            </div>
+            <div
+              class="meter-filters"
+              role="group"
+              aria-label={t("Filter meters")}
+            >
+              <button
+                type="button"
+                class="btn-secondary btn-sm"
+                data-meter-filter="active"
+                aria-pressed="true"
+              >
+                {t("Active")}
+              </button>
+              <button
+                type="button"
+                class="btn-secondary btn-sm"
+                data-meter-filter="archived"
+                aria-pressed="false"
+              >
+                {t("Archived")}
+              </button>
+            </div>
+            {meterUpdateResult?.error && (
+              <p class="notice notice-danger" role="alert">
+                {friendlyActionErrorMessage(meterUpdateResult.error, locale)}
+              </p>
+            )}
+            <div
+              id="meters-list-region"
+              data-empty-active={t("No active meters for this dwelling.")}
+              data-empty-archived={t("No archived meters for this dwelling.")}
+            >
+              <ul class="sidebar-item-list" hidden={activeMeterCount === 0}>
+                {meterList.map((m) => (
+                  <li
+                    class="meter-row flex-wrap"
+                    data-meter-id={m.id}
+                    data-archived={m.archivedAt ? "true" : "false"}
+                    hidden={!!m.archivedAt}
+                  >
+                    <div
+                      class="sidebar-item-icon"
+                      data-meter-type={m.type}
+                      aria-hidden="true"
+                    >
+                      {m.unit}
+                    </div>
+                    <div class="sidebar-item-body">
+                      <strong>
+                        {m.label ?? entityLabel(m.type, locale)}
+                        {m.archivedAt && ` (${t("archived")})`}
+                      </strong>
+                      <p>
+                        {meterCaption(
+                          m.label,
+                          entityLabel(m.type, locale),
+                          m.serialNumber
+                        )}
+                        <span class="sr-only"> ({m.unit})</span>
+                      </p>
+                    </div>
+                    {!m.archivedAt && (
+                      <>
+                        <form
+                          method="POST"
+                          action={actions.meters.archive}
+                          data-meter-archive-form
+                        >
+                          <input
+                            type="hidden"
+                            name="organizationId"
+                            value={organizationId}
+                          />
+                          <input type="hidden" name="meterId" value={m.id} />
+                          <button
+                            type="submit"
+                            class="sidebar-item-remove"
+                            data-confirm={`${t("Archive")} ${m.label ?? entityLabel(m.type, locale)}?`}
+                          >
+                            {t("Archive")}
+                          </button>
+                        </form>
+                        <div class="w-full mt-2">
+                          <details class="meter-edit">
+                            <summary class="chevron-toggle">
+                              {t("Edit")}
+                            </summary>
+                            <form
+                              method="POST"
+                              action={actions.meters.update}
+                              class="mt-2 grid grid-cols-2 gap-2"
+                            >
+                              <input
+                                type="hidden"
+                                name="organizationId"
+                                value={organizationId}
+                              />
+                              <input
+                                type="hidden"
+                                name="meterId"
+                                value={m.id}
+                              />
+                              <div>
+                                <label
+                                  class="field-label"
+                                  for={`meter-serial-${m.id}`}
+                                >
+                                  {t("Serial number")}
+                                </label>
+                                <input
+                                  id={`meter-serial-${m.id}`}
+                                  name="serialNumber"
+                                  value={m.serialNumber ?? ""}
+                                  class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                                />
+                              </div>
+                              <div>
+                                <label
+                                  class="field-label"
+                                  for={`meter-label-${m.id}`}
+                                >
+                                  {t("Label")}
+                                </label>
+                                <input
+                                  id={`meter-label-${m.id}`}
+                                  name="label"
+                                  value={m.label ?? ""}
+                                  class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                                />
+                              </div>
+                              <div>
+                                <label
+                                  class="field-label"
+                                  for={`meter-unit-${m.id}`}
+                                >
+                                  {t("Unit")}
+                                </label>
+                                <input
+                                  id={`meter-unit-${m.id}`}
+                                  name="unit"
+                                  required
+                                  value={m.unit}
+                                  class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                                />
+                              </div>
+                              <div>
+                                <label
+                                  class="field-label"
+                                  for={`meter-installed-${m.id}`}
+                                >
+                                  {t("Installed on")}
+                                </label>
+                                <input
+                                  type="date"
+                                  id={`meter-installed-${m.id}`}
+                                  name="installedAt"
+                                  value={m.installedAt ?? ""}
+                                  class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                                />
+                              </div>
+                              <div class="col-span-2">
+                                <button type="submit" class="btn-primary">
+                                  {t("Save changes")}
+                                </button>
+                              </div>
+                            </form>
+                          </details>
+                        </div>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <div id="meters-empty-state" hidden={activeMeterCount > 0}>
+                <EmptyState title={t("No active meters for this dwelling.")} />
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
 
@@ -1627,10 +1646,7 @@ function meterCaption(
               />
               <input type="hidden" name="dwellingId" value={dwellingId} />
               <div>
-                <label
-                  class="field-label"
-                  for="dwelling-type"
-                >
+                <label class="field-label" for="dwelling-type">
                   {t("Type")}
                 </label>
                 <select
@@ -2876,6 +2892,11 @@ function meterCaption(
     line-height: 1.25rem;
     text-align: center;
   }
+  /* The two-pane layout depends on the room this area has, not the screen:
+     with the admin sidebar the area is 240px narrower. */
+  .dwelling-grid-host {
+    container-type: inline-size;
+  }
   .dwelling-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 26rem;
@@ -3241,6 +3262,12 @@ function meterCaption(
     color: var(--color-foreground);
     text-decoration: underline;
   }
+  @media (pointer: coarse) {
+    .sidebar-item-remove {
+      min-height: var(--control-size-md);
+      padding-inline: var(--space-2);
+    }
+  }
   [data-resident-remove-form] .sidebar-item-remove,
   [data-meter-archive-form] .sidebar-item-remove {
     color: var(--color-destructive);
@@ -3350,6 +3377,8 @@ function meterCaption(
     .summary-stat:nth-child(n + 3) {
       border-top: 1px solid var(--color-border);
     }
+  }
+  @container (width < 60rem) {
     .dwelling-grid {
       grid-template-columns: minmax(0, 1fr);
     }
