@@ -346,8 +346,9 @@ only on hover, because it is not focusable.
 
 `Icon` (`name`, `size?` xs 16, sm 18, md 20, lg 24, `class?`) renders a Tabler
 outline icon as decoration with `aria-hidden`; the control that contains it
-supplies the accessible name. `skip-link` is the first focusable element on each
-layout and moves focus to the main content.
+supplies the accessible name. `skip-link` is the first focusable element on the admin
+and resident layouts and moves focus to the main content (the auth layout has
+none).
 
 ### Drawer
 
@@ -491,7 +492,8 @@ dashboard's setup card sits above its header; dwelling panels contain
 column: resident (email, sign-in link, the page `h1`) and admin (email and
 password). Messages are plain danger-tinted paragraphs above each form; the page
 renders no `field-error` and its messages do not carry `role="alert"` (an
-exception to the field pattern; password reset and the in-app forms follow it).
+exception to the field pattern, as is the password reset page, which shows one
+form-level alert; the in-app forms follow the pattern).
 Below `md` the line drawing is hidden.
 
 **Admin dashboard.** Width `--width-content`. The setup card comes first when
@@ -578,13 +580,13 @@ Disclosures are opened first. It fails on:
 - horizontal overflow;
 - a control below 44px on a coarse pointer (checked in a touch context that is
   confirmed to match `(pointer: coarse)`), or any target below 24px with another
-  target inside its 24px circle (WCAG 2.5.8). A text link inside a sentence, a
-  stretched row link and a bare checkbox with no label are held to 24px;
+  target inside its 24px circle (WCAG 2.5.8). A link inside a sentence and a
+  stretched row link are exempt; a bare checkbox with no label is held to 24px;
 - a missing keyboard focus indicator among the first 12 tab stops of the main
   content at each width and theme.
 
 It also checks the exact `sm` and `lg` breakpoint edges, the dwelling two-pane
-switch at 60rem of container width, and the contrast of the semantic token
+switch at 60rem of container width (959 and 960px host widths), and the contrast of the semantic token
 pairs (text 4.5:1, field border and focus ring 3:1) in both themes. It needs the
 local Supabase stack with demo data and the local mailbox; it logs in as admin
 once and requests one resident sign-in link per run (the auth rate limit is 5

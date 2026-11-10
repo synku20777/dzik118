@@ -187,11 +187,14 @@ function auditLayout(page: Page, coarse: boolean): Promise<string[]> {
         return (cx - nx) ** 2 + (cy - ny) ** 2 < 12 ** 2;
       });
     };
-    // Exempt only a link set inside a sentence: its parent has more text.
+    // Exempt only a link set inside a sentence: its parent holds plain text
+    // once every link and button in it is taken out.
     const inSentence = (el: Element) => {
-      const own = (el.textContent ?? "").trim().length;
-      const around = (el.parentElement?.textContent ?? "").trim().length;
-      return around > own + 3;
+      const parent = el.parentElement?.cloneNode(true) as
+        HTMLElement | undefined;
+      if (!parent) return false;
+      parent.querySelectorAll("a, button, summary").forEach((n) => n.remove());
+      return (parent.textContent ?? "").trim().length > 3;
     };
     for (const el of targets) {
       const cs = getComputedStyle(el);
@@ -246,8 +249,12 @@ async function auditFocus(page: Page, stops = 12): Promise<string[]> {
       if (!el || el === document.body || el.tagName === "IFRAME") return null;
       if (!el.matches(":focus-visible")) return null;
       const cs = getComputedStyle(el);
+      // The outline must be drawn: a style, 2px of width and a visible colour.
+      const alpha = Number(cs.outlineColor.match(/[0-9.]+/g)?.[3] ?? 1);
       const outline =
-        cs.outlineStyle !== "none" && parseFloat(cs.outlineWidth) >= 2;
+        cs.outlineStyle !== "none" &&
+        parseFloat(cs.outlineWidth) >= 2 &&
+        alpha > 0;
       // A resting shadow is not a focus indicator: the outline must be drawn.
       const label = `${el.tagName.toLowerCase()}${el instanceof HTMLInputElement ? `[${el.type}]` : ""}.${String(el.className).slice(0, 40)} ${el.getAttribute("name") ?? ""}`;
       return { ok: outline, label };
@@ -477,6 +484,23 @@ test("the shell and panes switch exactly at their breakpoints", async ({
       .evaluate(
         (el) => getComputedStyle(el).gridTemplateColumns.split(" ").length
       );
+  // The threshold itself: 60rem is 960px of the host's own width.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  for (const [hostWidth, expected] of [
+    [959, 1],
+    [960, 2],
+  ] as const) {
+    await page.locator(".dwelling-grid-host").evaluate((el, w) => {
+      el.style.width = w + "px";
+    }, hostWidth);
+    await settle();
+    expect(await columns(), `dwelling grid at a ${hostWidth}px host`).toBe(
+      expected
+    );
+  }
+  await page.locator(".dwelling-grid-host").evaluate((el) => {
+    el.style.width = "";
+  });
   for (const [width, expected] of [
     [1440, 2],
     [1120, 1],
