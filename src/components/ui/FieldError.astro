@@ -3,13 +3,16 @@ import { isInputError } from "astro:actions";
 interface Props {
   error: unknown;
   name: string;
+  // Override when the control's id is not the action field name (for example
+  // a form rendered twice on one page); the id must be "<control id>-error".
+  id?: string;
 }
-const { error, name } = Astro.props;
+const { error, name, id } = Astro.props;
 const messages = isInputError(error) ? error.fields[name] : undefined;
 ---
 
-{messages && (
-  <p id={name + "-error"} class="field-error" role="alert">
+{messages && messages.length > 0 && (
+  <p id={id ?? name + "-error"} class="field-error" role="alert">
     {messages.join(" ")}
   </p>
 )}

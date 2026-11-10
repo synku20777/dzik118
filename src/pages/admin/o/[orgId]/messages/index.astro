@@ -424,7 +424,7 @@ const conversationStatusMap = Object.fromEntries(
                 value={organizationId}
               />
               <div>
-                <label for="new-dwelling">{t("Dwelling")}</label>
+                <label class="field-label" for="new-dwelling">{t("Dwelling")}</label>
                 <select id="new-dwelling" name="dwellingId" required>
                   {dwellingsForNewMessage.map((d) => (
                     <option value={d.id}>
@@ -435,7 +435,7 @@ const conversationStatusMap = Object.fromEntries(
                 <FieldError name="dwellingId" error={createResult?.error} />
               </div>
               <div>
-                <label for="new-subject">{t("Subject")}</label>
+                <label class="field-label" for="new-subject">{t("Subject")}</label>
                 <input
                   id="new-subject"
                   name="subject"
@@ -445,7 +445,7 @@ const conversationStatusMap = Object.fromEntries(
                 <FieldError name="subject" error={createResult?.error} />
               </div>
               <div>
-                <label for="new-body">{t("Message")}</label>
+                <label class="field-label" for="new-body">{t("Message")}</label>
                 <textarea id="new-body" name="body" required rows={5} />
                 <FieldError name="body" error={createResult?.error} />
               </div>
@@ -1073,10 +1073,7 @@ const conversationStatusMap = Object.fromEntries(
     gap: 1rem;
   }
   .messages-new-form label {
-    display: block;
     margin-bottom: 0.5rem;
-    font-size: var(--text-sm);
-    font-weight: 600;
   }
   .messages-new-form select,
   .messages-new-form input,
@@ -1106,6 +1103,12 @@ const conversationStatusMap = Object.fromEntries(
     color: var(--color-muted);
     list-style: none;
     cursor: pointer;
+  }
+  @media (pointer: coarse) {
+    .row-menu summary {
+      min-width: var(--control-size-md);
+      min-height: var(--control-size-md);
+    }
   }
   .row-menu summary::-webkit-details-marker {
     display: none;

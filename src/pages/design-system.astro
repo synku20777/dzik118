@@ -544,7 +544,7 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
               <button
                 class="copy-button"
                 type="button"
-                data-copy={`<label for="email">Billing email</label>\n<input id="email" name="email" type="email" autocomplete="email" />`}
+                data-copy={`<label class="field-label" for="email">Billing email</label>\n<input id="email" name="email" type="email" autocomplete="email" aria-describedby="email-hint" class="mt-1" />\n<p id="email-hint" class="field-hint">Invoices are sent here.</p>`}
               >
                 Copy snippet
               </button>
@@ -561,6 +561,7 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
                   autocomplete="email"
                   placeholder="name@example.com"
                   aria-describedby="specimen-email-hint"
+                  class="mt-1"
                 />
                 <p id="specimen-email-hint" class="field-hint">
                   Invoices are sent here.
@@ -570,7 +571,7 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
                 <label class="field-label" for="specimen-cycle">
                   Billing cycle
                 </label>
-                <select id="specimen-cycle" name="cycle">
+                <select id="specimen-cycle" name="cycle" class="mt-1">
                   <option>Monthly</option>
                   <option>Quarterly</option>
                 </select>
@@ -585,6 +586,7 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
                 </label>
                 <input
                   id="specimen-reference"
+                  class="mt-1"
                   name="reference"
                   aria-invalid="true"
                   aria-describedby="reference-error"
@@ -1354,21 +1356,11 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1.25rem;
   }
-  .form-grid > div {
-    display: grid;
-    gap: var(--gap-label);
-  }
   .form-grid input:not([type="checkbox"]):not([type="radio"]),
   .form-grid select {
     width: 100%;
     padding: 0.6rem 0.75rem;
     font: inherit;
-  }
-  .check-row {
-    display: flex;
-    align-items: center;
-    min-height: var(--control-size-md);
-    gap: 0.5rem;
   }
   .component-row {
     display: flex;

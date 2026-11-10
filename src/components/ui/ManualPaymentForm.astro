@@ -32,7 +32,7 @@ const onlyOne = invoices.length + dwellings.length === 1;
 const submissionId = crypto.randomUUID();
 const field =
   "mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-1.5 text-sm";
-const label = "block text-sm font-medium text-foreground";
+const label = "field-label";
 ---
 
 <p class="text-sm text-muted">
@@ -76,7 +76,7 @@ const label = "block text-sm font-medium text-foreground";
         </optgroup>
       )}
     </select>
-    <FieldError name="target" error={error} />
+    <FieldError name="target" id={`${id}-target-error`} error={error} />
   </div>
   <div>
     <label class={label} for={`${id}-method`}>
@@ -98,7 +98,7 @@ const label = "block text-sm font-medium text-foreground";
       required
       class={field}
     />
-    <FieldError name="amount" error={error} />
+    <FieldError name="amount" id={`${id}-amount-error`} error={error} />
   </div>
   <div>
     <label class={label} for={`${id}-date`}>
@@ -112,14 +112,14 @@ const label = "block text-sm font-medium text-foreground";
       max={today}
       class={field}
     />
-    <FieldError name="bookingDate" error={error} />
+    <FieldError name="bookingDate" id={`${id}-date-error`} error={error} />
   </div>
   <div>
     <label class={label} for={`${id}-payer`}>
       {t("Payer")}
     </label>
     <input id={`${id}-payer`} name="payerName" class={field} />
-    <FieldError name="payerName" error={error} />
+    <FieldError name="payerName" id={`${id}-payer-error`} error={error} />
   </div>
   <div>
     <label class={label} for={`${id}-reference`}>
@@ -132,12 +132,12 @@ const label = "block text-sm font-medium text-foreground";
       aria-describedby={`${id}-reference-hint`}
       class={field}
     />
-    <small id={`${id}-reference-hint`} class="text-muted">
+    <p id={`${id}-reference-hint`} class="field-hint">
       {t(
         "Required for a bank transfer. For cash, a receipt number if you have one."
       )}
-    </small>
-    <FieldError name="reference" error={error} />
+    </p>
+    <FieldError name="reference" id={`${id}-reference-error`} error={error} />
   </div>
   <div>
     <label class={label} for={`${id}-reason`}>
@@ -150,7 +150,7 @@ const label = "block text-sm font-medium text-foreground";
       maxlength="500"
       class={field}
     />
-    <FieldError name="reason" error={error} />
+    <FieldError name="reason" id={`${id}-reason-error`} error={error} />
   </div>
   <div>
     <button

@@ -20,7 +20,7 @@ const ordered = [...organizations].sort(
 ---
 
 <details class="organization-switcher" name="organization-switcher">
-  <summary class="organization-trigger" data-tip={t("Switch organization")}>
+  <summary class="organization-trigger">
     <span class="organization-symbol">
       <Icon name="building" size="sm" />
     </span>
@@ -106,7 +106,7 @@ const ordered = [...organizations].sort(
     background: var(--color-surface-hover);
   }
   .organization-trigger:focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: 2px solid var(--color-focus-ring);
     outline-offset: 3px;
   }
   .organization-symbol {

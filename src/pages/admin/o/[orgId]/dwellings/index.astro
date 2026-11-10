@@ -665,6 +665,12 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
     list-style: none;
     cursor: pointer;
   }
+  @media (pointer: coarse) {
+    .row-menu summary {
+      min-width: var(--control-size-md);
+      min-height: var(--control-size-md);
+    }
+  }
   .row-menu summary::-webkit-details-marker {
     display: none;
   }

@@ -177,7 +177,10 @@ labels, a controller), not to wrap one element.
 
 - **States.** Every interactive component defines default, hover, active
   (press), `:focus-visible`, disabled and, where work happens, busy. Hover and
-  press apply only to enabled controls. Press changes color, never position.
+  press apply only to enabled controls. Buttons and fields change color on
+  press and do not move; navigation chrome (sidebar links, sign-out, the theme
+  toggle's icon, the organization trigger) may scale slightly. Links and tabs
+  have hover and current states only.
 - **Touch.** The minimum target is 44px (`--control-size-md`). Compact (36px)
   controls expand to 44px under `@media (pointer: coarse)`.
 - **Focus.** A 2px `--color-focus-ring` outline from the base layer. Do not
@@ -214,20 +217,27 @@ purpose is not clear from the buttons.
 
 ### Form field
 
-Parts: `field-label`, the control, optional `field-hint`, optional
-`FieldError` (`error`, `name`) which renders `field-error` with
-`id="<name>-error"` and `role="alert"`.
+Parts: `field-label`, the control (give it `mt-1`, which is `--gap-label`),
+optional `field-hint`, optional `FieldError` (`error`, `name`, `id?`) which
+renders `field-error` with `id="<name>-error"` and `role="alert"`. Pass `id`
+when the control's id is not the field name, for example a form rendered twice
+on one page; it must be `<control id>-error`. `FieldError` renders nothing for
+an empty message list.
 
 - Controls (input, select, textarea) are styled by the base layer: 44px
   minimum height, `--color-input-border`, `--radius-input`, placeholder in
-  muted. Checkbox and radio are 16px with an `accent-color` of primary; wrap them in a
-  label whose row is at least 44px tall.
+  muted. Use utilities for width and spacing only; do not restyle the border,
+  radius or padding. Checkbox and radio are 16px with an `accent-color` of
+  primary; put them in a `check-row` label so the whole 44px row is the target.
 - States: focus (border to primary plus the 2px outline), invalid
   (`aria-invalid="true"`, border to destructive, survives focus), disabled
   (`--color-surface-hover` fill, muted text).
 - Accessibility: every control has a persistent visible label (placeholder is
-  not a label). Link hint and error with `aria-describedby`. Put fields on
-  canvas or surface (see the input-border note under Color).
+  not a label). `linkFieldErrors` (`src/lib/ui/field-errors.ts`, loaded by the
+  admin, resident and auth layouts) finds each `.field-error` by id, then sets
+  `aria-invalid` and adds the error to `aria-describedby` on its control. Link a
+  `field-hint` yourself with `aria-describedby`. Put fields on canvas or surface
+  (see the input-border note under Color).
 - Don't hide the error behind color: always include text that says what to fix.
 
 ### Status badge
@@ -258,8 +268,13 @@ alone; forced-colors mode draws a system-color outline.
   (`--metrics` sets the column count, default 4; 2 columns below `md`);
   `data-tone` of success or warning colors the value. One surface, dividers
   between figures.
-- `KpiCard` (`label`, `value`, `tone?`, `icon?`, `hint?`): a summary figure with
+- `KpiCard` (`label`, `value`, `tone?` neutral, success, warning or danger,
+  `icon?` invoice, coins, clock, open or lock, `hint?`): a summary figure with
   tabular numerals; not clickable.
+- A region that is loading carries `aria-busy="true"` and dims; announce the
+  result through a status element, not by making the region live.
+- `empty-state` can be used as a class without the component for a one-off
+  empty region.
 - Don't add a shadow to a panel; don't nest a panel in a panel.
 
 ### Data table
@@ -278,8 +293,10 @@ A `<table>` inside `table-wrap`: header cell `th` (semibold, no wrap, tinted
 ### Page header and breadcrumbs
 
 `PageHeader` (`title`, `headingLevel` h1 default, `description?`, `eyebrow?`,
-`display?`, `accent?`) with an actions slot (`page-actions`). `display` selects
-the Fraunces treatment for period and month headings only. `Breadcrumbs`
+`display?`, `accent?`) and a default slot for actions (wrap them in
+`page-actions`). `display` selects the Fraunces treatment for period and month
+headings and the top-level admin index pages (dwellings, messages, rules).
+`Breadcrumbs`
 (`items`: `{ label, href? }`, last crumb has no `href`) is rendered once by the
 admin layout, so pages only declare their trail. It is a `<nav>` named
 "Breadcrumb" and marks the current page with `aria-current="page"`.
@@ -289,7 +306,7 @@ admin layout, so pages only declare their trail. It is a `<nav>` named
 `tabs` is a row of links to sibling views; the current one carries
 `aria-current="page"`. Hover tints the others. These are navigation, not
 `role="tab"` widgets. `filter-bar` groups labelled filter controls on a panel
-surface and wraps; fields flex to at least 9rem and fill the width below `sm`.
+surface and wraps; below `sm` its fields flex from 9rem and fill the width.
 
 ### Empty state
 
@@ -301,21 +318,42 @@ the next action. Say what is missing and give the action that fixes it. Reserve
 
 `disclosure` on a `<details>`: bordered panel whose `<summary>` is at least
 44px tall with a rotating chevron. Native keyboard operation; no script. Use for
-optional detail, not for navigation.
+optional detail, not for navigation. A bare `<details>` text toggle (no panel)
+is allowed for a small inline reveal.
+
+### Row menu
+
+`row-menu` is a `<details>` whose `<summary aria-label>` is a dots button (36px,
+44px on coarse pointers) opening a small floating menu (`--elevation-raised`,
+`--color-surface-raised`) of actions for one row. Used by the dwellings,
+messages and rules lists. The summary's `aria-label` names the action and the
+shared tooltip shows it.
 
 ### Tooltip
 
-One shared tooltip (`installTooltips`, included once per layout) shows for
-`[data-tip]`, clipped text (`data-tip-clipped`) and `.icon-btn[aria-label]`,
-on pointer hover and keyboard focus after 400ms. Touch has no tooltip, so the
-text must never be the only place information lives. Don't add one to a control
-with a visible label.
+One shared tooltip (`Tooltips` calls `installTooltips`, include it once per
+layout) shows for `[data-tip]`, clipped text (`data-tip-clipped`),
+`.icon-btn[aria-label]` and `.row-menu > summary[aria-label]`. A pointer waits
+400ms; keyboard focus shows it at once. Touch has no tooltip, so the text must
+never be the only place information lives. Don't add one to a control with a
+visible label. Known gap: the truncated current breadcrumb shows its full text
+only on hover, because it is not focusable.
+
+### Icon and skip link
+
+`Icon` (`name`, `size?` xs 16, sm 18, md 20, lg 24, `class?`) renders a Tabler
+outline icon as decoration with `aria-hidden`; the control that contains it
+supplies the accessible name. `skip-link` is the first focusable element on each
+layout and moves focus to the main content.
 
 ### Drawer
 
-`AdminContextDrawer` and `.context-drawer`: a native modal `<dialog>` that
-slides from the right (full width below `md`), with a named heading, scrollable
-body, close button (`context-drawer-close`) and wrapping footer actions.
+`AdminContextDrawer` (`organizationId`, `periodId`, `periodStatus`,
+`periodName`, `workbenchPath`, `refreshSelectors?`) and `.context-drawer`: a
+native modal `<dialog>` that slides from the right (full width below `md`), with
+a named heading, scrollable body, close button (`context-drawer-close`) and
+wrapping footer actions. Loading results are announced through the
+`#workbench-announcer` status region, not by the body.
 Uses `--elevation-modal-side` and `--color-surface-raised`. Focus returns to the
 trigger; Escape closes; unsaved edits are the controller's job.
 
@@ -323,24 +361,36 @@ trigger; Escape closes; unsaved edits are the controller's job.
 
 `MutationStatus` renders the saving, saved and needs-attention toasts and the
 recent-changes panel for admin actions (ADR 0005). Messages are translated
-strings; retry and check-again are offered for failed or unconfirmed changes.
-Live region semantics belong to the component; pages only register mutations.
+strings. States: saving, saved, needs attention (retry, dismiss), and
+verifying or outcome-not-confirmed (check again). Retry and dismiss are 24px
+tall, 44px on coarse pointers. Live region semantics belong to the component;
+pages only register mutations.
 
 ### Navigation chrome
 
 `AppNavigation` (`organizationId`, `unreadMessages?`) is the single sidebar nav
 with `aria-current="page"` and an unread badge. `OrganizationSwitcher`
 (`organizationId?`, `organizationName?`, `organizations`, `residentAccess`) is a
-disclosure menu at the top of the sidebar; Escape closes it. `ThemeToggle`
-(`data-theme-toggle`) and `LanguageSwitch` sit in the account block. Below `lg`
-the same nav lives in the mobile drawer.
+disclosure menu at the top of the sidebar; Escape closes it and returns focus to
+the trigger. `SidebarAccount` (`email?`), `ThemeToggle` (`data-theme-toggle`)
+and `LanguageSwitch` make up the account block. Below `lg` the same nav lives in
+the mobile drawer.
 
 ### Setup wizard
 
 `SetupLayout` (`title`, `description?`, plus the step props) wraps a step in the
 guided setup; `SetupSteps` (`organizationId`, `current`, `steps`) shows the
 trail: complete, current and upcoming steps are distinguished by icon and text
-as well as color. On phones the trail compacts to the current step.
+as well as color. On phones the step titles are hidden, leaving the numbered
+row of icons, and the current step's title appears above it.
+
+### Manual payment form
+
+`ManualPaymentForm` (`organizationId`, `invoices`, `dwellings`, `today`,
+`error?`, `idPrefix?`) is the reference use of the form field pattern: every
+control has a `field-label`, errors use `FieldError` with ids built from
+`idPrefix` so two copies on one page do not collide, and the reference field
+links a `field-hint`.
 
 ## Patterns
 

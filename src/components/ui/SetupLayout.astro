@@ -21,22 +21,10 @@ const { title, description, ...steps } = Astro.props;
 
 <script>
   import { onPageLoad } from "../../lib/ui/page-lifecycle";
-  // Mark each field that has an error, and start the user on the first one.
+  import { linkFieldErrors } from "../../lib/ui/field-errors";
+  // Start the user on the first field that has an error.
   onPageLoad(() => {
-    const errors = document.querySelectorAll<HTMLElement>(
-      '.setup-content [id$="-error"]'
-    );
-    const fields = [...errors]
-      .map((error) => {
-        const name = error.id.slice(0, -6);
-        return (
-          document.getElementById(name) ??
-          document.getElementById(`meter-${name}`)
-        );
-      })
-      .filter((field): field is HTMLElement => field !== null);
-    for (const field of fields) field.setAttribute("aria-invalid", "true");
-    fields[0]?.focus();
+    linkFieldErrors(document.querySelector(".setup-content") ?? document)[0]?.focus();
   });
 </script>
 

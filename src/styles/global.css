@@ -612,7 +612,8 @@ textarea:disabled {
     line-height: 1rem; /* 16px */
     font-weight: 500;
   }
-  .text-label {
+  .text-label,
+  .field-label {
     letter-spacing: var(--tracking-small);
     font-size: var(--text-sm);
     line-height: 1.125rem; /* 18px */
@@ -899,7 +900,7 @@ textarea:disabled {
     z-index: 1;
   }
   .row-link:focus-within {
-    outline: 2px solid var(--color-primary);
+    outline: 2px solid var(--color-focus-ring);
     outline-offset: -2px;
   }
   .panel,
@@ -1303,13 +1304,17 @@ textarea:disabled {
   /* Form field parts. The control itself is styled by the base layer; the
      label, hint and error text come from these classes. Link hint and error
      to the control with aria-describedby (FieldError renders id="<name>-error"). */
+  /* Typography comes from the shared label role above. */
   .field-label {
     display: block;
     color: var(--color-foreground);
-    letter-spacing: var(--tracking-small);
-    font-size: var(--text-sm);
-    line-height: 1.125rem;
-    font-weight: 600;
+  }
+  /* Checkbox or radio with its text: the whole row is the 44px target. */
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--control-size-md);
   }
   .field-hint {
     margin-top: var(--gap-label);

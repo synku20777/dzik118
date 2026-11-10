@@ -320,7 +320,19 @@ const strings = {
   }
   .mutation-item-actions {
     display: flex;
-    gap: 0.5rem;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .mutation-retry,
+  .mutation-dismiss {
+    min-height: 1.5rem;
+    padding: 0.25rem 0.5rem;
+  }
+  @media (pointer: coarse) {
+    .mutation-retry,
+    .mutation-dismiss {
+      min-height: var(--control-size-md);
+    }
   }
   .mutation-retry {
     color: var(--color-primary);
