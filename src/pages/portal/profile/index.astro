@@ -39,7 +39,7 @@ const [dwellings, displayName] = await withRequestDb((db) =>
 
       <h1 class="text-h2 text-foreground">{t("Profile")}</h1>
 
-      <section class="rounded-panel border border-border bg-surface p-4">
+      <section class="rounded-panel border border-(--color-panel-border) bg-surface p-4">
         <h2 class="text-h3 text-foreground">{t("Account")}</h2>
         <p class="mt-2 text-body-sm text-foreground">{auth.email}</p>
         <p class="mt-1 text-body-sm text-muted">{t("Resident")}</p>
@@ -77,14 +77,14 @@ const [dwellings, displayName] = await withRequestDb((db) =>
         </form>
       </section>
 
-      <section class="rounded-panel border border-border bg-surface p-4">
+      <section class="rounded-panel border border-(--color-panel-border) bg-surface p-4">
         <h2 class="text-h3 text-foreground">{t("Dwelling access")}</h2>
         {dwellings.length === 0 ? (
           <p class="mt-2 text-body-sm text-muted">
             {t("No dwellings assigned.")}
           </p>
         ) : (
-          <ul class="mt-4 divide-y divide-border rounded-control border border-border bg-surface">
+          <ul class="mt-4 divide-y divide-border rounded-control border border-(--color-panel-border) bg-surface">
             {dwellings.map((dwelling) => (
               <li>
                 <a
@@ -105,7 +105,7 @@ const [dwellings, displayName] = await withRequestDb((db) =>
           </ul>
         )}
       </section>
-      <section class="rounded-panel border border-border bg-surface p-4">
+      <section class="rounded-panel border border-(--color-panel-border) bg-surface p-4">
         <h2 class="text-h3 text-foreground">{t("Your data")}</h2>
         <p class="mt-2 text-body-sm text-muted">
           {t(

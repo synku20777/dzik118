@@ -63,7 +63,7 @@ const adminLinkError = errorCode === "6";
         {t("Too many sign-in attempts. Please wait a minute and try again.")}
       </p>
     )}
-    <div class="rounded-panel border border-border bg-surface p-8">
+    <div class="rounded-panel border border-(--color-panel-border) bg-surface p-8">
       <h1 class="text-xl font-bold text-foreground">{t("Resident sign in")}</h1>
       <p class="mt-1 text-sm text-muted">
         {t("Enter your email and we'll send you a secure sign-in link.")}
@@ -107,7 +107,7 @@ const adminLinkError = errorCode === "6";
       </form>
     </div>
 
-    <div class="rounded-panel border border-border bg-surface p-8">
+    <div class="rounded-panel border border-(--color-panel-border) bg-surface p-8">
       <h2 class="text-lg font-bold text-foreground">{t("Admin sign in")}</h2>
       {passwordReset && (
         <p

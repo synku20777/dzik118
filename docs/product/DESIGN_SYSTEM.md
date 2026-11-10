@@ -30,12 +30,13 @@ and bone (dark structure and text), daugava (action and navigation), verdigris
 
 | Token | Role |
 | --- | --- |
-| `--color-canvas` | Page background. |
+| `--color-canvas` | Page background. One visible step (about 1.2:1) darker than surface in light mode, so panels read without an outline. |
 | `--color-surface` | Panels, tables, fields, menus. |
 | `--color-surface-hover` | Hover and disabled-field fill. |
 | `--color-surface-raised` | Background of elevated surfaces: toasts, menus, popovers, dialogs, drawers (tooltips and the bulk-action toolbar keep their own fill). Equal to surface in light mode, one step lighter in dark mode, where shadows cannot show depth. |
 | `--color-foreground` / `--color-muted` | Text, and secondary text. Muted keeps 4.5:1 on canvas and surface. |
-| `--color-border` | Panel, table and divider hairlines. |
+| `--color-border` | Dividers: table rows, list rows, tab underline, metric dividers, progress tracks. Not used for container outlines. |
+| `--color-panel-border` | The outline of a container (panel, table wrap, metric strip, card, shell edge). Transparent: containers are told apart by the canvas/surface step. It stays a 1px transparent border so layout does not move and forced-colors mode still draws an edge. Point it at `--color-border` to bring outlines back. |
 | `--color-input-border` | Field boundary. Deeper than `--color-border` so a field edge meets 3:1 (WCAG 1.4.11) on canvas and surface. Place fields on those two; on `--color-surface-hover` or table headers the edge falls to about 2.9:1. Never `border-border` on a field. |
 | `--color-primary` (+ `-hover`, `-active`, `--color-on-primary`) | Actions, links, navigation. In dark mode primary is a pale tint, so `--color-on-primary` is dark. |
 | `--color-secondary`, `--color-success`, `--color-warning`, `--color-destructive` | Meaning colors for text and fills. Only destructive has `-hover` and `-active` variants. |
@@ -139,7 +140,8 @@ containers.
 | Overlay | `--elevation-overlay` | Menus, tooltips and popovers. |
 | Modal | `--elevation-modal` | Dialogs and floating panels. `--elevation-modal-side` is the drawer variant. |
 
-In dark mode shadows are replaced by a hairline `--color-border` ring, and the
+In dark mode shadows are replaced by a hairline `--color-border` ring (floating
+surfaces keep an outline; only containers on the page lose theirs), and the
 element uses `--color-surface-raised`. `--shadow-control` is the thumb shadow
 for toggles.
 
@@ -264,8 +266,8 @@ alone; forced-colors mode draws a system-color outline.
 
 ### Panel, metrics and KPI
 
-- `panel` is the default container: surface, 1px border, `--radius-panel`,
-  flat. Pad it with `--pad-panel` (`p-6`) or `--pad-panel-compact` (`p-4`).
+- `panel` is the default container: surface, no visible outline
+  (`--color-panel-border`), `--radius-panel`, flat. Pad it with `--pad-panel` (`p-6`) or `--pad-panel-compact` (`p-4`).
 - `table-wrap` is a panel that scrolls horizontally.
 - `metric-strip` with `metric`, `metric-label`, `metric-value`, `metric-note`
   (`--metrics` sets the column count, default 4; 2 columns below `md`);

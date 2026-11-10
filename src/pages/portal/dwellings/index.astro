@@ -33,7 +33,7 @@ const dwellings = await withRequestDb((db) =>
             {t("You don't have access to any dwellings.")}
           </p>
         ) : (
-          <ul class="mt-4 divide-y divide-border rounded-control border border-border bg-surface">
+          <ul class="mt-4 divide-y divide-border rounded-control border border-(--color-panel-border) bg-surface">
             {dwellings.map((dwelling) => (
               <li>
                 <a

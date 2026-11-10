@@ -86,7 +86,7 @@ try {
       {meters
         .filter((m) => !m.archivedAt)
         .map((m) => (
-          <section class="rounded-panel border border-border bg-surface p-4">
+          <section class="rounded-panel border border-(--color-panel-border) bg-surface p-4">
             <h2 class="font-medium text-foreground">
               {m.label ?? entityLabel(m.type, locale)}{" "}
               <span class="text-body-sm text-muted">
