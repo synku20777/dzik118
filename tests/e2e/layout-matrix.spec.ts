@@ -248,9 +248,9 @@ async function auditFocus(page: Page, stops = 12): Promise<string[]> {
       const cs = getComputedStyle(el);
       const outline =
         cs.outlineStyle !== "none" && parseFloat(cs.outlineWidth) >= 2;
-      const ring = cs.boxShadow !== "none";
+      // A resting shadow is not a focus indicator: the outline must be drawn.
       const label = `${el.tagName.toLowerCase()}${el instanceof HTMLInputElement ? `[${el.type}]` : ""}.${String(el.className).slice(0, 40)} ${el.getAttribute("name") ?? ""}`;
-      return { ok: outline || ring, label };
+      return { ok: outline, label };
     });
     if (result && !result.ok) out.push(`no focus indicator: ${result.label}`);
   }

@@ -1290,7 +1290,9 @@ const MAX_MISSING = 2;
             box.checked = false;
           });
           updateSelection();
-          document.querySelector<HTMLInputElement>("#select-all")?.focus();
+          // Select-all is not shown below sm; fall back to the first case.
+          const selectAll = document.querySelector<HTMLInputElement>("#select-all");
+          (selectAll?.checkVisibility() ? selectAll : boxes()[0])?.focus();
         }
         if (target.closest("[data-open-lock-dialog]")) {
           target.closest("details")?.removeAttribute("open");

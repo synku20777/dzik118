@@ -24,7 +24,8 @@ const { title, description, ...steps } = Astro.props;
   import { linkFieldErrors } from "../../lib/ui/field-errors";
   // Start the user on the first field that has an error.
   onPageLoad(() => {
-    linkFieldErrors(document.querySelector(".setup-content") ?? document)[0]?.focus();
+    // Called without a root, linkFieldErrors searches the whole document.
+    linkFieldErrors()[0]?.focus();
   });
 </script>
 

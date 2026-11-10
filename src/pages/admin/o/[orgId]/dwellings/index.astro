@@ -655,8 +655,8 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
   }
   .row-menu summary {
     display: grid;
-    min-width: 2rem;
-    min-height: 2rem;
+    min-width: var(--control-size-sm);
+    min-height: var(--control-size-sm);
     place-items: center;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
@@ -684,7 +684,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     background: var(--color-surface-raised);
-    box-shadow: var(--elevation-raised);
+    box-shadow: var(--elevation-overlay);
   }
   .row-menu button {
     display: block;

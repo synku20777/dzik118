@@ -355,8 +355,9 @@ layout and moves focus to the main content.
 `periodName`, `workbenchPath`, `refreshSelectors?`) and `.context-drawer`: a
 native modal `<dialog>` that slides from the right (full width below `md`), with
 a named heading, scrollable body, close button (`context-drawer-close`) and
-wrapping footer actions. Loading results are announced through the
-`#workbench-announcer` status region, not by the body.
+wrapping footer actions. Save results are announced through the
+`#workbench-announcer` status region, not by the body; a load error appears in
+the drawer's meta line.
 Uses `--elevation-modal-side` and `--color-surface-raised`. Focus returns to the
 trigger; Escape closes; unsaved edits are the controller's job.
 
@@ -497,8 +498,9 @@ Below `md` the line drawing is hidden.
 setup is unfinished, then the dashboard header with the period navigation. A
 grid holds the collection panel and the readings panel: two thirds and one third
 from `lg`, two equal columns from `md`, one column below. The month status is a
-full-width section under it; its progress steps run four across from `lg` and
-two below, and the setup steps run three across until `md` and one column below.
+full-width section under it; its progress steps run four across down to `md` and
+two below, and the setup steps run five across from `lg`, three from `md` to
+`lg` and one column below `md`.
 The attention list is one column at the bottom.
 
 **Dwellings list.** Header with the create and import actions, a `filter-bar`,
