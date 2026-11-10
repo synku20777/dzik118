@@ -1291,7 +1291,8 @@ const MAX_MISSING = 2;
           });
           updateSelection();
           // Select-all is not shown below sm; fall back to the first case.
-          const selectAll = document.querySelector<HTMLInputElement>("#select-all");
+          const selectAll =
+            document.querySelector<HTMLInputElement>("#select-all");
           (selectAll?.checkVisibility() ? selectAll : boxes()[0])?.focus();
         }
         if (target.closest("[data-open-lock-dialog]")) {
@@ -1471,7 +1472,7 @@ const MAX_MISSING = 2;
   }
   .more-menu summary:hover {
     color: var(--color-foreground);
-    background: var(--color-surface-hover);
+    background: var(--color-hover);
   }
   .more-menu summary::-webkit-details-marker {
     display: none;
@@ -1517,29 +1518,33 @@ const MAX_MISSING = 2;
   .more-menu button:hover,
   .case-menu a:hover,
   .case-menu button:hover {
-    background: var(--color-surface-hover);
+    background: var(--color-hover);
   }
   .period-navigation {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    font-size: var(--text-xs);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    font-size: var(--text-sm);
   }
-  .period-navigation a {
-    display: inline-flex;
+  /* Two equal buttons, each a generous target. */
+  .period-navigation :is(a, [aria-disabled="true"]) {
+    display: flex;
     align-items: center;
     gap: 0.5rem;
+    min-height: 3.5rem;
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
     font-weight: 550;
-    min-height: 2rem;
+  }
+  .period-navigation :is(a, [aria-disabled="true"]):last-child {
+    justify-content: flex-end;
   }
   .period-navigation a:hover {
+    background: var(--color-hover);
     color: var(--color-primary);
-    text-decoration: underline;
-    text-underline-offset: 0.2em;
   }
   .period-navigation [aria-disabled="true"] {
-    display: inline-flex;
-    align-items: center;
     color: var(--color-muted);
   }
   .financial-summary {
@@ -1908,7 +1913,7 @@ const MAX_MISSING = 2;
     border-bottom: 0;
   }
   .case-table tbody tr:hover {
-    background: var(--color-surface-hover);
+    background: var(--color-hover);
   }
   .case-table tbody tr[data-selected] {
     background: var(--color-nav-active-bg);
@@ -2189,8 +2194,7 @@ const MAX_MISSING = 2;
     .readiness-more,
     .clear-filters,
     .clear-selection,
-    .period-resource summary,
-    .period-navigation a {
+    .period-resource summary {
       min-height: 2.75rem;
     }
   }

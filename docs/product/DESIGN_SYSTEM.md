@@ -34,6 +34,7 @@ and bone (dark structure and text), daugava (action and navigation), verdigris
 | `--color-surface` | Panels, tables, fields, menus. |
 | `--color-surface-hover` | Hover and disabled-field fill. |
 | `--color-surface-raised` | Background of elevated surfaces: toasts, menus, popovers, dialogs, drawers (tooltips and the bulk-action toolbar keep their own fill). Equal to surface in light mode, one step lighter in dark mode, where shadows cannot show depth. |
+| `--color-hover` | Hover fill of interactive things: table rows, secondary and ghost buttons, menu items, tabs, nav links. Darker than both canvas and surface in light mode (about 1.1 against the canvas, 1.3 against the surface) so a hovered button on the page background does not disappear. `--color-surface-hover` stays for static tints (table header, disabled fields). |
 | `--color-foreground` / `--color-muted` | Text, and secondary text. Muted keeps 4.5:1 on canvas and surface. |
 | `--color-border` | Dividers: table rows, list rows, tab underline, metric dividers, progress tracks. Not used for container outlines. |
 | `--panel-border` | The `border` shorthand of every container (panel, table wrap, metric strip, card, shell edge). It is `0 solid transparent`: containers have no outline and are told apart by the canvas/surface step. In Windows high-contrast mode it becomes `1px solid CanvasText`. Set it to `1px solid var(--color-border)` to bring outlines back. Use `.contained` on a utility-styled container. |
@@ -524,7 +525,8 @@ links to its own page that explains where the money went. Tables stack into
 cards below `sm`; the ledger is a separate page.
 
 **Current month and periods.** The periods list is a `stack-table`. A period
-page opens with its finance metric strip, then the billing workbench: filters,
+page opens with previous and next period as two equal, 56px-tall buttons, then
+its finance metric strip, then the billing workbench: filters,
 the case table with a select-all checkbox (not offered below `sm`) and a bulk
 toolbar (`--elevation-raised`), and a drawer for editing one case. The header
 stacks below `md`; its action row wraps at every width.
