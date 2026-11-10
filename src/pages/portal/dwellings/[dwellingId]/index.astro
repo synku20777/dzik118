@@ -275,10 +275,7 @@ const base = "/portal/dwellings/" + dwellingId;
                     <input type="hidden" name="dwellingId" value={dwellingId} />
                     <input type="hidden" name="periodId" value={period.id} />
                     <input type="hidden" name="meterId" value={meter.meterId} />
-                    <label
-                      class="field-label"
-                      for={"reading-" + meter.meterId}
-                    >
+                    <label class="field-label" for={"reading-" + meter.meterId}>
                       {t("Current value")} ({meter.unit})
                     </label>
                     <div class="mt-2 flex flex-col gap-3 sm:flex-row">
