@@ -399,40 +399,42 @@ links a `field-hint`.
 
 Layout is built from three shells, a few width tokens and a handful of grid
 recipes. There is no 12-column grid: each screen is a stack of full-width
-regions, and a region decides its own columns.
+regions, and a region decides its own columns. Where a section below describes
+a rule for new work and a view does not follow it yet, the exception is named.
 
 ### Shells
 
 | Shell | Used by | Structure |
 | --- | --- | --- |
-| Admin | everything under `/admin/o/<org>` | From `lg`: fixed 15rem sidebar (`AppNavigation`, organization switcher, account block) and a content area with `margin-left: 15rem`. Below `lg`: no sidebar; a top bar (`admin-mobile`) opens the same navigation in a drawer. The content area pads `--space-8` above and `--gutter` at the sides, 6rem below, and stops at `--width-shell`. The layout renders the skip link and breadcrumbs. |
-| Resident | `/portal` | No sidebar. A header with the brand and a text nav, then one centered column at `--width-reading`, padded by `--gutter`. Mobile-first: it is the same layout at every width. |
-| Auth | `/login`, password reset | A centered card at `--width-narrow` (`max-w-md`). An architectural line drawing sits behind it from `md` and is hidden below. |
+| Admin | everything under `/admin/o/<org>` | From `lg`: fixed 15rem sidebar (`AppNavigation`, organization switcher, account block) and a content area with `margin-left: 15rem`. Below `lg`: no sidebar; a top bar (`admin-mobile`) opens the same navigation in a drawer capped at 320px. The content area pads `--gutter` at the sides and 6rem below, and 2rem above from `lg`, 1.5rem from `sm` to `lg`, 1.25rem below `sm`. It stops at `--width-shell`. The layout renders the skip link and breadcrumbs. |
+| Resident | `/portal` | No sidebar. A header holds the brand, theme and language toggles and the profile link; the text nav (`resident-nav`) is the first thing in `<main>`. One centered column at `--width-reading`, padded by `--gutter`. It is the same layout at every width. |
+| Auth | `/login`, password reset | A centered card (`max-w-md`, which equals `--width-narrow`). Language and theme controls are positioned absolutely in the top-right corner. An architectural line drawing sits behind the card from `md` and is hidden below. |
 
 The admin and resident shells never mix: the resident shell has no admin
 chrome, and a resident route must not render `.admin-sidebar`.
 
 ### Widths
 
-| Token | Value | Use |
-| --- | --- | --- |
-| `--width-narrow` | 28rem | Auth card, single-purpose forms. |
-| `--width-reading` | 50rem | Resident column, prose pages. |
-| `--width-wizard` | 76rem | Guided setup. |
-| `--width-content` | 94rem | Dashboard and standard admin pages. |
-| `--width-shell` | 110rem | Outer cap of the admin content area. |
+| Token | Value | Used by today | Intended use |
+| --- | --- | --- | --- |
+| `--width-narrow` | 28rem | Nothing yet; the login card uses `max-w-md`, the same value. | Auth card, single-purpose forms. |
+| `--width-reading` | 50rem | Resident column and header. | Resident column, prose pages. |
+| `--width-wizard` | 76rem | Guided setup. | Guided setup. |
+| `--width-content` | 94rem | The dashboard. | Standard admin pages. Other admin pages currently fill `--width-shell`. |
+| `--width-shell` | 110rem | The admin content area. | Outer cap of the admin content area. |
 
-Content never needs a width below these: it shrinks with its container, and no
-view overflows horizontally from 320px up.
+Content shrinks with its container. None of the audited views overflows
+horizontally at 320, 390, 768, 1024 or 1440px (see Verification for what is and
+is not audited).
 
 ### Responsive behavior
 
-| Width | Admin | Tables | Grids |
+| Width | Admin shell | Tables | Grids and drawers |
 | --- | --- | --- | --- |
-| below `sm` (640px) | Top bar and drawer nav; gutter 16px; drawers are full width | `stack-table` rows become labelled cards; other tables scroll in `table-wrap` | One column; metric strips two columns |
-| `sm` to `md` (768px) | Top bar; gutter 24px | Tables with room; wide ones scroll | Forms two-up; card grids reflow with auto-fit |
-| `md` to `lg` (1120px) | Top bar; drawers at their own width | Normal | Two-up and three-up regions; the sidebar is still a drawer |
-| `lg` and up | Persistent sidebar; fluid gutter | Normal | Full layouts: metric strip four columns, dashboard two columns |
+| below `sm` (640px) | Top bar and drawer nav; gutter 16px | `stack-table` rows become labelled cards; other tables scroll in `table-wrap`; bulk select-all is not offered | One column for most forms (setup charges and some dwelling forms keep two); metric strips two columns; drawers full width |
+| `sm` to `md` (768px) | Top bar; gutter 24px | Tables with room; wide ones scroll | Forms two-up; card grids reflow with auto-fit; drawers full width |
+| `md` to `lg` (1120px) | Top bar; gutter 24px | Normal | Metric strips four columns; context drawers at their own width; the sidebar is still a drawer |
+| `lg` and up | Persistent sidebar; fluid gutter | Normal | Full layouts: dashboard two columns, setup trail as a side column |
 
 Choose a layout by the room the region has, not only by the screen. A region
 beside the 15rem sidebar has 240px less than the screen, so a wide two-pane
@@ -442,15 +444,19 @@ at 60rem) instead of adding a breakpoint.
 ### Grid recipes
 
 - **Card grid.** `grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr))`
-  with `gap: var(--gap-section)`: one to four columns with no media query.
+  with `gap: var(--gap-section)`: as many columns as fit, one on a phone. The
+  dwelling summary uses `minmax(13rem, 1fr)`; use the `min(100%, …)` form in new
+  code so a narrow container cannot overflow.
 - **Metric strip.** `metric-strip` and `--metrics`: one surface, dividers, four
   columns from `md`, two below. Use it for three to five figures that belong
   together; use `KpiCard` for a figure that stands alone.
 - **Two-pane.** `minmax(0, 1fr)` plus a fixed side column (26rem on the dwelling
   detail). Collapse to one column with a container query when the region is
-  narrower than the two panes need.
-- **Form grid.** Two columns of fields from `sm`; one below. Fields keep
-  `--gap-field` between them and their label `--gap-label` above.
+  narrower than the two panes need. Hide the wrapper, not just the grid, when
+  the content is filtered away.
+- **Form grid.** Two columns of fields from `sm`; one below, with the exceptions
+  above. Fields keep `--gap-field` between them and their label `--gap-label`
+  above (`gap-3` and `gap-4` appear in older forms).
 - **Stack.** The default: `space-y-6` (`--gap-section`) between regions,
   `space-y-4` inside a panel.
 
@@ -460,10 +466,16 @@ Wrap the table in `stack-table` for lists a phone user reads row by row. Below
 `sm` each `tr` becomes a card with the column header as a label (`data-label`).
 Put the row's primary link first and keep action cells last. Use a plain
 `table-wrap` scroll for dense reference tables where comparing columns matters.
+The setup readings table defines its own card layout without header labels.
 
 ### Composition rules
 
-- One `h1` per view, from `PageHeader`, directly under the breadcrumbs.
+These are the rules for new views. Existing exceptions: the dashboard, dwelling
+detail and period workbench build their own headers instead of `PageHeader`; the
+dashboard's setup card sits above its header; dwelling panels contain
+`table-wrap` panels.
+
+- One `h1` per view, directly under the breadcrumbs.
 - Order inside a view: header and actions, then any notice, then filters, then
   the content. A notice goes above the content it describes.
 - One `btn-primary` per region; the page's main action sits in the header.
@@ -474,18 +486,20 @@ Put the row's primary link first and keep action cells last. Use a plain
 
 ### Core view recipes
 
-**Login and auth.** Auth shell, language and theme controls fixed top-right.
-The login page holds two sign-in forms in one column: resident (email, sign-in
-link, the page `h1`) and admin (email and password). Errors use a danger notice
-above the form; field errors use `field-error`. Below `md` the line drawing is
-hidden.
+**Login and auth.** Auth shell. The login page holds two sign-in forms in one
+column: resident (email, sign-in link, the page `h1`) and admin (email and
+password). Messages are plain danger-tinted paragraphs above each form; the page
+renders no `field-error` and its messages do not carry `role="alert"` (an
+exception to the field pattern; password reset and the in-app forms follow it).
+Below `md` the line drawing is hidden.
 
-**Admin dashboard.** `PageHeader` plus the period navigation, then the setup
-checklist when setup is unfinished. The collection panel and the month status
-sit in a grid of two thirds and one third from `lg`, two equal columns from `md`
-and one column below `md`; the month progress steps run four across, two from
-`md` to `lg`. The attention list is one column under the grid. Width
-`--width-content`.
+**Admin dashboard.** Width `--width-content`. The setup card comes first when
+setup is unfinished, then the dashboard header with the period navigation. A
+grid holds the collection panel and the readings panel: two thirds and one third
+from `lg`, two equal columns from `md`, one column below. The month status is a
+full-width section under it; its progress steps run four across from `lg` and
+two below, and the setup steps run three across until `md` and one column below.
+The attention list is one column at the bottom.
 
 **Dwellings list.** Header with the create and import actions, a `filter-bar`,
 then a `stack-table` of dwellings. Each row links through `row-link`; the row
@@ -494,34 +508,38 @@ menu holds secondary actions. Cards below `sm`.
 **Dwelling detail.** A summary strip (`dwelling-summary`, four figures, two
 columns below `md`) with the balance first, a section filter, then a two-pane
 region: overview, account balance, tariffs and messages in the main column;
-residents and meters in the 26rem side column. It collapses to one column when
-the area is narrower than 60rem. Period history and the audit trail follow as
-full-width panels.
+invoice delivery, residents and meters in the 26rem side column. It collapses to
+one column when the area is narrower than 60rem. Period history, the audit trail
+and additional information follow as full-width panels.
 
-**Payments.** A review queue of payments that need a decision, then the history
-table with a date and status filter. Each payment links to its own page that
-explains where the money went. Tables stack into cards below `sm`; the ledger is
-a separate page.
+**Payments.** A metric strip of the totals, a review queue of payments that need
+a decision, then the history table with a date and status filter. Each payment
+links to its own page that explains where the money went. Tables stack into
+cards below `sm`; the ledger is a separate page.
 
 **Current month and periods.** The periods list is a `stack-table`. A period
 page opens with its finance metric strip, then the billing workbench: filters,
-the case table with a select-all checkbox and a bulk toolbar (`--elevation-raised`),
-and a drawer for editing one case. The header actions wrap below `lg`.
+the case table with a select-all checkbox (not offered below `sm`) and a bulk
+toolbar (`--elevation-raised`), and a drawer for editing one case. The header
+stacks below `md`; its action row wraps at every width.
 
 **Setup wizard.** `SetupLayout` at `--width-wizard`: a step trail (a 13.5rem
-column from `lg`; a single row of numbered icons on phones), then the step
-content at up to 52rem. One primary action per step; errors keep the user's
-input and focus the first invalid field.
+column from `lg`, a three-column grid from `sm` to `lg`, a single row of
+numbered icons on phones), then the step content at up to 52rem. One primary
+action per step; errors keep the user's input and focus the first invalid field.
 
 **Resident portal.** Resident shell. The home page leads with the current
 invoice (`current-invoice`) and its amount in `--text-display-lg`, then recent
 invoices as a list (`invoice-list`) and a link to all of them. Everything is one
-column; targets are 44px.
+column. Header links are 44px tall on a coarse pointer; links elsewhere follow
+the WCAG 2.5.8 rule.
 
-**Invoice view.** A document (`invoice-document`) on a panel: header, a
-two-column parties block that becomes one column below `sm`, a line-item table,
-and the totals with the amount due emphasised. The page actions (print, and for
-admins preparing the invoice) sit above it and are hidden when printing.
+**Invoice view.** The page is a header and actions around an `<iframe srcdoc>`
+that shows the invoice as standalone HTML (`src/domain/billing/invoice-html.ts`,
+fixed light colors, its own `.parties` block of two flex columns with no
+breakpoint). The page actions are print (resident) and, for admins, preparing
+the invoice; they are hidden when printing. The layout
+matrix audits the page around the frame, not the document inside it.
 
 ## Feedback and accessibility preferences
 
@@ -551,15 +569,28 @@ real product field states, keyboard operation and live token readouts.
 
 `layout-matrix.spec.ts` sweeps the core views (login, dashboard, dwellings and
 dwelling detail, payments, periods and current month, setup, invoice view and
-the resident portal) at 320, 390, 768, 1024 and 1440px in both themes. It fails
-on horizontal overflow, on a control below 44px on a coarse pointer (24px, or
-WCAG 2.5.8 spacing, otherwise), and on a missing keyboard focus indicator
-among the first 14 tab stops (28 across the two themes). It also checks the
-exact `sm` and `lg` breakpoint edges and the contrast of the semantic token pairs
-(text 4.5:1, field border and focus ring 3:1) in both themes. It needs the local
-Supabase stack with demo data and the local mailbox for the resident sign-in.
+the resident portal) at 320, 390, 768, 1024 and 1440px in both themes. Each page
+is checked to be the one requested (status and final URL) before it is audited.
+Disclosures are opened first. It fails on:
 
-Not covered: authenticated workflow tests beyond those pages, screen-reader use,
-Safari and iOS devices, and views that need data the demo seed lacks.
+- horizontal overflow;
+- a control below 44px on a coarse pointer (checked in a touch context that is
+  confirmed to match `(pointer: coarse)`), or any target below 24px with another
+  target inside its 24px circle (WCAG 2.5.8). A text link inside a sentence, a
+  stretched row link and a bare checkbox with no label are held to 24px;
+- a missing keyboard focus indicator among the first 12 tab stops of the main
+  content at each width and theme.
+
+It also checks the exact `sm` and `lg` breakpoint edges, the dwelling two-pane
+switch at 60rem of container width, and the contrast of the semantic token
+pairs (text 4.5:1, field border and focus ring 3:1) in both themes. It needs the
+local Supabase stack with demo data and the local mailbox; it logs in as admin
+once and requests one resident sign-in link per run (the auth rate limit is 5
+per minute).
+
+Not covered: dialogs and drawers (they need an interaction), the invoice
+document inside its iframe, focus beyond the first tab stops, system-preference
+theme changes, authenticated workflows beyond these pages, screen-reader use,
+Safari and iOS devices, and any view the demo seed has no data for.
 
 After changing code, run `graphify update .` to refresh the repository graph.

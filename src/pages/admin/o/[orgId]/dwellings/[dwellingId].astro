@@ -2897,6 +2897,10 @@ function meterCaption(
   .dwelling-grid-host {
     container-type: inline-size;
   }
+  /* Hidden grid (History filter): do not leave a gap behind. */
+  .dwelling-grid-host:has(> [hidden]) {
+    display: none;
+  }
   .dwelling-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 26rem;
@@ -3253,6 +3257,9 @@ function meterCaption(
   }
   /* Only removal is destructive; exporting or disabling is reversible. */
   .sidebar-item-remove {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.5rem;
     flex: 0 0 auto;
     color: var(--color-muted);
     font-size: var(--text-sm);

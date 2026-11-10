@@ -14,8 +14,10 @@ import {
 //
 // Per view, width and theme it checks: no horizontal overflow, target size
 // (24px everywhere per WCAG 2.5.8, 44px on a coarse pointer per the design
-// system), and, at desktop widths, a visible focus indicator for the first
-// tab stops. Separate tests cover token contrast and the breakpoint edges.
+// system), and a visible focus indicator for the first tab stops of the main
+// content. Disclosures are opened first; dialogs, drawers and the contents of
+// the invoice iframe are not audited. Separate tests cover token contrast and
+// the breakpoint edges.
 
 const DESKTOP_WIDTHS = [1440, 1024, 768];
 const TOUCH_WIDTHS = [390, 320];
@@ -46,31 +48,60 @@ async function loginAdmin(page: Page): Promise<string> {
   return new URL(page.url()).pathname.replace(/\/dashboard$/, "");
 }
 
+type StorageState = Awaited<ReturnType<BrowserContext["storageState"]>>;
+
+// One admin login per run: the auth rate limit is 5 per minute and shared with
+// the sign-in link request, so every test reuses this session.
+let adminSession: Promise<{ state: StorageState; base: string }> | undefined;
+function adminSessionFor(browser: Browser) {
+  adminSession ??= (async () => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const base = await loginAdmin(page);
+    const state = await context.storageState();
+    await context.close();
+    return { state, base };
+  })();
+  return adminSession;
+}
+
+const MAILBOX = "http://127.0.0.1:54324/api/v1";
+interface MailSummary {
+  ID: string;
+  To: { Address: string }[];
+}
+const mailFor = async (request: APIRequestContext) =>
+  ((await (await request.get(`${MAILBOX}/messages`)).json()).messages ??
+    []) as MailSummary[];
+
 async function loginResident(
   page: Page,
   request: APIRequestContext
 ): Promise<void> {
+  // Only a message that arrives after this request can hold a live token.
+  const before = new Set((await mailFor(request)).map((m) => m.ID));
   await page.goto("/login?lang=en");
   await page.locator("#resident-email").fill("resident1@example.com");
   await page.getByRole("button", { name: "Send sign-in link" }).click();
   await expect(page).toHaveURL(/sent=1/);
-  let message: { ID: string } | undefined;
+  let message: MailSummary | undefined;
   for (let attempt = 0; attempt < 20 && !message; attempt++) {
-    const mailbox = await (
-      await request.get("http://127.0.0.1:54324/api/v1/messages")
-    ).json();
-    message = mailbox.messages.find((m: { To: { Address: string }[] }) =>
-      m.To.some((to) => to.Address === "resident1@example.com")
+    message = (await mailFor(request)).find(
+      (m) =>
+        !before.has(m.ID) &&
+        m.To.some((to) => to.Address === "resident1@example.com")
     );
     if (!message) await page.waitForTimeout(500);
   }
-  if (!message) throw new Error("no sign-in email for resident1");
+  if (!message) throw new Error("no new sign-in email for resident1");
   const mail = await (
-    await request.get(`http://127.0.0.1:54324/api/v1/message/${message.ID}`)
+    await request.get(`${MAILBOX}/message/${message.ID}`)
   ).json();
-  const link = new URL(
-    mail.HTML.match(/href="([^"]+)"/)[1].replaceAll("&amp;", "&")
-  );
+  const html = mail.HTML as string;
+  const href =
+    html.match(/href="([^"]*\/auth\/confirm[^"]*)"/)?.[1] ??
+    html.match(/href="([^"]+)"/)![1];
+  const link = new URL(href.replaceAll("&amp;", "&"));
   await page.goto(link.pathname + link.search);
   await page.getByRole("button", { name: "Confirm sign-in" }).click();
   await page.waitForURL(/\/portal\/dwellings(?:\/.*)?$/);
@@ -135,6 +166,10 @@ function auditLayout(page: Page, coarse: boolean): Promise<string[]> {
         Math.max(a.bottom, b.bottom) - top
       );
     };
+    // WCAG 2.5.8 spacing: a 24px circle centred on the target must not touch
+    // another target. Against a target that is itself under 24px the two
+    // circles must not overlap (centres 24px apart); against a larger one the
+    // circle must clear its box.
     const crowded = (el: Element, box: DOMRect) => {
       const cx = box.left + box.width / 2;
       const cy = box.top + box.height / 2;
@@ -142,16 +177,27 @@ function auditLayout(page: Page, coarse: boolean): Promise<string[]> {
         if (other === el || other.contains(el) || el.contains(other))
           return false;
         const o = other.getBoundingClientRect();
+        if (Math.min(o.width, o.height) < 24) {
+          const ox = o.left + o.width / 2;
+          const oy = o.top + o.height / 2;
+          return Math.hypot(cx - ox, cy - oy) < 24;
+        }
         const nx = Math.max(o.left, Math.min(cx, o.right));
         const ny = Math.max(o.top, Math.min(cy, o.bottom));
         return (cx - nx) ** 2 + (cy - ny) ** 2 < 12 ** 2;
       });
     };
+    // Exempt only a link set inside a sentence: its parent has more text.
+    const inSentence = (el: Element) => {
+      const own = (el.textContent ?? "").trim().length;
+      const around = (el.parentElement?.textContent ?? "").trim().length;
+      return around > own + 3;
+    };
     for (const el of targets) {
       const cs = getComputedStyle(el);
-      // A link inside a sentence is exempt (2.5.8); a stretched row link
-      // (.row-link-target) is activated by the whole row.
-      if (el.tagName === "A" && cs.display === "inline") continue;
+      // A stretched row link (.row-link-target) is activated by the whole row.
+      if (el.tagName === "A" && cs.display === "inline" && inSentence(el))
+        continue;
       if (el.matches(".row-link-target")) continue;
       const box = boxOf(el);
       // A checkbox or radio without a label is held to 2.5.8 (24px or
@@ -161,7 +207,8 @@ function auditLayout(page: Page, coarse: boolean): Promise<string[]> {
         (el.type === "checkbox" || el.type === "radio") &&
         !el.labels?.length;
       const need = isControl(el) && !bare ? minimum : 24;
-      const small = box.width < need - 0.5 || box.height < need - 0.5;
+      // 1px of tolerance for subpixel layout (a 44px control can measure 43.4).
+      const small = box.width < need - 1 || box.height < need - 1;
       if (
         small &&
         (isControl(el) && !bare && coarse ? true : crowded(el, box))
@@ -175,10 +222,19 @@ function auditLayout(page: Page, coarse: boolean): Promise<string[]> {
   }, coarse);
 }
 
-/** Tabs through the first stops and reports any without a focus indicator. */
-async function auditFocus(page: Page, stops = 14): Promise<string[]> {
+/**
+ * Tabs through the first stops of the main content (not the sidebar, which
+ * comes first in the DOM) and reports any without a focus indicator.
+ */
+async function auditFocus(page: Page, stops = 12): Promise<string[]> {
   const out: string[] = [];
-  await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+  await page.evaluate(() => {
+    const main =
+      document.getElementById("main-content") ?? document.querySelector("main");
+    if (!main) return;
+    if (!main.hasAttribute("tabindex")) main.setAttribute("tabindex", "-1");
+    main.focus();
+  });
   for (let i = 0; i < stops; i++) {
     await page.keyboard.press("Tab");
     const result = await page.evaluate(async () => {
@@ -227,22 +283,61 @@ async function sweep(
       viewport: { width: widths[0], height: 900 },
     });
     const page = await context.newPage();
+    await page.goto("/login?lang=en");
+    const pointerIsCoarse = await page.evaluate(
+      () => matchMedia("(pointer: coarse)").matches
+    );
+    if (pointerIsCoarse !== coarse) {
+      add(
+        violations,
+        `emulation: (pointer: coarse) is ${pointerIsCoarse}`,
+        "-"
+      );
+    }
     for (const view of views) {
-      await page.goto(withLang(view.path));
+      const response = await page.goto(withLang(view.path));
       await page.waitForLoadState("load");
+      // Guard against auditing a redirect (for example the login page) under
+      // another view's name.
+      const landed = new URL(page.url()).pathname;
+      if (
+        !response ||
+        response.status() >= 400 ||
+        landed !== view.path.split("?")[0]
+      ) {
+        add(
+          violations,
+          `${view.name}: expected ${view.path}, got ${landed} (${response?.status()})`,
+          "-"
+        );
+        continue;
+      }
+      // Open every disclosure so the controls inside them are audited too.
+      // Dialogs and drawers need an interaction and are not covered.
+      await page.evaluate(() =>
+        document
+          .querySelectorAll("main details:not([open])")
+          .forEach((d) => d.setAttribute("open", ""))
+      );
+      // Let fonts and any open-state transitions settle before measuring.
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(300);
       for (const theme of THEMES) {
         await setTheme(page, theme);
         for (const width of widths) {
           await page.setViewportSize({ width, height: 900 });
-          const found = await auditLayout(page, coarse);
+          await page.evaluate(
+            () =>
+              new Promise((resolve) =>
+                requestAnimationFrame(() => resolve(null))
+              )
+          );
+          const found = [
+            ...(await auditLayout(page, coarse)),
+            ...(await auditFocus(page)),
+          ];
           for (const message of found) {
             add(violations, `${view.name}: ${message}`, `${theme} ${width}`);
-          }
-        }
-        if (!coarse) {
-          await page.setViewportSize({ width: 1440, height: 900 });
-          for (const message of await auditFocus(page)) {
-            add(violations, `${view.name}: ${message}`, `${theme} 1440`);
           }
         }
       }
@@ -255,7 +350,7 @@ test("admin and auth views hold their layout at every width and theme", async ({
   page,
   browser,
 }) => {
-  test.setTimeout(600_000);
+  test.setTimeout(900_000);
   const violations: Violations = new Map();
 
   // Unauthenticated: the login page.
@@ -266,34 +361,37 @@ test("admin and auth views hold their layout at every width and theme", async ({
     violations
   );
 
-  const base = await loginAdmin(page);
-  const state = await page.context().storageState();
+  const { state, base } = await adminSessionFor(browser);
+  const authed = await browser.newContext({ storageState: state });
+  const probe = await authed.newPage();
   const link = async (path: string, prefix: string) => {
-    await page.goto(withLang(path));
-    return page
+    await probe.goto(withLang(path));
+    const href = await probe
       .locator(
         `main a[href^="${prefix}"]:not([href*="import"]):not([href*="export"]):not([href$="/new"])`
       )
       .first()
-      .getAttribute("href");
+      .getAttribute("href", { timeout: 5_000 });
+    expect(href, `a link starting ${prefix} on ${path}`).toBeTruthy();
+    return href!;
   };
-
   const dwelling = await link(`${base}/dwellings`, `${base}/dwellings/`);
   const period = await link(`${base}/periods`, `${base}/periods/`);
+  const invoice = await link(period, `${period}/invoices/`);
+  await authed.close();
+  void page;
+
   const views: View[] = [
     { name: "dashboard", path: `${base}/dashboard` },
     { name: "dwellings", path: `${base}/dwellings` },
+    { name: "dwelling detail", path: dwelling },
     { name: "payments", path: `${base}/payments` },
     { name: "periods", path: `${base}/periods` },
+    { name: "current month", path: period },
+    { name: "invoice view", path: invoice },
     { name: "setup organization", path: `${base}/setup/organization` },
     { name: "setup charges", path: `${base}/setup/charges` },
   ];
-  if (dwelling) views.push({ name: "dwelling detail", path: dwelling });
-  if (period) {
-    views.push({ name: "current month", path: period });
-    const invoice = await link(period, `${period}/invoices/`);
-    if (invoice) views.push({ name: "invoice view", path: invoice });
-  }
   await sweep(browser, state, views, violations);
 
   expect(report(violations)).toEqual([]);
@@ -304,12 +402,12 @@ test("resident portal holds its layout at every width and theme", async ({
   browser,
   request,
 }) => {
-  test.setTimeout(600_000);
+  test.setTimeout(900_000);
   const violations: Violations = new Map();
   await loginResident(page, request);
   if (new URL(page.url()).pathname === "/portal/dwellings") {
     await page.locator('main a[href^="/portal/dwellings/"]').first().click();
-    await page.waitForURL(/\/portal\/dwellings\/.+/);
+    await page.waitForURL("**/portal/dwellings/*");
   }
   const home = new URL(page.url()).pathname;
   const state = await page.context().storageState();
@@ -317,21 +415,30 @@ test("resident portal holds its layout at every width and theme", async ({
   const invoice = await page
     .locator('main a[href^="/portal/invoices/"]')
     .first()
-    .getAttribute("href");
+    .getAttribute("href", { timeout: 5_000 });
+  expect(invoice, "a resident invoice link").toBeTruthy();
   const views: View[] = [
     { name: "portal home", path: home },
     { name: "portal invoices", path: `${home}/invoices` },
     { name: "portal profile", path: "/portal/profile" },
+    { name: "portal invoice", path: invoice! },
   ];
-  if (invoice) views.push({ name: "portal invoice", path: invoice });
   await sweep(browser, state, views, violations);
   expect(report(violations)).toEqual([]);
 });
 
-test("the shell switches exactly at the lg and sm breakpoints", async ({
-  page,
+test("the shell and panes switch exactly at their breakpoints", async ({
+  browser,
 }) => {
-  const base = await loginAdmin(page);
+  const { state, base } = await adminSessionFor(browser);
+  const context = await browser.newContext({ storageState: state });
+  const page = await context.newPage();
+  const settle = () =>
+    page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+    );
+
+  // The persistent sidebar starts at lg (70rem = 1120px).
   await page.goto(withLang(`${base}/dashboard`));
   const sidebar = page.locator(".admin-sidebar");
   const mobileBar = page.locator(".admin-mobile");
@@ -345,12 +452,43 @@ test("the shell switches exactly at the lg and sm breakpoints", async ({
   // Tables stack into labelled cards only below sm (40rem).
   await page.goto(withLang(`${base}/dwellings`));
   const stacked = page.locator(".stack-table tbody tr").first();
-  if ((await stacked.count()) > 0) {
-    await page.setViewportSize({ width: 639, height: 900 });
-    await expect(stacked).toHaveCSS("display", "block");
-    await page.setViewportSize({ width: 640, height: 900 });
-    await expect(stacked).not.toHaveCSS("display", "block");
+  await expect(
+    stacked,
+    "a stack-table row on the dwellings list"
+  ).toBeVisible();
+  await page.setViewportSize({ width: 639, height: 900 });
+  await expect(stacked).toHaveCSS("display", "block");
+  await page.setViewportSize({ width: 640, height: 900 });
+  await expect(stacked).not.toHaveCSS("display", "block");
+
+  // The dwelling two-pane layout follows its own area, not the screen: it
+  // needs 60rem. At 1120 the sidebar leaves less than that.
+  const href = await page
+    .locator(
+      `main a[href^="${base}/dwellings/"]:not([href*="import"]):not([href*="export"]):not([href$="/new"])`
+    )
+    .first()
+    .getAttribute("href", { timeout: 5_000 });
+  expect(href, "a dwelling link").toBeTruthy();
+  await page.goto(withLang(href!));
+  const columns = () =>
+    page
+      .locator(".dwelling-grid")
+      .evaluate(
+        (el) => getComputedStyle(el).gridTemplateColumns.split(" ").length
+      );
+  for (const [width, expected] of [
+    [1440, 2],
+    [1120, 1],
+    [900, 1],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await settle();
+    expect(await columns(), `dwelling grid columns at ${width}px`).toBe(
+      expected
+    );
   }
+  await context.close();
 });
 
 test("semantic token pairs meet WCAG AA in both themes", async ({ page }) => {
