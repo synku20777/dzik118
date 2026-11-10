@@ -124,7 +124,7 @@ if (Astro.request.method === "POST") {
       <form
         method="POST"
         enctype="multipart/form-data"
-        class="max-w-lg space-y-3 rounded-panel border border-(--color-panel-border) bg-surface p-6"
+        class="max-w-lg space-y-3 rounded-panel contained bg-surface p-6"
       >
         <div>
           <label class="field-label" for="file">
@@ -240,7 +240,7 @@ if (Astro.request.method === "POST") {
     )}
 
     {step === "result" && result && (
-      <div class="rounded-panel border border-(--color-panel-border) bg-surface p-6">
+      <div class="rounded-panel contained bg-surface p-6">
         <p class="text-body-sm text-foreground">
           Created {result.created}, updated {result.updated}, skipped{" "}
           {result.errored} row(s) with errors.

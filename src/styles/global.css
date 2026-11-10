@@ -163,11 +163,12 @@
     var(--palette-daugava-200)
   );
   --color-on-primary: light-dark(var(--palette-paper), var(--palette-ink-900));
-  /* Container outlines (panels, tables, cards, shell edges) are off: surfaces
-     are told apart by the canvas/surface step. Set this to --color-border to
-     bring them back. It is transparent, not none, so layout does not move and
-     forced-colors mode still draws the edge. Dividers keep --color-border. */
-  --color-panel-border: transparent;
+  /* Containers (panels, table wraps, cards, shell edges) have no outline at all:
+     surfaces are told apart by the canvas/surface step. Every container rule
+     uses this shorthand, so one edit brings outlines back, for example
+     `1px solid var(--color-border)`. Windows high-contrast mode draws an edge
+     (see the forced-colors rule). Dividers keep --color-border. */
+  --panel-border: 0 solid transparent;
   --color-backdrop: rgb(9 15 27 / 55%);
   --color-control-thumb: var(--palette-paper);
   --color-table-th-bg: light-dark(
@@ -709,6 +710,9 @@ textarea:disabled {
 }
 
 @media (forced-colors: active) {
+  :root {
+    --panel-border: 1px solid CanvasText;
+  }
   .status-badge {
     outline: 1px solid CanvasText;
     outline-offset: -1px;
@@ -916,10 +920,14 @@ textarea:disabled {
     outline: 2px solid var(--color-focus-ring);
     outline-offset: -2px;
   }
+  /* A container styled with utilities: gets the same edge rule as .panel. */
+  .contained {
+    border: var(--panel-border);
+  }
   .panel,
   .table-wrap {
     background: var(--color-surface);
-    border: 1px solid var(--color-panel-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     box-shadow: var(--elevation-flat);
   }
@@ -932,7 +940,7 @@ textarea:disabled {
   .metric-strip {
     display: grid;
     grid-template-columns: repeat(var(--metrics, 4), minmax(0, 1fr));
-    border: 1px solid var(--color-panel-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     background: var(--color-surface);
   }
@@ -1207,7 +1215,7 @@ textarea:disabled {
     gap: 0.75rem;
     padding: 1rem;
     background: var(--color-surface);
-    border: 1px solid var(--color-panel-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     box-shadow: var(--elevation-flat);
     min-width: 0;
@@ -1359,7 +1367,7 @@ textarea:disabled {
     gap: 0.75rem;
     padding: 1rem;
     background: var(--color-surface);
-    border: 1px solid var(--color-panel-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
   }
   .tabs {
@@ -1429,7 +1437,7 @@ textarea:disabled {
     background-size: 100% 9rem;
     background-position: bottom;
     background-repeat: no-repeat;
-    border-right: 1px solid var(--color-panel-border);
+    border-right: var(--panel-border);
     padding: 1.75rem 1rem;
     display: flex;
     flex-direction: column;
@@ -1532,7 +1540,7 @@ textarea:disabled {
   .sidebar-account {
     margin-top: auto;
     padding-top: 1rem;
-    border-top: 1px solid var(--color-panel-border);
+    border-top: var(--panel-border);
     background: var(--color-surface);
   }
   /* Account: who, then the two display preferences, then the way out. */
@@ -1670,7 +1678,7 @@ textarea:disabled {
   }
   .resident-header {
     background: var(--color-surface);
-    border-bottom: 1px solid var(--color-panel-border);
+    border-bottom: var(--panel-border);
   }
   @media (pointer: coarse) {
     .resident-header a:not(.theme-toggle) {
@@ -1718,7 +1726,7 @@ textarea:disabled {
   }
   .current-invoice {
     padding: 1.5rem;
-    border: 1px solid var(--color-panel-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     background: var(--color-surface);
   }
@@ -1730,7 +1738,7 @@ textarea:disabled {
     font-variant-numeric: tabular-nums;
   }
   .invoice-list {
-    border: 1px solid var(--color-panel-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     background: var(--color-surface);
     overflow: hidden;
@@ -1746,7 +1754,7 @@ textarea:disabled {
   }
   .disclosure {
     background: var(--color-surface);
-    border: 1px solid var(--color-panel-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     padding: 1.25rem;
   }
@@ -2226,7 +2234,7 @@ html:has(.context-drawer:modal) {
   .stack-table tr {
     margin-bottom: 0.75rem;
     padding: 0.375rem 0;
-    border: 1px solid var(--color-panel-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     background: var(--color-surface);
   }

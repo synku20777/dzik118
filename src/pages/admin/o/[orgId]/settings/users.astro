@@ -60,7 +60,7 @@ const currentUserId = Astro.locals.auth!.userId;
         {addResult?.error?.message ?? removeResult?.error?.message}
       </p>
     )}
-    <div class="rounded-panel border border-(--color-panel-border) bg-surface p-6">
+    <div class="rounded-panel contained bg-surface p-6">
       <ul class="divide-y divide-border">
         {members.map((m) => (
           <li class="flex items-center justify-between py-2 text-body-sm">

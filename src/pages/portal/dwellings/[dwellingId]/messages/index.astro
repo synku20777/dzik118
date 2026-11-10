@@ -83,7 +83,7 @@ const conversations = await withRequestDb((db) =>
         </p>
       )}
 
-      <section class="rounded-panel border border-(--color-panel-border) bg-surface p-4">
+      <section class="rounded-panel contained bg-surface p-4">
         <h2 class="text-base font-semibold text-foreground">
           {t("New message")}
         </h2>
@@ -131,7 +131,7 @@ const conversations = await withRequestDb((db) =>
         <p class="text-sm text-muted">{t("No conversations yet.")}</p>
       ) : (
         conversations.map(({ conversation, messages }) => (
-          <section class="rounded-panel border border-(--color-panel-border) bg-surface p-4">
+          <section class="rounded-panel contained bg-surface p-4">
             <div class="flex items-center justify-between">
               <h3 class="font-medium text-foreground">
                 {conversation.subject}
