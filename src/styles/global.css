@@ -76,7 +76,7 @@
   --palette-limestone-100: #eee8de;
   --palette-limestone-200: #e4ded2;
   --palette-limestone-300: #d5cec2;
-  --palette-stone-500: #857e74;
+  --palette-stone-500: #837c72;
   --palette-ink-900: #17242b;
   --palette-ink-500: #4f5d63;
 
@@ -126,6 +126,7 @@
   --palette-night-850: #1a2528;
   --palette-night-800: #1e2b2e;
   --palette-night-750: #243134;
+  --palette-night-725: #2f3d40;
   --palette-night-700: #3d4a4d;
   --palette-night-600: #718083;
   --palette-night-300: #b7c0bd;
@@ -717,6 +718,23 @@ textarea:disabled {
   }
 }
 
+/* Hover inside a raised surface (menus, dialogs, the drawer): the shared hover
+   tone equals the raised fill in dark mode, so these use one step lighter. */
+:is(
+  .organization-menu,
+  .row-menu > div,
+  .more-menu > div,
+  .case-menu,
+  .info-tip-panel,
+  .tpl-popover,
+  .context-drawer,
+  dialog
+) {
+  --color-hover: light-dark(
+    var(--palette-limestone-200),
+    var(--palette-night-725)
+  );
+}
 @media (forced-colors: active) {
   :root {
     --panel-border: 1px solid CanvasText;
@@ -2246,6 +2264,9 @@ html:has(.context-drawer:modal) {
     border-radius: var(--radius-panel);
     background: var(--color-surface);
   }
+  :is(.panel, .contained) .stack-table tr {
+    background: var(--color-canvas);
+  }
   .stack-table td {
     display: flex !important;
     align-items: center;
@@ -2275,6 +2296,9 @@ html:has(.context-drawer:modal) {
 }
 
 @media print {
+  :root {
+    --panel-border: 1px solid #bbb;
+  }
   .admin-sidebar,
   .admin-mobile,
   .resident-header,

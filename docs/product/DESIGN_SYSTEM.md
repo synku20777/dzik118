@@ -32,13 +32,13 @@ and bone (dark structure and text), daugava (action and navigation), verdigris
 | --- | --- |
 | `--color-canvas` | Page background. One visible step (about 1.2:1) darker than surface in light mode, so panels read without an outline. |
 | `--color-surface` | Panels, tables, fields, menus. |
-| `--color-surface-hover` | Hover and disabled-field fill. |
+| `--color-surface-hover` | Static tints: the table header and disabled fields. Equal to the canvas in light mode. Do not use it for hover (use `--color-hover`). |
 | `--color-surface-raised` | Background of elevated surfaces: toasts, menus, popovers, dialogs, drawers (tooltips and the bulk-action toolbar keep their own fill). Equal to surface in light mode, one step lighter in dark mode, where shadows cannot show depth. |
-| `--color-hover` | Hover fill of interactive things: table rows, secondary and ghost buttons, menu items, tabs, nav links. Darker than both canvas and surface in light mode (about 1.1 against the canvas, 1.3 against the surface) so a hovered button on the page background does not disappear. `--color-surface-hover` stays for static tints (table header, disabled fields). |
+| `--color-hover` | Hover fill of interactive things: table rows, secondary and ghost buttons, menu items, tabs, nav links. Inside a raised surface (menus, dialogs, the drawer) dark mode uses one step lighter (`--palette-night-725`), because the shared dark hover equals the raised fill. Darker than both canvas and surface in light mode (about 1.1 against the canvas, 1.3 against the surface) so a hovered button on the page background does not disappear. `--color-surface-hover` stays for static tints (table header, disabled fields). |
 | `--color-foreground` / `--color-muted` | Text, and secondary text. Muted keeps 4.5:1 on canvas and surface. |
 | `--color-border` | Dividers: table rows, list rows, tab underline, metric dividers, progress tracks. Not used for container outlines. |
 | `--panel-border` | The `border` shorthand of every container (panel, table wrap, metric strip, card, shell edge). It is `0 solid transparent`: containers have no outline and are told apart by the canvas/surface step. In Windows high-contrast mode it becomes `1px solid CanvasText`. Set it to `1px solid var(--color-border)` to bring outlines back. Use `.contained` on a utility-styled container. |
-| `--color-input-border` | Field boundary. Deeper than `--color-border` so a field edge meets 3:1 (WCAG 1.4.11) on canvas and surface. Place fields on those two; on `--color-surface-hover` or table headers the edge falls to about 2.9:1. Never `border-border` on a field. |
+| `--color-input-border` | Field boundary. Deeper than `--color-border` so a field edge meets 3:1 (WCAG 1.4.11) on canvas, surface, table headers and `--color-hover` (about 3.1 on hover, 3.3 on canvas). Never `border-border` on a field. |
 | `--color-primary` (+ `-hover`, `-active`, `--color-on-primary`) | Actions, links, navigation. In dark mode primary is a pale tint, so `--color-on-primary` is dark. |
 | `--color-secondary`, `--color-success`, `--color-warning`, `--color-destructive` | Meaning colors for text and fills. Only destructive has `-hover` and `-active` variants. |
 | `--color-positive-secondary` | Quiet positive state (pine), for example gas meters and credits. |
@@ -322,7 +322,7 @@ the next action. Say what is missing and give the action that fixes it. Reserve
 
 ### Disclosure
 
-`disclosure` on a `<details>`: bordered panel whose `<summary>` is at least
+`disclosure` on a `<details>`: panel (no outline) whose `<summary>` is at least
 44px tall with a rotating chevron. Native keyboard operation; no script. Use for
 optional detail, not for navigation. A bare `<details>` text toggle (no panel)
 is allowed for a small inline reveal.
@@ -525,7 +525,7 @@ links to its own page that explains where the money went. Tables stack into
 cards below `sm`; the ledger is a separate page.
 
 **Current month and periods.** The periods list is a `stack-table`. A period
-page opens with previous and next period as two equal, 56px-tall buttons, then
+page opens with previous and next period as two equal buttons at least 56px tall, then
 its finance metric strip, then the billing workbench: filters,
 the case table with a select-all checkbox (not offered below `sm`) and a bulk
 toolbar (`--elevation-raised`), and a drawer for editing one case. The header

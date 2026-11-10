@@ -597,6 +597,34 @@ test("semantic token pairs meet WCAG AA in both themes", async ({ page }) => {
         ratio: ratio(opaque("--color-on-primary"), opaque("--color-primary")),
         min: 4.5,
       });
+      // Interactive hover: text stays readable on it, a field edge stays 3:1,
+      // and it must be a visible step from both the surface and the canvas.
+      for (const fg of [
+        "--color-foreground",
+        "--color-muted",
+        "--color-primary",
+        "--color-destructive",
+        "--color-success",
+        "--color-warning",
+      ]) {
+        rows.push({
+          pair: `${fg} on --color-hover`,
+          ratio: ratio(opaque(fg), opaque("--color-hover")),
+          min: 4.5,
+        });
+      }
+      rows.push({
+        pair: "--color-input-border on --color-hover",
+        ratio: ratio(opaque("--color-input-border"), opaque("--color-hover")),
+        min: 3,
+      });
+      for (const bg of ["--color-surface", "--color-canvas"]) {
+        rows.push({
+          pair: `--color-hover against ${bg} (must be distinguishable)`,
+          ratio: ratio(opaque("--color-hover"), opaque(bg)),
+          min: 1.08,
+        });
+      }
       for (const token of ["--color-input-border", "--color-focus-ring"]) {
         for (const bg of ["--color-surface", "--color-canvas"]) {
           rows.push({
