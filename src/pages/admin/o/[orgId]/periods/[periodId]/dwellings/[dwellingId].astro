@@ -21,6 +21,7 @@ import { getDwelling } from "../../../../../../../domain/organizations/dwellings
 import { getPeriod } from "../../../../../../../domain/periods/periods";
 import { listMetersWithReadingForPeriod } from "../../../../../../../domain/periods/cases";
 import { withRequestDb } from "../../../../../../../lib/db-request";
+import { rethrowUnexpected } from "../../../../../../../domain/errors";
 
 const organizationId = Astro.params.orgId!;
 const periodId = Astro.params.periodId!;
@@ -49,7 +50,8 @@ try {
       ),
     })
   ));
-} catch {
+} catch (err) {
+  rethrowUnexpected(err);
   return Astro.redirect(`/admin/o/${organizationId}/periods/${periodId}`);
 }
 ---

@@ -20,6 +20,7 @@ import {
   listTransactionsForImport,
 } from "../../../../../../domain/payments/bank-import";
 import { withRequestDb } from "../../../../../../lib/db-request";
+import { rethrowUnexpected } from "../../../../../../domain/errors";
 
 const organizationId = Astro.params.orgId!;
 const importId = Astro.params.importId!;
@@ -45,7 +46,8 @@ try {
       ),
     })
   ));
-} catch {
+} catch (err) {
+  rethrowUnexpected(err);
   return Astro.redirect(`/admin/o/${organizationId}/payments`);
 }
 ---

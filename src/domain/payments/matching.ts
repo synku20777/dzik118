@@ -20,6 +20,7 @@ import {
 } from "../../lib/decimal2";
 import { ConflictError, NotFoundError } from "../errors";
 import {
+  PAYABLE_CASE_STATUSES,
   getInvoiceAllocatedAmount,
   postAccountEntry,
 } from "../accounts/ledger";
@@ -57,6 +58,46 @@ export async function proposeExactMatches(
       )
     );
 
+  // Read once for the whole import, not per transaction: a statement of 300
+  // rows made over 600 round trips inside the import's transaction. Nothing
+  // in the loop below changes either answer for a later transaction. An
+  // invoice that another request prepares while this import runs is not seen:
+  // its payment stays unmatched, and the admin matches it by hand.
+  const alreadyMatched = new Set(
+    (
+      await db
+        .select({ bankTransactionId: paymentMatches.bankTransactionId })
+        .from(paymentMatches)
+        .innerJoin(
+          bankTransactions,
+          eq(bankTransactions.id, paymentMatches.bankTransactionId)
+        )
+        .where(
+          and(
+            eq(bankTransactions.organizationId, organizationId),
+            eq(bankTransactions.bankImportId, bankImportId)
+          )
+        )
+    ).map((row) => row.bankTransactionId)
+  );
+  const openInvoices = await db
+    .select({
+      id: invoices.id,
+      dwellingId: invoices.dwellingId,
+      invoiceNumber: invoices.invoiceNumber,
+      amountDue: invoices.amountDue,
+      currency: invoices.currency,
+    })
+    .from(invoices)
+    .innerJoin(billingCases, eq(billingCases.id, invoices.billingCaseId))
+    .where(
+      and(
+        eq(invoices.organizationId, organizationId),
+        isNull(invoices.paidAt),
+        inArray(billingCases.status, PAYABLE_CASE_STATUSES)
+      )
+    );
+
   let proposed = 0;
   for (const txn of transactions) {
     // PAY-002: "no reference -> unmatched".
@@ -64,32 +105,14 @@ export async function proposeExactMatches(
     // Rows stored before the import rule can still be zero or negative.
     if (compareExact(txn.amount, "0.00") <= 0) continue;
 
-    const existingMatches = await db
-      .select({ id: paymentMatches.id, status: paymentMatches.status })
-      .from(paymentMatches)
-      .where(eq(paymentMatches.bankTransactionId, txn.id));
     // Any existing match (proposed, confirmed, or rejected) means this
     // transaction has already been through the matching workflow once;
     // don't propose a second one on top of it.
-    if (existingMatches.length > 0) continue;
+    if (alreadyMatched.has(txn.id)) continue;
 
-    const candidates = await db
-      .select({
-        id: invoices.id,
-        dwellingId: invoices.dwellingId,
-        invoiceNumber: invoices.invoiceNumber,
-        amountDue: invoices.amountDue,
-      })
-      .from(invoices)
-      .innerJoin(billingCases, eq(billingCases.id, invoices.billingCaseId))
-      .where(
-        and(
-          eq(invoices.organizationId, organizationId),
-          eq(invoices.currency, txn.currency),
-          isNull(invoices.paidAt),
-          inArray(billingCases.status, ["PREPARED", "SENT", "OVERDUE"])
-        )
-      );
+    const candidates = openInvoices.filter(
+      (invoice) => invoice.currency === txn.currency
+    );
 
     const normalizedReference = normalizeForMatch(txn.reference);
     const matching = candidates.filter((invoice) =>
@@ -149,7 +172,7 @@ export async function proposeExactMatches(
 // Confirmation posts the bank transaction once, records the portion assigned
 // to this invoice, and marks PAID only when this statement is fully settled.
 export async function confirmMatch(
-  db: Db,
+  db: DbOrTx,
   organizationId: string,
   matchId: string,
   actorUserId: string
@@ -234,6 +257,22 @@ export async function confirmMatch(
       .limit(1);
     if (!invoice) throw new NotFoundError("Invoice not found");
     if (invoice.paidAt) throw new ConflictError("This invoice is already paid");
+    // A proposal can be older than a change to the invoice (a case overridden
+    // back to Draft), so the rule is checked again at confirmation. Locked, so
+    // a status override at the same moment waits and is not overwritten.
+    const [billingCase] = await tx
+      .select({ status: billingCases.status })
+      .from(billingCases)
+      .where(eq(billingCases.id, invoice.billingCaseId))
+      .for("update")
+      .limit(1);
+    if (
+      invoice.currency !== transaction.currency ||
+      !billingCase ||
+      !PAYABLE_CASE_STATUSES.includes(billingCase.status)
+    ) {
+      throw new ConflictError("This invoice cannot receive a payment");
+    }
     const allocatedBefore = await getInvoiceAllocatedAmount(
       tx,
       organizationId,

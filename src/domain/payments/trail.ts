@@ -11,7 +11,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import type { Db } from "../../db/client";
+import { inOrder, type Db } from "../../db/client";
 import {
   accountEntries,
   paymentAllocations,
@@ -270,7 +270,7 @@ export async function getPaymentTrail(
     )
     .orderBy(asc(paymentMatches.createdAt));
 
-  const [allocations, reversals, entries] = await Promise.all([
+  const [allocations, reversals, entries] = await inOrder([
     db
       .select({
         id: paymentAllocations.id,

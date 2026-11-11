@@ -28,7 +28,10 @@ import {
   getPeriod,
   lockPeriod,
 } from "../../src/domain/periods/periods";
-import { listCasesForPeriod } from "../../src/domain/periods/cases";
+import {
+  listCasesForPeriod,
+  listReadingGridForPeriod,
+} from "../../src/domain/periods/cases";
 import {
   submitAdminReading,
   submitResidentReading,
@@ -849,6 +852,118 @@ describe("meters and readings", () => {
       seedAdminId
     );
     expect(reading.source).toBe("RESIDENT");
+
+    // Once the invoice is prepared the resident cannot change the reading it
+    // was calculated from. An admin still can.
+    await db.$client.query(
+      "update billing_cases set status = 'PREPARED' where period_id = $1 and dwelling_id = $2",
+      [period.id, dwelling.id]
+    );
+    await expect(
+      submitResidentReading(
+        db,
+        dwelling.id,
+        period.id,
+        meter.id,
+        "11.000",
+        seedAdminId
+      )
+    ).rejects.toBeInstanceOf(ConflictError);
+    await submitAdminReading(
+      db,
+      org.id,
+      period.id,
+      meter.id,
+      "11.000",
+      seedAdminId
+    );
+
+    await cleanupOrg(org.id);
+  });
+});
+
+describe("reading grid", () => {
+  it("shows each meter's latest earlier reading as the previous value", async () => {
+    const { org, dwelling, meter } =
+      await setupOrgWithDwellingAndMeter("IT-E Org Grid");
+    const hot = await createMeter(
+      db,
+      org.id,
+      dwelling.id,
+      { type: "HOT_WATER", unit: "m3" },
+      seedAdminId
+    );
+    const never = await createMeter(
+      db,
+      org.id,
+      dwelling.id,
+      { type: "HEAT", unit: "kWh" },
+      seedAdminId
+    );
+    const periods = [];
+    for (const month of [1, 2, 3]) {
+      const mm = String(month).padStart(2, "0");
+      periods.push(
+        await createPeriod(
+          db,
+          org.id,
+          {
+            year: 2026,
+            month,
+            startsOn: `2026-${mm}-01`,
+            endsOn: `2026-${mm}-28`,
+            invoiceIssueDate: `2026-${mm}-28`,
+            invoiceDueDate: `2026-${String(month + 1).padStart(2, "0")}-14`,
+          },
+          seedAdminId
+        )
+      );
+    }
+    const [january, february, march] = periods;
+    const read = (periodId: string, meterId: string, value: string) =>
+      submitAdminReading(db, org.id, periodId, meterId, value, seedAdminId);
+    await read(january.id, meter.id, "10.000");
+    await read(february.id, meter.id, "15.000");
+    // The hot water meter has a gap in February.
+    await read(january.id, hot.id, "7.000");
+
+    const previousByMeter = async () =>
+      Object.fromEntries(
+        (await listReadingGridForPeriod(db, org.id, march.id)).map((row) => [
+          row.meterId,
+          { current: row.currentValue, previous: row.previousValue },
+        ])
+      );
+
+    expect(await previousByMeter()).toEqual({
+      [meter.id]: { current: null, previous: "15.000" },
+      [hot.id]: { current: null, previous: "7.000" },
+      [never.id]: { current: null, previous: null },
+    });
+
+    // With a reading in the period, the stored previous value is shown.
+    await read(march.id, meter.id, "20.000");
+    expect((await previousByMeter())[meter.id]).toEqual({
+      current: "20.000",
+      previous: "15.000",
+    });
+    // A later reading is never the previous value of an earlier period.
+    await read(march.id, hot.id, "9.000");
+    expect(
+      (await listReadingGridForPeriod(db, org.id, february.id)).find(
+        (row) => row.meterId === hot.id
+      )?.previousValue
+    ).toBe("7.000");
+
+    // The missed February cannot be filled in afterwards: the March reading
+    // already bills everything since January.
+    await expect(read(february.id, hot.id, "8.000")).rejects.toBeInstanceOf(
+      ConflictError
+    );
+    // Only "nothing was used" (the January value again), so the February case
+    // can still be completed.
+    const filled = await read(february.id, hot.id, "7.000");
+    expect(filled.consumption).toBe("0.000");
 
     await cleanupOrg(org.id);
   });

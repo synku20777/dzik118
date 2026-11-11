@@ -14,6 +14,7 @@ import { compareExact, subtractExact } from "../../lib/decimal2";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { orgLocalDateString } from "../../lib/org-time";
 import {
+  PAYABLE_CASE_STATUSES,
   getInvoiceAllocatedAmount,
   postAccountEntry,
 } from "../accounts/ledger";
@@ -64,7 +65,7 @@ async function hasOpenInvoice(
         eq(invoices.dwellingId, dwellingId),
         eq(invoices.currency, currency),
         isNull(invoices.paidAt),
-        inArray(billingCases.status, ["PREPARED", "SENT", "OVERDUE"])
+        inArray(billingCases.status, PAYABLE_CASE_STATUSES)
       )
     );
   for (const row of rows) {

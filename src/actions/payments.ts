@@ -107,7 +107,7 @@ export const payments = {
       organizationId: z.uuid(),
       target: z.string().regex(/^(invoice|dwelling):[0-9a-fA-F-]{36}$/),
       method: z.enum(["BANK", "CASH"]).default("BANK"),
-      amount: decimalInput(/^\d+(\.\d{1,2})?$/, POSITIVE_AMOUNT_MESSAGE),
+      amount: decimalInput(/^\d{1,12}(\.\d{1,2})?$/, POSITIVE_AMOUNT_MESSAGE),
       bookingDate: z.iso.date(),
       payerName: z.string().max(140).optional(),
       reference: z.string().trim().max(140).optional(),
@@ -170,7 +170,7 @@ export const payments = {
     input: z.object({
       organizationId: z.uuid(),
       transactionId: z.uuid(),
-      amount: decimalInput(/^\d+(\.\d{1,2})?$/, POSITIVE_AMOUNT_MESSAGE),
+      amount: decimalInput(/^\d{1,12}(\.\d{1,2})?$/, POSITIVE_AMOUNT_MESSAGE),
       bookingDate: z.iso.date(),
       payerName: z.string().max(140).optional(),
       reference: z.string().trim().max(140).optional(),

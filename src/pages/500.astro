@@ -1,0 +1,22 @@
+---
+// Astro shows this page for any error a page or the middleware throws. The
+// middleware does not run again for it when it was the middleware that failed
+// (a database outage), so this page must not read locals.auth or the database.
+import AuthLayout from "../layouts/AuthLayout.astro";
+import { translate, uiLocale } from "../lib/ui/i18n";
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+---
+
+<AuthLayout title={t("We couldn’t load this page.") + " - " + t("Namkopa")}>
+  <div class="w-full max-w-md rounded-panel contained bg-surface p-8 text-center">
+    <h1 class="text-xl font-bold text-foreground">
+      {t("We couldn’t load this page.")}
+    </h1>
+    <p class="mt-2 text-sm text-muted">{t("Please try again.")}</p>
+    <!-- An empty href loads the same address again with GET, also after a failed form post. -->
+    <a href="" class="btn-primary mt-6 inline-flex">
+      {t("Retry")}
+    </a>
+  </div>
+</AuthLayout>

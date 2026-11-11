@@ -948,16 +948,20 @@ describe("invoice generation", () => {
       )
     ).rejects.toBeInstanceOf(ConflictError);
 
-    const updated = await overrideCaseStatus(
-      db,
-      org.id,
-      invoice.billingCaseId,
-      "PREPARED",
-      "valid prepared override",
-      seedAdminId
-    );
-    expect(updated.status).toBe("PREPARED");
-    expect(updated.manualStatusOverride).toBe(true);
+    // An override posts nothing to the account: Prepared needs a real
+    // preparation, Overdue needs a sent invoice.
+    for (const status of ["PREPARED", "OVERDUE"] as const) {
+      await expect(
+        overrideCaseStatus(
+          db,
+          org.id,
+          invoice.billingCaseId,
+          status,
+          "attempt to skip preparation",
+          seedAdminId
+        )
+      ).rejects.toBeInstanceOf(ConflictError);
+    }
 
     await expect(
       overrideCaseStatus(

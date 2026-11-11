@@ -14,7 +14,7 @@ import { dwellings, meters } from "../../db/schema/dwellings";
 import { invoices } from "../../db/schema/invoices";
 import { getApplicableRulesForDwelling } from "../billing/rules";
 import { wasMeterActiveDuringPeriod } from "./case-readiness";
-import { findPreviousValue } from "./readings";
+import { findPreviousValues } from "./readings";
 import { caseMatchesStatus, type CaseStatusFilter } from "./case-filter";
 
 // Spec Section 27's required default sort: status priority first, then
@@ -230,9 +230,17 @@ export async function listReadingGridForPeriod(
     )
     .orderBy(dwellings.number, meters.type);
 
+  const active = rows.filter((row) => wasMeterActiveDuringPeriod(row, period));
+  // One query for all meters without a reading yet, not one per meter: at the
+  // start of a month that was 600 round trips for 300 dwellings.
+  const previousValues = await findPreviousValues(
+    db,
+    active.filter((row) => !row.currentValue).map((row) => row.meterId),
+    period
+  );
+
   const grid = [];
-  for (const row of rows) {
-    if (!wasMeterActiveDuringPeriod(row, period)) continue;
+  for (const row of active) {
     const missing = (
       row.missingData as { reason?: string; meterId?: string }[]
     ).some((m) => m?.reason === "NO_READING" && m.meterId === row.meterId);
@@ -249,7 +257,7 @@ export async function listReadingGridForPeriod(
       source: row.source,
       previousValue: row.currentValue
         ? row.storedPreviousValue
-        : await findPreviousValue(db, row.meterId, period),
+        : (previousValues.get(row.meterId) ?? null),
       missing,
     });
   }

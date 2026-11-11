@@ -22,6 +22,7 @@ import {
   type DwellingImportMode,
   type DwellingImportRow,
 } from "../../../../../domain/organizations/csv-import";
+import { decodeBytes } from "../../../../../domain/migration/files";
 import { withRequestDb } from "../../../../../lib/db-request";
 
 // Matches the max csvText size actions elsewhere in this app accept; this
@@ -95,7 +96,13 @@ if (Astro.request.method === "POST") {
         headerError = "The CSV file is too large (up to 2 MB).";
         step = "preview";
       } else {
-        csvText = await file.text();
+        // Not file.text(): an Excel export is often Windows-1257, not UTF-8,
+        // and would turn names into garbage.
+        csvText = decodeBytes(
+          new Uint8Array(await file.arrayBuffer()),
+          "auto",
+          MAX_CSV_BYTES
+        ).text;
         const preview = await withRequestDb((db) =>
           validateDwellingsCsv(db, organizationId, csvText, mode)
         );

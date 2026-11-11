@@ -17,6 +17,7 @@ import {
   type BankTransactionRow,
   type ImportBankCsvResult,
 } from "../../../../../domain/payments/bank-import";
+import { decodeBytes } from "../../../../../domain/migration/files";
 import { withRequestDb } from "../../../../../lib/db-request";
 
 const organizationId = Astro.params.orgId!;
@@ -86,9 +87,17 @@ if (Astro.request.method === "POST") {
         headerError = `File is too large (max ${MAX_CSV_BYTES / 1_000_000}MB).`;
         step = "preview";
       } else {
-        csvText = await file.text();
+        // Not file.text(): a bank or Excel export is often Windows-1257, not
+        // UTF-8, and would turn names into garbage.
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        csvText = decodeBytes(bytes, "auto", MAX_CSV_BYTES).text;
         const preview = await withRequestDb((db) =>
-          validateBankCsv(db, organizationId, csvText)
+          validateBankCsv(
+            db,
+            organizationId,
+            csvText,
+            new TextDecoder().decode(bytes)
+          )
         );
         rows = preview.rows;
         headerError = preview.headerError;

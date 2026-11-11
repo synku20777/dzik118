@@ -19,7 +19,6 @@ import {
   type SetupProgress,
 } from "../../../../../domain/onboarding/progress";
 import { withRequestDb } from "../../../../../lib/db-request";
-import { subtractExact, sumExact } from "../../../../../lib/decimal2";
 import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
 import EmptyState from "../../../../../components/ui/EmptyState.astro";
 import AdminContextDrawer from "../../../../../components/ui/AdminContextDrawer.astro";
@@ -297,19 +296,7 @@ const dayMonth = (value: string) =>
     timeZone: "UTC",
   }).format(new Date(value));
 
-const manualAdjustment = summary
-  ? subtractExact(
-      summary.amountDue,
-      subtractExact(
-        sumExact([
-          summary.currentCharges,
-          summary.carriedOutstanding,
-          summary.lateFees,
-        ]),
-        summary.creditsApplied
-      )
-    )
-  : "0.00";
+const manualAdjustment = summary?.manualAdjustments ?? "0.00";
 const hasManualAdjustment = Number(manualAdjustment) !== 0;
 
 function formatMoney(value: string, currency: string): string {
@@ -425,6 +412,22 @@ if (summary?.deliveryFailureCount) {
     icon: "alert-triangle",
   });
 }
+if (summary?.blockedDraftCount) {
+  attentionRows.push({
+    kind: "summary",
+    key: "blocked",
+    label: plural(
+      locale,
+      summary.blockedDraftCount,
+      "{n} invoice cannot be prepared: billing details are missing.",
+      "{n} invoices cannot be prepared: billing details are missing."
+    ),
+    href: `${workbenchPath}?status=DRAFT`,
+    actionLabel: "Review invoices",
+    tone: "warning",
+    icon: "alert-triangle",
+  });
+}
 if (
   summary?.caseStatusCounts.READY &&
   summary.nextAction.key !== "GENERATE_INVOICES"
@@ -486,7 +489,7 @@ if (
 function attentionPriority(row: AttentionRow): number {
   if (row.kind === "case") return row.item.status === "OVERDUE" ? 2 : 3;
   if (row.key === "delivery") return 0;
-  if (row.key === "unmatched" || row.key === "proposed") return 1;
+  if (["unmatched", "proposed", "blocked"].includes(row.key)) return 1;
   return 4;
 }
 

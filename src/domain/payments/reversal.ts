@@ -163,7 +163,13 @@ export async function reversePayment(
         .where(eq(invoices.id, invoice.id));
 
       const orgToday = orgLocalDateString(new Date(), org.timezone);
-      const caseStatus = invoice.dueDate < orgToday ? "OVERDUE" : "SENT";
+      // An invoice paid before it was ever sent goes back to Prepared, so it
+      // is still sent to the resident.
+      const caseStatus = !invoice.sentAt
+        ? "PREPARED"
+        : invoice.dueDate < orgToday
+          ? "OVERDUE"
+          : "SENT";
 
       await tx
         .update(billingCases)

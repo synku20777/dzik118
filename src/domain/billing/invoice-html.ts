@@ -17,12 +17,14 @@
 // exactly what makes it safe to also bundle into the client-side editor.
 import { trimDecimal } from "../../lib/decimal-trim";
 import { escapeHtml } from "../../lib/html-escape";
+import { ConflictError } from "../errors";
 import {
   TRIMMED_NUMBERS_FROM_LABEL_SET,
   pickLocalizedText,
   translateInvoiceLabel,
   type InvoiceLocale,
 } from "./invoice-i18n";
+import { parseInvoiceSnapshots } from "./invoice-snapshots";
 import { tryBuildSepaQrSvg } from "./sepa-qr";
 import {
   normalizeInvoiceTemplateSnapshot,
@@ -67,35 +69,6 @@ export interface InvoiceHtmlLine {
   vatAmount: string;
   grossAmount: string;
   sourceSnapshot: unknown;
-}
-
-interface IssuerSnapshot {
-  name?: string;
-  registrationNumber?: string | null;
-  vatNumber?: string | null;
-  addressLine1?: string;
-  addressLine2?: string | null;
-  city?: string | null;
-  postalCode?: string | null;
-  countryCode?: string;
-  email?: string | null;
-  phone?: string | null;
-}
-
-interface RecipientSnapshot {
-  dwellingNumber?: string;
-  displayName?: string | null;
-  occupantName?: string | null;
-  billingName?: string | null;
-  billingEmail?: string | null;
-  billingAddress?: string | null;
-}
-
-interface PaymentSnapshot {
-  bankName?: string | null;
-  iban?: string | null;
-  bic?: string | null;
-  currency?: string;
 }
 
 // The full billing_rules row is already snapshotted onto every line's
@@ -173,14 +146,28 @@ export function rowPresentationKey(line: InvoiceHtmlLine): string {
   return source?.code ?? line.id;
 }
 
+// For a preview on a page (an iframe's srcdoc). A damaged invoice shows the
+// reason in place of the document, and the rest of the page still loads.
+export function renderInvoicePreview(
+  invoice: InvoiceHtmlInvoice,
+  lines: InvoiceHtmlLine[],
+  locale: InvoiceLocale,
+  translateMessage: (text: string) => string
+): string {
+  try {
+    return renderInvoiceHtml(invoice, lines, locale);
+  } catch (err) {
+    if (!(err instanceof ConflictError)) throw err;
+    return `<p style="font-family: sans-serif;">${escapeHtml(translateMessage(err.message))}</p>`;
+  }
+}
+
 export function renderInvoiceHtml(
   invoice: InvoiceHtmlInvoice,
   lines: InvoiceHtmlLine[],
   locale: InvoiceLocale = "lv"
 ): string {
-  const issuer = invoice.issuerSnapshot as IssuerSnapshot;
-  const recipient = invoice.recipientSnapshot as RecipientSnapshot;
-  const payment = invoice.paymentSnapshot as PaymentSnapshot;
+  const { issuer, recipient, payment } = parseInvoiceSnapshots(invoice);
   const template = normalizeInvoiceTemplateSnapshot(invoice.templateSnapshot);
   // Pinned per invoice at generation, like the label wording: an invoice
   // generated before label set 3 keeps printing its figures as stored.

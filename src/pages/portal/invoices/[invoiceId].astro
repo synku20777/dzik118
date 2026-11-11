@@ -9,12 +9,13 @@ import {
   requireDwellingAccess,
 } from "../../../domain/authorization/guards";
 import { getInvoiceForResident } from "../../../domain/billing/generation";
-import { renderInvoiceHtml } from "../../../domain/billing/invoice-html";
+import { renderInvoicePreview } from "../../../domain/billing/invoice-html";
 import {
   parseInvoiceLocale,
   INVOICE_LOCALES,
 } from "../../../domain/billing/invoice-i18n";
 import { withRequestDb } from "../../../lib/db-request";
+import { rethrowUnexpected } from "../../../domain/errors";
 
 const invoiceId = Astro.params.invoiceId!;
 const dwellingId = Astro.url.searchParams.get("dwellingId");
@@ -41,11 +42,12 @@ try {
     await withRequestDb((db) =>
       getInvoiceForResident(db, invoiceId, dwellingId)
     ));
-} catch {
+} catch (err) {
+  rethrowUnexpected(err);
   return Astro.redirect(`/portal/dwellings/${dwellingId}/invoices`);
 }
 const docLocale = parseInvoiceLocale(Astro.url.searchParams.get("docLocale"));
-const invoiceHtml = renderInvoiceHtml(invoice, lines, docLocale);
+const invoiceHtml = renderInvoicePreview(invoice, lines, docLocale, t);
 const pdfHref =
   `/api/v1/portal/invoices/${invoiceId}/pdf?dwellingId=${dwellingId}` +
   (docLocale === "lv" ? "" : `&locale=${docLocale}`);

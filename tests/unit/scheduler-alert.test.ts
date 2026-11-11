@@ -119,4 +119,22 @@ describe("buildSchedulerAlert", () => {
       "Organization org-a: 2 invoice(s) were not delivered"
     );
   });
+
+  it("reports invoices that wait for billing details or hit a technical error", () => {
+    const results = [
+      { organizationId: "org-a", blockedInvoices: 1 },
+      { organizationId: "org-b", failedInvoices: 3 },
+      { organizationId: "org-c", blockedInvoices: 0, failedInvoices: 0 },
+    ];
+    expect(isSchedulerFailure(results)).toBe(true);
+    expect(isSchedulerFailure([results[2]])).toBe(false);
+    const alert = buildSchedulerAlert(results);
+    expect(alert.text).toContain(
+      "Organization org-a: 1 invoice(s) need billing details"
+    );
+    expect(alert.text).toContain(
+      "Organization org-b: 3 invoice(s) could not be created"
+    );
+    expect(alert.text).not.toContain("org-c");
+  });
 });

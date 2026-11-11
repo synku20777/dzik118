@@ -246,6 +246,65 @@ describe("statement financials and snapshots", () => {
     expect(financials.balance.previousOutstanding).toBe("100.00");
     expect(financials.balance.amountDue).toBe("160.00");
 
+    // On 1 March only the January invoice is late (due 14 February). The
+    // February one is due 14 March, so it is debt but not late-fee principal.
+    await createLateFeePolicy(db, {
+      organizationId: org.id,
+      effectiveFrom: "2025-01-01",
+      enabled: true,
+      dailyRate: "0.5000",
+      graceDays: 0,
+      maxPenaltyPercent: "10.00",
+      stopsAtCap: true,
+      actorUserId: seedAdminId,
+    });
+    const onFirstOfMarch = await resolveStatementFinancials(db, {
+      organizationId: org.id,
+      dwellingId: dwelling.id,
+      currency: "EUR",
+      issueDate: "2026-03-01",
+      currentCharges: "60.00",
+      manualAdjustment: "0.00",
+    });
+    expect(onFirstOfMarch.accountBalance).toBe("100.00");
+    expect(onFirstOfMarch.lateFee.eligiblePrincipal).toBe("50.00");
+
+    // An invoice in another currency does not set the date a late fee starts.
+    await db.$client.query("update invoices set currency = $1 where id = $2", [
+      "USD",
+      invoice1.id,
+    ]);
+    const inEuro = await resolveStatementFinancials(db, {
+      organizationId: org.id,
+      dwellingId: dwelling.id,
+      currency: "EUR",
+      issueDate: "2026-03-31",
+      currentCharges: "60.00",
+      manualAdjustment: "0.00",
+    });
+    expect(inEuro.oldestUnpaid?.invoiceNumber).toBe(invoice2.invoiceNumber);
+    await db.$client.query("update invoices set currency = $1 where id = $2", [
+      "EUR",
+      invoice1.id,
+    ]);
+
+    // An invoice that asks for nothing (a credit covered it) is not late: its
+    // due date is not where a late fee starts.
+    await db.$client.query(
+      "update invoices set manual_adjustment = -current_charges, amount_due = 0 where id = $1",
+      [invoice1.id]
+    );
+    const withJanuaryCovered = await resolveStatementFinancials(db, {
+      organizationId: org.id,
+      dwellingId: dwelling.id,
+      currency: "EUR",
+      issueDate: "2026-03-01",
+      currentCharges: "60.00",
+      manualAdjustment: "0.00",
+    });
+    expect(withJanuaryCovered.oldestUnpaid).toBeUndefined();
+    expect(withJanuaryCovered.lateFee.appliedAmount).toBe("0.00");
+
     await cleanupOrg(org.id);
   });
 

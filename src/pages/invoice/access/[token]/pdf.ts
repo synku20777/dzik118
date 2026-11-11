@@ -17,7 +17,7 @@ import {
 import { withRequestDb } from "../../../../lib/db-request";
 import { getSupabaseAdmin } from "../../../../actions/_supabase_admin";
 import {
-  invalidInvoiceLinkResponse,
+  invoiceTokenErrorResponse,
   checkPublicInvoiceTokenRequest,
 } from "../../../../lib/http/public-invoice-token";
 
@@ -71,7 +71,7 @@ export const GET: APIRoute = async ({ params, request, url }) => {
       locale,
       NO_CACHE_HEADERS
     );
-  } catch {
-    return invalidInvoiceLinkResponse();
+  } catch (err) {
+    return invoiceTokenErrorResponse(err);
   }
 };

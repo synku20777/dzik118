@@ -1,4 +1,15 @@
-import { and, asc, eq, inArray, isNull, lt } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  sql,
+} from "drizzle-orm";
 import type { DbOrTx } from "../../db/client";
 import { billingCases } from "../../db/schema/billing";
 import { invoices } from "../../db/schema/invoices";
@@ -6,6 +17,7 @@ import { addExact, maxExact, subtractExact } from "../../lib/decimal2";
 import { calculateStatementBalance } from "./balance";
 import { calculateLateFee } from "./late-fees";
 import {
+  PAYABLE_CASE_STATUSES,
   getDwellingAccountBalance,
   getEffectiveLateFeePolicy,
   getProtectedOpeningDebt,
@@ -21,6 +33,8 @@ export async function resolveStatementFinancials(
     currentCharges: string;
     manualAdjustment: string;
     lateFeeAdjustment?: string;
+    // The invoice this statement is for, when it exists already.
+    invoiceId?: string;
   }
 ) {
   const accountBalance = await getDwellingAccountBalance(
@@ -28,7 +42,8 @@ export async function resolveStatementFinancials(
     input.organizationId,
     input.dwellingId,
     input.currency,
-    input.issueDate
+    input.issueDate,
+    input.invoiceId
   );
   // Migrated opening debt has no known due date, so it is not late-fee
   // principal until paid (ADR 0013).
@@ -55,20 +70,51 @@ export async function resolveStatementFinancials(
       and(
         eq(invoices.organizationId, input.organizationId),
         eq(invoices.dwellingId, input.dwellingId),
+        eq(invoices.currency, input.currency),
         isNull(invoices.paidAt),
+        // An invoice a credit covered in full asks for nothing: it is not
+        // late, so its due date is not where a late fee starts.
+        gt(invoices.amountDue, "0"),
         lt(invoices.dueDate, input.issueDate),
-        inArray(billingCases.status, ["PREPARED", "SENT", "OVERDUE"])
+        inArray(billingCases.status, PAYABLE_CASE_STATUSES)
       )
     )
     .orderBy(asc(invoices.dueDate))
     .limit(1);
+  // Debt that is not late yet: what each invoice not due at the issue date
+  // added itself (its amount due without the earlier debt it carries). It is
+  // in the balance, but a late fee is for late debt only. Payments count
+  // against the oldest debt first, as each invoice carries the earlier
+  // balance; a payment matched to a not-yet-due invoice can so only lower the
+  // principal, never raise it.
+  const [{ notYetDue }] = await db
+    .select({
+      notYetDue: sql<string>`coalesce(sum(greatest(${invoices.amountDue} - ${invoices.previousOutstanding}, 0)), 0)::numeric(14, 2)::text`,
+    })
+    .from(invoices)
+    .innerJoin(billingCases, eq(billingCases.id, invoices.billingCaseId))
+    .where(
+      and(
+        eq(invoices.organizationId, input.organizationId),
+        eq(invoices.dwellingId, input.dwellingId),
+        eq(invoices.currency, input.currency),
+        isNull(invoices.paidAt),
+        gte(invoices.dueDate, input.issueDate),
+        inArray(billingCases.status, PAYABLE_CASE_STATUSES),
+        // Its own entries are already left out of the balance.
+        input.invoiceId ? ne(invoices.id, input.invoiceId) : undefined
+      )
+    );
 
   const lateFee =
     policy && oldestUnpaid
       ? calculateLateFee({
           enabled: policy.enabled,
           principal: maxExact(
-            subtractExact(accountBalance, excludedOpeningDebt),
+            subtractExact(
+              subtractExact(accountBalance, excludedOpeningDebt),
+              notYetDue
+            ),
             "0.00"
           ),
           dailyRate: policy.dailyRate,

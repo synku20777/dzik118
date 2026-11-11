@@ -7,9 +7,10 @@
 // the first successful send -- a resend reuses the same pdf_object_key/
 // pdf_sha256, never regenerates it (Section 21: "canonical PDF
 // immutable").
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { Db, Tx } from "../../db/client";
 import { billingCases, billingPeriods } from "../../db/schema/billing";
+import { dwellings } from "../../db/schema/dwellings";
 import {
   invoiceDeliveries,
   invoiceLines,
@@ -27,6 +28,7 @@ import { recordAuditEvent } from "../../lib/logging/audit";
 import { ConflictError, NotFoundError, toSafeSkipReason } from "../errors";
 import { assertEmailNotSuppressed } from "../email/suppression";
 import { renderInvoiceHtml } from "./invoice-html";
+import { invoiceDelivery } from "./invoice-snapshots";
 import { createInvoiceAccessToken } from "./invoice-tokens";
 import { getInvoice } from "./generation";
 import {
@@ -174,16 +176,9 @@ async function deliver(
     .from(billingPeriods)
     .where(eq(billingPeriods.id, invoice.periodId))
     .limit(1);
-  const recipient = invoice.recipientSnapshot as {
-    billingEmail?: string | null;
-    invoiceByEmail?: boolean;
-    invoiceByPaper?: boolean;
-  };
+  const recipient = invoiceDelivery(invoice.recipientSnapshot);
   const issuer = invoice.issuerSnapshot as { name?: string };
-  // A snapshot taken before per-dwelling delivery preferences existed has
-  // neither key -- treat it as the email-only behavior that was the only
-  // option back then, not as "no delivery method".
-  const invoiceByEmail = recipient.invoiceByEmail ?? true;
+  const invoiceByEmail = recipient.invoiceByEmail;
 
   let emailOutcome: DeliverResult["emailOutcome"] = "NOT_ENABLED";
   let emailErrorCode: string | undefined;
@@ -769,6 +764,34 @@ async function reconcileAttemptForInvoice(
   return { action: "IN_FLIGHT", attempt: reconciled };
 }
 
+// The invoice froze its recipient when it was generated. If the dwelling's
+// billing email was changed since (a new occupant, for example), the old
+// address must not get a new link to the invoice.
+async function assertBillingEmailCurrent(
+  db: Db,
+  organizationId: string,
+  dwellingId: string,
+  invoiceEmail: string
+) {
+  const [dwelling] = await db
+    .select({ billingEmail: dwellings.billingEmail })
+    .from(dwellings)
+    .where(
+      and(
+        eq(dwellings.id, dwellingId),
+        eq(dwellings.organizationId, organizationId)
+      )
+    )
+    .limit(1);
+  const normalize = (email: string | null | undefined) =>
+    (email ?? "").trim().toLowerCase();
+  if (normalize(dwelling?.billingEmail) !== normalize(invoiceEmail)) {
+    throw new ConflictError(
+      "The billing email of this dwelling changed after the invoice was created, so the invoice cannot be emailed to the old address. If it was not sent yet, set its case back to Draft and generate it again"
+    );
+  }
+}
+
 // INV-006. A no-op (idempotent) once the invoice has already been sent --
 // callers that just want "make sure this went out" can call this safely
 // without an extra existence check.
@@ -822,12 +845,8 @@ export async function sendInvoice(
   // the scheduler's bulkSendInvoices catch-and-skip cleanly skip a
   // PAPER-only or no-usable-email invoice with zero provider calls and zero
   // delivery rows.
-  const recipient = invoice.recipientSnapshot as {
-    billingEmail?: string | null;
-    invoiceByEmail?: boolean;
-    invoiceByPaper?: boolean;
-  };
-  const invoiceByEmail = recipient.invoiceByEmail ?? true;
+  const recipient = invoiceDelivery(invoice.recipientSnapshot);
+  const invoiceByEmail = recipient.invoiceByEmail;
   // An attempt already CLAIMED/DISPATCHING must still be reconcilable even
   // if the dwelling's preference has since changed (or was seeded before
   // this preference existed) -- only reject outright when there is no
@@ -848,6 +867,20 @@ export async function sendInvoice(
   if (invoiceByEmail && recipient.billingEmail) {
     await assertEmailNotSuppressed(db, organizationId, recipient.billingEmail);
   }
+  // Runs before every new dispatch: here when no attempt is in flight, and
+  // otherwise in the loop below at the moment this call claims a new attempt
+  // (an attempt in flight must stay reconcilable, so it is not checked here).
+  const assertEmailCurrent = async () => {
+    if (invoiceByEmail && recipient.billingEmail) {
+      await assertBillingEmailCurrent(
+        db,
+        organizationId,
+        invoice.dwellingId,
+        recipient.billingEmail
+      );
+    }
+  };
+  if (!hasActiveAttempt) await assertEmailCurrent();
 
   // 4. Atomic command claim loop (see claimSendCommand: the invoice row
   // lock closes the late-claim race where a loser re-checking for an active
@@ -865,6 +898,22 @@ export async function sendInvoice(
     );
 
     if (claim.outcome === "CLAIMED") {
+      // The attempt that was in flight has ended (this loop gave up on it,
+      // or another sender did), so the email was not checked above. The new
+      // claim is closed again when the check fails, so it blocks nothing.
+      if (hasActiveAttempt) {
+        try {
+          await assertEmailCurrent();
+        } catch (err) {
+          await markFailedConditional(
+            db,
+            claim.attempt.id,
+            "BILLING_EMAIL_CHANGED",
+            "CLAIMED"
+          );
+          throw err;
+        }
+      }
       attempt = claim.attempt;
       break;
     }
@@ -1028,18 +1077,31 @@ export async function bulkSendInvoices(
   actorUserId: string | null
 ): Promise<BulkSendResult> {
   const result: BulkSendResult = { sent: [], skipped: [] };
+  // One query for the whole selection. An invoice sent by another request
+  // after this read is still safe: sendInvoice does nothing for it.
+  const alreadySent = new Set(
+    invoiceIds.length === 0
+      ? []
+      : (
+          await db
+            .select({ id: invoices.id })
+            .from(invoices)
+            .where(
+              and(
+                eq(invoices.organizationId, organizationId),
+                inArray(invoices.id, invoiceIds),
+                isNotNull(invoices.sentAt)
+              )
+            )
+        ).map((row) => row.id)
+  );
   for (const invoiceId of invoiceIds) {
     try {
       // sendInvoice is idempotent (a no-op returning the already-sent
       // invoice) -- checked here first so an already-sent/paid invoice in
       // the selection is reported as skipped, not double-counted as a
       // fresh send.
-      const { invoice: before } = await getInvoice(
-        db,
-        organizationId,
-        invoiceId
-      );
-      if (before.sentAt) {
+      if (alreadySent.has(invoiceId)) {
         result.skipped.push({ invoiceId, reason: "Already sent" });
         continue;
       }
@@ -1081,12 +1143,8 @@ export async function resendInvoice(
   const wasAlreadySent = !!invoice.sentAt;
 
   // Electronic-only check: if dwelling has no email enabled, reject immediately
-  const recipient = invoice.recipientSnapshot as {
-    billingEmail?: string | null;
-    invoiceByEmail?: boolean;
-    invoiceByPaper?: boolean;
-  };
-  const invoiceByEmail = recipient.invoiceByEmail ?? true;
+  const recipient = invoiceDelivery(invoice.recipientSnapshot);
+  const invoiceByEmail = recipient.invoiceByEmail;
   if (!invoiceByEmail) {
     throw new ConflictError(
       "This dwelling has no electronic delivery method enabled; use Record paper dispatch instead."
@@ -1098,6 +1156,12 @@ export async function resendInvoice(
     );
   }
   await assertEmailNotSuppressed(db, organizationId, recipient.billingEmail);
+  await assertBillingEmailCurrent(
+    db,
+    organizationId,
+    invoice.dwellingId,
+    recipient.billingEmail
+  );
 
   // Resend requires prior EMAIL-channel history specifically -- checked
   // regardless of overall wasAlreadySent, since a PAPER dispatch can set
@@ -1335,10 +1399,8 @@ export async function recordPaperDispatch(
       .limit(1);
     const caseStatus = billingCase?.status;
 
-    const recipient = invoice.recipientSnapshot as {
-      invoiceByPaper?: boolean;
-    };
-    const invoiceByPaper = recipient.invoiceByPaper ?? false;
+    const recipient = invoiceDelivery(invoice.recipientSnapshot);
+    const invoiceByPaper = recipient.invoiceByPaper;
     if (!invoiceByPaper) {
       throw new ConflictError(
         "Paper delivery is not enabled for this dwelling"

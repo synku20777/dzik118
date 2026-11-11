@@ -15,6 +15,8 @@ const strings = {
   recent: t("Recent changes"),
   dismiss: t("Dismiss"),
   retry: t("Retry"),
+  refresh: t("Refresh"),
+  savedNotUpdated: t("Saved, but the view could not be updated"),
   checkAgain: t("Check again"),
   checking: t("Checking save status…"),
   unknown: t("Outcome not confirmed"),
@@ -63,6 +65,7 @@ const strings = {
     completeMutation,
     confirmMutation,
     dismissMutation,
+    failReconciliation,
     hydrateMutations,
     markOutcomeUnknown,
     markReconciling,
@@ -86,6 +89,8 @@ const strings = {
     recent: string;
     dismiss: string;
     retry: string;
+    refresh: string;
+    savedNotUpdated: string;
     checkAgain: string;
     checking: string;
     unknown: string;
@@ -144,15 +149,21 @@ const strings = {
       const dismiss =
         item.querySelector<HTMLButtonElement>(".mutation-dismiss")!;
       const retry = item.querySelector<HTMLButtonElement>(".mutation-retry")!;
-      retry.textContent =
-        mutation.status === "unknown" ? strings.checkAgain : strings.retry;
+      retry.textContent = mutation.refresh
+        ? strings.refresh
+        : mutation.status === "unknown"
+          ? strings.checkAgain
+          : strings.retry;
       retry.hidden =
+        !mutation.refresh &&
         (mutation.status !== "error" || !mutation.retry) &&
         (mutation.status !== "unknown" || !mutation.checkAgain);
       retry.onclick = () =>
-        mutation.status === "unknown"
-          ? mutation.checkAgain?.()
-          : retryMutation(mutation.id);
+        mutation.refresh
+          ? location.reload()
+          : mutation.status === "unknown"
+            ? mutation.checkAgain?.()
+            : retryMutation(mutation.id);
       dismiss.textContent = strings.dismiss;
       dismiss.hidden = mutation.status !== "error";
       dismiss.onclick = () => dismissMutation(mutation.id);
@@ -200,6 +211,8 @@ const strings = {
               : translateMessage(mutation.successMessageKey ?? "Saved")
           );
         },
+        viewFailed: () =>
+          failReconciliation(mutation.id, strings.savedNotUpdated),
         unknown: (checkAgain) => {
           markOutcomeUnknown(mutation.id, () => {
             markVerifying(mutation.id);

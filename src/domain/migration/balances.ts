@@ -252,6 +252,21 @@ export async function validateBalances(
         )
     ).map((r) => r.dwellingId)
   );
+  // An invoice that was prepared, set back to Draft and generated again has
+  // no preparedAt, but its first charge is still in the ledger (as an opening
+  // entry with an invoice, when it is from before the ledger).
+  for (const row of await db
+    .selectDistinct({ dwellingId: accountEntries.dwellingId })
+    .from(accountEntries)
+    .where(
+      and(
+        eq(accountEntries.organizationId, organizationId),
+        inArray(accountEntries.type, ["INVOICE_CHARGE", "OPENING_BALANCE"]),
+        isNotNull(accountEntries.invoiceId)
+      )
+    )) {
+    invoiced.add(row.dwellingId);
+  }
 
   const seen = new Set<string>();
   const rows: MigrationBalanceRow[] = table.rows.map((raw, i) => {

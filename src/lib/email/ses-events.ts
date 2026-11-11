@@ -26,9 +26,14 @@ interface SesMessage {
   };
 }
 
-function cleanEmails(list: { emailAddress?: string }[] | undefined): string[] {
-  const emails = (list ?? [])
-    .map((entry) => (entry.emailAddress ?? "").trim().toLowerCase())
+// The message comes from outside, so the declared shape is not guaranteed.
+function cleanEmails(list: unknown): string[] {
+  const emails = (Array.isArray(list) ? list : [])
+    .map((entry: { emailAddress?: unknown } | null) =>
+      typeof entry?.emailAddress === "string"
+        ? entry.emailAddress.trim().toLowerCase()
+        : ""
+    )
     .filter((email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
   return [...new Set(emails)];
 }

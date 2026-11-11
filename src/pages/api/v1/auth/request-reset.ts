@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "astro:env/server";
 import { appUsers } from "../../../../db/schema/auth";
 import { hasAdminCapability } from "../../../../domain/authorization/context";
+import { describeError } from "../../../../domain/errors";
 import { withRequestDb } from "../../../../lib/db-request";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -28,8 +29,9 @@ export const POST: APIRoute = async ({ request, redirect, url, locals }) => {
   // Everything account-dependent runs after the response is sent, so the
   // response time is the same for admins, residents and unknown addresses.
   locals.cfContext.waitUntil(
-    sendResetLink(email, clientIp).catch(() => {
-      // Swallowed deliberately -- see the neutral-response note above.
+    sendResetLink(email, clientIp).catch((err) => {
+      // Logged only: the response stays neutral (see the note above).
+      console.error("request-reset failed", describeError(err));
     })
   );
   return redirect(NEUTRAL_REDIRECT, 303);
@@ -58,9 +60,10 @@ async function sendResetLink(email: string, clientIp: string) {
   });
   // Only an enabled user with admin capability gets a reset link.
   if (eligible) {
-    await createClient(
+    const { error } = await createClient(
       SUPABASE_URL,
       SUPABASE_PUBLISHABLE_KEY
     ).auth.resetPasswordForEmail(email);
+    if (error) throw error;
   }
 }

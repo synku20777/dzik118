@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { renderInvoiceHtml } from "../../src/domain/billing/invoice-html";
+import {
+  renderInvoiceHtml,
+  renderInvoicePreview,
+} from "../../src/domain/billing/invoice-html";
+import {
+  missingBillingDetails,
+  readInvoiceSnapshots,
+} from "../../src/domain/billing/invoice-snapshots";
+import { ConflictError } from "../../src/domain/errors";
 import {
   createDefaultInvoiceTemplateConfig,
   type InvoiceTemplateConfigV2,
@@ -57,6 +65,54 @@ function snapshot(
     ...overrides,
   };
 }
+
+describe("invoice snapshots", () => {
+  it("accepts an older snapshot with fewer fields and unknown ones", () => {
+    const html = renderInvoiceHtml(
+      makeInvoice({
+        issuerSnapshot: { name: "Old Org", legacyField: 1 },
+        recipientSnapshot: {},
+        paymentSnapshot: { iban: null },
+      }),
+      [makeLine()]
+    );
+    expect(html).toContain("Old Org");
+  });
+
+  it("stops on a damaged snapshot and names the reason in a preview", () => {
+    for (const damaged of [
+      { issuerSnapshot: null },
+      { recipientSnapshot: "Jane Doe" },
+      { paymentSnapshot: { iban: 42 } },
+    ]) {
+      expect(() =>
+        renderInvoiceHtml(makeInvoice(damaged), [makeLine()])
+      ).toThrow(ConflictError);
+    }
+    const preview = renderInvoicePreview(
+      makeInvoice({ issuerSnapshot: null }),
+      [makeLine()],
+      "lv",
+      (text) => `<${text}>`
+    );
+    expect(preview).toContain("&lt;This invoice cannot be shown");
+  });
+
+  it("gives the same reason prepareInvoice refuses an invoice for", () => {
+    const complete = {
+      issuer: { name: "Org", addressLine1: "1 Main St" },
+      recipient: { billingName: "Jane", billingAddress: "2 Side St" },
+      payment: { iban: "LV00TEST", bankName: "Bank" },
+    };
+    expect(missingBillingDetails(complete)).toBeNull();
+    expect(
+      missingBillingDetails({ ...complete, recipient: { billingName: "Jane" } })
+    ).toContain("billing address");
+    expect(
+      readInvoiceSnapshots(makeInvoice({ issuerSnapshot: [] }))
+    ).toBeNull();
+  });
+});
 
 describe("renderInvoiceHtml", () => {
   it("includes the invoice number, line items, and totals", () => {

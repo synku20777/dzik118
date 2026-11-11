@@ -60,10 +60,15 @@ const previewFontUrl = import.meta.env.DEV
 const residentAccess = (Astro.locals.auth?.dwellingIds.length ?? 0) > 0;
 const { unreadMessages, switcherOrganizations } = organizationId
   ? await withRequestDb(async (db) => {
-      const [unreadMessages, switcherOrganizations] = await Promise.all([
-        countUnreadConversationsForOrganization(db, organizationId),
-        listOrganizations(db, Astro.locals.auth?.organizationIds ?? []),
-      ]);
+      // One after the other: one connection runs one query at a time.
+      const unreadMessages = await countUnreadConversationsForOrganization(
+        db,
+        organizationId
+      );
+      const switcherOrganizations = await listOrganizations(
+        db,
+        Astro.locals.auth?.organizationIds ?? []
+      );
       return { unreadMessages, switcherOrganizations };
     })
   : { unreadMessages: 0, switcherOrganizations: [] };

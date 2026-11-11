@@ -23,6 +23,7 @@ import { getFirstBillingPeriod } from "../../../../../domain/periods/periods";
 import { listRules } from "../../../../../domain/billing/rules";
 import { listDwellings } from "../../../../../domain/organizations/dwellings";
 import { ImportHeaderError } from "../../../../../domain/organizations/csv-import";
+import { decodeBytes } from "../../../../../domain/migration/files";
 import {
   importOpeningReadingsCsv,
   listMetersWithOpeningReading,
@@ -116,7 +117,12 @@ if (
           importHeaderError = "The CSV file is too large (up to 2 MB).";
           importStep = "preview";
         } else {
-          importCsvText = await file.text();
+          // Not file.text(): an Excel export is often Windows-1257, not UTF-8.
+          importCsvText = decodeBytes(
+            new Uint8Array(await file.arrayBuffer()),
+            "auto",
+            MAX_CSV_BYTES
+          ).text;
           const preview = await withRequestDb((db) =>
             validateOpeningReadingsCsv(db, organizationId, importCsvText)
           );
@@ -138,13 +144,12 @@ const {
   metersWithOpening,
 } = await withRequestDb(async (db) => {
   const org = await getOrganization(db, organizationId);
-  const [prog, first, r, dwl, mtrs] = await Promise.all([
-    getSetupProgress(db, organizationId, org),
-    getFirstBillingPeriod(db, organizationId),
-    listRules(db, organizationId),
-    listDwellings(db, organizationId, { limit: 5000 }),
-    listMetersWithOpeningReading(db, organizationId),
-  ]);
+  // One after the other: one connection runs one query at a time.
+  const prog = await getSetupProgress(db, organizationId, org);
+  const first = await getFirstBillingPeriod(db, organizationId);
+  const r = await listRules(db, organizationId);
+  const dwl = await listDwellings(db, organizationId, { limit: 5000 });
+  const mtrs = await listMetersWithOpeningReading(db, organizationId);
   return {
     organization: org,
     progress: prog,

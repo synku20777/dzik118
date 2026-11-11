@@ -6,10 +6,21 @@ import {
   paymentAllocations,
   paymentReversals,
 } from "../../db/schema/accounts";
+import type { billingCases } from "../../db/schema/billing";
 import { dwellings } from "../../db/schema/dwellings";
-import { invoices } from "../../db/schema/invoices";
-import { maxExact, subtractExact, sumExact } from "../../lib/decimal2";
+import {
+  compareExact,
+  maxExact,
+  negateExact,
+  subtractExact,
+  sumExact,
+} from "../../lib/decimal2";
 import { NotFoundError } from "../errors";
+
+// A case in one of these states has an invoice that is a real debt: it can
+// take a payment and it can be late.
+export const PAYABLE_CASE_STATUSES: (typeof billingCases.$inferSelect)["status"][] =
+  ["PREPARED", "SENT", "OVERDUE"];
 
 // An opening balance posted by the Migration Center (ADR 0013). The older
 // OPENING_BALANCE rows (one per unpaid v1 invoice) do not carry this key.
@@ -29,20 +40,33 @@ export async function getDwellingAccountBalance(
   organizationId: string,
   dwellingId: string,
   currency: string,
-  asOf?: string
+  asOf?: string,
+  // The invoice the balance is calculated for. A case can be overridden back
+  // to Draft and prepared again; the charges its first preparation posted are
+  // then not previous debt for that same invoice.
+  forInvoiceId?: string
 ): Promise<string> {
-  const rows = await db
-    .select({ debit: accountEntries.debit, credit: accountEntries.credit })
+  // Summed by the database (exact numeric), not row by row here: a dwelling
+  // gains entries every month and this runs for every statement.
+  const [{ balance }] = await db
+    .select({
+      balance: sql<string>`coalesce(sum(${accountEntries.debit} - ${accountEntries.credit}), 0)::numeric(14, 2)::text`,
+    })
     .from(accountEntries)
     .where(
       and(
         eq(accountEntries.organizationId, organizationId),
         eq(accountEntries.dwellingId, dwellingId),
         eq(accountEntries.currency, currency),
-        notMigratedAfter(asOf)
+        notMigratedAfter(asOf),
+        forInvoiceId
+          ? // OPENING_BALANCE with an invoice: the charge of an invoice that
+            // was unpaid when the ledger was introduced (migration 0002).
+            sql`(${accountEntries.invoiceId} is distinct from ${forInvoiceId} or ${accountEntries.type} not in ('INVOICE_CHARGE', 'LATE_FEE', 'MANUAL_ADJUSTMENT', 'OPENING_BALANCE'))`
+          : undefined
       )
     );
-  return sumExact(rows.map((row) => subtractExact(row.debit, row.credit)));
+  return balance;
 }
 
 // The part of the balance that is migrated opening debt not yet paid. It is
@@ -147,6 +171,51 @@ export async function postAccountEntry(
   return existing;
 }
 
+// Brings what an invoice has posted under one entry type up to `amount`. The
+// first preparation posts the whole amount. A later one (after an override
+// back to Draft) posts only the difference, as a correcting entry: the journal
+// is append-only.
+export async function postInvoiceCharge(
+  db: DbOrTx,
+  entry: Omit<typeof accountEntries.$inferInsert, "debit" | "credit"> & {
+    invoiceId: string;
+  },
+  amount: string
+) {
+  const posted = await db
+    .select({ debit: accountEntries.debit, credit: accountEntries.credit })
+    .from(accountEntries)
+    .where(
+      and(
+        eq(accountEntries.organizationId, entry.organizationId),
+        eq(accountEntries.invoiceId, entry.invoiceId),
+        // The opening entry of an invoice from before the ledger (migration
+        // 0002) is its charge: without it, preparing that invoice again would
+        // charge it a second time.
+        inArray(
+          accountEntries.type,
+          entry.type === "INVOICE_CHARGE"
+            ? ["INVOICE_CHARGE", "OPENING_BALANCE"]
+            : [entry.type]
+        )
+      )
+    );
+  const missing = subtractExact(
+    amount,
+    sumExact(posted.map((row) => subtractExact(row.debit, row.credit)))
+  );
+  const sign = compareExact(missing, "0.00");
+  if (sign === 0) return;
+  await postAccountEntry(db, {
+    ...entry,
+    debit: sign > 0 ? missing : "0.00",
+    credit: sign < 0 ? negateExact(missing) : "0.00",
+    idempotencyKey: posted.length
+      ? `${entry.idempotencyKey}:${posted.length + 1}`
+      : entry.idempotencyKey,
+  });
+}
+
 export async function getInvoiceAllocatedAmount(
   db: DbOrTx,
   organizationId: string,
@@ -216,23 +285,4 @@ export async function assertDwellingInOrganization(
     )
     .limit(1);
   if (!dwelling) throw new NotFoundError("Dwelling not found");
-}
-
-export async function getInvoiceWithFinancialScope(
-  db: DbOrTx,
-  organizationId: string,
-  invoiceId: string
-) {
-  const [invoice] = await db
-    .select()
-    .from(invoices)
-    .where(
-      and(
-        eq(invoices.id, invoiceId),
-        eq(invoices.organizationId, organizationId)
-      )
-    )
-    .limit(1);
-  if (!invoice) throw new NotFoundError("Invoice not found");
-  return invoice;
 }

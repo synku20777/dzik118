@@ -13,6 +13,7 @@ import { getOrganization } from "../../../../../../domain/organizations/organiza
 import { getPeriod } from "../../../../../../domain/periods/periods";
 import { listReadingGridForPeriod } from "../../../../../../domain/periods/cases";
 import { withRequestDb } from "../../../../../../lib/db-request";
+import { rethrowUnexpected } from "../../../../../../domain/errors";
 import { subtractDecimal3 } from "../../../../../../lib/decimal3";
 import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
 
@@ -36,7 +37,8 @@ try {
     period: await getPeriod(db, organizationId, periodId),
     gridRows: await listReadingGridForPeriod(db, organizationId, periodId),
   })));
-} catch {
+} catch (err) {
+  rethrowUnexpected(err);
   return Astro.redirect(`/admin/o/${organizationId}/periods`);
 }
 

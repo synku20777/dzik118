@@ -36,6 +36,7 @@ import {
   markConversationRead,
 } from "../../../../../domain/messaging/conversations";
 import { withRequestDb } from "../../../../../lib/db-request";
+import { rethrowUnexpected } from "../../../../../domain/errors";
 
 const organizationId = Astro.params.orgId!;
 try {
@@ -170,7 +171,8 @@ if (selectedId) {
         return { selectedConversation: conversation, selectedMessages: msgs };
       }
     ));
-  } catch {
+  } catch (err) {
+    rethrowUnexpected(err);
     selectedConversation = null;
   }
 }

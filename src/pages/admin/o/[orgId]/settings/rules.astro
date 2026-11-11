@@ -107,7 +107,7 @@ function ruleToDrawerJson(rule: RuleRow) {
 
 // Deep link (?edit=<ruleId>): looked up against allRules (already
 // organization-scoped by listRules -- a cross-org id simply won't be in
-// this array, and an isolated getRule() call would be redundant). Archived
+// this array, and a separate single-rule query would be redundant). Archived
 // rules are never editable via this page at all (their row has no Edit
 // button either), so one is never auto-opened even if `includeArchived`
 // happens to also be set. Missing/invalid/archived all resolve to `null`

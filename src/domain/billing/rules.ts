@@ -223,25 +223,6 @@ export async function createRule(
   }
 }
 
-export async function getRule(
-  db: DbOrTx,
-  organizationId: string,
-  ruleId: string
-) {
-  const [rule] = await db
-    .select()
-    .from(billingRules)
-    .where(
-      and(
-        eq(billingRules.id, ruleId),
-        eq(billingRules.organizationId, organizationId)
-      )
-    )
-    .limit(1);
-  if (!rule) throw new NotFoundError("Billing rule not found");
-  return rule;
-}
-
 export async function listRules(
   db: Db,
   organizationId: string,

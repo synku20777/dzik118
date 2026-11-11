@@ -1055,6 +1055,16 @@ const lv: Record<string, string> = {
   "This sign-in link is invalid or has expired. Request a new one below.":
     "Šī pieteikšanās saite nav derīga vai tās derīguma termiņš ir beidzies. Pieprasiet jaunu zemāk.",
   "Page not found": "Lapa nav atrasta",
+  "We couldn’t load this page.": "Neizdevās ielādēt šo lapu.",
+  "Please try again.": "Lūdzu, mēģiniet vēlreiz.",
+  Refresh: "Atsvaidzināt",
+  "This invoice cannot be shown because its stored details are damaged.":
+    "Šo rēķinu nevar parādīt, jo tā saglabātie dati ir bojāti.",
+  "{n} invoices cannot be prepared: billing details are missing.|one":
+    "{n} rēķinu nevar sagatavot: trūkst norēķinu datu.",
+  "{n} invoices cannot be prepared: billing details are missing.|other":
+    "{n} rēķinus nevar sagatavot: trūkst norēķinu datu.",
+  "Review invoices": "Pārskatīt rēķinus",
   "The page you are looking for does not exist or has moved.":
     "Meklētā lapa neeksistē vai ir pārvietota.",
   "Go to sign in": "Uz pieteikšanos",
@@ -1322,6 +1332,10 @@ const lv: Record<string, string> = {
   "Billing case not found": "Norēķinu ieraksts nav atrasts",
   "A case can be set to Sent only when its invoice was sent":
     "Ieraksta statusu var iestatīt uz “Nosūtīts” tikai tad, ja tā rēķins ir nosūtīts",
+  "A case can be set to Prepared only when its invoice was prepared":
+    "Ieraksta statusu var iestatīt uz “Sagatavots” tikai tad, ja tā rēķins ir sagatavots",
+  "A case can be set to Overdue only when its invoice was sent":
+    "Ieraksta statusu var iestatīt uz “Nokavēts” tikai tad, ja tā rēķins ir nosūtīts",
   "A case can be set to Paid only when its invoice is paid":
     "Ieraksta statusu var iestatīt uz “Apmaksāts” tikai tad, ja tā rēķins ir apmaksāts",
   "A case that already has an invoice cannot go back to Missing data or Ready":
@@ -1346,6 +1360,8 @@ const lv: Record<string, string> = {
     "Šim īpašumam nav ieslēgts neviens elektroniskās piegādes veids; tā vietā izmantojiet “Reģistrēt papīra nosūtīšanu”.",
   "Invoice email is missing. Add a billing email before resending.":
     "Trūkst rēķina e-pasta adreses. Pievienojiet to pirms atkārtotas nosūtīšanas.",
+  "The billing email of this dwelling changed after the invoice was created, so the invoice cannot be emailed to the old address. If it was not sent yet, set its case back to Draft and generate it again":
+    "Šī mājokļa rēķinu e-pasta adrese ir mainīta pēc rēķina izveides, tāpēc rēķinu nevar nosūtīt uz veco adresi. Ja rēķins vēl nav nosūtīts, atgrieziet ierakstu statusā “Melnraksts” un izveidojiet rēķinu no jauna",
   "This invoice has not been sent by email yet; use Send instead.":
     "Šis rēķins vēl nav nosūtīts pa e-pastu; tā vietā izmantojiet “Nosūtīt”.",
   "A delivery attempt is currently in progress for this invoice; wait for it to finish before resending.":
@@ -1437,6 +1453,14 @@ const lv: Record<string, string> = {
     "Nevar reģistrēt rādījumu arhivētam skaitītājam",
   "Cannot edit this reading: a later billing period already recorded a reading for this meter":
     "Šo rādījumu nevar rediģēt: vēlākā norēķinu periodā šim skaitītājam jau ir reģistrēts rādījums",
+  "A later billing period already has a reading for this meter, and that reading covers this period too. Only a reading with no consumption can be recorded here: the previous value, or 0 when there is no earlier reading":
+    "Vēlākā norēķinu periodā šim skaitītājam jau ir rādījums, un tas aptver arī šo periodu. Šeit var ievadīt tikai rādījumu bez patēriņa: iepriekšējo vērtību vai 0, ja agrāka rādījuma nav",
+  "This invoice already has a payment. Reverse the payment before preparing the invoice again":
+    "Šim rēķinam jau ir maksājums. Pirms rēķina atkārtotas sagatavošanas atceliet maksājumu",
+  "Some of these payments were imported a moment ago. Open the file again to see which.":
+    "Daži no šiem maksājumiem tika importēti pirms brīža. Atveriet failu vēlreiz, lai redzētu, kuri.",
+  "The invoice for this period is already prepared, so the reading can no longer be changed":
+    "Šī perioda rēķins jau ir sagatavots, tāpēc rādījumu vairs nevar mainīt",
   "What's this about?": "Par ko ir runa?",
   "The previous delivery attempt's outcome could not be confirmed. Verify whether the invoice was actually delivered, then use Resend if it needs to go out again.":
     "Iepriekšējā piegādes mēģinājuma rezultātu nevarēja apstiprināt. Pārbaudiet, vai rēķins tika piegādāts, un, ja tas jānosūta vēlreiz, izmantojiet “Nosūtīt atkārtoti”.",
@@ -3355,6 +3379,18 @@ const ru: Record<string, string> = {
   "This sign-in link is invalid or has expired. Request a new one below.":
     "Эта ссылка для входа недействительна или срок её действия истёк. Запросите новую ниже.",
   "Page not found": "Страница не найдена",
+  "We couldn’t load this page.": "Не удалось загрузить страницу.",
+  "Please try again.": "Попробуйте ещё раз.",
+  Refresh: "Обновить",
+  "This invoice cannot be shown because its stored details are damaged.":
+    "Этот счёт нельзя показать: его сохранённые данные повреждены.",
+  "{n} invoices cannot be prepared: billing details are missing.|one":
+    "{n} счёт нельзя подготовить: не хватает платёжных данных.",
+  "{n} invoices cannot be prepared: billing details are missing.|few":
+    "{n} счёта нельзя подготовить: не хватает платёжных данных.",
+  "{n} invoices cannot be prepared: billing details are missing.|other":
+    "{n} счетов нельзя подготовить: не хватает платёжных данных.",
+  "Review invoices": "Проверить счета",
   "The page you are looking for does not exist or has moved.":
     "Страница, которую вы ищете, не существует или была перемещена.",
   "Go to sign in": "Перейти ко входу",
@@ -3625,6 +3661,10 @@ const ru: Record<string, string> = {
   "Billing case not found": "Расчётная запись не найдена",
   "A case can be set to Sent only when its invoice was sent":
     "Запись можно перевести в статус «Отправлен» только тогда, когда её счёт был отправлен",
+  "A case can be set to Prepared only when its invoice was prepared":
+    "Запись можно перевести в статус «Подготовлен» только тогда, когда её счёт был подготовлен",
+  "A case can be set to Overdue only when its invoice was sent":
+    "Запись можно перевести в статус «Просрочен» только тогда, когда её счёт был отправлен",
   "A case can be set to Paid only when its invoice is paid":
     "Запись можно перевести в статус «Оплачен» только тогда, когда её счёт оплачен",
   "A case that already has an invoice cannot go back to Missing data or Ready":
@@ -3649,6 +3689,8 @@ const ru: Record<string, string> = {
     "Для этого помещения не включён ни один электронный способ доставки; используйте вместо этого «Зафиксировать отправку на бумаге».",
   "Invoice email is missing. Add a billing email before resending.":
     "Не указана эл. почта для счетов. Добавьте её перед повторной отправкой.",
+  "The billing email of this dwelling changed after the invoice was created, so the invoice cannot be emailed to the old address. If it was not sent yet, set its case back to Draft and generate it again":
+    "Эл. почта для счетов этого жилья была изменена после создания счёта, поэтому счёт нельзя отправить на старый адрес. Если счёт ещё не отправлен, верните запись в статус «Черновик» и создайте счёт заново",
   "This invoice has not been sent by email yet; use Send instead.":
     "Этот счёт ещё не был отправлен по эл. почте; используйте вместо этого «Отправить».",
   "A delivery attempt is currently in progress for this invoice; wait for it to finish before resending.":
@@ -3741,6 +3783,14 @@ const ru: Record<string, string> = {
     "Нельзя внести показание по архивному счётчику",
   "Cannot edit this reading: a later billing period already recorded a reading for this meter":
     "Нельзя отредактировать это показание: в более позднем расчётном периоде уже внесено показание по этому счётчику",
+  "A later billing period already has a reading for this meter, and that reading covers this period too. Only a reading with no consumption can be recorded here: the previous value, or 0 when there is no earlier reading":
+    "В более позднем расчётном периоде уже есть показание по этому счётчику, и оно охватывает и этот период. Здесь можно внести только показание без расхода: предыдущее значение или 0, если более раннего показания нет",
+  "This invoice already has a payment. Reverse the payment before preparing the invoice again":
+    "По этому счёту уже есть платёж. Отмените платёж, прежде чем снова подготавливать счёт",
+  "Some of these payments were imported a moment ago. Open the file again to see which.":
+    "Некоторые из этих платежей были импортированы только что. Откройте файл ещё раз, чтобы увидеть, какие именно.",
+  "The invoice for this period is already prepared, so the reading can no longer be changed":
+    "Счёт за этот период уже подготовлен, поэтому показание больше нельзя изменить",
   "What's this about?": "О чём ваше сообщение?",
   "The previous delivery attempt's outcome could not be confirmed. Verify whether the invoice was actually delivered, then use Resend if it needs to go out again.":
     "Результат предыдущей попытки доставки не удалось подтвердить. Проверьте, был ли счёт доставлен, и, если его нужно отправить снова, используйте «Отправить повторно».",

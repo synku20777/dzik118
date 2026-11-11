@@ -21,14 +21,17 @@ import {
 } from "../../lib/decimal2";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { orgLocalDateString } from "../../lib/org-time";
-import { getInvoiceAllocatedAmount } from "../accounts/ledger";
+import {
+  PAYABLE_CASE_STATUSES,
+  getInvoiceAllocatedAmount,
+} from "../accounts/ledger";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import { confirmMatch } from "./matching";
 
 export { ConflictError, NotFoundError, ValidationError };
 
 export async function matchTransactionToInvoice(
-  db: Db,
+  db: DbOrTx,
   organizationId: string,
   transactionId: string,
   invoiceId: string,
@@ -111,7 +114,7 @@ export async function matchTransactionToInvoice(
       .limit(1);
 
     const validCaseStatus =
-      bCase && ["PREPARED", "SENT", "OVERDUE"].includes(bCase.status);
+      bCase && PAYABLE_CASE_STATUSES.includes(bCase.status);
     if (
       invoice.currency !== transaction.currency ||
       invoice.paidAt !== null ||
@@ -169,12 +172,7 @@ export async function matchTransactionToInvoice(
       afterData: inserted,
     });
 
-    return confirmMatch(
-      tx as unknown as Db,
-      organizationId,
-      inserted.id,
-      actorUserId
-    );
+    return confirmMatch(tx, organizationId, inserted.id, actorUserId);
   });
 }
 
@@ -463,7 +461,7 @@ export async function recordManualPayment(
     });
 
     return matchTransactionToInvoice(
-      tx as unknown as Db,
+      tx,
       organizationId,
       transaction.id,
       input.invoiceId,
@@ -609,7 +607,7 @@ export async function listOpenInvoicesForPayment(
         eq(invoices.organizationId, organizationId),
         dwellingId ? eq(invoices.dwellingId, dwellingId) : undefined,
         isNull(invoices.paidAt),
-        inArray(billingCases.status, ["PREPARED", "SENT", "OVERDUE"])
+        inArray(billingCases.status, PAYABLE_CASE_STATUSES)
       )
     )
     .orderBy(asc(invoices.invoiceNumber));

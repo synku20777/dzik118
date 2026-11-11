@@ -669,6 +669,26 @@ describe("DWL-004: CSV import", () => {
     await cleanupOrg(org.id);
   });
 
+  it("rejects numbers the columns cannot store", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT Csv Org Bounds", addressLine1: "Addr" },
+      seedAdminId
+    );
+    const csv = [
+      "number,type,display_name,occupant_name,billing_name,billing_email,billing_address,area_m2,resident_count,cold_water_meter_serial,hot_water_meter_serial",
+      "BIG-1,APARTMENT,,,,,,100000000,2147483648,,",
+    ].join("\n");
+
+    const { rows } = await validateDwellingsCsv(db, org.id, csv, "create");
+    expect(rows[0].errors).toEqual([
+      "area_m2 is too large",
+      "resident_count is too large",
+    ]);
+
+    await cleanupOrg(org.id);
+  });
+
   it("update mode matches existing dwellings by number", async () => {
     const org = await createOrganization(
       db,

@@ -7,7 +7,12 @@
 // *current* template (spec Section 21: an already-generated invoice's
 // snapshot stays frozen even after the template is edited later).
 import StatusBadge from "../../../../../../../components/ui/StatusBadge.astro";
-import { renderInvoiceHtml } from "../../../../../../../domain/billing/invoice-html";
+import { renderInvoicePreview } from "../../../../../../../domain/billing/invoice-html";
+import {
+  invoiceDelivery,
+  readInvoiceSnapshots,
+  type InvoiceSnapshots,
+} from "../../../../../../../domain/billing/invoice-snapshots";
 import {
   translate,
   uiLocale,
@@ -35,6 +40,7 @@ import {
   INVOICE_LOCALES,
 } from "../../../../../../../domain/billing/invoice-i18n";
 import { withRequestDb } from "../../../../../../../lib/db-request";
+import { rethrowUnexpected } from "../../../../../../../domain/errors";
 
 const organizationId = Astro.params.orgId!;
 const periodId = Astro.params.periodId!;
@@ -89,29 +95,25 @@ try {
       latestAttempt: await getLatestSendAttempt(db, organizationId, invoiceId),
     };
   }));
-} catch {
+} catch (err) {
+  rethrowUnexpected(err);
   return Astro.redirect(`/admin/o/${organizationId}/periods/${periodId}`);
 }
 
-const issuer = invoice.issuerSnapshot as Record<string, string | null>;
-const recipient = invoice.recipientSnapshot as {
-  billingName?: string | null;
-  occupantName?: string | null;
-  billingAddress?: string | null;
-  billingEmail?: string | null;
-  invoiceByEmail?: boolean;
-  invoiceByPaper?: boolean;
-  [key: string]: unknown;
-};
-const payment = invoice.paymentSnapshot as Record<string, string | null>;
+// A damaged snapshot reads as empty here, so the rest of the page still
+// works. The preview below stops and says why.
+const { issuer, recipient, payment }: InvoiceSnapshots = readInvoiceSnapshots(
+  invoice
+) ?? { issuer: {}, recipient: {}, payment: {} };
 const recipientIncomplete =
   (!recipient.billingName && !recipient.occupantName) ||
   !recipient.billingAddress;
 const organizationIncomplete =
   !issuer.name || !issuer.addressLine1 || !payment.iban || !payment.bankName;
 
-const invoiceByEmail = recipient.invoiceByEmail ?? true;
-const invoiceByPaper = recipient.invoiceByPaper ?? false;
+const { invoiceByEmail, invoiceByPaper } = invoiceDelivery(
+  invoice.recipientSnapshot
+);
 const hasValidEmail = !!recipient.billingEmail;
 // A verified initial paper dispatch is one explicitly confirmed through the
 // "Record paper dispatch" action -- NEVER inferred from an old, possibly
@@ -179,7 +181,7 @@ const useResendCommand =
 // page gets a new one, free to resend again.
 const resendCommandId = crypto.randomUUID();
 const docLocale = parseInvoiceLocale(Astro.url.searchParams.get("docLocale"));
-const invoiceHtml = renderInvoiceHtml(invoice, lines, docLocale);
+const invoiceHtml = renderInvoicePreview(invoice, lines, docLocale, t);
 const pdfHref =
   `/api/v1/admin/o/${organizationId}/invoices/${invoice.id}/pdf` +
   (docLocale === "lv" ? "" : `?locale=${docLocale}`);

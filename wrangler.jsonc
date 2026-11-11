@@ -56,7 +56,7 @@
       "id": "935a51fab52f464db770b6232c5dd9d1",
       // Local dev only: wrangler dev/preview needs this to boot without a live
       // Cloudflare account. Matches .env.example DATABASE_URL. Not used in production.
-      // "localConnectionString": "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+      "localConnectionString": "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
     },
   ],
   // Native platform rate limiting (spec Section 15.1: "endpoint

@@ -78,4 +78,16 @@ describe("parseSesMessage", () => {
       })
     ).toBeNull();
   });
+
+  it("ignores malformed recipient lists and keeps the valid entries", () => {
+    const bounce = (bouncedRecipients: unknown) => ({
+      eventType: "Bounce",
+      bounce: { bounceType: "Permanent", bouncedRecipients },
+    });
+    expect(parseSesMessage(bounce("a@example.com"))).toBeNull();
+    expect(parseSesMessage(bounce([null, { emailAddress: 7 }]))).toBeNull();
+    expect(
+      parseSesMessage(bounce([null, { emailAddress: "a@example.com" }]))?.emails
+    ).toEqual(["a@example.com"]);
+  });
 });

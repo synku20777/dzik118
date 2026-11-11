@@ -439,7 +439,8 @@ onPageLoad(() => {
       );
 
       input.addEventListener("input", () => {
-        const current = Number.parseFloat(input.value);
+        // A decimal comma is accepted on save, so the preview reads it too.
+        const current = Number.parseFloat(input.value.replace(",", "."));
         const previous = meter.previousValue
           ? Number.parseFloat(meter.previousValue)
           : null;

@@ -16,6 +16,7 @@ import {
 import { getDwellingForResident } from "../../../../../domain/organizations/dwellings";
 import { listInvoicesForDwelling } from "../../../../../domain/billing/generation";
 import { withRequestDb } from "../../../../../lib/db-request";
+import { rethrowUnexpected } from "../../../../../domain/errors";
 
 const dwellingId = Astro.params.dwellingId!;
 try {
@@ -30,7 +31,8 @@ try {
   dwelling = await withRequestDb((db) =>
     getDwellingForResident(db, dwellingId)
   );
-} catch {
+} catch (err) {
+  rethrowUnexpected(err);
   return Astro.redirect("/portal/dwellings");
 }
 

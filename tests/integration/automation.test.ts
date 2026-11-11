@@ -228,6 +228,15 @@ describe("scanOverdueInvoices", () => {
     const result = await scanOverdueInvoices(db, org.id, "2099-01-01");
     expect(result.overdue).toBe(0);
 
+    // Nor one that asks for nothing (a credit covered it in full).
+    await db.$client.query(
+      "update invoices set paid_at = null, manual_adjustment = -current_charges, amount_due = 0 where id = $1",
+      [invoice.id]
+    );
+    expect((await scanOverdueInvoices(db, org.id, "2099-01-01")).overdue).toBe(
+      0
+    );
+
     await cleanupOrg(org.id);
   });
 
@@ -267,10 +276,15 @@ describe("autoGenerateForOrganization", () => {
     const { org } = await setupBillableOrg("IT-L Org AutoGenerate", 3);
 
     const result = await autoGenerateForOrganization(db, org.id, seedAdminId);
-    expect(result).toEqual({ generated: 1, prepared: 1 });
+    expect(result).toEqual({
+      generated: 1,
+      prepared: 1,
+      blocked: 0,
+      failed: 0,
+    });
 
     const rerun = await autoGenerateForOrganization(db, org.id, seedAdminId);
-    expect(rerun).toEqual({ generated: 0, prepared: 0 });
+    expect(rerun).toEqual({ generated: 0, prepared: 0, blocked: 0, failed: 0 });
 
     await cleanupOrg(org.id);
   });
@@ -282,7 +296,12 @@ describe("autoGenerateForOrganization", () => {
       seedAdminId
     );
     const result = await autoGenerateForOrganization(db, org.id, seedAdminId);
-    expect(result).toEqual({ generated: 0, prepared: 0 });
+    expect(result).toEqual({
+      generated: 0,
+      prepared: 0,
+      blocked: 0,
+      failed: 0,
+    });
     await cleanupOrg(org.id);
   });
 });
@@ -497,6 +516,8 @@ describe("autoSendForOrganization", () => {
       seedAdminId
     );
     expect(secondResult.sent).toBe(0);
+    // Still reported, so the owner alert keeps naming it.
+    expect(secondResult.failed).toBe(1);
     expect(emailCallCount).toBe(1);
 
     // bulkSendInvoices surfaces the exact safe ConflictError skip reason
@@ -859,6 +880,12 @@ describe("runScheduledJobs", () => {
       seedAdminId
     );
     await prepareInvoice(db, org.id, invoice.id, seedAdminId);
+    // Prepared before the send day of the run below. Without this the test
+    // depends on today's date: an invoice prepared after the send day waits.
+    await db.$client.query(
+      "update invoices set prepared_at = '2026-10-19T10:00:00Z' where id = $1",
+      [invoice.id]
+    );
 
     let emailCallCount = 0;
     const ambiguousDeps = stubDeps({

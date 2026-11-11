@@ -34,6 +34,7 @@ import {
   overrideCaseStatus,
 } from "../../src/domain/billing/generation";
 import { prepareInvoice } from "../../src/domain/billing/generation";
+import { getDwellingAccountBalance } from "../../src/domain/accounts/ledger";
 import {
   ConflictError,
   ensureCanonicalPdf,
@@ -333,6 +334,173 @@ describe("invoice sending", () => {
     );
     expect(resent.pdfObjectKey).not.toBe(staleObjectKey);
     expect(resent.pdfSha256).not.toBe(staleHash);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("preparing again after an override back to Draft charges the dwelling once, at the new total", async () => {
+    const { org, dwelling, period, invoice } = await setupPreparedInvoice(
+      "IT-G Org Reprepare",
+      6
+    );
+    expect(invoice.amountDue).toBe("12.10");
+    const balance = () =>
+      getDwellingAccountBalance(db, org.id, dwelling.id, invoice.currency);
+
+    await overrideCaseStatus(
+      db,
+      org.id,
+      invoice.billingCaseId,
+      "DRAFT",
+      "test: correct the invoice",
+      seedAdminId
+    );
+    // Nothing changed on the invoice, so the override may also be undone.
+    await overrideCaseStatus(
+      db,
+      org.id,
+      invoice.billingCaseId,
+      "PREPARED",
+      "test: undo",
+      seedAdminId
+    );
+    await overrideCaseStatus(
+      db,
+      org.id,
+      invoice.billingCaseId,
+      "DRAFT",
+      "test: correct the invoice",
+      seedAdminId
+    );
+
+    await createRule(
+      db,
+      org.id,
+      {
+        name: "Extra",
+        code: "extra",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "5.00",
+        effectiveFrom: "2025-01-01",
+      },
+      seedAdminId
+    );
+    const regenerated = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    // The invoice's own first charge is not previous debt.
+    expect(regenerated.previousOutstanding).toBe("0.00");
+    expect(regenerated.amountDue).toBe("17.10");
+    // Its content changed: the status override cannot stand in for Prepare.
+    await expect(
+      overrideCaseStatus(
+        db,
+        org.id,
+        invoice.billingCaseId,
+        "PREPARED",
+        "test: skip preparation",
+        seedAdminId
+      )
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    const prepared = await prepareInvoice(
+      db,
+      org.id,
+      regenerated.id,
+      seedAdminId
+    );
+    expect(prepared.previousOutstanding).toBe("0.00");
+    expect(prepared.amountDue).toBe("17.10");
+    expect(await balance()).toBe("17.10");
+
+    // An invoice from before the ledger has its charge as an opening entry
+    // (migration 0002). Preparing it again must not charge it a second time.
+    await db.$client.query("set session_replication_role = replica");
+    await db.$client.query(
+      "update account_entries set type = 'OPENING_BALANCE' where invoice_id = $1 and idempotency_key = $2",
+      [invoice.id, `invoice:${invoice.id}:current-charges`]
+    );
+    await db.$client.query("set session_replication_role = origin");
+    await overrideCaseStatus(
+      db,
+      org.id,
+      invoice.billingCaseId,
+      "DRAFT",
+      "test: correct the invoice",
+      seedAdminId
+    );
+    const again = await prepareInvoice(db, org.id, invoice.id, seedAdminId);
+    expect(again.amountDue).toBe("17.10");
+    expect(await balance()).toBe("17.10");
+
+    await cleanupOrg(org.id);
+  });
+
+  it("does not email an invoice to an address the dwelling no longer uses", async () => {
+    const { org, dwelling, invoice } = await setupPreparedInvoice(
+      "IT-G Org Changed Email",
+      6
+    );
+    await updateDwelling(
+      db,
+      org.id,
+      dwelling.id,
+      { billingEmail: "new-occupant@example.com" },
+      seedAdminId
+    );
+    let emailCalls = 0;
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCalls++;
+          return { success: true, provider: "smtp" };
+        },
+      },
+    });
+    await expect(
+      sendInvoice(db, org.id, invoice.id, deps, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+    expect(emailCalls).toBe(0);
+
+    // Nor when the send first gives up on an abandoned attempt and claims a
+    // new one.
+    const claim = await claimSendAttempt(db, org.id, invoice.id);
+    await db.$client.query(
+      "update invoice_send_attempts set claimed_at = now() - interval '2 minutes' where id = $1",
+      [claim.attempt.id]
+    );
+    await expect(
+      sendInvoice(db, org.id, invoice.id, deps, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+    expect(emailCalls).toBe(0);
+    // The claim it took is closed again, so it does not block the next send.
+    const attempts = await db.$client
+      .query(
+        "select status, error_code from invoice_send_attempts where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(attempts).toEqual([
+      { status: "FAILED", error_code: "ABANDONED_BEFORE_DISPATCH" },
+      { status: "FAILED", error_code: "BILLING_EMAIL_CHANGED" },
+    ]);
+
+    // Back to the address on the invoice: it goes out.
+    await updateDwelling(
+      db,
+      org.id,
+      dwelling.id,
+      { billingEmail: " Resident@Example.com " },
+      seedAdminId
+    );
+    const sent = await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
+    expect(sent.sentAt).not.toBeNull();
+    expect(emailCalls).toBe(1);
 
     await cleanupOrg(org.id);
   });

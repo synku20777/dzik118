@@ -13,10 +13,16 @@ import { invoiceDeliveries, invoices } from "../../db/schema/invoices";
 import { paymentAllocations, paymentReversals } from "../../db/schema/accounts";
 import { organizations } from "../../db/schema/organizations";
 import { maxExact, subtractExact, sumExact } from "../../lib/decimal2";
+import { orgLocalDateString } from "../../lib/org-time";
 import {
   listPaymentMatches,
   listUnmatchedTransactions,
 } from "../payments/matching";
+import {
+  missingBillingDetails,
+  readInvoiceSnapshots,
+} from "../billing/invoice-snapshots";
+import { NotFoundError } from "../errors";
 import { getPeriod } from "./periods";
 
 export type CaseStatusCounts = Record<
@@ -58,6 +64,10 @@ export interface DashboardSummary {
   carriedOutstanding: string;
   creditsApplied: string;
   lateFees: string;
+  // The stored adjustments. Not "amount due minus the rest": an invoice whose
+  // credit is larger than its charges has amount due 0, and the rest would not
+  // add up.
+  manualAdjustments: string;
   amountDue: string;
   totalPaid: string;
   totalOutstanding: string;
@@ -88,6 +98,9 @@ export interface DashboardSummary {
   proposedPaymentCount: number;
   // This period's invoices not sent whose last delivery FAILED or is UNKNOWN.
   deliveryFailureCount: number;
+  // This period's DRAFT invoices that cannot be prepared: the issuer, the
+  // recipient or the payment details are incomplete.
+  blockedDraftCount: number;
   readiness: { billingReady: boolean; readyToSend: boolean };
 }
 
@@ -122,10 +135,14 @@ export async function getDashboardSummary(
 ): Promise<DashboardSummary> {
   const period = await getPeriod(db, organizationId, periodId);
   const [org] = await db
-    .select({ currency: organizations.currency })
+    .select({
+      currency: organizations.currency,
+      timezone: organizations.timezone,
+    })
     .from(organizations)
     .where(eq(organizations.id, organizationId))
     .limit(1);
+  if (!org) throw new NotFoundError("Organization not found");
 
   const allPeriodInvoices = await db
     .select({
@@ -134,12 +151,16 @@ export async function getDashboardSummary(
       previousOutstanding: invoices.previousOutstanding,
       previousCreditApplied: invoices.previousCreditApplied,
       lateFeeApplied: invoices.lateFeeApplied,
+      manualAdjustment: invoices.manualAdjustment,
       amountDue: invoices.amountDue,
       paidAt: invoices.paidAt,
       sentAt: invoices.sentAt,
       dueDate: invoices.dueDate,
       billingCaseId: invoices.billingCaseId,
       currency: invoices.currency,
+      issuerSnapshot: invoices.issuerSnapshot,
+      recipientSnapshot: invoices.recipientSnapshot,
+      paymentSnapshot: invoices.paymentSnapshot,
     })
     .from(invoices)
     .where(
@@ -216,6 +237,9 @@ export async function getDashboardSummary(
     periodInvoices.map((i) => i.previousCreditApplied)
   );
   const lateFees = sumExact(periodInvoices.map((i) => i.lateFeeApplied));
+  const manualAdjustments = sumExact(
+    periodInvoices.map((i) => i.manualAdjustment)
+  );
   const amountDue = sumExact(periodInvoices.map((i) => i.amountDue));
   const totalPaid = sumExact(
     periodInvoices.map((invoice) => {
@@ -316,9 +340,12 @@ export async function getDashboardSummary(
         daysLate: overdue
           ? Math.max(
               0,
-              Math.floor(
-                (Date.now() - Date.parse(overdue.dueDate)) / 86_400_000
-              )
+              // Whole days between two dates in the organization's own
+              // timezone, like the overdue scan. Not UTC: the count would be a
+              // day short until 02:00 or 03:00 in Riga.
+              (Date.parse(orgLocalDateString(new Date(), org.timezone)) -
+                Date.parse(overdue.dueDate)) /
+                86_400_000
             )
           : null,
       });
@@ -350,6 +377,15 @@ export async function getDashboardSummary(
     .limit(1);
   const isNewestPeriod = newest?.id === periodId;
 
+  // The same check prepareInvoice makes, so the count is what automatic and
+  // manual preparation would refuse. A damaged snapshot counts too.
+  const blockedDraftCount = cases.filter((c) => {
+    const invoice = c.status === "DRAFT" ? invoiceByCase.get(c.id) : undefined;
+    if (!invoice) return false;
+    const snapshots = readInvoiceSnapshots(invoice);
+    return !snapshots || missingBillingDetails(snapshots) !== null;
+  }).length;
+
   // Unsent invoices whose last delivery attempt did not succeed.
   const unsentIds = periodInvoices.filter((i) => !i.sentAt).map((i) => i.id);
   const failedDeliveries = unsentIds.length
@@ -373,6 +409,7 @@ export async function getDashboardSummary(
     carriedOutstanding,
     creditsApplied,
     lateFees,
+    manualAdjustments,
     amountDue,
     totalPaid,
     totalOutstanding,
@@ -402,6 +439,7 @@ export async function getDashboardSummary(
       await listPaymentMatches(db, organizationId, "PROPOSED")
     ).length,
     deliveryFailureCount: failedDeliveries.length,
+    blockedDraftCount,
     readiness: {
       billingReady: cases.length > 0 && n.MISSING_DATA === 0,
       readyToSend: n.DRAFT + n.PREPARED > 0,

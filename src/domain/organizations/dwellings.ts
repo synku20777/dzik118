@@ -470,6 +470,7 @@ export async function assignResident(
       .from(appUsers)
       .where(eq(appUsers.id, supabaseUser.id))
       .limit(1);
+    if (!appUser) throw new NotFoundError("Resident not found");
 
     const [access] = await tx
       .insert(dwellingAccess)
@@ -492,8 +493,8 @@ export async function assignResident(
 
     return {
       userId: supabaseUser.id,
-      email: appUser!.emailSnapshot,
-      displayName: appUser!.displayName,
+      email: appUser.emailSnapshot,
+      displayName: appUser.displayName,
     };
   });
 }

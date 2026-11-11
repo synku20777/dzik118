@@ -22,11 +22,13 @@ try {
 }
 
 const nameResult = Astro.getActionResult(actions.profile.updateDisplayName);
-const [dwellings, displayName] = await withRequestDb((db) =>
-  Promise.all([
-    listDwellingsForResident(db, auth.dwellingIds),
-    getOwnDisplayName(db, auth.userId),
-  ])
+// One after the other: one connection runs one query at a time.
+const [dwellings, displayName] = await withRequestDb(
+  async (db) =>
+    [
+      await listDwellingsForResident(db, auth.dwellingIds),
+      await getOwnDisplayName(db, auth.userId),
+    ] as const
 );
 ---
 

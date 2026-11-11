@@ -6,21 +6,22 @@
 // against duplicate sends (already-sent invoices are skipped), and an invoice
 // with an unresolved (UNKNOWN) delivery outcome is deliberately skipped
 // rather than auto-retried, requiring admin attention via an explicit resend.
-import { and, eq, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import { organizations } from "../../db/schema/organizations";
 import { billingCases } from "../../db/schema/billing";
 import { suppressedEmails } from "../../db/schema/email";
-import { invoices } from "../../db/schema/invoices";
+import { invoiceSendAttempts, invoices } from "../../db/schema/invoices";
 import {
   bulkGenerateInvoices,
   bulkPrepareInvoices,
-  getInvoiceIdForDwellingPeriod,
 } from "../billing/generation";
+import { invoiceDelivery } from "../billing/invoice-snapshots";
 import { bulkSendInvoices, type SendInvoiceDeps } from "../billing/sending";
 import { getCurrentOpenPeriod } from "../periods/periods";
 import { carryForwardMissingReadings } from "../periods/readings";
 import { orgLocalDateString } from "../../lib/org-time";
+import type { SkipKind } from "../errors";
 import { latestSendDay, selectAutoSendBatch } from "./send-window";
 
 // billing-overdue-scan. No audit event: spec Section 31's list has no
@@ -32,35 +33,35 @@ export async function scanOverdueInvoices(
   organizationId: string,
   todayLocal: string
 ): Promise<{ overdue: number }> {
-  const rows = await db
-    .select({ caseId: billingCases.id })
-    .from(billingCases)
-    .innerJoin(invoices, eq(invoices.billingCaseId, billingCases.id))
+  // One statement, so a payment confirmed at the same moment (case -> PAID)
+  // is never overwritten: the status check and the update cannot come apart.
+  const updated = await db
+    .update(billingCases)
+    .set({ status: "OVERDUE", statusUpdatedAt: new Date() })
     .where(
       and(
         eq(billingCases.organizationId, organizationId),
         eq(billingCases.status, "SENT"),
-        isNull(invoices.paidAt),
-        lt(invoices.dueDate, todayLocal)
+        inArray(
+          billingCases.id,
+          db
+            .select({ id: invoices.billingCaseId })
+            .from(invoices)
+            .where(
+              and(
+                eq(invoices.organizationId, organizationId),
+                isNull(invoices.paidAt),
+                lt(invoices.dueDate, todayLocal),
+                // An invoice a credit covered in full asks for nothing, so it
+                // cannot be late.
+                gt(invoices.amountDue, "0")
+              )
+            )
+        )
       )
-    );
-
-  let overdue = 0;
-  for (const row of rows) {
-    // Re-assert status = SENT in the WHERE clause itself: if a payment was
-    // confirmed (billing_cases -> PAID) between the SELECT above and this
-    // UPDATE, this becomes a no-op instead of blindly overwriting PAID back
-    // to OVERDUE.
-    const [updated] = await db
-      .update(billingCases)
-      .set({ status: "OVERDUE", statusUpdatedAt: new Date() })
-      .where(
-        and(eq(billingCases.id, row.caseId), eq(billingCases.status, "SENT"))
-      )
-      .returning({ id: billingCases.id });
-    if (updated) overdue++;
-  }
-  return { overdue };
+    )
+    .returning({ id: billingCases.id });
+  return { overdue: updated.length };
 }
 
 // auto-invoice-generate: generate + prepare in one step for orgs with
@@ -73,34 +74,64 @@ export async function autoGenerateForOrganization(
   db: Db,
   organizationId: string,
   actorUserId: string | null
-): Promise<{ generated: number; prepared: number }> {
+): Promise<{
+  generated: number;
+  prepared: number;
+  // Invoices that cannot be prepared until an admin adds billing details.
+  blocked: number;
+  // Invoices that stopped on a technical error.
+  failed: number;
+}> {
   const period = await getCurrentOpenPeriod(db, organizationId);
-  if (!period) return { generated: 0, prepared: 0 };
+  if (!period) return { generated: 0, prepared: 0, blocked: 0, failed: 0 };
 
-  const { generated } = await bulkGenerateInvoices(
+  const { generated, skipped: notGenerated } = await bulkGenerateInvoices(
     db,
     organizationId,
     period.id,
     actorUserId
   );
-  if (generated.length === 0) return { generated: 0, prepared: 0 };
-
-  const invoiceIds: string[] = [];
-  for (const dwellingId of generated) {
-    const invoiceId = await getInvoiceIdForDwellingPeriod(
-      db,
-      dwellingId,
-      period.id
-    );
-    if (invoiceId) invoiceIds.push(invoiceId);
+  // A dwelling with missing readings or no tariff is not counted: its case is
+  // MISSING_DATA, which the dashboard already lists under "Needs attention".
+  const failedToGenerate = notGenerated.filter(
+    (s) => s.kind === "FAILED"
+  ).length;
+  if (generated.length === 0) {
+    return { generated: 0, prepared: 0, blocked: 0, failed: failedToGenerate };
   }
-  const { prepared } = await bulkPrepareInvoices(
+
+  // One query, not one per dwelling, in the order of `generated`. No case
+  // status filter: these invoices are DRAFT, made a moment ago.
+  const idByDwelling = new Map(
+    (
+      await db
+        .select({ id: invoices.id, dwellingId: invoices.dwellingId })
+        .from(invoices)
+        .where(
+          and(
+            eq(invoices.periodId, period.id),
+            inArray(invoices.dwellingId, generated)
+          )
+        )
+    ).map((row) => [row.dwellingId, row.id])
+  );
+  const invoiceIds = generated.flatMap(
+    (dwellingId) => idByDwelling.get(dwellingId) ?? []
+  );
+  const { prepared, skipped: notPrepared } = await bulkPrepareInvoices(
     db,
     organizationId,
     invoiceIds,
     actorUserId
   );
-  return { generated: generated.length, prepared: prepared.length };
+  const count = (kind: SkipKind) =>
+    notPrepared.filter((s) => s.kind === kind).length;
+  return {
+    generated: generated.length,
+    prepared: prepared.length,
+    blocked: count("NEEDS_ATTENTION"),
+    failed: failedToGenerate + count("FAILED"),
+  };
 }
 
 // auto-invoice-send: sends every PREPARED invoice for the organization,
@@ -150,19 +181,46 @@ export async function autoSendForOrganization(
         .where(eq(suppressedEmails.organizationId, organizationId))
     ).map((row) => row.email)
   );
+  // An invoice whose last send has no confirmed outcome is never retried
+  // automatically: an admin resends it. Left in the queue it would take a
+  // batch place every day and block the invoices behind it.
+  const unresolved = new Set(
+    (
+      await db
+        .selectDistinctOn([invoiceSendAttempts.invoiceId], {
+          invoiceId: invoiceSendAttempts.invoiceId,
+          status: invoiceSendAttempts.status,
+        })
+        .from(invoiceSendAttempts)
+        .where(
+          and(
+            eq(invoiceSendAttempts.organizationId, organizationId),
+            inArray(
+              invoiceSendAttempts.invoiceId,
+              preparedInvoices.map((row) => row.id)
+            )
+          )
+        )
+        .orderBy(
+          invoiceSendAttempts.invoiceId,
+          desc(invoiceSendAttempts.createdAt)
+        )
+    )
+      .filter((attempt) => attempt.status === "UNKNOWN")
+      .map((attempt) => attempt.invoiceId)
+  );
   const selection = selectAutoSendBatch(
-    preparedInvoices.map((row) => {
-      const recipient = row.recipient as {
-        billingEmail?: string | null;
-        invoiceByEmail?: boolean;
-      };
-      return {
-        id: row.id,
-        preparedAt: row.preparedAt,
-        billingEmail: recipient.billingEmail ?? null,
-        invoiceByEmail: recipient.invoiceByEmail ?? true,
-      };
-    }),
+    preparedInvoices
+      .filter((row) => !unresolved.has(row.id))
+      .map((row) => {
+        const { billingEmail, invoiceByEmail } = invoiceDelivery(row.recipient);
+        return {
+          id: row.id,
+          preparedAt: row.preparedAt,
+          billingEmail,
+          invoiceByEmail,
+        };
+      }),
     {
       // No window: everything prepared is due (the old one-day behavior).
       timezone: window?.timezone ?? "UTC",
@@ -174,7 +232,9 @@ export async function autoSendForOrganization(
     suppressed: selection.suppressed,
     waiting: selection.waiting,
   };
-  if (selection.batch.length === 0) return { sent: 0, failed: 0, ...counts };
+  if (selection.batch.length === 0) {
+    return { sent: 0, failed: unresolved.size, ...counts };
+  }
 
   const { sent, skipped } = await bulkSendInvoices(
     db,
@@ -184,9 +244,12 @@ export async function autoSendForOrganization(
     actorUserId
   );
   // A skipped invoice is one that did not go out. Already sent is not a failure.
+  // The unresolved ones still count, so the owner alert keeps naming them.
   return {
     sent: sent.length,
-    failed: skipped.filter((s) => s.reason !== "Already sent").length,
+    failed:
+      skipped.filter((s) => s.reason !== "Already sent").length +
+      unresolved.size,
     ...counts,
   };
 }
@@ -199,6 +262,10 @@ export interface OrganizationJobResult {
   sent: number;
   // Invoices that auto send tried and could not deliver.
   failedSends: number;
+  // Auto generation: invoices waiting for billing details, and invoices that
+  // stopped on a technical error. Both go into the owner alert.
+  blockedInvoices?: number;
+  failedInvoices?: number;
   // Not an error. Prepared invoices skipped because the address is suppressed,
   // and invoices left for the next run by the batch limit.
   suppressedSends?: number;
@@ -278,13 +345,12 @@ export async function runScheduledJobs(
       }
 
       if (org.autoGenerateEnabled && (await stillActive())) {
-        const { generated, prepared } = await autoGenerateForOrganization(
-          db,
-          org.id,
-          actorUserId
-        );
+        const { generated, prepared, blocked, failed } =
+          await autoGenerateForOrganization(db, org.id, actorUserId);
         result.generated = generated;
         result.prepared = prepared;
+        result.blockedInvoices = blocked;
+        result.failedInvoices = failed;
       }
 
       if (

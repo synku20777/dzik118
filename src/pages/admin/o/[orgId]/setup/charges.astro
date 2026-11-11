@@ -36,11 +36,10 @@ try {
 const { organization, progress, firstPeriod, rules } = await withRequestDb(
   async (db) => {
     const org = await getOrganization(db, organizationId);
-    const [prog, first, r] = await Promise.all([
-      getSetupProgress(db, organizationId, org),
-      getFirstBillingPeriod(db, organizationId),
-      listRules(db, organizationId, { includeArchived: true }),
-    ]);
+    // One after the other: one connection runs one query at a time.
+    const prog = await getSetupProgress(db, organizationId, org);
+    const first = await getFirstBillingPeriod(db, organizationId);
+    const r = await listRules(db, organizationId, { includeArchived: true });
     return {
       organization: org,
       progress: prog,

@@ -224,6 +224,7 @@ describe("workbench bulk actions", () => {
       {
         invoiceId: alreadyPreparedInvoice.id,
         reason: "Only a DRAFT invoice can be prepared",
+        kind: "ROUTINE",
       },
     ]);
 
@@ -541,7 +542,8 @@ describe("dashboard summary", () => {
         Number(s.currentCharges) +
         Number(s.carriedOutstanding) -
         Number(s.creditsApplied) +
-        Number(s.lateFees)
+        Number(s.lateFees) +
+        Number(s.manualAdjustments)
       ).toFixed(2)
     );
     expect(Number(s.totalPaid) + Number(s.totalOutstanding)).toBeCloseTo(

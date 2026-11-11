@@ -21,10 +21,12 @@ import {
   listDwellingsWithoutCase,
   listPeriods,
 } from "../../../../../../domain/periods/periods";
+import { invoiceDelivery } from "../../../../../../domain/billing/invoice-snapshots";
 import { listCasesForPeriod } from "../../../../../../domain/periods/cases";
 import { getDashboardSummary } from "../../../../../../domain/periods/dashboard";
 import { billingCaseStatusEnum } from "../../../../../../db/schema/billing";
 import { withRequestDb } from "../../../../../../lib/db-request";
+import { rethrowUnexpected } from "../../../../../../domain/errors";
 import {
   entityLabel,
   fill,
@@ -101,7 +103,8 @@ try {
     allPeriods: await listPeriods(db, organizationId),
     summary: await getDashboardSummary(db, organizationId, periodId),
   })));
-} catch {
+} catch (err) {
+  rethrowUnexpected(err);
   return Astro.redirect(`/admin/o/${organizationId}/periods`);
 }
 // The starting-readings month is not a billing workbench; its readings are
@@ -686,15 +689,9 @@ const MAX_MISSING = 2;
               const billingEmail = billingCase.invoiceId
                 ? recipient.billingEmail
                 : billingCase.billingEmail;
-              // A snapshot taken before per-dwelling delivery preferences
-              // existed has neither key -- same email-only fallback as
-              // sending.ts's deliver().
-              const invoiceByEmail = billingCase.invoiceId
-                ? (recipient.invoiceByEmail ?? true)
-                : billingCase.invoiceByEmail;
-              const invoiceByPaper = billingCase.invoiceId
-                ? (recipient.invoiceByPaper ?? false)
-                : billingCase.invoiceByPaper;
+              const { invoiceByEmail, invoiceByPaper } = billingCase.invoiceId
+                ? invoiceDelivery(billingCase.invoiceRecipientSnapshot)
+                : billingCase;
               const prepareEligible =
                 billingCase.status === "DRAFT" &&
                 !recipientIncomplete &&

@@ -18,7 +18,8 @@ const POSITIVE_AMOUNT_MESSAGE =
 const DAILY_RATE_MESSAGE = "Enter a valid daily rate, for example 0.05.";
 const PERCENT_MESSAGE = "Enter a valid percentage, for example 10 or 10.5.";
 
-const money = decimalInput(/^-?\d+(\.\d{1,2})?$/, AMOUNT_MESSAGE);
+// 12 whole digits: what the numeric(14, 2) money columns hold.
+const money = decimalInput(/^-?\d{1,12}(\.\d{1,2})?$/, AMOUNT_MESSAGE);
 
 export const accounts = {
   saveLateFeePolicy: defineAction({
@@ -103,7 +104,7 @@ export const accounts = {
       organizationId: z.uuid(),
       dwellingId: z.uuid(),
       currency: z.string().length(3),
-      amount: decimalInput(/^\d+(\.\d{1,2})?$/, POSITIVE_AMOUNT_MESSAGE),
+      amount: decimalInput(/^\d{1,12}(\.\d{1,2})?$/, POSITIVE_AMOUNT_MESSAGE),
       direction: z.enum(["CHARGE", "CREDIT"]),
       effectiveDate: z.iso.date(),
       reason: z.string().min(1).max(200),

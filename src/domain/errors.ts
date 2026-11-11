@@ -3,9 +3,18 @@
 // src/actions/_errors.ts's toActionError can recognize them regardless of
 // which domain module raised them and map them to a safe, specific
 // client-facing message instead of a generic one.
+export class ForbiddenError extends Error {
+  constructor(message = "You do not have access to this resource.") {
+    super(message);
+    this.name = "ForbiddenError";
+  }
+}
 export class NotFoundError extends Error {}
 export class ConflictError extends Error {}
 export class ValidationError extends Error {}
+// Thrown by the CSV imports (dwellings, bank, opening readings) for a problem
+// with the file as a whole. Its message is safe to show an admin verbatim.
+export class ImportHeaderError extends Error {}
 export class RateLimitedError extends Error {
   constructor(message = "Too many requests. Try again in a minute.") {
     super(message);
@@ -32,7 +41,10 @@ export function describeError(err: unknown): {
     typeof e?.code === "string" || typeof e?.code === "number"
       ? e.code
       : undefined;
-  let message = e?.cause?.message ?? e?.message ?? String(err ?? "");
+  // A thrown value can carry any `message`; only a string is safe to read.
+  const str = (value: unknown) =>
+    typeof value === "string" ? value : undefined;
+  let message = str(e?.cause?.message) ?? str(e?.message) ?? String(err ?? "");
 
   if (name === "DrizzleQueryError" || message.startsWith("Failed query:")) {
     const newlineIdx = message.indexOf("\n");
@@ -46,6 +58,36 @@ export function describeError(err: unknown): {
   }
 
   return { name, code, message };
+}
+
+function isDomainError(err: unknown): boolean {
+  return (
+    err instanceof ForbiddenError ||
+    err instanceof NotFoundError ||
+    err instanceof ConflictError ||
+    err instanceof ValidationError ||
+    err instanceof RateLimitedError
+  );
+}
+
+// For the catch around a page's data load. A domain error (not found, no
+// access) returns, and the page answers it as before. Anything else (a
+// database outage, a bug) is logged without the query text and thrown again,
+// so Astro shows src/pages/500.astro.
+export function rethrowUnexpected(err: unknown): void {
+  if (isDomainError(err)) return;
+  const described = describeError(err);
+  console.error(described);
+  throw new Error(described.message);
+}
+
+// How the scheduler treats one skipped item of a bulk operation. A
+// ValidationError is data the admin must fix, another domain error is a
+// routine skip (already sent, period locked), anything else is a failure.
+export type SkipKind = "NEEDS_ATTENTION" | "ROUTINE" | "FAILED";
+export function skipKind(err: unknown): SkipKind {
+  if (err instanceof ValidationError) return "NEEDS_ATTENTION";
+  return isDomainError(err) ? "ROUTINE" : "FAILED";
 }
 
 // Shared with every bulk-operation domain function (bulkGenerateInvoices,

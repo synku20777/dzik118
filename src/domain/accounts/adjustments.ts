@@ -52,6 +52,7 @@ export async function adjustLateFee(
       dwellingId: invoice.dwellingId,
       currency: invoice.currency,
       issueDate: invoice.issueDate,
+      invoiceId: invoice.id,
       currentCharges: invoice.currentCharges,
       manualAdjustment: invoice.manualAdjustment,
     });
@@ -67,6 +68,7 @@ export async function adjustLateFee(
       dwellingId: invoice.dwellingId,
       currency: invoice.currency,
       issueDate: invoice.issueDate,
+      invoiceId: invoice.id,
       currentCharges: invoice.currentCharges,
       manualAdjustment: invoice.manualAdjustment,
       lateFeeAdjustment,
@@ -155,6 +157,7 @@ export async function setInvoiceManualAdjustment(
       dwellingId: invoice.dwellingId,
       currency: invoice.currency,
       issueDate: invoice.issueDate,
+      invoiceId: invoice.id,
       currentCharges: invoice.currentCharges,
       manualAdjustment: input.amount,
       lateFeeAdjustment: invoice.lateFeeAdjustment,

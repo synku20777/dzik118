@@ -12,7 +12,7 @@ import { renderInvoiceHtml } from "../../../domain/billing/invoice-html";
 import { parseInvoiceLocale } from "../../../domain/billing/invoice-i18n";
 import { withRequestDb } from "../../../lib/db-request";
 import {
-  invalidInvoiceLinkResponse,
+  invoiceTokenErrorResponse,
   checkPublicInvoiceTokenRequest,
 } from "../../../lib/http/public-invoice-token";
 
@@ -71,9 +71,7 @@ export const GET: APIRoute = async ({ params, request, url }) => {
         "Cache-Control": "private, no-cache, no-store, must-revalidate",
       },
     });
-  } catch {
-    // Uniform response for "no such token", "revoked", "expired" -- spec
-    // Section 24 gives a public caller no way to distinguish these.
-    return invalidInvoiceLinkResponse();
+  } catch (err) {
+    return invoiceTokenErrorResponse(err);
   }
 };

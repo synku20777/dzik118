@@ -8,11 +8,14 @@ import { exportAuditLogsCsv } from "../../../../../../../domain/audit/audit-log"
 import { getOrganization } from "../../../../../../../domain/organizations/organizations";
 import { parseDateInput } from "../../../../../../../lib/date-input";
 import { toApiErrorResponse } from "../../../../../../../lib/http/api-error";
+import { ValidationError } from "../../../../../../../domain/errors";
 
 export const GET: APIRoute = async ({ params, locals, url }) => {
   const organizationId = params.orgId;
   if (!organizationId) {
-    return toApiErrorResponse(new Error("missing orgId"));
+    return toApiErrorResponse(
+      new ValidationError("An organization id is required")
+    );
   }
 
   try {
@@ -40,20 +43,24 @@ export const GET: APIRoute = async ({ params, locals, url }) => {
     return new Response("Invalid filter", { status: 400 });
   }
 
-  const db = await createDb(env.HYPERDRIVE.connectionString);
   let csv: string;
   try {
-    const org = await getOrganization(db, organizationId);
-    csv = await exportAuditLogsCsv(db, organizationId, {
-      action,
-      entityType,
-      actorUserId: actor,
-      fromDate: from,
-      toDate: to,
-      timezone: org.timezone,
-    });
-  } finally {
-    await db.$client.end();
+    const db = await createDb(env.HYPERDRIVE.connectionString);
+    try {
+      const org = await getOrganization(db, organizationId);
+      csv = await exportAuditLogsCsv(db, organizationId, {
+        action,
+        entityType,
+        actorUserId: actor,
+        fromDate: from,
+        toDate: to,
+        timezone: org.timezone,
+      });
+    } finally {
+      await db.$client.end();
+    }
+  } catch (err) {
+    return toApiErrorResponse(err);
   }
 
   return new Response(csv, {

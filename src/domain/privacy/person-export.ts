@@ -8,7 +8,7 @@
 // idempotency keys, internal notes, admin reasons, request IDs, IP hashes, the
 // email of another person, or any dwelling the person cannot access.
 import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
-import type { DbOrTx } from "../../db/client";
+import { inOrder, type DbOrTx } from "../../db/client";
 import {
   accountEntries,
   paymentAllocations,
@@ -140,7 +140,7 @@ export async function exportPersonData(db: DbOrTx, input: ExportPersonInput) {
   const invoiceIds = invoiceRows.map((i) => i.id);
 
   const [lines, deliveries] = invoiceIds.length
-    ? await Promise.all([
+    ? await inOrder([
         db
           .select({
             invoiceId: invoiceLines.invoiceId,
@@ -177,7 +177,7 @@ export async function exportPersonData(db: DbOrTx, input: ExportPersonInput) {
     readingRows,
     conversationRows,
   ] = inScope
-    ? await Promise.all([
+    ? await inOrder([
         db
           .select({
             dwellingId: paymentAllocations.dwellingId,

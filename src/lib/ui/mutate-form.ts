@@ -15,6 +15,7 @@ import {
   confirmMutation,
   createMutationId,
   failMutation,
+  failReconciliation,
   markOutcomeUnknown,
   markReconciling,
   markVerifying,
@@ -101,6 +102,22 @@ export function bindMutationForm<T, Optimistic = undefined>(
     el.textContent = message;
     form.insertAdjacentElement("beforebegin", el);
     errorEl = el;
+  }
+
+  // The server saved the change but the page could not show it. The save stays
+  // confirmed, so the next submit is a new change, and the status offers a
+  // refresh instead of a retry.
+  function savedButStale(
+    mutationId: string,
+    descriptor: MutationDescriptor | undefined
+  ) {
+    const message =
+      descriptor?.reconciliationErrorLabel ??
+      "Saved, but the view could not be updated";
+    showError(message);
+    failReconciliation(mutationId, message);
+    clientMutationId = undefined;
+    logicalMutationId = undefined;
   }
 
   form.addEventListener("submit", (event) => {
@@ -245,6 +262,11 @@ export function bindMutationForm<T, Optimistic = undefined>(
               releaseForm();
               config.onSettled?.();
             },
+            viewFailed: () => {
+              savedButStale(mutationId, descriptor);
+              releaseForm();
+              config.onSettled?.();
+            },
             unknown: (checkAgain) => {
               config.onVerifying?.(optimistic, true);
               markOutcomeUnknown(mutationId, () => {
@@ -256,19 +278,18 @@ export function bindMutationForm<T, Optimistic = undefined>(
           });
           return;
         }
-        const message = serverConfirmed
-          ? (descriptor?.reconciliationErrorLabel ??
-            "Saved, but the view could not be updated")
-          : fallbackErrorMessage;
-        showError(message);
-        const error = { message } as ActionError;
-        if (!serverConfirmed) config.onError?.(error, form, optimistic);
+        if (mutationId && serverConfirmed) {
+          savedButStale(mutationId, descriptor);
+          return;
+        }
+        showError(fallbackErrorMessage);
+        config.onError?.(
+          { message: fallbackErrorMessage } as ActionError,
+          form,
+          optimistic
+        );
         if (mutationId && descriptor) {
-          failMutation(
-            mutationId,
-            message,
-            serverConfirmed ? message : descriptor.errorLabel
-          );
+          failMutation(mutationId, fallbackErrorMessage, descriptor.errorLabel);
         }
       })
       .finally(() => {

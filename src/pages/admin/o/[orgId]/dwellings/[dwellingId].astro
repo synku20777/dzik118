@@ -27,6 +27,7 @@ import {
 } from "../../../../../domain/organizations/dwellings";
 import { listMeters } from "../../../../../domain/organizations/meters";
 import { withRequestDb } from "../../../../../lib/db-request";
+import { rethrowUnexpected } from "../../../../../domain/errors";
 import {
   getDwellingAccountBalance,
   listDwellingAccountActivity,
@@ -144,7 +145,8 @@ try {
       ),
     };
   }));
-} catch {
+} catch (err) {
+  rethrowUnexpected(err);
   return Astro.redirect(`/admin/o/${organizationId}/dwellings`);
 }
 

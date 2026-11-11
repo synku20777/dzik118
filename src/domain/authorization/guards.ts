@@ -1,15 +1,10 @@
 // Phase C (Auth/security) - Authorization guard functions (spec Section 14).
 // Later phases' repository functions (getAdminInvoice, getResidentInvoice,
 // etc.) call these instead of re-implementing the tenant/dwelling check.
-import { ConflictError } from "../errors";
+import { ConflictError, ForbiddenError } from "../errors";
 import type { AuthContext } from "./context";
 
-export class ForbiddenError extends Error {
-  constructor(message = "You do not have access to this resource.") {
-    super(message);
-    this.name = "ForbiddenError";
-  }
-}
+export { ForbiddenError };
 
 // For actions with no target organizationId yet (e.g. creating a new
 // organization) -- just proves "has admin capability somewhere", nothing

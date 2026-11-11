@@ -43,7 +43,16 @@ export const POST: APIRoute = async ({ request, url }) => {
   }
   let body: SnsMessage;
   try {
-    body = JSON.parse(text);
+    const parsed: unknown = JSON.parse(text);
+    // Valid JSON can still be `null`, a list or a bare value: not a message.
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      throw new Error();
+    }
+    body = parsed;
   } catch {
     return new Response("Bad request", { status: 400 });
   }
