@@ -10,7 +10,7 @@
 // dwelling's occupant name/billing fields are admin-entered, not
 // hardcoded, so the same discipline applies here.
 import { actions, isInputError } from "astro:actions";
-import { ICONS, type IconName } from "./icons";
+import { ICONS, METER_ICONS, type IconName } from "./icons";
 import { onPageLoad } from "./page-lifecycle";
 
 type DrawerKind = "readings" | "billing-details";
@@ -79,18 +79,6 @@ interface DrawerConfig {
 function appendAll(parent: Node, ...children: Node[]): void {
   for (const child of children) parent.appendChild(child);
 }
-
-// Tabler Icons (Outline) per meter type. Hot water is "droplet-hot", a
-// custom droplet+wave variant (see icons.ts) -- never a flame, which reads
-// as gas/heating rather than water.
-const METER_ICON_NAMES: Record<string, IconName> = {
-  COLD_WATER: "droplet",
-  HOT_WATER: "droplet-hot",
-  ELECTRICITY: "bolt",
-  GAS: "flame",
-  HEAT: "thermometer",
-  OTHER: "tool",
-};
 
 // Builds a Tabler-outline <svg> from the shared icon registry (icons.ts).
 // The registry only holds static, developer-authored path data (never
@@ -388,7 +376,7 @@ onPageLoad(() => {
       icon.className = "drawer-meter-icon";
       icon.dataset.meterType = meter.type;
       icon.setAttribute("aria-hidden", "true");
-      icon.appendChild(iconSvg(METER_ICON_NAMES[meter.type] ?? "tool"));
+      icon.appendChild(iconSvg(METER_ICONS[meter.type] ?? "tool"));
       const nameWrap = document.createElement("div");
       const heading = document.createElement("h3");
       heading.className = "drawer-meter-name";

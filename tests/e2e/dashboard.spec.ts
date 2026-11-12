@@ -14,19 +14,21 @@ test("dashboard is readable across languages, themes and viewport sizes", async 
   }
   const dashboard = new URL(page.url()).pathname;
   await expect(page.locator(".dashboard-page")).toBeVisible();
-  // The money cards are one collection overview; the breakdown is its popover.
+  // One money card: the total to pay leads, and the sum that makes it is
+  // visible without a click.
   await expect(page.locator(".dashboard-metric")).toHaveCount(2);
   await expect(page.locator('[data-metric="collection"]')).toHaveCount(1);
-  await expect(page.locator(".collection-overview")).toBeVisible();
-  await expect(page.locator(".money-total")).toBeHidden();
-  await page.locator(".money-breakdown summary").click();
-  await expect(page.locator(".info-tip-panel")).toBeVisible();
-  await expect(page.locator(".money-total")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".info-tip-panel")).toBeHidden();
-  await page.locator(".money-breakdown summary").click();
-  await page.locator("main h1").click(); // an outside click closes it too
-  await expect(page.locator(".info-tip-panel")).toBeHidden();
+  await expect(page.locator(".collection-total")).toBeVisible();
+  await expect(page.locator(".money-ledger .money-total")).toBeVisible();
+  await expect(page.locator(".money-total dd")).toHaveText(
+    (await page.locator(".collection-total").textContent())!.trim()
+  );
+  // A period with no neighbour gets no placeholder button, and a passed
+  // deadline is never shown as an invoice issue date.
+  await expect(
+    page.locator(".dashboard-period-nav [aria-disabled]")
+  ).toHaveCount(0);
+  await expect(page.locator(".month-progress time")).toHaveCount(2);
   // The Dashboard is its own breadcrumb root: just the current page.
   await expect(page.locator(".crumbs [aria-current='page']")).toHaveText(
     "Dashboard"
@@ -68,7 +70,9 @@ test("dashboard is readable across languages, themes and viewport sizes", async 
     .locator('[data-metric="unpaid"]')
     .getAttribute("href");
   await page.goto(`${workbench}?status=UNSENT`);
-  await expect(page.locator("#status")).toHaveValue("UNSENT");
+  await expect(page.locator(".queue-result")).toContainText(
+    "Draft and prepared invoices"
+  );
   const queueStatuses = await page
     .locator("tr[data-status]")
     .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-status")));
@@ -117,6 +121,18 @@ test("dashboard is readable across languages, themes and viewport sizes", async 
     path: testInfo.outputPath("dashboard-dark.png"),
     fullPage: true,
   });
+  await page.setViewportSize({ width: 390, height: 844 });
+  // One column: the breakdown starts closed, opens on demand, and the
+  // next-step button is on the first screen.
+  await expect(page.locator(".money-ledger")).toBeHidden();
+  await expect(
+    page.locator(".month-status-lead .btn-primary")
+  ).toBeInViewport();
+  await page.locator(".collection-ledger > summary").click();
+  await expect(page.locator(".money-ledger .money-total")).toBeVisible();
+  await page.locator(".collection-ledger > summary").click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(page.locator(".money-ledger .money-total")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({
     path: testInfo.outputPath("dashboard-mobile.png"),

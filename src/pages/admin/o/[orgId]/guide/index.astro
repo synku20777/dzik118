@@ -62,13 +62,24 @@ const setupSteps = [
   {
     title: "Set tariffs and rules",
     description:
-      "Add the billing rules that set fixed, area, resident-count, or meter-consumption charges.",
+      "Click New tariff to add a charge. Choose a fixed, area, resident-count, or meter-consumption calculation. Click a tariff to edit it. Use the actions menu to turn a tariff off or on, or to archive it. To restore an archived tariff, select Show archived. Then click Restore in its actions menu. A restored tariff stays off until you turn it on. A price change applies to invoices that you generate later.",
     ready:
-      "Ready when every required charge has an enabled rule for the billing date.",
+      "Ready when every required charge has a tariff that is on for the billing date.",
     action: "Open tariffs & rules",
     href: `${base}/settings/rules`,
     image: "/guide/rules.jpg",
     imageAlt: "Tariffs and rules list with rule details.",
+  },
+  {
+    title: "Set up the invoice template",
+    description:
+      "Choose the text and the sections of each invoice. Use the language tabs to write the text in each language. An empty field uses the Latvian text. If Sample charges for appears, choose a month to preview its tariff prices. The preview uses sample quantities. Click Save changes when the bar at the bottom shows unsaved changes.",
+    ready:
+      "Ready when the preview shows the text and the sections that you want on every invoice.",
+    action: "Open invoice template",
+    href: `${base}/settings/invoice-template`,
+    image: "/guide/invoice-template.jpg",
+    imageAlt: "Invoice template",
   },
 ];
 
@@ -157,6 +168,18 @@ const faqs = [
   [
     "Can I edit a sent invoice?",
     "No. A sent invoice is a permanent financial record and cannot change. Changes to dwellings, tariffs, or settings apply only to future invoices.",
+  ],
+  [
+    "How do I stop using a tariff?",
+    "Open the actions menu of the tariff and click Turn off. New invoices then ignore the tariff. The page offers Undo for ten seconds. Click Turn on in the same menu to use the tariff again. Click Archive only when you do not plan to use the tariff again. Prepared and sent invoices keep their amounts.",
+  ],
+  [
+    "How do I change what an invoice shows?",
+    "Open Settings, then Invoice template. Change the text and the sections. Use the language tabs to write the English and Russian text. The English and Russian tabs show a count when translations are missing. Click Save changes. Click Discard changes to go back to the last saved version. The change applies to invoices that you generate after you save.",
+  ],
+  [
+    "Why does an older invoice print units in a different way?",
+    "A new invoice prints known units, such as month and person, in the language of the invoice. An older invoice keeps the wording that it had when you generated it. Regenerate a DRAFT invoice to get the new wording. The app prints a unit that it does not know as you typed it.",
   ],
   [
     "What should I do with an unmatched payment?",
@@ -298,7 +321,9 @@ const statuses = [
             )}
           </p>
           <p class="mt-3">
-            {t("The guided setup walks you through these steps.")}{" "}
+            {t(
+              "The guided setup covers your organization details, dwellings, first billing period, charges, and meters."
+            )}{" "}
             <a
               href={`${base}/setup`}
               class="font-semibold text-primary underline"
@@ -522,6 +547,11 @@ const statuses = [
     color: var(--color-success);
     font-size: var(--text-sm);
     font-weight: 600;
+  }
+
+  .guide-ready :global(svg) {
+    display: inline-block;
+    vertical-align: -0.125em;
   }
 
   .guide-copy > a {

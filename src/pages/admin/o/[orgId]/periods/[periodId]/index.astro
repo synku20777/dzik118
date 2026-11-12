@@ -32,9 +32,11 @@ import {
   fill,
   formatMoney,
   formatPeriod,
+  friendlyActionErrorMessage,
   translate,
   uiLocale,
 } from "../../../../../../lib/ui/i18n";
+import { skipReasonsText } from "../../../../../../lib/ui/skip-reason";
 
 type CaseStatus = (typeof billingCaseStatusEnum.enumValues)[number];
 type Snapshot = Record<string, string | null>;
@@ -59,6 +61,33 @@ const bulkGenerateResult = Astro.getActionResult(actions.billing.bulkGenerate);
 const bulkPrepareResult = Astro.getActionResult(actions.billing.bulkPrepare);
 const bulkSendResult = Astro.getActionResult(actions.invoices.bulkSend);
 const sendResult = Astro.getActionResult(actions.invoices.send);
+// One request carries one action result, so one error and one outcome.
+const actionError =
+  lockResult?.error ??
+  generateResult?.error ??
+  sendResult?.error ??
+  bulkGenerateResult?.error ??
+  bulkPrepareResult?.error ??
+  bulkSendResult?.error;
+const bulkOutcome = bulkGenerateResult?.data
+  ? {
+      done: bulkGenerateResult.data.generated.length,
+      label: "invoices generated",
+      skipped: bulkGenerateResult.data.skipped,
+    }
+  : bulkPrepareResult?.data
+    ? {
+        done: bulkPrepareResult.data.prepared.length,
+        label: "invoices prepared",
+        skipped: bulkPrepareResult.data.skipped,
+      }
+    : bulkSendResult?.data
+      ? {
+          done: bulkSendResult.data.sent.length,
+          label: "invoices sent",
+          skipped: bulkSendResult.data.skipped,
+        }
+      : null;
 
 const search = Astro.url.searchParams.get("search")?.trim() || undefined;
 const rawStatus = Astro.url.searchParams.get("status");
@@ -157,33 +186,16 @@ const totalCases = Object.values(summary.caseStatusCounts).reduce(
   (total, count) => total + count,
   0
 );
+// Stage, label, and what the stage means (for screen readers).
 const workflowFilters = [
-  [undefined, "All", "All billing cases", "neutral", "layout-dashboard"],
-  [
-    "MISSING_DATA",
-    "Missing data",
-    "Resolve inputs",
-    "danger",
-    "alert-triangle",
-  ],
-  [
-    "READY",
-    "Ready to invoice",
-    "Generate the invoice",
-    "warning",
-    "receipt-euro",
-  ],
-  ["DRAFT", "Draft", "Review and prepare", "neutral", "pencil"],
-  ["PREPARED", "Prepared", "Ready to send", "info", "file-description"],
-  [
-    "OVERDUE",
-    "Overdue",
-    "Payment needs review",
-    "warning",
-    "clock-exclamation",
-  ],
-  ["SENT", "Sent", "Delivered", "info", "send"],
-  ["PAID", "Paid", "Complete", "success", "circle-check"],
+  [undefined, "All", "All billing cases"],
+  ["MISSING_DATA", "Missing data", "Resolve inputs"],
+  ["READY", "Ready to invoice", "Generate the invoice"],
+  ["DRAFT", "Draft", "Review and prepare"],
+  ["PREPARED", "Prepared", "Ready to send"],
+  ["OVERDUE", "Overdue", "Payment needs review"],
+  ["SENT", "Sent", "Delivered"],
+  ["PAID", "Paid", "Complete"],
 ] as const;
 
 function filterHref(status?: CaseStatus) {
@@ -217,18 +229,39 @@ const MAX_MISSING = 2;
       refreshSelectors={[".financial-summary", ".case-queue"]}
     />
     <header class="workbench-header">
-      <div>
-        <div class="period-title">
-          <h1 class="font-display">{periodName}</h1>
-          <StatusBadge status={period.status} />
-        </div>
-        <p class="period-description">
-          {t("Collect readings, generate invoices, then prepare and send.")}
-        </p>
+      <div class="period-title">
+        <h1 class="font-display">{periodName}</h1>
+        <StatusBadge status={period.status} />
       </div>
 
       <div class="period-actions">
-        {!period.openingReadings && (
+        {/* A period with no neighbour gets no placeholder button. */}
+        {(previousPeriod || nextPeriod) && (
+          <nav class="period-navigation" aria-label={t("Period navigation")}>
+            {previousPeriod && (
+              <a
+                href={`/admin/o/${organizationId}/periods/${previousPeriod.id}`}
+              >
+                <Icon name="arrow-left" size="xs" />
+                <span class="sr-only">{t("Previous period")}: </span>
+                {formatPeriod(
+                  previousPeriod.year,
+                  previousPeriod.month,
+                  locale
+                )}
+              </a>
+            )}
+            {nextPeriod && (
+              <a href={`/admin/o/${organizationId}/periods/${nextPeriod.id}`}>
+                <span class="sr-only">{t("Next period")}: </span>
+                {formatPeriod(nextPeriod.year, nextPeriod.month, locale)}
+                <Icon name="arrow-right" size="xs" />
+              </a>
+            )}
+          </nav>
+        )}
+        {/* A locked month offers no work: its actions are not shown. */}
+        {period.status === "OPEN" && (
           <>
             <a
               href={`/admin/o/${organizationId}/periods/${periodId}/readings`}
@@ -243,54 +276,24 @@ const MAX_MISSING = 2;
                 value={organizationId}
               />
               <input type="hidden" name="periodId" value={periodId} />
-              <button
-                type="submit"
-                disabled={period.status === "LOCKED"}
-                aria-describedby={
-                  period.status === "LOCKED" ? "locked-notice" : undefined
-                }
-                class="btn-primary"
-              >
+              <button type="submit" class="btn-primary">
                 {t("Generate all eligible")}
               </button>
             </form>
+            <details class="more-menu">
+              <summary aria-label={t("More actions")}>
+                <Icon name="dots" size="sm" />
+              </summary>
+              <div>
+                <button type="button" data-open-lock-dialog>
+                  {t("Lock period")}
+                </button>
+              </div>
+            </details>
           </>
-        )}
-        {period.status === "OPEN" && (
-          <details class="more-menu">
-            <summary aria-label={t("More actions")}>
-              <Icon name="dots" size="sm" />
-            </summary>
-            <div>
-              <button type="button" data-open-lock-dialog>
-                {t("Lock period")}
-              </button>
-            </div>
-          </details>
         )}
       </div>
     </header>
-
-    <nav class="period-navigation" aria-label={t("Period navigation")}>
-      {previousPeriod ? (
-        <a href={`/admin/o/${organizationId}/periods/${previousPeriod.id}`}>
-          <span aria-hidden="true">←</span>
-          <span>
-            {formatPeriod(previousPeriod.year, previousPeriod.month, locale)}
-          </span>
-        </a>
-      ) : (
-        <span aria-disabled="true">← {t("Previous period")}</span>
-      )}
-      {nextPeriod ? (
-        <a href={`/admin/o/${organizationId}/periods/${nextPeriod.id}`}>
-          <span>{formatPeriod(nextPeriod.year, nextPeriod.month, locale)}</span>
-          <span aria-hidden="true">→</span>
-        </a>
-      ) : (
-        <span aria-disabled="true">{t("Next period")} →</span>
-      )}
-    </nav>
 
     {period.status === "OPEN" && (
       <dialog
@@ -329,7 +332,7 @@ const MAX_MISSING = 2;
       </dialog>
     )}
 
-    {period.status === "LOCKED" && !period.openingReadings && (
+    {period.status === "LOCKED" && (
       <div
         id="locked-notice"
         class="notice flex flex-wrap items-center justify-between gap-3"
@@ -345,7 +348,13 @@ const MAX_MISSING = 2;
         <form method="POST" action={actions.periods.reopen}>
           <input type="hidden" name="organizationId" value={organizationId} />
           <input type="hidden" name="periodId" value={periodId} />
-          <button type="submit" class="btn-secondary btn-sm">
+          <button
+            type="submit"
+            class="btn-secondary btn-sm"
+            data-confirm={t(
+              "Reopen this period? Readings and invoices can be changed again."
+            )}
+          >
             {t("Reopen period")}
           </button>
         </form>
@@ -356,46 +365,29 @@ const MAX_MISSING = 2;
       <h2 id="financial-heading" class="sr-only">
         {t("Financial summary")}
       </h2>
-      <div class="financial-stat">
-        <span class="financial-label">
-          <Icon name="receipt-euro" size="sm" />
-          {t("Total to pay")}
-        </span>
-        <strong class="font-display">
-          {formatMoney(summary.amountDue, organization.currency, locale)}
-        </strong>
-        <span>
+      {(
+        [
+          ["Total to pay", summary.amountDue],
+          ["Received in payments", summary.totalPaid],
+          ["Still unpaid", summary.totalOutstanding],
+        ] as const
+      ).map(([label, value]) => (
+        <div class="financial-stat">
+          <span>{t(label)}</span>
+          <strong>{formatMoney(value, organization.currency, locale)}</strong>
+        </div>
+      ))}
+      {summary.currentCharges !== summary.amountDue && (
+        <p class="financial-note">
           {t("Current charges")}:{" "}
           {formatMoney(summary.currentCharges, organization.currency, locale)}
-        </span>
-      </div>
-      <div class="financial-stat">
-        <span class="financial-label">
-          <Icon name="coin" size="sm" />
-          {t("Received in payments")}
-        </span>
-        <strong class="font-display">
-          {formatMoney(summary.totalPaid, organization.currency, locale)}
-        </strong>
-        <span>{t("of total to pay")}</span>
-      </div>
-      <div class="financial-stat">
-        <span class="financial-label">
-          <Icon name="clock" size="sm" />
-          {t("Still unpaid")}
-        </span>
-        <strong class="font-display">
-          {formatMoney(summary.totalOutstanding, organization.currency, locale)}
-        </strong>
-        <span>{t("of total to pay")}</span>
-      </div>
+        </p>
+      )}
     </section>
 
-    {(lockResult?.error || generateResult?.error || sendResult?.error) && (
+    {actionError && (
       <p class="notice notice-danger" role="alert">
-        {lockResult?.error?.message ??
-          generateResult?.error?.message ??
-          sendResult?.error?.message}
+        {friendlyActionErrorMessage(actionError, locale)}
       </p>
     )}
     {sendResult && !sendResult.error && (
@@ -405,73 +397,27 @@ const MAX_MISSING = 2;
           : t("Sending has not finished yet. Check the delivery status.")}
       </p>
     )}
-    {bulkGenerateResult?.data && (
+    {bulkOutcome && (
       <p class="notice" role="status">
-        {bulkGenerateResult.data.generated.length} {t("invoices generated")}.
-        {bulkGenerateResult.data.skipped.length > 0 && (
+        {bulkOutcome.done} {t(bulkOutcome.label)}.
+        {bulkOutcome.skipped.length > 0 && (
           <>
             {" "}
-            {bulkGenerateResult.data.skipped.length} {t("skipped")}:{" "}
-            {bulkGenerateResult.data.skipped
-              .map((item) => item.reason)
-              .join("; ")}
+            {bulkOutcome.skipped.length} {t("skipped")}:{" "}
+            {skipReasonsText(bulkOutcome.skipped, locale)}
           </>
         )}
-      </p>
-    )}
-    {bulkGenerateResult?.error && (
-      <p class="notice notice-danger" role="alert">
-        {bulkGenerateResult.error.message}
-      </p>
-    )}
-    {bulkPrepareResult?.data && (
-      <p class="notice" role="status">
-        {bulkPrepareResult.data.prepared.length} {t("invoices prepared")}.
-        {bulkPrepareResult.data.skipped.length > 0 && (
-          <>
-            {" "}
-            {bulkPrepareResult.data.skipped.length} {t("skipped")}:{" "}
-            {bulkPrepareResult.data.skipped
-              .map((item) => item.reason)
-              .join("; ")}
-          </>
-        )}
-      </p>
-    )}
-    {bulkPrepareResult?.error && (
-      <p class="notice notice-danger" role="alert">
-        {bulkPrepareResult.error.message}
-      </p>
-    )}
-    {bulkSendResult?.data && (
-      <p class="notice" role="status">
-        {bulkSendResult.data.sent.length} {t("invoices sent")}.
-        {bulkSendResult.data.skipped.length > 0 && (
-          <>
-            {" "}
-            {bulkSendResult.data.skipped.length} {t("skipped")}:{" "}
-            {bulkSendResult.data.skipped.map((item) => item.reason).join("; ")}
-          </>
-        )}
-      </p>
-    )}
-    {bulkSendResult?.error && (
-      <p class="notice notice-danger" role="alert">
-        {bulkSendResult.error.message}
       </p>
     )}
 
     <section class="case-queue" aria-labelledby="queue-heading">
       <div class="queue-heading">
-        <div>
-          <h2 id="queue-heading">
-            {t("Billing cases")} <span class="queue-count">{totalCases}</span>
-          </h2>
-          <p>
-            {t("Resolve blockers, then move each invoice to its next stage.")}
-          </p>
-        </div>
-        <form method="GET" class="queue-filters">
+        <h2 id="queue-heading">{t("Billing cases")}</h2>
+        {/* One field: Enter submits. The active stage is kept. */}
+        <form method="GET" class="queue-filters" role="search">
+          {statusFilter && (
+            <input type="hidden" name="status" value={statusFilter} />
+          )}
           <div class="queue-search">
             <Icon name="search" size="sm" />
             <label class="sr-only" for="search">
@@ -486,75 +432,45 @@ const MAX_MISSING = 2;
               autocomplete="off"
             />
           </div>
-          <label class="sr-only" for="status">
-            {t("Status")}
-          </label>
-          <select id="status" name="status">
-            <option value="" selected={!statusFilter}>
-              {t("All statuses")}
-            </option>
-            <option value="UNSENT" selected={statusFilter === "UNSENT"}>
-              {t("Not sent yet")}
-            </option>
-            {workflowFilters.slice(1).map(([status, label]) => (
-              <option value={status} selected={statusFilter === status}>
-                {t(label)}
-              </option>
-            ))}
-          </select>
-          <button type="submit" class="btn-secondary btn-sm filter-submit">
-            {t("Apply filters")}
-          </button>
-          {(search || statusFilter) && (
-            <a href={workbenchPath} class="clear-filters">
-              {t("Clear filters")}
-            </a>
-          )}
         </form>
       </div>
 
-      <section class="workflow-overview" aria-labelledby="workflow-heading">
-        <h3 id="workflow-heading" class="sr-only">
-          {t("Filter by workflow stage")}
-        </h3>
-        <div class="workflow-scroll">
-          <nav class="workflow-rail" aria-label={t("Filter by workflow stage")}>
-            {workflowFilters.map(([status, label, description, tone, icon]) => {
-              const count = status
-                ? summary.caseStatusCounts[status]
-                : totalCases;
-              const active = status ? statusFilter === status : !statusFilter;
-              return (
-                <a
-                  href={filterHref(status)}
-                  class="workflow-filter"
-                  data-tone={tone}
-                  aria-current={active ? "page" : undefined}
-                >
-                  <span class="workflow-label">
-                    <span class="workflow-icon" aria-hidden="true">
-                      <Icon name={icon} size="sm" />
-                    </span>
-                    <span>{t(label)}</span>
-                    <strong>{count}</strong>
-                  </span>
-                  <span class="sr-only">{t(description)}</span>
-                </a>
-              );
-            })}
-          </nav>
-        </div>
-      </section>
+      <nav class="workflow-rail" aria-label={t("Filter by workflow stage")}>
+        {workflowFilters.map(([status, label, description]) => (
+          <a
+            href={filterHref(status)}
+            class="workflow-filter"
+            aria-current={
+              (status ? statusFilter === status : !statusFilter)
+                ? "page"
+                : undefined
+            }
+          >
+            {t(label)}
+            <strong>
+              {status ? summary.caseStatusCounts[status] : totalCases}
+            </strong>
+            <span class="sr-only">{t(description)}</span>
+          </a>
+        ))}
+      </nav>
 
-      <p class="queue-result" role="status">
-        {fill(t("Showing {shown} of {total} billing cases"), {
-          shown: String(cases.length),
-          total: String(totalCases),
-        })}
-        {statusFilter === "UNSENT" && (
-          <> · {t("Draft and prepared invoices")}</>
-        )}
-      </p>
+      {(search || statusFilter) && (
+        <p class="queue-result" role="status">
+          <span>
+            {fill(t("Showing {shown} of {total} billing cases"), {
+              shown: String(cases.length),
+              total: String(totalCases),
+            })}
+            {statusFilter === "UNSENT" && (
+              <> · {t("Draft and prepared invoices")}</>
+            )}
+          </span>
+          <a href={workbenchPath} class="clear-filters">
+            {t("Clear filters")}
+          </a>
+        </p>
+      )}
 
       <!-- Per-row forms cannot nest inside the bulk form, so checkboxes target
       this empty form by id. The submitted action still receives the same data. -->
@@ -607,7 +523,7 @@ const MAX_MISSING = 2;
         </div>
       </div>
 
-      <div class="table-wrap case-table-wrap stack-table">
+      <div class="table-wrap case-table-wrap">
         <table class="case-table" role="table">
           <caption class="sr-only">{t("Billing cases")}</caption>
           <thead>
@@ -620,7 +536,6 @@ const MAX_MISSING = 2;
                 />
               </th>
               <th scope="col">{t("Dwelling")}</th>
-              <th scope="col">{t("Billing inputs")}</th>
               <th scope="col">{t("Status")}</th>
               <th scope="col" class="numeric-column">
                 {t("Invoice")}
@@ -699,6 +614,14 @@ const MAX_MISSING = 2;
               const sendEligible =
                 billingCase.status === "PREPARED" &&
                 ((invoiceByEmail && Boolean(billingEmail)) || invoiceByPaper);
+              // Problems and delivery notes sit under the status. A case with
+              // none shows the status alone.
+              const hasIssues =
+                missing.length > 0 ||
+                (invoiceByEmail && !billingEmail) ||
+                invoiceByPaper ||
+                recipientIncomplete ||
+                organizationIncomplete;
               const invoiceHref = billingCase.invoiceId
                 ? `${workbenchPath}/invoices/${billingCase.invoiceId}`
                 : null;
@@ -734,10 +657,11 @@ const MAX_MISSING = 2;
                       <span>{billingCase.occupantName}</span>
                     )}
                   </td>
-                  <td>
-                    <div class="readiness-list">
-                      {missing.length > 0 ? (
-                        shownMissing.map((item) =>
+                  <td class="status-cell">
+                    <StatusBadge status={billingCase.status} />
+                    {hasIssues && (
+                      <div class="readiness-list">
+                        {shownMissing.map((item) =>
                           // missingData is a JSONB column with no schema
                           // enforcement: cases whose readiness was last
                           // computed by an older app version can still
@@ -822,37 +746,26 @@ const MAX_MISSING = 2;
                                 : t("Missing data")}
                             </span>
                           )
-                        )
-                      ) : (
-                        <span class="readiness-ok">
-                          <Icon name="check" size="xs" />
-                          {t("Required readings complete")}
-                        </span>
-                      )}
-                      {hiddenMissing > 0 && (
-                        <button
-                          type="button"
-                          class="readiness-more"
-                          data-open-drawer="readings"
-                          data-dwelling-id={billingCase.dwellingId}
-                          data-tip={t(
-                            "Open readings to see every missing item"
-                          )}
-                          aria-label={fill(t("{count} more missing items"), {
-                            count: String(hiddenMissing),
-                          })}
-                        >
-                          {fill(t("+{count} more"), {
-                            count: String(hiddenMissing),
-                          })}
-                        </button>
-                      )}
-                      {invoiceByEmail &&
-                        (billingEmail ? (
-                          <span class="sr-only">
-                            {t("Billing email ready")}
-                          </span>
-                        ) : (
+                        )}
+                        {hiddenMissing > 0 && (
+                          <button
+                            type="button"
+                            class="readiness-more"
+                            data-open-drawer="readings"
+                            data-dwelling-id={billingCase.dwellingId}
+                            data-tip={t(
+                              "Open readings to see every missing item"
+                            )}
+                            aria-label={fill(t("{count} more missing items"), {
+                              count: String(hiddenMissing),
+                            })}
+                          >
+                            {fill(t("+{count} more"), {
+                              count: String(hiddenMissing),
+                            })}
+                          </button>
+                        )}
+                        {invoiceByEmail && !billingEmail && (
                           <button
                             type="button"
                             class="readiness-item"
@@ -864,36 +777,34 @@ const MAX_MISSING = 2;
                             <Icon name="alert-triangle" size="xs" />{" "}
                             {t("Billing email missing")}
                           </button>
-                        ))}
-                      {invoiceByPaper && (
-                        <span class="readiness-item" data-tone="neutral">
-                          <Icon name="file-description" size="xs" />{" "}
-                          {t("Paper delivery")}
-                        </span>
-                      )}
-                      {recipientIncomplete && (
-                        <button
-                          type="button"
-                          class="readiness-item"
-                          data-tone="danger"
-                          data-open-drawer="billing-details"
-                          data-dwelling-id={billingCase.dwellingId}
-                          data-focus="recipient"
-                        >
-                          <Icon name="alert-triangle" size="xs" />{" "}
-                          {t("Recipient details incomplete")}
-                        </button>
-                      )}
-                      {organizationIncomplete && (
-                        <span class="readiness-item" data-tone="danger">
-                          <Icon name="alert-triangle" size="xs" />{" "}
-                          {t("Issuer or payment details incomplete")}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td>
-                    <StatusBadge status={billingCase.status} />
+                        )}
+                        {invoiceByPaper && (
+                          <span class="readiness-item" data-tone="neutral">
+                            <Icon name="file-description" size="xs" />{" "}
+                            {t("Paper delivery")}
+                          </span>
+                        )}
+                        {recipientIncomplete && (
+                          <button
+                            type="button"
+                            class="readiness-item"
+                            data-tone="danger"
+                            data-open-drawer="billing-details"
+                            data-dwelling-id={billingCase.dwellingId}
+                            data-focus="recipient"
+                          >
+                            <Icon name="alert-triangle" size="xs" />{" "}
+                            {t("Recipient details incomplete")}
+                          </button>
+                        )}
+                        {organizationIncomplete && (
+                          <span class="readiness-item" data-tone="danger">
+                            <Icon name="alert-triangle" size="xs" />{" "}
+                            {t("Issuer or payment details incomplete")}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td class="invoice-cell numeric-column">
                     {invoiceHref ? (
@@ -1099,7 +1010,7 @@ const MAX_MISSING = 2;
             })}
             {cases.length === 0 && (
               <tr>
-                <td colspan="7" class="empty-queue">
+                <td colspan="6" class="empty-queue">
                   <strong>
                     {t(
                       statusFilter === "MISSING_DATA"
@@ -1214,7 +1125,6 @@ const MAX_MISSING = 2;
 
 <script>
   import { onPageLoad } from "../../../../../../lib/ui/page-lifecycle";
-  import { labelStackTables } from "../../../../../../lib/ui/stack-tables";
 
   onPageLoad(() => {
     if (!document.querySelector(".workbench")) return;
@@ -1387,16 +1297,9 @@ const MAX_MISSING = 2;
       },
       options
     );
-    // Drawer saves replace the queue. Delegated controls and freshly applied
-    // mobile labels keep the new rows fully usable without a page navigation.
-    document.addEventListener(
-      "workbench:refreshed",
-      () => {
-        labelStackTables();
-        updateSelection();
-      },
-      options
-    );
+    // Drawer saves replace the queue. Controls are delegated, so only the
+    // selection state has to be read again from the new rows.
+    document.addEventListener("workbench:refreshed", updateSelection, options);
     updateSelection();
     return () => {
       controller.abort();
@@ -1407,43 +1310,28 @@ const MAX_MISSING = 2;
 <style>
   .workbench {
     display: grid;
-    gap: 1.5rem;
+    gap: 1rem;
     min-width: 0;
   }
+  /* Title on the left, navigation and actions on the right; the right group
+     drops to its own row when the two do not fit. */
   .workbench-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1.5rem;
-  }
-  .workbench-header > div {
-    min-width: 0;
-  }
-  .eyebrow {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
-    color: var(--color-muted);
-    font-size: var(--text-xs);
+    justify-content: space-between;
+    gap: 0.75rem 1.5rem;
   }
   .period-title {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.75rem;
-    margin-top: 0.375rem;
+    gap: 0.5rem 0.75rem;
+    min-width: 0;
   }
   .period-title h1 {
-    font-size: var(--text-display-lg);
-    font-weight: 700;
-    line-height: 1.12;
-  }
-  .period-description {
-    margin-top: 0.625rem;
-    max-width: 36rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
+    font-size: var(--text-display-md);
+    line-height: 1.2;
   }
   .period-actions {
     display: flex;
@@ -1451,6 +1339,7 @@ const MAX_MISSING = 2;
     align-items: center;
     justify-content: flex-end;
     gap: 0.5rem;
+    margin-inline-start: auto;
   }
   .more-menu {
     position: relative;
@@ -1517,70 +1406,65 @@ const MAX_MISSING = 2;
   .case-menu button:hover {
     background: var(--color-hover);
   }
+  /* Previous and next month as one joined control, as on the dashboard. */
   .period-navigation {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
-    font-size: var(--text-sm);
-  }
-  /* Two equal buttons, each a generous target. */
-  .period-navigation :is(a, [aria-disabled="true"]) {
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-height: 3.5rem;
-    padding: 1rem 1.25rem;
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     background: var(--color-surface);
-    font-weight: 550;
+    font-size: var(--text-sm);
   }
-  .period-navigation :is(a, [aria-disabled="true"]):last-child {
-    justify-content: flex-end;
+  .period-navigation a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    min-height: var(--control-size-md);
+    padding: 0.5rem 0.875rem;
+    color: var(--color-primary);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .period-navigation a + a {
+    border-inline-start: 1px solid var(--color-border);
+  }
+  .period-navigation a:first-child {
+    border-start-start-radius: var(--radius-control);
+    border-end-start-radius: var(--radius-control);
+  }
+  .period-navigation a:last-child {
+    border-start-end-radius: var(--radius-control);
+    border-end-end-radius: var(--radius-control);
   }
   .period-navigation a:hover {
     background: var(--color-hover);
-    color: var(--color-primary);
   }
-  .period-navigation [aria-disabled="true"] {
-    background: transparent;
-    color: var(--color-muted);
-  }
+  /* The money of the month on one line. The breakdown is on the dashboard. */
   .financial-summary {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 2.5rem;
+    padding: 0.75rem 1.25rem;
     border: var(--panel-border);
     border-radius: var(--radius-panel);
     background: var(--color-surface);
+    font-size: var(--text-sm);
   }
   .financial-stat {
-    display: grid;
-    align-content: start;
-    gap: 0.375rem;
-    min-width: 0;
-    padding: 1.25rem 1.5rem;
-  }
-  .financial-stat + .financial-stat {
-    border-left: 1px solid var(--color-border);
-  }
-  .financial-label {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: 0.5rem;
-    font-size: var(--text-sm);
-    font-weight: 550;
-  }
-  .financial-label :global(svg) {
     color: var(--color-muted);
-    flex: none;
   }
   .financial-stat strong {
-    font-size: var(--text-display-md);
-    line-height: 1.2;
-    font-weight: 600;
+    color: var(--color-foreground);
+    font-size: var(--text-base);
+    font-weight: 650;
     font-variant-numeric: tabular-nums;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
   }
-  .financial-stat > span:last-child {
+  .financial-note {
     color: var(--color-muted);
     font-size: var(--text-xs);
   }
@@ -1688,6 +1572,8 @@ const MAX_MISSING = 2;
     display: grid;
     gap: 0;
     min-width: 0;
+    /* The table becomes a list by the room this panel has, not the screen. */
+    container-type: inline-size;
     border: var(--panel-border);
     border-radius: var(--radius-panel);
     background: var(--color-surface);
@@ -1697,119 +1583,19 @@ const MAX_MISSING = 2;
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
-    padding: 1.25rem;
+    gap: 0.5rem 1rem;
+    padding: 1rem 1.25rem 0.5rem;
   }
   .queue-heading h2 {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
     font-size: var(--text-base);
     font-weight: 650;
   }
-  .queue-count {
-    display: inline-grid;
-    place-items: center;
-    min-width: 1.5rem;
-    height: 1.5rem;
-    padding-inline: 0.375rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-badge);
-    color: var(--color-muted);
-    font-size: var(--text-xs);
-    font-variant-numeric: tabular-nums;
-  }
-  .queue-heading p {
-    margin-top: 0.25rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .workflow-overview {
-    min-width: 0;
-  }
-  /* Stage filters are tabs, not boxes: one rule under the row, an underline on
-     the active one. Nothing is bordered inside the panel. */
-  .workflow-scroll {
-    padding: 0 1.25rem;
-    overflow-x: auto;
-    /* The row scrolls inside the panel. Positioned, so the screen-reader-only
-       text inside the tabs is clipped with it instead of widening the page. */
-    position: relative;
-    contain: inline-size;
-  }
-  .workflow-rail {
-    display: flex;
-    gap: 0.25rem;
-    min-width: max-content;
-    border-bottom: 1px solid var(--color-border);
-  }
-  .workflow-filter {
-    display: flex;
-    align-items: center;
-    min-height: 2.75rem;
-    padding: 0.5rem 0.875rem;
-    border-bottom: 2px solid transparent;
-    color: var(--color-muted);
-    transition: color var(--duration-feedback);
-  }
-  .workflow-filter:hover {
-    color: var(--color-foreground);
-  }
-  .workflow-filter:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: -2px;
-  }
-  .workflow-filter[aria-current="page"] {
-    border-bottom-color: var(--color-primary);
-    color: var(--color-foreground);
-  }
-  .workflow-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    white-space: nowrap;
-  }
-  .workflow-label strong {
-    min-width: 1.25rem;
-    padding: 0 0.375rem;
-    border-radius: 999px;
-    background: var(--tone-neutral-bg);
-    color: var(--tone-neutral-text);
-    font-size: var(--text-xs);
-    font-variant-numeric: tabular-nums;
-    line-height: 1.25rem;
-    text-align: center;
-  }
-  .workflow-icon {
-    display: flex;
-    flex: none;
-    color: var(--color-muted);
-  }
-  [data-tone="danger"] .workflow-icon {
-    color: var(--color-destructive);
-  }
-  [data-tone="info"] .workflow-icon {
-    color: var(--color-info);
-  }
-  [data-tone="warning"] .workflow-icon {
-    color: var(--color-warning);
-  }
-  [data-tone="success"] .workflow-icon {
-    color: var(--color-success);
-  }
   .queue-filters {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem;
+    flex: 0 1 20rem;
     min-width: 0;
   }
   .queue-search {
     position: relative;
-    flex: 1 1 10rem;
-    min-width: 0;
   }
   .queue-search :global(svg) {
     position: absolute;
@@ -1824,14 +1610,54 @@ const MAX_MISSING = 2;
     padding-left: 2.25rem;
     font-size: var(--text-sm);
   }
-  .queue-filters select {
-    padding-left: 0.75rem;
-    max-width: 100%;
-    width: 10.5rem;
+  /* Stage filters are tabs, not boxes: one rule under the row, an underline on
+     the active one. They wrap to a second row instead of scrolling, so no
+     stage is ever hidden. */
+  .workflow-rail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.25rem;
+    padding: 0 1.25rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .workflow-filter {
+    /* Holds the screen-reader-only description, so it cannot widen the page. */
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.625rem;
+    border-bottom: 2px solid transparent;
+    color: var(--color-muted);
     font-size: var(--text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    transition: color var(--duration-feedback);
+  }
+  .workflow-filter:hover {
+    color: var(--color-foreground);
+  }
+  .workflow-filter:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
+  .workflow-filter[aria-current="page"] {
+    border-bottom-color: var(--color-primary);
+    color: var(--color-foreground);
+  }
+  .workflow-filter strong {
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
   }
   .queue-result {
-    padding: 0.75rem 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 1rem;
+    padding: 0.5rem 1.25rem;
     color: var(--color-muted);
     font-size: var(--text-xs);
   }
@@ -1876,9 +1702,10 @@ const MAX_MISSING = 2;
   .selection-summary > span {
     color: var(--color-muted);
   }
+  /* Five columns that fit the panel: no minimum width, so nothing is pushed
+     off the side at 1024px in any language. Problems sit under the status. */
   .case-table {
     width: 100%;
-    min-width: 55rem;
     border-collapse: separate;
     border-spacing: 0;
     text-align: left;
@@ -1888,7 +1715,6 @@ const MAX_MISSING = 2;
     min-width: 0;
     max-width: 100%;
     border: 0;
-    border-top: 1px solid var(--color-border);
     border-radius: 0 0 var(--radius-panel) var(--radius-panel);
     box-shadow: none;
     overflow-x: auto;
@@ -1903,7 +1729,7 @@ const MAX_MISSING = 2;
   }
   .case-table th,
   .case-table td {
-    padding: 0.875rem 0.75rem;
+    padding: 0.625rem 0.75rem;
     border-bottom: 1px solid var(--color-border);
     vertical-align: middle;
   }
@@ -1920,6 +1746,9 @@ const MAX_MISSING = 2;
     width: 2.75rem;
     text-align: center;
   }
+  .dwelling-cell {
+    overflow-wrap: break-word;
+  }
   .dwelling-cell a {
     color: var(--color-foreground);
     font-size: var(--text-base);
@@ -1931,14 +1760,6 @@ const MAX_MISSING = 2;
   }
   .dwelling-cell span {
     display: block;
-    margin-top: 0.25rem;
-    color: var(--color-muted);
-    font-size: var(--text-xs);
-  }
-  .readiness-ok {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
     color: var(--color-muted);
     font-size: var(--text-xs);
   }
@@ -1946,25 +1767,25 @@ const MAX_MISSING = 2;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.25rem;
-    max-width: 24rem;
+    gap: 0.125rem;
+    margin-top: 0.375rem;
   }
-  /* One line each. A long meter or rule name truncates (its tooltip carries the
-     full text) instead of growing the row. */
+  /* Plain text with an icon, coloured by meaning. One line each: a long meter
+     or rule name truncates (its tooltip carries the full text) instead of
+     growing the row. */
   .readiness-item {
     display: block;
-    /* A definite cap: with nowrap, a percentage would let the longest tag set
-       the table's minimum width and push the page sideways. */
-    max-width: 24rem;
+    /* A definite cap: with nowrap, a percentage would let the longest item set
+       the minimum width of the table and push the page sideways. */
+    max-width: 16rem;
     overflow: hidden;
-    padding: 0.25rem 0.5rem;
+    padding: 0;
     border: none;
-    border-radius: var(--radius-badge);
-    background: var(--tone-neutral-bg);
-    color: var(--tone-neutral-text);
+    background: none;
+    color: var(--color-muted);
     font: inherit;
     font-size: var(--text-xs);
-    line-height: 1.35;
+    line-height: 1.5;
     text-align: left;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1972,48 +1793,50 @@ const MAX_MISSING = 2;
   .readiness-item :global(svg) {
     display: inline-block;
     margin-right: 0.25rem;
-    vertical-align: -2px;
+    vertical-align: -3px;
   }
-  /* Only tags that carry their full text in a tooltip truncate; the short fixed
-     ones wrap rather than lose words. */
+  /* Only items that carry their full text in a tooltip truncate; the short
+     fixed ones wrap rather than lose words. */
   .readiness-item:not([data-tip]) {
     overflow: visible;
     white-space: normal;
   }
-  button.readiness-item {
+  /* Stacked links: 24px each, so neighbours keep the WCAG 2.5.8 spacing. */
+  :is(button, a).readiness-item {
+    line-height: 1.5rem;
+  }
+  :is(button, a).readiness-item {
     cursor: pointer;
     text-decoration: underline;
     text-decoration-style: dotted;
     text-underline-offset: 2px;
   }
-  button.readiness-item:hover,
-  button.readiness-item:focus-visible {
+  :is(button, a).readiness-item:hover,
+  :is(button, a).readiness-item:focus-visible {
     text-decoration-style: solid;
   }
   .readiness-more {
-    padding: 0.125rem 0.25rem;
+    padding: 0;
     border: none;
     background: none;
     color: var(--color-primary);
     font: inherit;
     font-size: var(--text-xs);
     font-weight: 600;
+    line-height: 1.5rem;
     cursor: pointer;
   }
   .readiness-more:hover {
     text-decoration: underline;
   }
   .readiness-item[data-tone="danger"] {
-    background: var(--tone-danger-bg);
-    color: var(--tone-danger-text);
+    color: var(--color-destructive);
   }
   .readiness-item[data-tone="success"] {
-    background: var(--tone-success-bg);
-    color: var(--tone-success-text);
+    color: var(--color-success);
   }
   .readiness-item[data-tone="warning"] {
-    background: var(--tone-warning-bg);
-    color: var(--tone-warning-text);
+    color: var(--color-warning);
   }
   .numeric-column {
     text-align: right;
@@ -2021,7 +1844,7 @@ const MAX_MISSING = 2;
   }
   .invoice-cell a {
     display: grid;
-    gap: 0.25rem;
+    gap: 0.125rem;
   }
   .invoice-cell span,
   .invoice-cell small {
@@ -2063,85 +1886,29 @@ const MAX_MISSING = 2;
   .empty-queue a {
     margin-top: 1rem;
   }
-  @media (width < 70rem) {
-    .workbench-header {
-      align-items: flex-start;
-    }
-    .queue-filters {
-      width: 100%;
-    }
-  }
-  @media (width < 48rem) {
-    .workbench-header {
-      flex-direction: column;
-      gap: 1rem;
-    }
-    .period-actions {
-      justify-content: flex-start;
-      width: 100%;
-    }
-    .financial-stat {
-      padding: 1rem;
-    }
-    .financial-stat strong {
-      font-size: var(--text-2xl);
-    }
-    .financial-label {
-      font-size: var(--text-xs);
-    }
-    .financial-label :global(svg) {
-      display: none;
-    }
-  }
   @media (width < 40rem) {
-    .workbench {
-      gap: 1rem;
+    .period-actions {
+      width: 100%;
     }
-    .period-actions > a,
-    .period-actions > form {
+    .period-actions > :is(a, form, nav) {
       flex: 1 1 auto;
+    }
+    .period-navigation a {
+      flex: 1;
     }
     .period-actions form .btn-primary {
       width: 100%;
     }
-    .financial-summary {
-      grid-template-columns: 1fr 1fr;
-    }
-    .financial-stat:first-of-type {
-      grid-column: 1 / -1;
-      border-bottom: 1px solid var(--color-border);
-    }
-    .financial-stat:nth-of-type(2) {
-      border-left: 0;
-    }
-    .financial-stat:first-of-type strong {
-      font-size: var(--text-display-md);
-    }
-    .financial-stat strong {
-      font-size: var(--text-2xl);
-    }
-    .queue-heading {
-      padding: 1rem;
-    }
-    .queue-heading > div {
-      min-width: 0;
-    }
-    .queue-filters {
-      gap: 0.5rem;
-    }
-    .queue-search {
-      flex-basis: 100%;
-    }
-    .queue-filters select {
-      flex: 1;
-      width: 0;
-      min-width: 0;
-    }
-    .workflow-scroll {
-      padding-inline: 0.75rem;
-    }
+    .financial-summary,
+    .queue-heading,
     .queue-result {
       padding-inline: 1rem;
+    }
+    .queue-filters {
+      flex-basis: 100%;
+    }
+    .workflow-rail {
+      padding-inline: 0.5rem;
     }
     .bulk-toolbar {
       position: static;
@@ -2155,36 +1922,82 @@ const MAX_MISSING = 2;
     .bulk-actions .btn-secondary {
       flex: 1;
     }
-    .case-table-wrap {
-      padding: 0.75rem;
-    }
-    .case-table tr {
-      margin-bottom: 0.75rem;
-    }
-    .case-table tr:last-child {
-      margin-bottom: 0;
-    }
-    .readiness-list {
-      align-items: flex-end;
-    }
-    .next-action {
-      white-space: normal;
-    }
-    .case-menu-trigger {
-      margin-left: auto;
-    }
     .dialog-actions {
       flex-wrap: wrap;
     }
   }
-  @media (width < 40rem) {
-    .readiness-list {
-      flex: 1 1 0;
-      min-width: 0;
-      max-width: none;
+  /* Narrower than the five columns need (54rem holds the longest Russian
+     labels): each case is three short lines instead of a table row. Dwelling
+     and amount, then the status with any problems, then the action. */
+  @container (width < 54rem) {
+    .workflow-filter {
+      min-height: 2.25rem;
+    }
+    .case-table thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+    .case-table,
+    .case-table tbody,
+    .case-table td {
+      display: block;
+    }
+    .case-table tbody tr {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-areas:
+        "select dwelling invoice"
+        "status status status"
+        "action action menu";
+      align-items: center;
+      gap: 0.375rem 0.75rem;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .case-table tbody tr:last-child {
+      border-bottom: 0;
+    }
+    .case-table td {
+      padding: 0;
+      border: 0;
+    }
+    .select-column {
+      grid-area: select;
+      width: auto;
+    }
+    /* A case that cannot be selected gives its checkbox space to the name. */
+    .select-column:not(:has(input)) {
+      display: none;
+    }
+    .dwelling-cell {
+      grid-area: dwelling;
+    }
+    tr:not(:has(input[name="invoiceIds"])) .dwelling-cell {
+      grid-column: 1 / 3;
+    }
+    .invoice-cell {
+      grid-area: invoice;
+    }
+    .status-cell {
+      grid-area: status;
+    }
+    .next-action {
+      grid-area: action;
+      white-space: normal;
+    }
+    .menu-cell {
+      grid-area: menu;
+      width: auto;
+      justify-self: end;
     }
     .readiness-item {
       max-width: 100%;
+    }
+    .case-table tbody tr:has(.empty-queue) {
+      display: block;
     }
   }
   @media (pointer: coarse) {
@@ -2197,16 +2010,10 @@ const MAX_MISSING = 2;
     }
   }
   @media (forced-colors: active) {
-    .period-navigation a {
-      border: 1px solid CanvasText;
-    }
     .workflow-filter[aria-current="page"],
     .case-table tr[data-selected] {
       outline: 2px solid Highlight;
       outline-offset: -2px;
-    }
-    .readiness-item {
-      border: 1px solid CanvasText;
     }
   }
 </style>

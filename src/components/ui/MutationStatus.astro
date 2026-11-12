@@ -35,20 +35,24 @@ const strings = {
 ---
 
 <div id="mutation-status" data-strings={JSON.stringify(strings)}>
+  <span
+    class="sr-only"
+    data-mutation-announcer
+    aria-live="polite"
+    aria-atomic="true"
+  ></span>
   <div
     class="mutation-toasts"
     data-mutation-toasts
     aria-live="polite"
     aria-atomic="false"
   ></div>
-  <details class="mutation-activity">
+  <details class="mutation-activity" hidden>
     <summary class="mutation-summary">
       <span aria-hidden="true" data-mutation-summary-icon>
         ✓
       </span>
-      <span data-mutation-summary aria-live="polite">
-        {strings.allSaved}
-      </span>
+      <span data-mutation-summary>{strings.allSaved}</span>
     </summary>
     <section class="mutation-panel" aria-labelledby="mutation-panel-title">
       <h2 id="mutation-panel-title">{strings.recent}</h2>
@@ -237,8 +241,51 @@ const strings = {
     )!;
     const toasts = root.querySelector<HTMLElement>("[data-mutation-toasts]")!;
     const list = root.querySelector<HTMLElement>("[data-mutation-list]")!;
+    const activity =
+      root.querySelector<HTMLDetailsElement>(".mutation-activity")!;
+    const announcer = root.querySelector<HTMLElement>(
+      "[data-mutation-announcer]"
+    )!;
+    const controller = new AbortController();
+    let previousActive = 0;
+    let initialized = false;
+    let idle = true;
+    let savedUntil = 0;
+    let hideTimer: ReturnType<typeof setTimeout> | undefined;
+    let fadeTimer: ReturnType<typeof setTimeout> | undefined;
+    function showChip() {
+      clearTimeout(fadeTimer);
+      activity.hidden = false;
+      delete activity.dataset.fading;
+    }
+    function hideWhenIdle() {
+      if (activity.hidden) return;
+      if (!idle || savedUntil > Date.now()) return;
+      if (activity.open || activity.matches(":hover, :focus-within")) return;
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        activity.hidden = true;
+        return;
+      }
+      activity.dataset.fading = "true";
+      clearTimeout(fadeTimer);
+      fadeTimer = setTimeout(() => {
+        activity.hidden = true;
+        delete activity.dataset.fading;
+      }, 150);
+    }
+    activity.addEventListener("pointerenter", showChip, {
+      signal: controller.signal,
+    });
+    for (const event of ["pointerleave", "focusout", "toggle"]) {
+      activity.addEventListener(event, () => queueMicrotask(hideWhenIdle), {
+        signal: controller.signal,
+      });
+    }
+    activity.addEventListener("focusin", showChip, {
+      signal: controller.signal,
+    });
 
-    return subscribeMutations((mutations) => {
+    const unsubscribe = subscribeMutations((mutations) => {
       const { active, errors } = mutationCounts(mutations);
       summary.textContent = errors
         ? errors === 1
@@ -251,9 +298,35 @@ const strings = {
           : strings.allSaved;
       summaryIcon.textContent = errors ? "!" : active ? "◌" : "✓";
       root.dataset.state = errors ? "error" : active ? "pending" : "saved";
+      if (
+        announcer.textContent !== summary.textContent &&
+        (active || errors || initialized)
+      ) {
+        announcer.textContent = summary.textContent;
+      }
+      idle = active === 0 && errors === 0;
+      if (!idle) {
+        clearTimeout(hideTimer);
+        savedUntil = 0;
+        showChip();
+      } else if (initialized && previousActive > 0) {
+        showChip();
+        savedUntil = Date.now() + 4_000;
+        hideTimer = setTimeout(hideWhenIdle, 4_000);
+      } else {
+        hideWhenIdle();
+      }
+      previousActive = active;
+      initialized = true;
       renderItems(toasts, mutations, strings);
       renderItems(list, mutations, strings);
     });
+    return () => {
+      unsubscribe();
+      controller.abort();
+      clearTimeout(hideTimer);
+      clearTimeout(fadeTimer);
+    };
   });
 </script>
 
@@ -354,6 +427,11 @@ const strings = {
   }
   .mutation-activity {
     position: relative;
+    opacity: 1;
+    transition: opacity 150ms ease;
+  }
+  .mutation-activity[data-fading] {
+    opacity: 0;
   }
   .mutation-summary {
     display: flex;
@@ -376,27 +454,6 @@ const strings = {
   }
   #mutation-status[data-state="error"] .mutation-summary {
     color: var(--color-destructive);
-  }
-  /* Idle: a 44px check mark instead of a 219px pill, so it rarely sits on
-     content. The text stays in the DOM (aria-live) and the full pill returns on
-     hover, keyboard focus, while saving, on errors, and when the panel is open. */
-  #mutation-status:not([data-state="pending"]):not([data-state="error"])
-    .mutation-activity:not([open]):not(:hover):not(:focus-within)
-    .mutation-summary {
-    justify-content: center;
-    width: 2.75rem;
-    height: 2.75rem;
-    padding: 0;
-  }
-  #mutation-status:not([data-state="pending"]):not([data-state="error"])
-    .mutation-activity:not([open]):not(:hover):not(:focus-within)
-    [data-mutation-summary] {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
   }
   .mutation-panel {
     position: absolute;
@@ -429,15 +486,10 @@ const strings = {
       transform: rotate(360deg);
     }
   }
-  /* On phones the idle pill would sit over form fields and row actions;
-     only show the indicator while something is saving or has failed. */
-  @media (width < 40rem) {
-    #mutation-status:not([data-state="pending"]):not([data-state="error"])
-      .mutation-activity {
-      display: none;
-    }
-  }
   @media (prefers-reduced-motion: reduce) {
+    .mutation-activity {
+      transition: none;
+    }
     .mutation-item-icon {
       animation: none !important;
     }

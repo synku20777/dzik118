@@ -28,6 +28,7 @@ import {
   markConversationRead,
   reply,
   resolveConversation,
+  sendResidentMessage,
 } from "../../src/domain/messaging/conversations";
 
 let db: Db;
@@ -660,5 +661,60 @@ describe("exportReadingsCsv", () => {
     );
 
     await cleanupOrg(org.id);
+  });
+});
+
+describe("resident chat", () => {
+  it("joins the open conversation, and starts a new one after it is resolved", async () => {
+    const org = await createOrganization(
+      db,
+      { name: "IT-K Org Chat", addressLine1: "Addr 1" },
+      seedAdminId
+    );
+    const dwelling = await createDwelling(
+      db,
+      org.id,
+      { number: "1" },
+      seedAdminId
+    );
+    const residentId = await seedResident("it-k-resident-chat@example.com");
+    const auth = residentAuth(residentId, dwelling.id);
+
+    const first = await sendResidentMessage(
+      db,
+      dwelling.id,
+      "My hot water meter shows a strange number, what should I do about it?\nSecond line",
+      auth
+    );
+    expect(first.senderRole).toBe("RESIDENT");
+    await sendResidentMessage(db, dwelling.id, "It is 53.2 now.", auth);
+
+    let threads = await listConversationsWithMessagesForDwelling(
+      db,
+      dwelling.id
+    );
+    expect(threads).toHaveLength(1);
+    expect(threads[0].messages).toHaveLength(2);
+    // Named from the first line of the first message, cut to 60 characters.
+    expect(threads[0].conversation.subject).toBe(
+      "My hot water meter shows a strange number, what should I do…"
+    );
+
+    await resolveConversation(
+      db,
+      org.id,
+      threads[0].conversation.id,
+      seedAdminId
+    );
+    await sendResidentMessage(db, dwelling.id, "One more question", auth);
+    threads = await listConversationsWithMessagesForDwelling(db, dwelling.id);
+    expect(threads).toHaveLength(2);
+    expect(
+      threads.find((t) => t.conversation.subject === "One more question")
+        ?.conversation.status
+    ).toBe("NEW");
+
+    await cleanupOrg(org.id);
+    await deleteAppUser(residentId);
   });
 });

@@ -249,6 +249,19 @@ test("admin routes, keyboard navigation, filters and locked actions", async ({
   ]) {
     await inspect(page, `${base}/${path}`);
   }
+  await page.goto(`${base}/settings/rules?lang=en`);
+  await expect(page.locator(".mutation-activity")).toBeHidden();
+  await page
+    .locator('.page-actions button[data-open-tariff-drawer="create"]')
+    .click();
+  await expect(
+    page.locator('#tariff-form input:not([type="hidden"])').first()
+  ).toHaveAttribute("id", "tariff-enabled");
+  await expect(page.locator("#tariff-vatRate")).toHaveValue("21");
+  await expect(page.locator("#tariff-drawer-save")).toHaveText("Create tariff");
+  await page
+    .locator("#tariff-drawer footer [data-close-tariff-drawer]")
+    .click();
   await page.goto(`${base}/periods`);
   const periods = await page
     .locator("tbody a")
@@ -269,10 +282,11 @@ test("admin routes, keyboard navigation, filters and locked actions", async ({
       await expect(page.locator("#bulk-toolbar")).toBeHidden();
       selectionChecked = true;
     }
+    // A locked month offers no bulk generation at all.
     if (await page.locator("#locked-notice").count()) {
       await expect(
         page.getByRole("button", { name: "Generate all eligible" })
-      ).toBeDisabled();
+      ).toHaveCount(0);
     }
     const invoice = await page
       .locator('tbody a[href*="/invoices/"]')
@@ -359,6 +373,10 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await expect(page.locator("[data-mutation-summary]")).toHaveText(
     "All changes saved"
   );
+  await expect(page.locator(".mutation-activity")).toBeVisible();
+  await expect(page.locator(".mutation-activity")).toBeHidden({
+    timeout: 6_000,
+  });
   expect(dwellingRequests).toBe(1);
   const dwellingLink = page.locator("tbody a.row-link-target", {
     hasText: dwellingNumber,

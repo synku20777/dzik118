@@ -131,8 +131,8 @@ Counts for READY, DRAFT and PREPARED come from `caseStatusCounts`.
   updates the whole summary.
 - READY and OVERDUE no longer share a colour. Other pages that use the shared
   status badge change with them.
-- `public/guide/dashboard.jpg` still shows the old page, and the guide step about
-  unmatched payments is not rewritten ([KNOWN_GAPS.md](../KNOWN_GAPS.md)).
+- The guide screenshots were refreshed on 2026-11-12. The guide step wording
+  remains open ([KNOWN_GAPS.md](../KNOWN_GAPS.md)).
 - Not verified with users. See the open questions in
   [DASHBOARD_GUIDELINES.md](../product/DASHBOARD_GUIDELINES.md).
 
@@ -237,3 +237,60 @@ Still open:
   strip and the 375 period navigation height (46 px).
 - Native Latvian review of the new strings ("līdz", "Tagad", group titles).
 - A user test.
+
+## Addendum 2026-11-11: cards on top, visible ledger
+
+The owner reviewed the live page against this ADR and decided the points below.
+The next action, the attention order, the tones and the money definitions in
+Decision 3 are unchanged. These parts replace the earlier layout descriptions:
+
+- **Order.** Header, then the money card and the Readings card, then the
+  next-step band, then the attention list. "Next action first" (Decision 1) no
+  longer describes the order: the cards stay on top by the owner's choice.
+- **Money card.** "Total to pay" (`amountDue`) is the headline again, with a bar,
+  then "Received in payments" (with its share) and "Still unpaid" as two link
+  rows. The breakdown (this month's invoices, + previous debt, - previous
+  overpayment, + late fees, manual adjustment when needed, = total to pay) is
+  always visible beside it. The info popover is removed. The card shows one
+  column when it is narrower than 32 rem; there the breakdown is a `<details>`
+  ("Invoice breakdown") that a script closes on load, so it is one tap away.
+  The owner chose this over moving the band above the cards on phones.
+- **Card row.** The two cards share a row while the money card has 35 rem.
+  Below that each card takes a full row.
+- **Band.** The "Next step" label above the sentence is removed. The setup card
+  says "Next step: <step>" in one line. The four steps run across while the band
+  is at least 48 rem wide (a container query), and 2 by 2 below.
+- **Progress steps.** Each state has its own icon: check (done), arrow (now),
+  clock (in progress), dots (waiting). The icons have no tinted background. A
+  deadline that has passed while the step is unfinished shows a warning icon and
+  "N days late" in the warning tone (7.4:1 light, 9.9:1 dark). The Invoices step
+  no longer shows the invoice issue date: it is not a deadline.
+- **Period navigation.** A period with no previous or next period gets no
+  placeholder button.
+- **Attention rows.** Rows are 64 px (were 81 px). The dwelling link is 24 px
+  high on a fine pointer and 44 px on a coarse pointer. Overdue rows use the
+  short date ("29. sept.") like the progress steps. Summary-row icons have no
+  tinted tile.
+- **Not changed.** Text sizes stay as they are (the owner did not take the
+  16 px option, so Decision 10 is still not met for the rows and step details).
+
+Measured live (Latvian, September 2026 demo month with arrears, 2026-11-11),
+distances from the top of the page:
+
+| Viewport | Cards bottom | Primary button | Band bottom | Attention rows 1, 2, 3 |
+|---|---|---|---|---|
+| 1440 x 900 | 340 px (was 352) | 380-424 px (was 399-443) | 533 px (was 562) | 664, 728, 792 px (was 693, 774, 855) |
+| 1024 x 768 | 403 px (was 433) | 443-487 px (was 479-523) | 596 px (was 718) | 727, 791, 855 px (was 849 for row 1) |
+| 768 x 1024 | 559 px | 599-643 px | 805 px | 936, 1000, 1064 px |
+| 390 x 812 | 649 px (was 666) | 722-766 px (was 767-811) | 1004 px (was 1003) | 1127 px (was 1126) |
+
+Consequences:
+
+- At 1440 x 900 three attention rows are fully visible (two before).
+- At 1024 x 768 the first attention row starts above the fold and ends below it.
+  The owner accepted that the list stays below the fold at this width.
+- At 390 x 812 the primary button is inside the first screen, because the
+  breakdown starts closed on phones.
+- The fold rules in section 10 of
+  [DASHBOARD_GUIDELINES.md](../product/DASHBOARD_GUIDELINES.md) are rewritten for
+  this order.

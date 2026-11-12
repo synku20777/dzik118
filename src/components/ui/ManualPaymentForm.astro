@@ -19,10 +19,20 @@ interface Props {
   today: string;
   error?: unknown;
   idPrefix?: string;
+  // Shown with the amount in the confirmation; without it the amount is
+  // shown as typed.
+  currency?: string;
 }
 
-const { organizationId, invoices, dwellings, today, error, idPrefix } =
-  Astro.props;
+const {
+  organizationId,
+  invoices,
+  dwellings,
+  today,
+  error,
+  idPrefix,
+  currency,
+} = Astro.props;
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 const id = idPrefix ?? "manual";
@@ -44,6 +54,8 @@ const label = "field-label";
   method="POST"
   action={actions.payments.recordManual}
   class="mt-4 space-y-3"
+  data-payment-form
+  data-currency={currency}
 >
   <input type="hidden" name="organizationId" value={organizationId} />
   <input type="hidden" name="submissionId" value={submissionId} />
@@ -157,8 +169,52 @@ const label = "field-label";
       type="submit"
       class="btn-primary"
       data-confirm={t("Record this payment? It is applied right away.")}
+      data-confirm-template={t(
+        "Record {amount} for {target}? It is applied right away."
+      )}
     >
       {t("Record payment")}
     </button>
   </div>
 </form>
+
+<script>
+  // The confirmation names the amount and where the payment goes, so a
+  // mistyped amount or a wrong invoice is caught before anything is posted.
+  // forms.ts reads data-confirm when the form submits; this keeps it current.
+  function describe(form: HTMLFormElement) {
+    const button = form.querySelector<HTMLButtonElement>(
+      "button[data-confirm-template]"
+    );
+    const amountInput = form.querySelector<HTMLInputElement>(
+      'input[name="amount"]'
+    );
+    // A plain querySelector and a cast: workers-types break the
+    // HTMLSelectElement generic (see src/lib/ui/invoice-template-editor.ts).
+    const target = form.querySelector(
+      'select[name="target"]'
+    ) as unknown as HTMLSelectElement | null;
+    const option = target?.selectedOptions[0];
+    const raw = amountInput?.value.trim() ?? "";
+    if (!button || !raw || !option?.value) return;
+    const number = Number(raw.replace(/\s/g, "").replace(",", "."));
+    const currency = form.dataset.currency;
+    const amount =
+      currency && Number.isFinite(number)
+        ? new Intl.NumberFormat(document.documentElement.lang || undefined, {
+            style: "currency",
+            currency,
+          }).format(number)
+        : raw;
+    button.dataset.confirm = button.dataset
+      .confirmTemplate!.replace("{amount}", amount)
+      .replace("{target}", option.textContent?.trim() ?? "");
+  }
+  for (const type of ["input", "change"])
+    document.addEventListener(type, (event) => {
+      const form = (event.target as Element | null)?.closest?.(
+        "form[data-payment-form]"
+      );
+      if (form instanceof HTMLFormElement) describe(form);
+    });
+</script>

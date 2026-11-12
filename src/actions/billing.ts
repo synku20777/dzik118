@@ -8,7 +8,13 @@ import {
 } from "../db/schema/billing";
 import { meterTypeEnum } from "../db/schema/dwellings";
 import { requireActiveOrganization } from "../domain/authorization/guards";
-import { archiveRule, createRule, updateRule } from "../domain/billing/rules";
+import {
+  archiveRule,
+  createRule,
+  updateRule,
+  restoreRule,
+  setRuleEnabled,
+} from "../domain/billing/rules";
 import { decimalInput } from "../lib/decimal-input";
 import {
   bulkGenerateInvoices,
@@ -128,6 +134,29 @@ export const billing = {
     ),
   }),
 
+  setRuleEnabled: defineAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      ruleId: z.uuid(),
+      enabled: z.coerce.boolean(),
+    }),
+    handler: safeHandler(
+      async ({ organizationId, ruleId, enabled }, { locals }) => {
+        requireActiveOrganization(locals.auth, organizationId);
+        return withDb((db) =>
+          setRuleEnabled(
+            db,
+            organizationId,
+            ruleId,
+            enabled,
+            locals.auth!.userId
+          )
+        );
+      }
+    ),
+  }),
+
   archiveRule: defineAction({
     accept: "form",
     input: z.object({
@@ -138,6 +167,17 @@ export const billing = {
       requireActiveOrganization(locals.auth, organizationId);
       return withDb((db) =>
         archiveRule(db, organizationId, ruleId, locals.auth!.userId)
+      );
+    }),
+  }),
+
+  restoreRule: defineAction({
+    accept: "form",
+    input: z.object({ organizationId: z.uuid(), ruleId: z.uuid() }),
+    handler: safeHandler(async ({ organizationId, ruleId }, { locals }) => {
+      requireActiveOrganization(locals.auth, organizationId);
+      return withDb((db) =>
+        restoreRule(db, organizationId, ruleId, locals.auth!.userId)
       );
     }),
   }),

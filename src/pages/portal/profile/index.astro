@@ -3,6 +3,7 @@ import { translate, uiLocale } from "../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 import ResidentLayout from "../../../layouts/ResidentLayout.astro";
+import Icon from "../../../components/ui/Icon.astro";
 import {
   ForbiddenError,
   requireResidentRole,
@@ -33,100 +34,89 @@ const [dwellings, displayName] = await withRequestDb(
 ---
 
 <ResidentLayout title={`${t("Profile")} - ${t("Namkopa")}`}>
-  <div class="mx-auto max-w-2xl p-6">
-    <div class="space-y-6">
-      <a href="/portal" class="text-body-sm text-muted hover:underline">
-        ← {t("Portal")}
-      </a>
+  <div>
+    <a class="resident-back" href="/portal">
+      <Icon name="arrow-left" />
+      {t(auth.dwellingIds.length === 1 ? "Home" : "Your dwellings")}
+    </a>
+    <header class="resident-title">
+      <h1 class="font-display">{t("Profile")}</h1>
+    </header>
 
-      <h1 class="text-h2 text-foreground">{t("Profile")}</h1>
-
-      <section class="rounded-panel contained bg-surface p-4">
-        <h2 class="text-h3 text-foreground">{t("Account")}</h2>
-        <p class="mt-2 text-body-sm text-foreground">{auth.email}</p>
-        <p class="mt-1 text-body-sm text-muted">{t("Resident")}</p>
-        {nameResult?.error && (
-          <p class="notice notice-danger mt-3" role="alert">
-            {friendlyActionErrorMessage(nameResult.error, locale)}
-          </p>
-        )}
-        {nameResult?.data && (
-          <p class="notice mt-3" role="status">
-            {t("Saved successfully.")}
-          </p>
-        )}
-        <form
-          method="POST"
-          action={actions.profile.updateDisplayName}
-          class="mt-4"
-        >
-          <label class="field-label" for="displayName">
-            {t("Display name")}
-          </label>
-          <div class="mt-2 flex flex-col gap-3 sm:flex-row">
-            <input
-              id="displayName"
-              name="displayName"
-              maxlength="100"
-              required
-              value={nameResult?.data?.displayName ?? displayName ?? ""}
-              class="w-full rounded-control border border-(--color-input-border) px-3 py-2 sm:w-72"
-            />
-            <button type="submit" class="btn-primary">
-              {t("Save")}
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section class="rounded-panel contained bg-surface p-4">
-        <h2 class="text-h3 text-foreground">{t("Dwelling access")}</h2>
-        {dwellings.length === 0 ? (
-          <p class="mt-2 text-body-sm text-muted">
-            {t("No dwellings assigned.")}
-          </p>
-        ) : (
-          <ul class="mt-4 divide-y divide-border rounded-control contained bg-surface">
-            {dwellings.map((dwelling) => (
-              <li>
-                <a
-                  href={`/portal/dwellings/${dwelling.id}`}
-                  class="flex items-center justify-between px-4 py-3 hover:bg-hover"
-                >
-                  <span class="font-medium text-foreground">
-                    {dwelling.number}
-                  </span>
-                  {dwelling.displayName && (
-                    <span class="text-body-sm text-muted">
-                      {dwelling.displayName}
-                    </span>
-                  )}
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      <section class="rounded-panel contained bg-surface p-4">
-        <h2 class="text-h3 text-foreground">{t("Your data")}</h2>
-        <p class="mt-2 text-body-sm text-muted">
-          {t(
-            "Download a copy of the data this service holds about you, as a JSON file."
-          )}
+    <section class="resident-section" aria-labelledby="account-heading">
+      <h2 id="account-heading">{t("Account")}</h2>
+      <p class="resident-line">
+        <Icon name="user" />
+        <span>
+          {auth.email}
+          <span class="resident-muted block">{t("Resident")}</span>
+        </span>
+      </p>
+      {nameResult?.error && (
+        <p class="notice notice-danger" role="alert">
+          {friendlyActionErrorMessage(nameResult.error, locale)}
         </p>
-        <a
-          href="/api/v1/portal/me/export"
-          download
-          class="btn-secondary mt-4 inline-flex"
-        >
-          {t("Download my data")}
-        </a>
-      </section>
-      <form method="POST" action="/logout">
-        <button type="submit" class="btn-secondary">
-          {t("Sign out")}
-        </button>
+      )}
+      {nameResult?.data && (
+        <p class="resident-line resident-ok resident-enter" role="status">
+          <Icon name="circle-check" size="lg" />
+          {t("Saved successfully.")}
+        </p>
+      )}
+      <form method="POST" action={actions.profile.updateDisplayName}>
+        <label class="field-label" for="displayName">
+          {t("Display name")}
+        </label>
+        <div class="resident-reading-controls">
+          <input
+            id="displayName"
+            name="displayName"
+            maxlength="100"
+            required
+            autocomplete="name"
+            value={nameResult?.data?.displayName ?? displayName ?? ""}
+          />
+          <button type="submit" class="btn-primary">
+            {t("Save")}
+          </button>
+        </div>
       </form>
-    </div>
+    </section>
+
+    <section aria-labelledby="access-heading">
+      <h2 id="access-heading" class="mb-3">
+        {t("Dwelling access")}
+      </h2>
+      {dwellings.length === 0 ? (
+        <p class="resident-section">{t("No dwellings assigned.")}</p>
+      ) : (
+        <div class="resident-list">
+          {dwellings.map((dwelling) => (
+            <a href={`/portal/dwellings/${dwelling.id}`}>
+              <span class="resident-list-main">
+                <strong>
+                  {t("Dwelling")} {dwelling.number}
+                </strong>
+                {dwelling.displayName && <span>{dwelling.displayName}</span>}
+              </span>
+              <Icon name="chevron-right" />
+            </a>
+          ))}
+        </div>
+      )}
+    </section>
+
+    <section class="resident-section" aria-labelledby="data-heading">
+      <h2 id="data-heading">{t("Your data")}</h2>
+      <p class="resident-muted">
+        {t(
+          "Download a copy of the data this service holds about you, as a JSON file."
+        )}
+      </p>
+      <a href="/api/v1/portal/me/export" download class="btn-secondary">
+        <Icon name="download" />
+        {t("Download my data")}
+      </a>
+    </section>
   </div>
 </ResidentLayout>

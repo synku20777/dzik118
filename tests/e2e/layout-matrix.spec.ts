@@ -468,8 +468,8 @@ test("the shell and panes switch exactly at their breakpoints", async ({
   await page.setViewportSize({ width: 640, height: 900 });
   await expect(stacked).not.toHaveCSS("display", "block");
 
-  // The dwelling two-pane layout follows its own area, not the screen: it
-  // needs 60rem. At 1120 the sidebar leaves less than that.
+  // The dwelling overview's two columns follow the page's own area, not the
+  // screen: they need 60rem. At 1120 the sidebar leaves less than that.
   const href = await page
     .locator(
       `main a[href^="${base}/dwellings/"]:not([href*="import"]):not([href*="export"]):not([href$="/new"])`
@@ -480,7 +480,7 @@ test("the shell and panes switch exactly at their breakpoints", async ({
   await page.goto(withLang(href!));
   const columns = () =>
     page
-      .locator(".dwelling-grid")
+      .locator(".overview-grid")
       .evaluate(
         (el) => getComputedStyle(el).gridTemplateColumns.split(" ").length
       );
@@ -490,7 +490,7 @@ test("the shell and panes switch exactly at their breakpoints", async ({
     [959, 1],
     [960, 2],
   ] as const) {
-    await page.locator(".dwelling-grid-host").evaluate((el, w) => {
+    await page.locator("[data-dwelling-detail]").evaluate((el, w) => {
       el.style.width = w + "px";
     }, hostWidth);
     await settle();
@@ -498,7 +498,7 @@ test("the shell and panes switch exactly at their breakpoints", async ({
       expected
     );
   }
-  await page.locator(".dwelling-grid-host").evaluate((el) => {
+  await page.locator("[data-dwelling-detail]").evaluate((el) => {
     el.style.width = "";
   });
   for (const [width, expected] of [

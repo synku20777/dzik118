@@ -25,6 +25,8 @@ export const ICONS = {
     '<path d="M12 6a2 2 0 1 0 4 0a2 2 0 1 0-4 0M4 6h8m4 0h4M6 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0m-2 0h2m4 0h10m-5 6a2 2 0 1 0 4 0a2 2 0 1 0-4 0M4 18h11m4 0h1" />',
   logout:
     '<path d="M14 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2m-5-4h12l-3-3m0 6l3-3" />',
+  home: '<g><path d="M5 12H3l9-9l9 9h-2M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" /><path d="M9 21v-6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v6" /></g>',
+  copy: '<g><path d="M7 9.667A2.667 2.667 0 0 1 9.667 7h8.666A2.667 2.667 0 0 1 21 9.667v8.666A2.667 2.667 0 0 1 18.333 21H9.667A2.667 2.667 0 0 1 7 18.333z" /><path d="M4.012 16.737A2 2 0 0 1 3 15V5c0-1.1.9-2 2-2h10c.75 0 1.158.385 1.5 1" /></g>',
   "help-circle":
     '<g><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0m9 5v.01" /><path d="M12 13.5a1.5 1.5 0 0 1 1-1.5a2.6 2.6 0 1 0-3-4" /></g>',
 
@@ -64,6 +66,8 @@ export const ICONS = {
   "chevron-right": '<path d="m9 6l6 6l-6 6" />',
   link: '<path d="M9 15l6-6m-4-3l.463-.536a5 5 0 0 1 7.071 7.072L18 13m-5 5l-.397.534a5.07 5.07 0 0 1-7.127 0a4.97 4.97 0 0 1 0-7.071L6 11" />',
   "arrow-back-up": '<path d="M9 14L4 9l5-5m-5 5h11a5.5 5.5 0 0 1 0 11h-4" />',
+  "player-pause":
+    '<path d="M6 6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1zm8 0a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1z" />',
   "circle-x":
     '<path d="m10 10l4 4m0-4l-4 4M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0" />',
   x: '<path d="M18 6L6 18M6 6l12 12" />',
@@ -112,3 +116,14 @@ export const ICONS = {
 } satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICONS;
+
+// One icon per meter type. Hot water is "droplet-hot", never a flame, which
+// reads as gas or heating.
+export const METER_ICONS: Record<string, IconName> = {
+  COLD_WATER: "droplet",
+  HOT_WATER: "droplet-hot",
+  ELECTRICITY: "bolt",
+  GAS: "flame",
+  HEAT: "thermometer",
+  OTHER: "tool",
+};

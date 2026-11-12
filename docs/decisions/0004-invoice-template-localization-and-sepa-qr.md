@@ -43,6 +43,10 @@ There is exactly one persisted PDF artifact per invoice: the canonical Latvian P
 
 A new `src/domain/billing/sepa-qr.ts` module builds an EPC069-12 v3.1 payload from the exact same snapshot fields the adjacent human-readable payment text already prints (issuer name as beneficiary, `payment_snapshot.iban`/`bic`, `invoice.amount_due`, `invoice.invoice_number`) -- there is no second, independently editable "QR data" source. The remittance reference is always the Latvian `Rēķins {invoiceNumber}`, identical across every language copy, never truncated. A strict builder throws on any invalid input (non-EUR currency, missing/invalid BIC or IBAN, zero/out-of-range amount, oversized fields); a non-throwing wrapper used by the actual renderer catches every failure -- including a QR-library-internal failure, not just payload validation -- and simply omits the QR, so `renderInvoiceHtml` can never throw because of QR generation. QR image generation uses the `qrcode-generator` npm package (chosen as an already-well-scoped, zero-dependency, actively-maintained library over hand-rolling a QR encoder), with its default byte-encoder overridden to real UTF-8 (its own default silently mangles non-ASCII text, which would corrupt every Latvian diacritic in the payload despite the payload declaring UTF-8).
 
+### 6. Label set 4: known units in the invoice language (2026-11-12)
+
+Invoices printed a line unit exactly as typed on the tariff, so a Latvian invoice could read "1 month" or "1 m3". Label set 4 prints known units through the same `unitLabel` rules as the Tariffs page (`1 mēn.`, `1 m³`; English `month`, Russian `мес.`), and an unknown unit as typed. It rides the existing `labelSetVersion` mechanism: `LOCALIZED_UNITS_FROM_LABEL_SET` is 4, new invoices are stamped 4, and an invoice stamped 3 or lower prints its stored unit as before. The wording dictionary is the set 2 one, as for set 3.
+
 ## Consequences
 
 ### Benefits

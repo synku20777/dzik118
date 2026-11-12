@@ -173,6 +173,58 @@ export async function reply(
   });
 }
 
+// The resident portal shows one chat and has no Subject field. A new topic is
+// named from the first line of its first message, so the administrator inbox
+// still has something to list.
+export function subjectFromBody(body: string): string {
+  const line =
+    body
+      .split("\n")
+      .map((part) => part.replace(/\s+/g, " ").trim())
+      .find(Boolean) ?? "";
+  return line.length > 60 ? line.slice(0, 59).trimEnd() + "…" : line;
+}
+
+// One message box for the resident: the message joins the dwelling's newest
+// conversation that is not resolved, or starts a new one. The caller checks
+// dwelling access (requireDwellingAccess), as for createConversation.
+export async function sendResidentMessage(
+  db: Db,
+  dwellingId: string,
+  body: string,
+  auth: AuthContext
+) {
+  const [open] = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.dwellingId, dwellingId),
+        inArray(conversations.status, ["NEW", "OPEN"])
+      )
+    )
+    .orderBy(desc(conversations.updatedAt))
+    .limit(1);
+  // shortcut: an administrator can resolve the conversation between this read
+  // and reply(). The message is then still saved in it and shows in the inbox;
+  // lock here if that ever has to start a new conversation instead.
+  if (open) return reply(db, open.id, body, auth, "RESIDENT");
+  const conversation = await createConversation(
+    db,
+    dwellingId,
+    subjectFromBody(body),
+    body,
+    auth.userId,
+    "RESIDENT"
+  );
+  const [message] = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.conversationId, conversation.id))
+    .limit(1);
+  return message;
+}
+
 // Idempotent the same way Phase J's confirmMatch/rejectMatch are:
 // resolving an already-resolved conversation is a safe no-op.
 export async function resolveConversation(

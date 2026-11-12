@@ -1,6 +1,11 @@
 ---
 import { translate, uiLocale, type Locale } from "../../lib/ui/i18n";
+interface Props {
+  fullNames?: boolean;
+}
+const { fullNames = false } = Astro.props;
 const locale = uiLocale(Astro.cookies, Astro.url);
+const names = { en: "English", lv: "Latviešu", ru: "Русский" };
 
 const options: { code: Locale; label: string; ariaLabel: string }[] = [
   { code: "en", label: "EN", ariaLabel: "English" },
@@ -23,7 +28,7 @@ function hrefFor(code: Locale) {
   {options.map((option) =>
     option.code === locale ? (
       <span aria-current="true" lang={option.code} data-tip={option.ariaLabel}>
-        {option.label}
+        {fullNames ? names[option.code] : option.label}
       </span>
     ) : (
       <a
@@ -32,7 +37,7 @@ function hrefFor(code: Locale) {
         aria-label={option.ariaLabel}
         data-tip={option.ariaLabel}
       >
-        {option.label}
+        {fullNames ? names[option.code] : option.label}
       </a>
     )
   )}

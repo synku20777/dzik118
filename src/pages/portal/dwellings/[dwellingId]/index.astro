@@ -15,14 +15,19 @@ import {
   listMetersWithReadingForPeriod,
 } from "../../../../domain/periods/cases";
 import {
-  getInvoiceForDwellingPeriod,
+  getInvoiceForResident,
   listInvoicesForDwelling,
 } from "../../../../domain/billing/generation";
 import { withRequestDb } from "../../../../lib/db-request";
 import { rethrowUnexpected } from "../../../../domain/errors";
-import PageHeader from "../../../../components/ui/PageHeader.astro";
+import Icon from "../../../../components/ui/Icon.astro";
+import { findPreviousValues } from "../../../../domain/periods/readings";
+import readingsSource from "../../../../domain/periods/readings.ts?raw";
+import { errorTranslations } from "../../../../lib/ui/error-translations";
 import StatusBadge from "../../../../components/ui/StatusBadge.astro";
-import EmptyState from "../../../../components/ui/EmptyState.astro";
+import InvoiceList from "../../../../components/ui/ResidentInvoiceList.astro";
+import { METER_ICONS } from "../../../../lib/ui/icons";
+import { unitLabel } from "../../../../lib/ui/units";
 import {
   translate,
   uiLocale,
@@ -57,10 +62,11 @@ try {
 const {
   period,
   meters,
-  currentInvoice,
+  latestBill,
   groupedHistory,
   recentInvoices,
   timezone,
+  previousValues,
 } = await withRequestDb(async (db) => {
   const { timezone } = await getOrganization(db, dwelling.organizationId);
   const period = await getCurrentOpenPeriod(db, dwelling.organizationId);
@@ -72,31 +78,55 @@ const {
         period.id
       )
     : [];
-  const currentInvoice = period
-    ? await getInvoiceForDwellingPeriod(db, dwellingId, period.id)
-    : null;
-  const groupedHistory = await listConsumptionHistoryForDwelling(
-    db,
-    dwellingId
-  );
+  const previousValues = period
+    ? await findPreviousValues(
+        db,
+        meters.map((meter) => meter.meterId),
+        period
+      )
+    : new Map<string, string>();
   const allInvoices = await listInvoicesForDwelling(db, dwellingId);
+  const recentInvoices = [...allInvoices].reverse().slice(0, 3);
+  const latestBill = recentInvoices[0]
+    ? await getInvoiceForResident(db, recentInvoices[0].id, dwellingId)
+    : null;
   return {
     period,
     meters,
-    currentInvoice,
-    groupedHistory,
-    recentInvoices: [...allInvoices].reverse().slice(0, 3),
+    latestBill,
+    previousValues,
+    recentInvoices,
     timezone,
+    groupedHistory: (
+      await listConsumptionHistoryForDwelling(db, dwellingId)
+    ).filter(
+      (row) => !period || row.year !== period.year || row.month !== period.month
+    ),
   };
 });
 
 const submitResult = Astro.getActionResult(actions.readings.residentSubmit);
+if (submitResult?.data) return Astro.redirect(Astro.url.pathname + "#readings");
+let submitted: FormData | null = null;
+if (submitResult?.error) {
+  try {
+    submitted = await Astro.request.formData();
+  } catch {
+    submitted = null;
+  }
+}
+const readingErrors = errorTranslations([readingsSource], locale, [
+  "Enter a valid meter reading, for example 123.456. Use up to 3 decimal places.",
+]);
 // Same rule as the server (readings.ts): the deadline date is inclusive and
 // ends at midnight in the organization timezone.
 const deadlinePassed = period?.readingDeadline
   ? orgLocalDateString(new Date(), timezone) > period.readingDeadline
   : false;
 const activeMeters = meters.filter((m) => !m.archivedAt);
+const missingReadings = activeMeters.filter(
+  (m) => m.currentValue === null
+).length;
 // One column per meter type and unit that has any reading. The rows arrive
 // sorted by type, so the columns keep the same order in every period.
 const historyColumns = groupedHistory
@@ -113,299 +143,374 @@ const historyColumns = groupedHistory
       a.unit.localeCompare(b.unit)
   );
 const base = "/portal/dwellings/" + dwellingId;
+const billPaid = latestBill?.remainingAmount === "0.00";
+const canSubmit = !deadlinePassed && missingReadings > 0;
 ---
 
 <ResidentLayout title={t("Dwelling") + " " + dwelling.number}>
-  <div class="space-y-7">
+  <div>
     {(Astro.locals.auth?.dwellingIds.length ?? 0) > 1 && (
-      <a class="text-sm text-primary" href="/portal/dwellings">
-        ← {t("Your dwellings")}
+      <a class="resident-back" href="/portal/dwellings">
+        <Icon name="arrow-left" />
+        {t("Your dwellings")}
       </a>
     )}
-    <PageHeader
-      accent
-      title={t("Dwelling") + " " + dwelling.number}
-      eyebrow={t("Resident portal")}
-      description={
-        dwelling.billingAddress ??
-        t("Your billing, readings and messages in one place.")
-      }
-    />
-    {period && (
-      <p class="text-sm font-semibold">
-        {formatPeriod(period.year, period.month, locale)}
-      </p>
-    )}
-    {currentInvoice ? (
-      <section
-        class="current-invoice"
-        data-paid={currentInvoice.caseStatus === "PAID" ? "true" : "false"}
-      >
+    <header class="resident-title">
+      <h1 class="font-display">
+        {t("Dwelling")} {dwelling.number}
+      </h1>
+      <p>{dwelling.billingAddress}</p>
+    </header>
+
+    <section class="resident-section" aria-labelledby="bill-heading">
+      <div class="resident-row">
+        <h2 id="bill-heading">{t("Latest bill")}</h2>
+        {latestBill && <StatusBadge status={latestBill.caseStatus} />}
+      </div>
+      {latestBill ? (
         <>
-          <div class="flex items-center justify-between gap-3">
-            <>
-              <h2 class="text-sm text-muted">{t("Current bill")}</h2>
-              <StatusBadge status={currentInvoice.caseStatus} />
-            </>
+          <div hidden={billPaid}>
+            <p class="resident-amount">
+              {formatMoney(
+                latestBill.remainingAmount,
+                latestBill.invoice.currency,
+                locale
+              )}
+            </p>
+            <p>
+              {t("Amount still due")} · {t("Due date")}:{" "}
+              <strong>{formatDate(latestBill.invoice.dueDate, locale)}</strong>
+            </p>
           </div>
-          <p class="amount mt-4">
-            {formatMoney(
-              currentInvoice.outstandingAmount,
-              currentInvoice.currency,
-              locale
-            )}
-          </p>
-          <p class="mt-2 text-sm text-muted">{currentInvoice.invoiceNumber}</p>
-          {currentInvoice.previousOutstanding !== "0.00" && (
-            <p class="mt-2 text-sm">
-              {t("Previous balance")}:{" "}
-              {formatMoney(
-                currentInvoice.previousOutstanding,
-                currentInvoice.currency,
-                locale
-              )}
+          {billPaid && (
+            <p class="resident-line resident-ok">
+              <Icon name="circle-check" size="lg" />
+              {t("This bill is paid. No payment is needed.")}
             </p>
           )}
-          {currentInvoice.previousCreditApplied !== "0.00" && (
-            <p class="mt-2 text-sm">
-              {t("Credit applied")}: −
-              {formatMoney(
-                currentInvoice.previousCreditApplied,
-                currentInvoice.currency,
-                locale
-              )}
-            </p>
-          )}
-          {currentInvoice.lateFeeApplied !== "0.00" && (
-            <p class="mt-2 text-sm">
-              {t("Late fee")}:{" "}
-              {formatMoney(
-                currentInvoice.lateFeeApplied,
-                currentInvoice.currency,
-                locale
-              )}
-            </p>
-          )}
-          {currentInvoice.remainingCredit !== "0.00" && (
-            <p class="mt-2 text-sm text-success">
-              {t("Account credit")}:{" "}
-              {formatMoney(
-                currentInvoice.remainingCredit,
-                currentInvoice.currency,
-                locale
-              )}
-            </p>
-          )}
-          <div class="mt-5 flex flex-wrap items-center justify-between gap-3">
-            <>
-              <p class="text-sm">
-                {t("Due date")}:{" "}
-                <strong>{formatDate(currentInvoice.dueDate, locale)}</strong>
-              </p>
-              <a
-                class={
-                  currentInvoice.caseStatus === "PAID"
-                    ? "btn-secondary"
-                    : "btn-primary"
-                }
-                href={
-                  "/portal/invoices/" +
-                  currentInvoice.id +
-                  "?dwellingId=" +
-                  dwellingId
-                }
-              >
-                {t("Review invoice")} →
-              </a>
-            </>
+          <div class="resident-row">
+            <a
+              class={billPaid ? "btn-secondary" : "btn-primary"}
+              href={`/portal/invoices/${latestBill.invoice.id}?dwellingId=${dwellingId}`}
+            >
+              {t(billPaid ? "View invoice" : "How to pay")}
+              <Icon name="arrow-right" />
+            </a>
+            <p class="resident-muted">{latestBill.invoice.invoiceNumber}</p>
           </div>
         </>
-      </section>
-    ) : (
-      <EmptyState title={t("No current invoice yet.")} />
-    )}
-    {period && (
-      <section>
-        <h2 class="section-title">{t("Meter readings")}</h2>
-        {submitResult?.error && (
-          <p role="alert" class="notice notice-danger mb-4">
-            {friendlyActionErrorMessage(submitResult.error, locale)}
+      ) : (
+        <p>{t("No current invoice yet.")}</p>
+      )}
+    </section>
+
+    <section
+      id="readings"
+      class="resident-section"
+      aria-labelledby="readings-heading"
+      data-reading-errors={JSON.stringify(readingErrors)}
+    >
+      <div class="resident-row">
+        <h2 id="readings-heading">{t("Meter readings")}</h2>
+        {period && (
+          <p class="resident-line">
+            <Icon name="calendar-month" />
+            <strong>{formatPeriod(period.year, period.month, locale)}</strong>
           </p>
         )}
-        {submitResult?.data && (
-          <p role="status" class="notice mb-4">
-            {t("Reading received")}
-          </p>
-        )}
-        {deadlinePassed && (
-          <p class="notice notice-warning mb-4">
-            {t("The reading deadline has passed. Contact your administrator.")}
-          </p>
-        )}
-        <div class="panel divide-y divide-border">
-          {activeMeters.map((meter) => (
-            <section class="p-4">
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <h3 class="text-sm font-semibold">
-                  {meter.label || entityLabel(meter.type, locale)}
-                </h3>
-                {meter.currentValue !== null && (
-                  <span class="status-badge" data-tone="success">
-                    ✓ {t("Reading received")}
-                  </span>
-                )}
-              </div>
-              {meter.serialNumber && (
-                <p class="mt-1 text-xs text-muted">{meter.serialNumber}</p>
+      </div>
+      {period ? (
+        <>
+          {activeMeters.length > 0 && (
+            <p
+              class="resident-line resident-ok"
+              data-all-readings
+              hidden={missingReadings > 0}
+              role="status"
+            >
+              <Icon name="circle-check" size="lg" />
+              {t("All readings received for this month.")}
+            </p>
+          )}
+          {period.readingDeadline && missingReadings > 0 && (
+            <p class="resident-line" data-reading-deadline>
+              <Icon name="clock" />
+              <span>
+                {t("Reading deadline")}:{" "}
+                <strong>{formatDate(period.readingDeadline, locale)}</strong>
+              </span>
+            </p>
+          )}
+          {deadlinePassed && missingReadings > 0 && (
+            <p class="notice notice-warning">
+              {t(
+                "The reading deadline has passed. Contact your administrator."
               )}
-              {meter.currentValue !== null ? (
-                <p class="mt-3 text-sm">
-                  <strong class="tabular-nums">
-                    {formatNumber(meter.currentValue, locale)} {meter.unit}
-                  </strong>
-                  <span class="ml-2 text-muted">
-                    · {meter.source && entityLabel(meter.source, locale)}
-                  </span>
-                </p>
-              ) : (
-                !deadlinePassed && (
+            </p>
+          )}
+          {submitResult?.error && (
+            <p role="alert" class="notice notice-danger">
+              {friendlyActionErrorMessage(submitResult.error, locale)}
+            </p>
+          )}
+          {canSubmit && (
+            <p id="reading-help" class="resident-line resident-hint">
+              <Icon name="info-circle" />
+              {t(
+                "Enter the full number on the meter, not the amount used. You can use a comma or a decimal point, with up to 3 decimal places."
+              )}
+            </p>
+          )}
+          {activeMeters.map((meter) => {
+            const name = meter.label || entityLabel(meter.type, locale);
+            const unit = unitLabel(meter.unit, locale);
+            return (
+              <section
+                class="resident-meter"
+                aria-labelledby={`meter-title-${meter.meterId}`}
+              >
+                <span class="resident-meter-icon" data-meter={meter.type}>
+                  <Icon name={METER_ICONS[meter.type] ?? "tool"} size="lg" />
+                </span>
+                <div>
+                  <h3 id={`meter-title-${meter.meterId}`}>{name}</h3>
+                  <p class="resident-meter-facts">
+                    {meter.serialNumber && (
+                      <span>
+                        {t("Serial number")}: {meter.serialNumber}
+                      </span>
+                    )}
+                    {previousValues.has(meter.meterId) && (
+                      <span>
+                        {t("Previous reading")}:{" "}
+                        <strong>
+                          {formatNumber(
+                            previousValues.get(meter.meterId)!,
+                            locale
+                          )}{" "}
+                          {unit}
+                        </strong>
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div
+                  data-reading-received
+                  hidden={meter.currentValue === null}
+                  role="status"
+                  tabindex="-1"
+                >
+                  <p class="resident-meter-figure">
+                    <strong data-reading-value>
+                      {meter.currentValue !== null &&
+                        formatNumber(meter.currentValue, locale)}
+                    </strong>{" "}
+                    <span>{unit}</span>
+                  </p>
+                  <p class="resident-meter-state">
+                    <Icon name="check" size="sm" />
+                    {t("Reading received")}
+                  </p>
+                  {meter.source === "CARRIED_FORWARD" && (
+                    <p class="resident-muted">
+                      {entityLabel(meter.source, locale)}
+                    </p>
+                  )}
+                </div>
+                {meter.currentValue === null && !deadlinePassed && (
                   <form
                     method="POST"
                     action={actions.readings.residentSubmit}
-                    class="mt-4"
+                    data-resident-reading
+                    data-saving={t("Saving…")}
+                    data-failed={t(
+                      "The reading could not be saved. Check your connection and try again."
+                    )}
                   >
                     <input type="hidden" name="dwellingId" value={dwellingId} />
                     <input type="hidden" name="periodId" value={period.id} />
                     <input type="hidden" name="meterId" value={meter.meterId} />
-                    <label class="field-label" for={"reading-" + meter.meterId}>
-                      {t("Current value")} ({meter.unit})
+                    <label class="field-label" for={`reading-${meter.meterId}`}>
+                      {t("Number shown on the meter")} ({unit})
                     </label>
-                    <div class="mt-2 flex flex-col gap-3 sm:flex-row">
+                    <div class="resident-reading-controls">
                       <input
-                        id={"reading-" + meter.meterId}
+                        id={`reading-${meter.meterId}`}
                         name="currentValue"
                         type="text"
                         inputmode="decimal"
-                        pattern="\d+(\.\d{1,3})?"
+                        pattern="[0-9]{1,11}([.,][0-9]{1,3})?"
                         required
-                        placeholder="0.000"
-                        aria-describedby={"reading-help-" + meter.meterId}
-                        class="w-full rounded-control border border-(--color-input-border) px-3 py-2 sm:w-48"
+                        autocomplete="off"
+                        value={
+                          submitted?.get("meterId") === meter.meterId
+                            ? String(submitted.get("currentValue") ?? "")
+                            : ""
+                        }
+                        aria-describedby="reading-help"
                       />
-                      <button type="submit" class="btn-primary">
+                      <button
+                        type="submit"
+                        class="btn-primary"
+                        aria-label={`${t("Submit reading")}: ${name}`}
+                      >
                         {t("Submit reading")}
                       </button>
                     </div>
-                    <p
-                      id={"reading-help-" + meter.meterId}
-                      class="mt-2 text-xs text-muted"
-                    >
-                      {t("Use a decimal point and up to three decimal places.")}
-                    </p>
                   </form>
-                )
-              )}
-            </section>
-          ))}
-        </div>
-        {activeMeters.length === 0 && (
-          <p class="text-sm text-muted">
-            {t("No active meters for this dwelling.")}
-          </p>
-        )}
-      </section>
-    )}
-    <section>
-      <h2 class="section-title">{t("Consumption history")}</h2>
-      {groupedHistory.length === 0 ? (
-        <p class="text-sm text-muted">{t("No consumption history yet.")}</p>
+                )}
+              </section>
+            );
+          })}
+          {activeMeters.length === 0 && (
+            <p>{t("No active meters for this dwelling.")}</p>
+          )}
+        </>
       ) : (
-        <div class="table-wrap stack-table">
-          <table class="w-full text-sm">
-            <caption class="sr-only">{t("Consumption history")}</caption>
-            <>
-              <thead>
-                <tr>
-                  <>
-                    <th scope="col" class="text-left">
-                      {t("Period")}
-                    </th>
-                    {historyColumns.map((column) => (
-                      <th scope="col" class="text-right">
-                        {entityLabel(column.meterType, locale)} ({column.unit})
-                      </th>
-                    ))}
-                  </>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-border">
-                {groupedHistory.map((row) => (
+        <p>
+          {t(
+            "There is no open reading period. Contact your administrator if you need to submit a reading."
+          )}
+        </p>
+      )}
+      <a class="btn-secondary" href={base + "/messages"}>
+        <Icon name="help-circle" />
+        {t("Help with readings")}
+      </a>
+    </section>
+    <details class="resident-details">
+      <summary>
+        {t("Consumption history")}
+        <Icon name="chevron-right" size="lg" />
+      </summary>
+      <div class="resident-details-body">
+        {groupedHistory.length === 0 ? (
+          <p class="resident-muted">{t("No consumption history yet.")}</p>
+        ) : (
+          <div class="table-wrap stack-table">
+            <table class="w-full text-sm">
+              <caption class="sr-only">{t("Consumption history")}</caption>
+              <>
+                <thead>
                   <tr>
-                    <td>{formatPeriod(row.year, row.month, locale)}</td>
-                    {historyColumns.map((column) => {
-                      const reading = row.readings.find(
-                        (r) =>
-                          r.meterType === column.meterType &&
-                          r.unit === column.unit
-                      );
-                      return (
-                        <td class="text-right">
-                          {reading
-                            ? formatNumber(reading.consumption, locale)
-                            : "—"}
-                        </td>
-                      );
-                    })}
+                    <>
+                      <th scope="col" class="text-left">
+                        {t("Period")}
+                      </th>
+                      {historyColumns.map((column) => (
+                        <th scope="col" class="text-right">
+                          {entityLabel(column.meterType, locale)} (
+                          {unitLabel(column.unit, locale)})
+                        </th>
+                      ))}
+                    </>
                   </tr>
-                ))}
-              </tbody>
-            </>
-          </table>
-        </div>
-      )}
-    </section>
-    <a class="btn-secondary w-full justify-between" href={base + "/payments"}>
-      {t("Payment history")} <span aria-hidden="true">→</span>
-    </a>
-    <a class="btn-secondary w-full justify-between" href={base + "/messages"}>
-      {t("Contact administrator")} <span aria-hidden="true">→</span>
-    </a>
-    <section>
-      <div class="mb-4 flex items-center justify-between">
-        <h2 class="font-semibold">{t("Recent invoices")}</h2>
-        <a class="text-sm text-primary" href={base + "/invoices"}>
-          {t("View all")} →
-        </a>
+                </thead>
+                <tbody class="divide-y divide-border">
+                  {groupedHistory.map((row) => (
+                    <tr>
+                      <td>{formatPeriod(row.year, row.month, locale)}</td>
+                      {historyColumns.map((column) => {
+                        const reading = row.readings.find(
+                          (r) =>
+                            r.meterType === column.meterType &&
+                            r.unit === column.unit
+                        );
+                        return (
+                          <td class="text-right">
+                            {reading
+                              ? formatNumber(reading.consumption, locale)
+                              : "—"}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </>
+            </table>
+          </div>
+        )}
       </div>
-      {recentInvoices.length === 0 ? (
-        <p class="text-sm text-muted">{t("No invoices yet.")}</p>
-      ) : (
-        <div class="invoice-list">
-          {recentInvoices.map((invoice) => (
-            <a
-              class="block p-4 hover:bg-hover"
-              href={
-                "/portal/invoices/" + invoice.id + "?dwellingId=" + dwellingId
-              }
-            >
-              <div class="flex flex-wrap items-center justify-between gap-3">
-                <span class="text-sm font-semibold">
-                  {invoice.invoiceNumber}
-                </span>
-                <StatusBadge status={invoice.caseStatus} />
-              </div>
-              <div class="mt-2 flex flex-wrap justify-between gap-2 text-sm">
-                <span class="text-muted">
-                  {t("Due date")}: {formatDate(invoice.dueDate, locale)}
-                </span>
-                <strong>
-                  {formatMoney(invoice.amountDue, invoice.currency, locale)}
-                </strong>
-              </div>
+    </details>
+    <details class="resident-details">
+      <summary>
+        {t("Recent invoices")}
+        <Icon name="chevron-right" size="lg" />
+      </summary>
+      <div class="resident-details-body">
+        {recentInvoices.length === 0 ? (
+          <p class="resident-muted">{t("No invoices yet.")}</p>
+        ) : (
+          <>
+            <InvoiceList
+              invoices={recentInvoices}
+              dwellingId={dwellingId}
+              locale={locale}
+            />
+            <a class="btn-secondary" href={base + "/invoices"}>
+              {t("All invoices")}
+              <Icon name="arrow-right" />
             </a>
-          ))}
-        </div>
-      )}
-    </section>
+          </>
+        )}
+      </div>
+    </details>
   </div>
 </ResidentLayout>
+
+<script>
+  import { actions } from "astro:actions";
+  import { bindMutationForm } from "../../../../lib/ui/mutate-form";
+  import { onPageLoad } from "../../../../lib/ui/page-lifecycle";
+
+  onPageLoad(() => {
+    const errors: Record<string, string> = JSON.parse(
+      document.querySelector<HTMLElement>("[data-reading-errors]")?.dataset
+        .readingErrors ?? "{}"
+    );
+    for (const form of document.querySelectorAll<HTMLFormElement>(
+      "[data-resident-reading]"
+    )) {
+      bindMutationForm({
+        form,
+        action: actions.readings.residentSubmit,
+        savingLabel: form.dataset.saving!,
+        fallbackErrorMessage: form.dataset.failed!,
+        translateError: (message) => errors[message] ?? message,
+        onError: () => {
+          const input = form.querySelector<HTMLInputElement>(
+            '[name="currentValue"]'
+          )!;
+          const error = form.previousElementSibling;
+          if (error?.classList.contains("form-inline-error")) {
+            error.id = input.id + "-error";
+            input.setAttribute("aria-invalid", "true");
+            input.setAttribute("aria-describedby", `reading-help ${error.id}`);
+          }
+          input.focus();
+        },
+        onSuccess: (reading) => {
+          const receipt = form
+            .closest(".resident-meter")!
+            .querySelector<HTMLElement>("[data-reading-received]")!;
+          // Intl directly: importing i18n.ts would ship the whole dictionary.
+          receipt.querySelector("[data-reading-value]")!.textContent =
+            new Intl.NumberFormat(document.documentElement.lang, {
+              maximumFractionDigits: 3,
+            }).format(Number(reading.currentValue));
+          form.remove();
+          receipt.hidden = false;
+          receipt.classList.add("resident-enter");
+          receipt.focus();
+          if (!document.querySelector("[data-resident-reading]")) {
+            document.querySelector<HTMLElement>("[data-all-readings]")!.hidden =
+              false;
+            document.getElementById("reading-help")?.remove();
+            document.querySelector("[data-reading-deadline]")?.remove();
+          }
+        },
+      });
+    }
+  });
+</script>

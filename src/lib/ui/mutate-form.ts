@@ -35,6 +35,10 @@ export interface MutationDescriptor {
   messageKey?: string;
   successMessageKey?: string;
   committedMissingLabel?: string;
+  // false for a change the server cannot recognise as a repeat (an additive
+  // money entry): after an unknown outcome a Retry could post it twice, so
+  // none is offered.
+  retryable?: boolean;
 }
 
 export interface MutateFormConfig<T, Optimistic = undefined> {
@@ -58,6 +62,9 @@ export interface MutateFormConfig<T, Optimistic = undefined> {
     optimistic: Optimistic | undefined
   ) => void;
   onSettled?: () => void;
+  // Words a server message in the page's language; the message is shown as is
+  // when this is absent or returns it unchanged.
+  translateError?: (message: string) => string;
   recover?: (clientMutationId: string) => Promise<RecoveryResult>;
   onVerifying?: (optimistic: Optimistic | undefined, unknown: boolean) => void;
   onCommittedMissing?: (
@@ -124,6 +131,10 @@ export function bindMutationForm<T, Optimistic = undefined>(
     event.preventDefault();
     if (pending) return;
     pending = true;
+    // forms.ts reads data-confirm from the submitter, so a retry must submit
+    // with the same one or it would skip the confirmation.
+    const submitter = (event as SubmitEvent)
+      .submitter as HTMLButtonElement | null;
     clearError();
     if (submitButton) {
       submitButton.disabled = true;
@@ -150,7 +161,13 @@ export function bindMutationForm<T, Optimistic = undefined>(
         entity: descriptor.entity,
         operation: descriptor.operation,
         label: descriptor.pendingLabel,
-        retry: () => form.requestSubmit(),
+        retry:
+          descriptor.retryable === false
+            ? undefined
+            : () =>
+                submitter?.isConnected && submitter.form === form
+                  ? form.requestSubmit(submitter)
+                  : form.requestSubmit(),
         messageKey: descriptor.messageKey,
         successMessageKey: descriptor.successMessageKey,
         recovery:
@@ -189,7 +206,9 @@ export function bindMutationForm<T, Optimistic = undefined>(
           const message = isInputError(error)
             ? (Object.values(error.fields)[0]?.[0] ?? fallbackErrorMessage)
             : error.message;
-          const safeMessage = message || fallbackErrorMessage;
+          const safeMessage = message
+            ? (config.translateError?.(message) ?? message)
+            : fallbackErrorMessage;
           showError(safeMessage);
           config.onError?.(error, form, optimistic);
           if (mutationId && descriptor) {

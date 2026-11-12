@@ -1,6 +1,12 @@
 ---
 import StatusBadge from "../../../components/ui/StatusBadge.astro";
-import { formatMoney, translate, uiLocale } from "../../../lib/ui/i18n";
+import Icon from "../../../components/ui/Icon.astro";
+import {
+  formatMoney,
+  formatDate,
+  translate,
+  uiLocale,
+} from "../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 import ResidentLayout from "../../../layouts/ResidentLayout.astro";
@@ -8,7 +14,10 @@ import {
   ForbiddenError,
   requireDwellingAccess,
 } from "../../../domain/authorization/guards";
-import { getInvoiceForResident } from "../../../domain/billing/generation";
+import {
+  getInvoiceForResident,
+  listInvoicesForDwelling,
+} from "../../../domain/billing/generation";
 import { renderInvoicePreview } from "../../../domain/billing/invoice-html";
 import {
   parseInvoiceLocale,
@@ -16,6 +25,8 @@ import {
 } from "../../../domain/billing/invoice-i18n";
 import { withRequestDb } from "../../../lib/db-request";
 import { rethrowUnexpected } from "../../../domain/errors";
+import { readInvoiceSnapshots } from "../../../domain/billing/invoice-snapshots";
+import { tryBuildSepaQrSvg } from "../../../domain/billing/sepa-qr";
 
 const invoiceId = Astro.params.invoiceId!;
 const dwellingId = Astro.url.searchParams.get("dwellingId");
@@ -37,17 +48,45 @@ let paidAmount: Awaited<ReturnType<typeof getInvoiceForResident>>["paidAmount"];
 let remainingAmount: Awaited<
   ReturnType<typeof getInvoiceForResident>
 >["remainingAmount"];
+let latestInvoice:
+  Awaited<ReturnType<typeof listInvoicesForDwelling>>[number] | undefined;
 try {
-  ({ invoice, lines, caseStatus, paidAmount, remainingAmount } =
-    await withRequestDb((db) =>
-      getInvoiceForResident(db, invoiceId, dwellingId)
-    ));
+  ({ invoice, lines, caseStatus, paidAmount, remainingAmount, latestInvoice } =
+    await withRequestDb(async (db) => ({
+      ...(await getInvoiceForResident(db, invoiceId, dwellingId)),
+      latestInvoice: (await listInvoicesForDwelling(db, dwellingId)).at(-1),
+    })));
 } catch (err) {
   rethrowUnexpected(err);
   return Astro.redirect(`/portal/dwellings/${dwellingId}/invoices`);
 }
+const snapshots = readInvoiceSnapshots(invoice);
+const issuer = snapshots?.issuer;
+const payment = snapshots?.payment;
+const isLatestInvoice = latestInvoice?.id === invoice.id;
+const needsPayment = isLatestInvoice && remainingAmount !== "0.00";
+const transferFields = [
+  ["Recipient", issuer?.name ?? ""],
+  ["IBAN", payment?.iban ?? ""],
+  ["Payment reference", invoice.invoiceNumber],
+  ["Amount still due", remainingAmount],
+] as const;
+const qrSvg =
+  needsPayment && snapshots
+    ? tryBuildSepaQrSvg({
+        beneficiaryName: issuer?.name ?? "",
+        iban: payment?.iban ?? "",
+        bic: payment?.bic ?? null,
+        currency: invoice.currency,
+        amountDue: remainingAmount,
+        invoiceNumber: invoice.invoiceNumber,
+      })
+    : null;
 const docLocale = parseInvoiceLocale(Astro.url.searchParams.get("docLocale"));
-const invoiceHtml = renderInvoicePreview(invoice, lines, docLocale, t);
+// The payment panel uses the remaining balance; the document keeps its original total.
+const invoiceHtml = renderInvoicePreview(invoice, lines, docLocale, t, {
+  showPaymentQr: false,
+});
 const pdfHref =
   `/api/v1/portal/invoices/${invoiceId}/pdf?dwellingId=${dwellingId}` +
   (docLocale === "lv" ? "" : `&locale=${docLocale}`);
@@ -59,58 +98,181 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
 ---
 
 <ResidentLayout title={invoice.invoiceNumber}>
-  <div class="mx-auto max-w-3xl p-6">
-    <div class="space-y-6">
-      <a
-        href={`/portal/dwellings/${dwellingId}/invoices`}
-        class="text-sm text-muted hover:underline"
-      >
-        ← {t("Invoices")}
-      </a>
-
-      <div class="flex flex-wrap items-center justify-between gap-4">
-        <h1 class="text-xl font-bold text-foreground">
-          {invoice.invoiceNumber}
-          <span class="ml-2 text-sm font-normal text-muted">
-            <StatusBadge status={caseStatus} />
-          </span>
-        </h1>
-        <button type="button" class="btn-secondary no-print" id="print-invoice">
-          {t("Print")}
-        </button>
-        {invoice.pdfObjectKey && (
-          <a
-            href={pdfHref}
-            target="_blank"
-            class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-hover"
-          >
-            {t("Download PDF")}
-          </a>
-        )}
-      </div>
-
-      <section class="panel p-4" aria-labelledby="invoice-balance">
-        <h2 id="invoice-balance" class="section-title">
-          {t("Balance")}
+  <div>
+    <a class="resident-back" href={`/portal/dwellings/${dwellingId}/invoices`}>
+      <Icon name="arrow-left" />
+      {t("All invoices")}
+    </a>
+    <header class="resident-title">
+      <h1 class="font-display">
+        {t(needsPayment ? "Pay by bank transfer" : "Invoice")}
+      </h1>
+      <p>
+        {invoice.invoiceNumber} · {t("Due date")}:{" "}
+        {formatDate(invoice.dueDate, locale)}
+      </p>
+    </header>
+    <section class="resident-section" aria-labelledby="invoice-balance">
+      <div class="resident-row">
+        <h2 id="invoice-balance">
+          {t(isLatestInvoice ? "Amount still due" : "Invoice total due")}
         </h2>
-        <dl class="mt-2 grid grid-cols-2 gap-2 text-sm">
-          <dt class="text-muted">{t("Invoice total due")}</dt>
+        <StatusBadge status={caseStatus} />
+      </div>
+      <p class="resident-amount">
+        {formatMoney(
+          isLatestInvoice ? remainingAmount : invoice.amountDue,
+          invoice.currency,
+          locale
+        )}
+      </p>
+      {!isLatestInvoice && latestInvoice ? (
+        <>
+          <p class="notice notice-warning">
+            {t(
+              "A newer bill exists. Do not pay this older bill separately. Check the newest bill for the amount to pay."
+            )}
+          </p>
+          <a
+            class="btn-primary"
+            href={`/portal/invoices/${latestInvoice.id}?dwellingId=${dwellingId}`}
+          >
+            {t("Open latest bill")}
+          </a>
+        </>
+      ) : needsPayment && snapshots ? (
+        <>
+          <p>
+            {t(
+              "Make the transfer in your bank. Copy these details into your bank's payment form."
+            )}
+          </p>
+          <dl class="resident-payment-fields">
+            {transferFields.map(([label, value]) => (
+              <div>
+                <dt>{t(label)}</dt>
+                <dd>
+                  {value
+                    ? label === "Amount still due"
+                      ? formatMoney(value, invoice.currency, locale)
+                      : value
+                    : t("Not available")}
+                </dd>
+                {value && (
+                  <button
+                    type="button"
+                    class="btn-secondary"
+                    data-copy-value={value}
+                    data-copied-label={t("Copied")}
+                    aria-label={`${t("Copy")}: ${t(label)}`}
+                    hidden
+                  >
+                    <Icon name="copy" />
+                    <span>{t("Copy")}</span>
+                  </button>
+                )}
+              </div>
+            ))}
+          </dl>
+          {(!issuer?.name || !payment?.iban) && (
+            <p class="notice notice-warning">
+              {t(
+                "Bank details are missing. Contact your administrator before paying."
+              )}
+            </p>
+          )}
+          <p
+            role="status"
+            data-copy-status
+            data-copied={t("Copied. Paste it into your bank's payment form.")}
+            data-copy-failed={t(
+              "Could not copy. Select the details and copy them yourself."
+            )}
+          ></p>
+          <p>
+            {t(
+              "Check the recipient, amount and payment reference in your bank before you confirm. This portal does not make the transfer."
+            )}
+          </p>
+          <p class="resident-line resident-hint">
+            <Icon name="info-circle" />
+            {t(
+              "If you have already paid, do not pay again. Your payment appears after the administrator records it."
+            )}
+          </p>
+          {paidAmount !== "0.00" && (
+            <p class="notice notice-warning">
+              {t(
+                "The invoice document shows the original amount. Pay only the amount still due shown above."
+              )}
+            </p>
+          )}
+          {qrSvg && (
+            <details class="resident-details">
+              <summary>
+                {t("Pay with a banking app QR code")}
+                <Icon name="chevron-right" size="lg" />
+              </summary>
+              <div class="resident-details-body">
+                <p>
+                  {t(
+                    "If your banking app supports it, scan this code from another screen. Check the payment details before confirming in your bank."
+                  )}
+                </p>
+                <div
+                  class="resident-qr"
+                  role="img"
+                  aria-label={t("Bank transfer QR code")}
+                  set:html={qrSvg}
+                />
+              </div>
+            </details>
+          )}
+        </>
+      ) : !snapshots ? (
+        <p class="notice notice-danger" role="alert">
+          {t(
+            "This invoice cannot be shown because its stored details are damaged."
+          )}
+        </p>
+      ) : (
+        <p class="resident-line resident-ok">
+          <Icon name="circle-check" size="lg" />
+          {t("This bill is paid. No payment is needed.")}
+        </p>
+      )}
+      <dl class="resident-facts">
+        <div>
+          <dt>{t("Invoice total due")}</dt>
           <dd>{formatMoney(invoice.amountDue, invoice.currency, locale)}</dd>
-          <dt class="text-muted">{t("Paid so far")}</dt>
+        </div>
+        <div>
+          <dt>{t("Paid so far")}</dt>
           <dd>{formatMoney(paidAmount, invoice.currency, locale)}</dd>
-          <dt class="text-muted">
-            <strong>{t("Amount still due")}</strong>
-          </dt>
-          <dd>
-            <strong>
-              {formatMoney(remainingAmount, invoice.currency, locale)}
-            </strong>
-          </dd>
-        </dl>
-      </section>
-
+        </div>
+      </dl>
+    </section>
+    <section aria-labelledby="invoice-document-heading">
+      <div class="resident-row mb-4">
+        <h2 id="invoice-document-heading">{t("Invoice document")}</h2>
+        <div class="resident-row">
+          <button
+            type="button"
+            class="btn-secondary no-print"
+            id="print-invoice"
+          >
+            {t("Print")}
+          </button>
+          {invoice.pdfObjectKey && (
+            <a href={pdfHref} target="_blank" class="btn-secondary">
+              <Icon name="download" />
+              {t("Download PDF")}
+            </a>
+          )}
+        </div>
+      </div>
       <div class="invoice-doc-locale-bar">
-        <p class="text-sm text-muted">
+        <p class="resident-muted">
           {t(
             "Latvian is the canonical invoice document. English and Russian are optional translated copies of the same invoice — not separate invoices."
           )}
@@ -145,11 +307,37 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
           srcdoc={invoiceHtml}
         ></iframe>
       </div>
-    </div>
+    </section>
   </div>
 </ResidentLayout>
 
 <script>
+  for (const button of document.querySelectorAll<HTMLButtonElement>(
+    "[data-copy-value]"
+  )) {
+    if (!navigator.clipboard?.writeText) continue;
+    button.hidden = false;
+    const label = button.querySelector("span")!;
+    const copyLabel = label.textContent;
+    let reset: ReturnType<typeof setTimeout> | undefined;
+    button.addEventListener("click", async () => {
+      const status = document.querySelector<HTMLElement>("[data-copy-status]")!;
+      try {
+        await navigator.clipboard.writeText(button.dataset.copyValue!);
+        status.textContent = status.dataset.copied!;
+        // The button itself confirms, next to the value that was copied.
+        button.toggleAttribute("data-copied", true);
+        label.textContent = button.dataset.copiedLabel!;
+        clearTimeout(reset);
+        reset = setTimeout(() => {
+          button.removeAttribute("data-copied");
+          label.textContent = copyLabel;
+        }, 2000);
+      } catch {
+        status.textContent = status.dataset.copyFailed!;
+      }
+    });
+  }
   document.querySelector("#print-invoice")?.addEventListener("click", () => {
     const frame = document.querySelector<HTMLIFrameElement>(
       "#invoice-preview-frame"
@@ -170,11 +358,11 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    flex: 0 0 auto;
+    flex-wrap: wrap;
   }
   .invoice-doc-locale-select {
     padding: 0.3rem 0.5rem;
-    font-size: var(--text-sm);
+    font-size: var(--text-base);
     border-radius: var(--radius-control);
     background-color: var(--color-surface);
     color: var(--color-foreground);

@@ -15,6 +15,7 @@ import {
   markConversationRead,
   reply,
   resolveConversation,
+  sendResidentMessage,
 } from "../domain/messaging/conversations";
 import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
@@ -41,6 +42,28 @@ export const messages = {
           "RESIDENT"
         )
       );
+    }),
+  }),
+
+  // The resident portal's one message box (no Subject field): the domain
+  // picks the open conversation or starts one.
+  residentSend: defineAction({
+    accept: "form",
+    input: z.object({
+      dwellingId: z.uuid(),
+      body: z.string().trim().min(1).max(4000),
+    }),
+    handler: safeHandler(async ({ dwellingId, body }, { locals }) => {
+      requireDwellingAccess(locals.auth, dwellingId);
+      await limitOrThrow("message", locals.auth!.userId);
+      const message = await withDb((db) =>
+        sendResidentMessage(db, dwellingId, body, locals.auth!)
+      );
+      return {
+        id: message.id,
+        body: message.body,
+        createdAt: message.createdAt,
+      };
     }),
   }),
 

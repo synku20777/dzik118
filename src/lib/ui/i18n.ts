@@ -45,9 +45,112 @@ export function uiLocale(cookies: AstroCookies, url: URL): Locale {
 }
 
 const lv: Record<string, string> = {
+  "A newer bill exists. Do not pay this older bill separately. Check the newest bill for the amount to pay.":
+    "Ir jaunāks rēķins. Nemaksājiet šo vecāko rēķinu atsevišķi. Maksājamo summu skatiet jaunākajā rēķinā.",
+  "Open latest bill": "Atvērt jaunāko rēķinu",
+  Home: "Sākums",
+  "Latest bill": "Jaunākais rēķins",
+  "All invoices": "Visi rēķini",
+  "How to pay": "Kā samaksāt",
+  "This bill is paid. No payment is needed.":
+    "Šis rēķins ir apmaksāts. Nekas nav jāmaksā.",
+  "All readings received for this month.":
+    "Visi šī mēneša rādījumi ir saņemti.",
+  "The reading could not be saved. Check your connection and try again.":
+    "Rādījumu neizdevās saglabāt. Pārbaudiet interneta savienojumu un mēģiniet vēlreiz.",
+  "Number shown on the meter": "Skaitītāja rādījums",
+  "Enter the full number on the meter, not the amount used. You can use a comma or a decimal point, with up to 3 decimal places.":
+    "Ievadiet visu skaitītāja rādījumu, nevis patēriņu. Varat lietot komatu vai punktu un līdz 3 cipariem aiz tā.",
+  "There is no open reading period. Contact your administrator if you need to submit a reading.":
+    "Pašlaik rādījumus iesniegt nevar. Ja nepieciešams iesniegt rādījumu, sazinieties ar pārvaldnieku.",
+  "Help with readings": "Palīdzība ar rādījumiem",
+  "Pay by bank transfer": "Samaksāt ar bankas pārskaitījumu",
+  "Make the transfer in your bank. Copy these details into your bank's payment form.":
+    "Veiciet pārskaitījumu savā bankā. Kopējiet šos datus bankas maksājuma formā.",
+  "Payment reference": "Maksājuma mērķis",
+  "Not available": "Nav pieejams",
+  Copy: "Kopēt",
+  Copied: "Nokopēts",
+  You: "Jūs",
+  "Your message": "Jūsu ziņojums",
+  "Sending…": "Sūta…",
+  "No messages yet. Write your question below.":
+    "Ziņojumu vēl nav. Uzrakstiet savu jautājumu zemāk.",
+  "The administrator marked this as resolved.":
+    "Administrators atzīmēja šo jautājumu kā atrisinātu.",
+  "The message could not be sent. Check your connection and try again.":
+    "Ziņojumu neizdevās nosūtīt. Pārbaudiet savienojumu un mēģiniet vēlreiz.",
+  "Bank details are missing. Contact your administrator before paying.":
+    "Trūkst bankas rekvizītu. Pirms maksāšanas sazinieties ar pārvaldnieku.",
+  "Copied. Paste it into your bank's payment form.":
+    "Nokopēts. Ielīmējiet bankas maksājuma formā.",
+  "Could not copy. Select the details and copy them yourself.":
+    "Neizdevās nokopēt. Iezīmējiet datus un kopējiet tos paši.",
+  "Check the recipient, amount and payment reference in your bank before you confirm. This portal does not make the transfer.":
+    "Pirms apstiprināšanas bankā pārbaudiet saņēmēju, summu un maksājuma mērķi. Šis portāls neveic pārskaitījumu.",
+  "If you have already paid, do not pay again. Your payment appears after the administrator records it.":
+    "Ja jau samaksājāt, nemaksājiet vēlreiz. Maksājums parādīsies pēc tam, kad pārvaldnieks to reģistrēs.",
+  "The invoice document shows the original amount. Pay only the amount still due shown above.":
+    "Rēķina dokumentā ir sākotnējā summa. Maksājiet tikai iepriekš norādīto atlikušo summu.",
+  "Pay with a banking app QR code": "Maksāt ar QR kodu bankas lietotnē",
+  "If your banking app supports it, scan this code from another screen. Check the payment details before confirming in your bank.":
+    "Ja bankas lietotne to atbalsta, noskenējiet šo kodu no cita ekrāna. Pirms apstiprināšanas bankā pārbaudiet maksājuma datus.",
+  "Bank transfer QR code": "Bankas pārskaitījuma QR kods",
+  "Invoice document": "Rēķina dokuments",
+  "Turn off": "Izslēgt",
+  "Turn on": "Ieslēgt",
+  "«{name}» turned off.": "«{name}» izslēgts.",
+  "«{name}» turned on.": "«{name}» ieslēgts.",
+  Undo: "Atsaukt",
+  "A tariff that is off is not added to invoices.":
+    "Izslēgts tarifs netiek iekļauts rēķinos.",
+  "Restore the tariff before turning it on.":
+    "Pirms ieslēgšanas atjaunojiet tarifu.",
+  "Archived tariffs cannot be changed.": "Arhivētus tarifus nevar mainīt.",
+  "Create tariff": "Izveidot tarifu",
+  "New tariff": "Jauns tarifs",
+  Tariff: "Tarifs",
+  Valid: "Spēkā",
+  "On the invoice": "Rēķinā",
+  Ended: "Beidzies",
+  Restore: "Atjaunot",
+  "How tariffs work": "Kā darbojas tarifi",
+  "Active and disabled": "Aktīvie un atspējotie",
+  "Showing {shown} of {total} tariffs": "Redzami {shown} no {total} tarifiem",
+  "Showing {shown} of {total} tariffs|one": "Redzami {shown} no {total} tarifa",
+  "Showing {shown} of {total} tariffs|other":
+    "Redzami {shown} no {total} tarifiem",
+  "No tariffs match these filters.": "Neviens tarifs neatbilst šiem filtriem.",
+  "Order on the invoice": "Secība rēķinā",
+  "Lower numbers come first on the invoice.":
+    "Mazāki skaitļi rēķinā ir augstāk.",
+  "Starts {date}": "Sāksies {date}",
+  "Tariff saved": "Tarifs saglabāts",
+  "Tariff created": "Tarifs izveidots",
+  "Tariff archived": "Tarifs arhivēts",
+  "Tariff restored. It is disabled until you enable it.":
+    "Tarifs atjaunots. Tas ir atspējots, līdz to ieslēgsiet.",
+  "Used to match invoice row styling. It cannot be changed after the tariff is created.":
+    "Izmanto rēķina rindu stila piesaistei. Pēc tarifa izveides to nevar mainīt.",
+  "The code cannot be changed after the tariff is created.":
+    "Pēc tarifa izveides kodu nevar mainīt.",
+  "Only archived tariffs can be restored.":
+    "Atjaunot var tikai arhivētus tarifus.",
+  "Archive {name}? It will no longer be used for new invoices.":
+    "Arhivēt {name}? Tas vairs netiks izmantots jaunos rēķinos.",
+  "Saving changes what open months bill: {months}. Draft invoices there change when they are generated again; prepared and sent invoices do not change.":
+    "Saglabājot izmaiņas, mainās aprēķins atvērtajos mēnešos: {months}. Šo mēnešu rēķinu melnraksti mainās, tos ģenerējot atkārtoti; sagatavotie un nosūtītie rēķini nemainās.",
+  "Edit the existing tariff when its price changes. The effective dates determine which months use it; prepared and sent invoices keep their saved amounts.":
+    "Mainoties cenai, rediģējiet esošo tarifu. Spēkā esamības datumi nosaka, kuros mēnešos to izmanto; sagatavotie un nosūtītie rēķini saglabā savas summas.",
+  "The tariff was saved, but the list could not be refreshed. Reload the page to see the latest tariffs.":
+    "Tarifs saglabāts, bet sarakstu neizdevās atjaunināt. Pārlādējiet lapu, lai redzētu aktuālos tarifus.",
+  "Billing rule restored": "Norēķinu noteikums atjaunots",
+  "Billing rule archived": "Norēķinu noteikums arhivēts",
+  "{n} dwellings selected|one": "Izvēlēts {n} īpašums",
+  "{n} dwellings selected|other": "Izvēlēti {n} īpašumi",
   "Apply filters": "Lietot filtrus",
   "Showing {shown} of {total} billing cases":
-    "Redzamas {shown} no {total} norēķinu lietām",
+    "Redzami {shown} no {total} norēķinu ierakstiem",
   "Draft and prepared invoices": "Melnraksti un sagatavotie rēķini",
   "In progress": "Procesā",
   "Monthly billing": "Ikmēneša norēķini",
@@ -169,8 +272,8 @@ const lv: Record<string, string> = {
   "Configure tariffs and rules": "Iestatiet tarifus un noteikumus",
   "Add the billing rules that determine fixed, area, resident-count or meter-consumption charges.":
     "Pievienojiet norēķinu noteikumus fiksētām, platības, iedzīvotāju skaita vai skaitītāju patēriņa maksām.",
-  "Ready when every required charge has an enabled rule for the billing date.":
-    "Gatavs, kad katrai nepieciešamajai maksai norēķinu datumā ir spēkā esošs noteikums.",
+  "Ready when every required charge has a tariff that is on for the billing date.":
+    "Gatavs, kad katrai nepieciešamajai maksai norēķinu datumā ir ieslēgts tarifs.",
   "Create the billing period": "Izveidojiet norēķinu periodu",
   "Set the billing window, reading deadline, invoice issue date and due date. Creating a period creates a case for each active dwelling.":
     "Norādiet norēķinu intervālu, rādījumu termiņu, rēķina datumu un apmaksas termiņu. Izveidojot periodu, katram aktīvajam īpašumam tiek izveidots norēķinu ieraksts.",
@@ -567,6 +670,51 @@ const lv: Record<string, string> = {
   "invoices prepared": "rēķini sagatavoti",
   "invoices sent": "rēķini nosūtīti",
   skipped: "izlaisti",
+  // Skip reasons of the bulk actions (src/lib/ui/skip-reason.ts).
+  "Already sent": "Jau nosūtīts",
+  "Delivery failed": "Piegāde neizdevās",
+  "An unexpected error occurred.": "Radās neparedzēta kļūda.",
+  "Already {status}": "Statuss jau ir „{status}”",
+  "Cannot generate an invoice for a case in {status} status":
+    "Rēķinu nevar izveidot, ja statuss ir „{status}”",
+  "Cannot send an invoice in {status} status":
+    "Rēķinu nevar nosūtīt, ja statuss ir „{status}”",
+  "Reopen this period? Readings and invoices can be changed again.":
+    "Atvērt šo periodu? Rādījumus un rēķinus atkal varēs mainīt.",
+  // Dwelling page (2026-11): portal access, editors, confirmations.
+  "It is not certain the adjustment was saved. Reload the page and check the account entries before adding it again.":
+    "Nav droši, ka korekcija tika saglabāta. Pārlādējiet lapu un pārbaudiet konta ierakstus, pirms pievienojat to vēlreiz.",
+  // Zod's own message for a malformed email (z.email()).
+  "Invalid email address": "Nederīga e-pasta adrese",
+  "Portal access": "Portāla piekļuve",
+  "Discard unsaved changes?": "Atmest nesaglabātās izmaiņas?",
+  "Add this adjustment? The balance changes right away.":
+    "Pievienot šo korekciju? Atlikums mainīsies uzreiz.",
+  "{direction}: {amount}. Add it? The balance changes right away.":
+    "{direction}: {amount}. Pievienot? Atlikums mainīsies uzreiz.",
+  "Record {amount} for {target}? It is applied right away.":
+    "Reģistrēt {amount} — {target}? Maksājums tiek piemērots uzreiz.",
+  "Disable {email}? They cannot sign in until the account is enabled again.":
+    "Atspējot {email}? Šī persona nevarēs pierakstīties, kamēr konts netiks iespējots.",
+  "Archive {meter}? It is no longer read or billed. Its past readings stay.":
+    "Arhivēt {meter}? Tam vairs netiks ievadīti rādījumi un izrakstīti rēķini. Iepriekšējie rādījumi saglabājas.",
+  "Adjustment added.": "Korekcija pievienota.",
+  "Recording payment…": "Reģistrē maksājumu…",
+  "Could not record the payment": "Neizdevās reģistrēt maksājumu",
+  "Adding adjustment…": "Pievieno korekciju…",
+  "Could not add the adjustment": "Neizdevās pievienot korekciju",
+  "Saving meter…": "Saglabā skaitītāju…",
+  "Meter saved": "Skaitītājs saglabāts",
+  // Ledger descriptions (src/lib/ui/ledger-description.ts).
+  "Current charges {ref}": "Kārtējā perioda maksa {ref}",
+  "Late fee {ref}": "Nokavējuma maksa {ref}",
+  "Manual adjustment {ref}": "Manuāla korekcija {ref}",
+  "Manual charge adjustment": "Manuāla debeta korekcija",
+  "Manual credit adjustment": "Manuāla kredīta korekcija",
+  "Bank payment {ref}": "Bankas maksājums {ref}",
+  "Cash payment {ref}": "Skaidras naudas maksājums {ref}",
+  "Opening balance (migrated)": "Sākuma atlikums (pārnests)",
+  "Reversal: {entry}": "Atcelts: {entry}",
   "Billing cases": "Norēķinu ieraksti",
   "Resolve blockers, then move each invoice to its next stage.":
     "Novērsiet šķēršļus un virziet katru rēķinu uz nākamo posmu.",
@@ -1697,6 +1845,36 @@ const lv: Record<string, string> = {
   "Meter type": "Skaitītāja veids",
   "Meter-based rules": "Skaitītāju noteikumi",
   "Need help?": "Nepieciešama palīdzība?",
+  "Name or code": "Nosaukums vai kods",
+  "The tariffs invoices are calculated from.":
+    "Tarifi, pēc kuriem tiek aprēķināti rēķini.",
+  "With VAT: {amount}": "Ar PVN: {amount}",
+  "Unsaved changes": "Nesaglabātas izmaiņas",
+  "Discard changes": "Atmest izmaiņas",
+  "Template saved.": "Veidne saglabāta.",
+  "Could not save the template. Your changes are still here.":
+    "Neizdevās saglabāt veidni. Jūsu izmaiņas ir saglabātas šeit.",
+  "Could not load the sample charges. Try again.":
+    "Neizdevās ielādēt parauga maksas. Mēģiniet vēlreiz.",
+  "Fit to width": "Ietilpināt platumā",
+  Left: "Pa kreisi",
+  Center: "Centrā",
+  Right: "Pa labi",
+  Small: "Neliela",
+  Medium: "Vidēja",
+  Large: "Liela",
+  "Extra large": "Ļoti liela",
+  "Sample charges for": "Parauga maksas par",
+  "Latvian is the main invoice language.":
+    "Latviešu valoda ir rēķina pamatvaloda.",
+  "An empty field uses the Latvian text.":
+    "Tukšs lauks izmanto latviešu tekstu.",
+  "Without translation: {n}": "Bez tulkojuma: {n}",
+  "Quantities are illustrative (always 1).":
+    "Daudzumi ir ilustratīvi (vienmēr 1).",
+  "Layout reset to the default.": "Izkārtojums atiestatīts uz noklusējumu.",
+  "Reset undone.": "Atiestatīšana atsaukta.",
+  "Editor view": "Redaktora skats",
   "No billing rules match this filter.":
     "Šim filtram neatbilst neviens norēķinu noteikums.",
   "No resident": "Nav iedzīvotāja",
@@ -1786,8 +1964,25 @@ const lv: Record<string, string> = {
   "Dwelling detail page with resident access and meter registration.":
     "Īpašuma informācijas lapa ar iedzīvotāja piekļuvi un skaitītāju reģistrāciju.",
   "Set tariffs and rules": "Iestatiet tarifus un noteikumus",
-  "Add the billing rules that set fixed, area, resident-count, or meter-consumption charges.":
-    "Pievienojiet norēķinu noteikumus, kas nosaka fiksētu maksu vai maksu pēc platības, iedzīvotāju skaita vai skaitītāja uzskaitītā patēriņa.",
+  "Click New tariff to add a charge. Choose a fixed, area, resident-count, or meter-consumption calculation. Click a tariff to edit it. Use the actions menu to turn a tariff off or on, or to archive it. To restore an archived tariff, select Show archived. Then click Restore in its actions menu. A restored tariff stays off until you turn it on. A price change applies to invoices that you generate later.":
+    "Nospiediet “Jauns tarifs”, lai pievienotu maksu. Izvēlieties aprēķinu: fiksēta maksa, maksa pēc platības, pēc iedzīvotāju skaita vai pēc skaitītāja patēriņa. Nospiediet uz tarifa, lai to rediģētu. Darbību izvēlnē tarifu var izslēgt, ieslēgt vai arhivēt. Lai atjaunotu arhivētu tarifu, atzīmējiet “Rādīt arhivētos”. Pēc tam tā darbību izvēlnē nospiediet “Atjaunot”. Atjaunots tarifs paliek izslēgts, līdz to ieslēdzat. Cenas izmaiņas attiecas uz rēķiniem, ko ģenerēsiet vēlāk.",
+  "Set up the invoice template": "Iestatiet rēķina veidni",
+  "Choose the text and the sections of each invoice. Use the language tabs to write the text in each language. An empty field uses the Latvian text. If Sample charges for appears, choose a month to preview its tariff prices. The preview uses sample quantities. Click Save changes when the bar at the bottom shows unsaved changes.":
+    "Izvēlieties katra rēķina tekstu un sadaļas. Izmantojiet valodu cilnes, lai uzrakstītu tekstu katrā valodā. Tukšs lauks izmanto latviešu tekstu. Ja redzams lauks “Parauga maksas par”, izvēlieties mēnesi, lai redzētu tā tarifu cenas. Priekšskatījums izmanto parauga daudzumus. Kad apakšējā josla rāda nesaglabātas izmaiņas, nospiediet “Saglabāt izmaiņas”.",
+  "Ready when the preview shows the text and the sections that you want on every invoice.":
+    "Gatavs, kad priekšskatījumā redzams teksts un sadaļas, kādas vēlaties katrā rēķinā.",
+  "Open invoice template": "Atvērt rēķina veidni",
+  "How do I stop using a tariff?": "Kā pārtraukt izmantot tarifu?",
+  "Open the actions menu of the tariff and click Turn off. New invoices then ignore the tariff. The page offers Undo for ten seconds. Click Turn on in the same menu to use the tariff again. Click Archive only when you do not plan to use the tariff again. Prepared and sent invoices keep their amounts.":
+    "Atveriet tarifa darbību izvēlni un nospiediet “Izslēgt”. Jaunie rēķini tad neņem tarifu vērā. Lapa desmit sekundes piedāvā “Atsaukt”. Lai tarifu izmantotu atkal, tajā pašā izvēlnē nospiediet “Ieslēgt”. “Arhivēt” nospiediet tikai tad, ja tarifu vairs neplānojat izmantot. Sagatavoto un nosūtīto rēķinu summas nemainās.",
+  "How do I change what an invoice shows?":
+    "Kā mainīt rēķinā redzamo informāciju?",
+  "Open Settings, then Invoice template. Change the text and the sections. Use the language tabs to write the English and Russian text. The English and Russian tabs show a count when translations are missing. Click Save changes. Click Discard changes to go back to the last saved version. The change applies to invoices that you generate after you save.":
+    "Atveriet “Iestatījumi”, pēc tam “Rēķina veidne”. Mainiet tekstu un sadaļas. Izmantojiet valodu cilnes, lai uzrakstītu tekstu angļu un krievu valodā. Angļu un krievu valodas cilnes rāda trūkstošo tulkojumu skaitu, ja tādi ir. Nospiediet “Saglabāt izmaiņas”. Nospiediet “Atmest izmaiņas”, lai atgrieztos pie pēdējās saglabātās versijas. Izmaiņas attiecas uz rēķiniem, ko ģenerēsiet pēc saglabāšanas.",
+  "Why does an older invoice print units in a different way?":
+    "Kāpēc vecāks rēķins mērvienības drukā citādi?",
+  "A new invoice prints known units, such as month and person, in the language of the invoice. An older invoice keeps the wording that it had when you generated it. Regenerate a DRAFT invoice to get the new wording. The app prints a unit that it does not know as you typed it.":
+    "Jauns rēķins zināmas mērvienības, piemēram, mēnesi un personu, drukā rēķina valodā. Vecāks rēķins saglabā formulējumu, kāds tam bija ģenerēšanas brīdī. Lai iegūtu jauno formulējumu, no jauna ģenerējiet rēķinu statusā MELNRAKSTS. Mērvienību, kuru lietotne nepazīst, tā izdrukā tā, kā jūs to ievadījāt.",
   "Tariffs and rules list with rule details.":
     "Tarifu un noteikumu saraksts ar noteikumu datiem.",
   "Set the billing window, reading deadline, invoice issue date, and due date. A new period creates a case for each active dwelling. Residents can submit readings through the deadline date in the organization time zone. Administrators can enter readings later.":
@@ -2143,8 +2338,8 @@ const lv: Record<string, string> = {
   "Complete the setup steps to send your first invoices.":
     "Pabeidziet iestatīšanas soļus, lai nosūtītu pirmos rēķinus.",
   "Continue setup": "Turpināt iestatīšanu",
-  "The guided setup walks you through these steps.":
-    "Vadītā iestatīšana palīdzēs veikt šos soļus.",
+  "The guided setup covers your organization details, dwellings, first billing period, charges, and meters.":
+    "Vadītā iestatīšana aptver organizācijas datus, īpašumus, pirmo norēķinu periodu, maksas un skaitītājus.",
   "Open the setup": "Atvērt iestatīšanu",
   "Starting readings": "Sākuma rādījumi",
   "Meter positions before the first billing month. Not billed.":
@@ -2338,9 +2533,119 @@ const lv: Record<string, string> = {
 };
 
 const ru: Record<string, string> = {
+  "A newer bill exists. Do not pay this older bill separately. Check the newest bill for the amount to pay.":
+    "Есть более новый счёт. Не оплачивайте этот старый счёт отдельно. Проверьте сумму к оплате в последнем счёте.",
+  "Open latest bill": "Открыть последний счёт",
+  Home: "Главная",
+  "Latest bill": "Последний счёт",
+  "All invoices": "Все счета",
+  "How to pay": "Как оплатить",
+  "This bill is paid. No payment is needed.":
+    "Этот счёт оплачен. Платить не нужно.",
+  "All readings received for this month.":
+    "Все показания за этот месяц получены.",
+  "The reading could not be saved. Check your connection and try again.":
+    "Не удалось сохранить показание. Проверьте подключение к интернету и повторите попытку.",
+  "Number shown on the meter": "Показание на счётчике",
+  "Enter the full number on the meter, not the amount used. You can use a comma or a decimal point, with up to 3 decimal places.":
+    "Введите полное показание счётчика, а не расход. Можно использовать запятую или точку и до 3 знаков после неё.",
+  "There is no open reading period. Contact your administrator if you need to submit a reading.":
+    "Сейчас приём показаний закрыт. Если вам нужно передать показание, свяжитесь с управляющим.",
+  "Help with readings": "Помощь с показаниями",
+  "Pay by bank transfer": "Оплата банковским переводом",
+  "Make the transfer in your bank. Copy these details into your bank's payment form.":
+    "Сделайте перевод в своём банке. Скопируйте эти данные в платёжную форму банка.",
+  "Payment reference": "Назначение платежа",
+  "Not available": "Нет данных",
+  Copy: "Копировать",
+  Copied: "Скопировано",
+  You: "Вы",
+  "Your message": "Ваше сообщение",
+  "Sending…": "Отправка…",
+  "No messages yet. Write your question below.":
+    "Сообщений пока нет. Напишите свой вопрос ниже.",
+  "The administrator marked this as resolved.":
+    "Администратор отметил этот вопрос как решённый.",
+  "The message could not be sent. Check your connection and try again.":
+    "Не удалось отправить сообщение. Проверьте соединение и попробуйте ещё раз.",
+  "Bank details are missing. Contact your administrator before paying.":
+    "Банковские реквизиты не указаны. Перед оплатой свяжитесь с управляющим.",
+  "Copied. Paste it into your bank's payment form.":
+    "Скопировано. Вставьте в платёжную форму банка.",
+  "Could not copy. Select the details and copy them yourself.":
+    "Не удалось скопировать. Выделите данные и скопируйте их вручную.",
+  "Check the recipient, amount and payment reference in your bank before you confirm. This portal does not make the transfer.":
+    "Перед подтверждением в банке проверьте получателя, сумму и назначение платежа. Этот портал не выполняет перевод.",
+  "If you have already paid, do not pay again. Your payment appears after the administrator records it.":
+    "Если вы уже заплатили, не платите повторно. Платёж появится после того, как управляющий его зарегистрирует.",
+  "The invoice document shows the original amount. Pay only the amount still due shown above.":
+    "В документе счёта указана первоначальная сумма. Оплатите только оставшуюся сумму, указанную выше.",
+  "Pay with a banking app QR code": "Оплата по QR-коду в приложении банка",
+  "If your banking app supports it, scan this code from another screen. Check the payment details before confirming in your bank.":
+    "Если приложение вашего банка поддерживает это, отсканируйте код с другого экрана. Перед подтверждением в банке проверьте данные платежа.",
+  "Bank transfer QR code": "QR-код банковского перевода",
+  "Invoice document": "Документ счёта",
+  "Turn off": "Отключить",
+  "Turn on": "Включить",
+  "«{name}» turned off.": "«{name}» отключён.",
+  "«{name}» turned on.": "«{name}» включён.",
+  Undo: "Отменить",
+  "A tariff that is off is not added to invoices.":
+    "Отключённый тариф не включается в счета.",
+  "Restore the tariff before turning it on.": "Сначала восстановите тариф.",
+  "Archived tariffs cannot be changed.": "Архивные тарифы нельзя изменить.",
+  "Create tariff": "Создать тариф",
+  "New tariff": "Новый тариф",
+  Tariff: "Тариф",
+  Valid: "Действует",
+  "On the invoice": "В счёте",
+  Ended: "Завершён",
+  Restore: "Восстановить",
+  "How tariffs work": "Как работают тарифы",
+  "Active and disabled": "Активные и отключённые",
+  "Showing {shown} of {total} tariffs": "Показано {shown} из {total} тарифов",
+  "Showing {shown} of {total} tariffs|one":
+    "Показано {shown} из {total} тарифа",
+  "Showing {shown} of {total} tariffs|few":
+    "Показано {shown} из {total} тарифов",
+  "Showing {shown} of {total} tariffs|many":
+    "Показано {shown} из {total} тарифов",
+  "Showing {shown} of {total} tariffs|other":
+    "Показано {shown} из {total} тарифа",
+  "No tariffs match these filters.":
+    "Нет тарифов, соответствующих этим фильтрам.",
+  "Order on the invoice": "Порядок в счёте",
+  "Lower numbers come first on the invoice.":
+    "Меньшие числа располагаются выше в счёте.",
+  "Starts {date}": "Начнётся {date}",
+  "Tariff saved": "Тариф сохранён",
+  "Tariff created": "Тариф создан",
+  "Tariff archived": "Тариф архивирован",
+  "Tariff restored. It is disabled until you enable it.":
+    "Тариф восстановлен. Он отключён, пока вы его не включите.",
+  "Used to match invoice row styling. It cannot be changed after the tariff is created.":
+    "Используется для сопоставления стилей строк счёта. После создания тарифа изменить его нельзя.",
+  "The code cannot be changed after the tariff is created.":
+    "После создания тарифа код изменить нельзя.",
+  "Only archived tariffs can be restored.":
+    "Восстановить можно только архивированные тарифы.",
+  "Archive {name}? It will no longer be used for new invoices.":
+    "Архивировать {name}? Тариф больше не будет использоваться для новых счетов.",
+  "Saving changes what open months bill: {months}. Draft invoices there change when they are generated again; prepared and sent invoices do not change.":
+    "Сохранение изменит начисления за открытые месяцы: {months}. Черновики счетов за эти месяцы изменятся при повторной генерации; подготовленные и отправленные счета не изменятся.",
+  "Edit the existing tariff when its price changes. The effective dates determine which months use it; prepared and sent invoices keep their saved amounts.":
+    "При изменении цены редактируйте существующий тариф. Даты действия определяют месяцы его применения; подготовленные и отправленные счета сохраняют свои суммы.",
+  "The tariff was saved, but the list could not be refreshed. Reload the page to see the latest tariffs.":
+    "Тариф сохранён, но список не удалось обновить. Перезагрузите страницу, чтобы увидеть актуальные тарифы.",
+  "Billing rule restored": "Правило начисления восстановлено",
+  "Billing rule archived": "Правило начисления архивировано",
+  "{n} dwellings selected|one": "Выбрано {n} помещение",
+  "{n} dwellings selected|few": "Выбрано {n} помещения",
+  "{n} dwellings selected|many": "Выбрано {n} помещений",
+  "{n} dwellings selected|other": "Выбрано {n} помещения",
   "Apply filters": "Применить фильтры",
   "Showing {shown} of {total} billing cases":
-    "Показано {shown} из {total} расчётных дел",
+    "Показано {shown} из {total} расчётных записей",
   "Draft and prepared invoices": "Черновики и подготовленные счета",
   "In progress": "В процессе",
   "Monthly billing": "Ежемесячные начисления",
@@ -2461,8 +2766,8 @@ const ru: Record<string, string> = {
   "Configure tariffs and rules": "Настройте тарифы и правила",
   "Add the billing rules that determine fixed, area, resident-count or meter-consumption charges.":
     "Добавьте правила расчёта: фиксированные начисления, по площади, по числу жильцов или по показаниям счётчиков.",
-  "Ready when every required charge has an enabled rule for the billing date.":
-    "Готово, когда для каждого обязательного начисления включено правило на дату счёта.",
+  "Ready when every required charge has a tariff that is on for the billing date.":
+    "Готово, когда для каждого обязательного начисления на дату счёта включён тариф.",
   "Create the billing period": "Создайте расчётный период",
   "Set the billing window, reading deadline, invoice issue date and due date. Creating a period creates a case for each active dwelling.":
     "Задайте границы периода, срок подачи показаний, дату выставления и срок оплаты. При создании периода для каждого активного помещения формируется расчётная запись.",
@@ -2888,6 +3193,51 @@ const ru: Record<string, string> = {
   "invoices prepared": "счетов подготовлено",
   "invoices sent": "счетов отправлено",
   skipped: "пропущено",
+  // Skip reasons of the bulk actions (src/lib/ui/skip-reason.ts).
+  "Already sent": "Уже отправлен",
+  "Delivery failed": "Доставка не удалась",
+  "An unexpected error occurred.": "Произошла непредвиденная ошибка.",
+  "Already {status}": "Статус уже «{status}»",
+  "Cannot generate an invoice for a case in {status} status":
+    "Нельзя создать счёт при статусе «{status}»",
+  "Cannot send an invoice in {status} status":
+    "Нельзя отправить счёт при статусе «{status}»",
+  "Reopen this period? Readings and invoices can be changed again.":
+    "Открыть этот период? Показания и счета снова можно будет изменять.",
+  // Dwelling page (2026-11): portal access, editors, confirmations.
+  "It is not certain the adjustment was saved. Reload the page and check the account entries before adding it again.":
+    "Нет уверенности, что корректировка сохранена. Обновите страницу и проверьте записи счёта, прежде чем добавлять её снова.",
+  // Zod's own message for a malformed email (z.email()).
+  "Invalid email address": "Неверный адрес электронной почты",
+  "Portal access": "Доступ к порталу",
+  "Discard unsaved changes?": "Отменить несохранённые изменения?",
+  "Add this adjustment? The balance changes right away.":
+    "Добавить эту корректировку? Баланс изменится сразу.",
+  "{direction}: {amount}. Add it? The balance changes right away.":
+    "{direction}: {amount}. Добавить? Баланс изменится сразу.",
+  "Record {amount} for {target}? It is applied right away.":
+    "Записать {amount} — {target}? Платёж применяется сразу.",
+  "Disable {email}? They cannot sign in until the account is enabled again.":
+    "Отключить {email}? Этот человек не сможет войти, пока учётная запись не будет снова включена.",
+  "Archive {meter}? It is no longer read or billed. Its past readings stay.":
+    "Архивировать {meter}? Для него больше не будут вноситься показания и выставляться счета. Прежние показания сохранятся.",
+  "Adjustment added.": "Корректировка добавлена.",
+  "Recording payment…": "Записываем платёж…",
+  "Could not record the payment": "Не удалось записать платёж",
+  "Adding adjustment…": "Добавляем корректировку…",
+  "Could not add the adjustment": "Не удалось добавить корректировку",
+  "Saving meter…": "Сохраняем счётчик…",
+  "Meter saved": "Счётчик сохранён",
+  // Ledger descriptions (src/lib/ui/ledger-description.ts).
+  "Current charges {ref}": "Текущие начисления {ref}",
+  "Late fee {ref}": "Плата за просрочку {ref}",
+  "Manual adjustment {ref}": "Ручная корректировка {ref}",
+  "Manual charge adjustment": "Ручная корректировка (начисление)",
+  "Manual credit adjustment": "Ручная корректировка (зачисление)",
+  "Bank payment {ref}": "Банковский платёж {ref}",
+  "Cash payment {ref}": "Оплата наличными {ref}",
+  "Opening balance (migrated)": "Начальное сальдо (перенесено)",
+  "Reversal: {entry}": "Отменено: {entry}",
   "Billing cases": "Расчётные записи",
   "Resolve blockers, then move each invoice to its next stage.":
     "Устраните проблемы и переведите каждый счёт на следующий этап.",
@@ -4027,6 +4377,34 @@ const ru: Record<string, string> = {
   "Meter type": "Тип счётчика",
   "Meter-based rules": "Правила на основе показаний счётчика",
   "Need help?": "Нужна помощь?",
+  "Name or code": "Название или код",
+  "The tariffs invoices are calculated from.":
+    "Тарифы, по которым рассчитываются счета.",
+  "With VAT: {amount}": "С НДС: {amount}",
+  "Unsaved changes": "Несохранённые изменения",
+  "Discard changes": "Отменить изменения",
+  "Template saved.": "Шаблон сохранён.",
+  "Could not save the template. Your changes are still here.":
+    "Не удалось сохранить шаблон. Ваши изменения остались здесь.",
+  "Could not load the sample charges. Try again.":
+    "Не удалось загрузить образец начислений. Попробуйте ещё раз.",
+  "Fit to width": "По ширине",
+  Left: "Слева",
+  Center: "По центру",
+  Right: "Справа",
+  Small: "Малый",
+  Medium: "Средний",
+  Large: "Большой",
+  "Extra large": "Очень большой",
+  "Sample charges for": "Образец начислений за",
+  "Latvian is the main invoice language.": "Латышский — основной язык счёта.",
+  "An empty field uses the Latvian text.":
+    "Пустое поле использует латышский текст.",
+  "Without translation: {n}": "Без перевода: {n}",
+  "Quantities are illustrative (always 1).": "Количества условные (всегда 1).",
+  "Layout reset to the default.": "Макет сброшен к стандартному.",
+  "Reset undone.": "Сброс отменён.",
+  "Editor view": "Вид редактора",
   "No billing rules match this filter.":
     "Нет правил расчёта, соответствующих этому фильтру.",
   "No resident": "Нет жильца",
@@ -4115,8 +4493,25 @@ const ru: Record<string, string> = {
   "Dwelling detail page with resident access and meter registration.":
     "Страница сведений о помещении с доступом жильца и регистрацией счётчиков.",
   "Set tariffs and rules": "Настройте тарифы и правила",
-  "Add the billing rules that set fixed, area, resident-count, or meter-consumption charges.":
-    "Добавьте правила начисления, которые задают фиксированную плату, плату за площадь, за число жильцов или за расход по счётчикам.",
+  "Click New tariff to add a charge. Choose a fixed, area, resident-count, or meter-consumption calculation. Click a tariff to edit it. Use the actions menu to turn a tariff off or on, or to archive it. To restore an archived tariff, select Show archived. Then click Restore in its actions menu. A restored tariff stays off until you turn it on. A price change applies to invoices that you generate later.":
+    "Нажмите «Новый тариф», чтобы добавить начисление. Выберите расчёт: фиксированная плата, плата за площадь, за число жильцов или за расход по счётчику. Нажмите на тариф, чтобы изменить его. В меню действий тариф можно отключить, включить или архивировать. Чтобы восстановить архивный тариф, отметьте «Показывать архивные». Затем нажмите «Восстановить» в меню действий тарифа. Восстановленный тариф остаётся отключённым, пока вы его не включите. Изменение цены действует для счетов, которые вы сформируете позже.",
+  "Set up the invoice template": "Настройте шаблон счёта",
+  "Choose the text and the sections of each invoice. Use the language tabs to write the text in each language. An empty field uses the Latvian text. If Sample charges for appears, choose a month to preview its tariff prices. The preview uses sample quantities. Click Save changes when the bar at the bottom shows unsaved changes.":
+    "Выберите текст и разделы каждого счёта. Используйте вкладки языков, чтобы написать текст на каждом языке. Пустое поле использует латышский текст. Если вы видите поле «Образец начислений за», выберите месяц, чтобы увидеть цены его тарифов. Предпросмотр использует условные количества. Когда нижняя панель показывает несохранённые изменения, нажмите «Сохранить изменения».",
+  "Ready when the preview shows the text and the sections that you want on every invoice.":
+    "Готово, когда предпросмотр показывает текст и разделы, которые вы хотите видеть в каждом счёте.",
+  "Open invoice template": "Открыть шаблон счёта",
+  "How do I stop using a tariff?": "Как перестать использовать тариф?",
+  "Open the actions menu of the tariff and click Turn off. New invoices then ignore the tariff. The page offers Undo for ten seconds. Click Turn on in the same menu to use the tariff again. Click Archive only when you do not plan to use the tariff again. Prepared and sent invoices keep their amounts.":
+    "Откройте меню действий тарифа и нажмите «Отключить». Новые счета тогда не учитывают тариф. Страница предлагает «Отменить» в течение десяти секунд. Чтобы снова использовать тариф, нажмите «Включить» в том же меню. Нажимайте «Архивировать», только если вы больше не планируете использовать тариф. Подготовленные и отправленные счета сохраняют свои суммы.",
+  "How do I change what an invoice shows?":
+    "Как изменить то, что показывает счёт?",
+  "Open Settings, then Invoice template. Change the text and the sections. Use the language tabs to write the English and Russian text. The English and Russian tabs show a count when translations are missing. Click Save changes. Click Discard changes to go back to the last saved version. The change applies to invoices that you generate after you save.":
+    "Откройте «Настройки», затем «Шаблон счёта». Измените текст и разделы. Используйте вкладки языков, чтобы написать текст на английском и русском языках. Вкладки английского и русского языков показывают число недостающих переводов, если они есть. Нажмите «Сохранить изменения». Нажмите «Отменить изменения», чтобы вернуться к последней сохранённой версии. Изменение действует для счетов, которые вы сформируете после сохранения.",
+  "Why does an older invoice print units in a different way?":
+    "Почему старый счёт печатает единицы измерения иначе?",
+  "A new invoice prints known units, such as month and person, in the language of the invoice. An older invoice keeps the wording that it had when you generated it. Regenerate a DRAFT invoice to get the new wording. The app prints a unit that it does not know as you typed it.":
+    "Новый счёт печатает известные единицы, например месяц и человек, на языке счёта. Старый счёт сохраняет формулировку, которая была в нём при формировании. Чтобы получить новую формулировку, сформируйте черновик заново. Единицу, которую приложение не знает, оно печатает так, как вы её ввели.",
   "Tariffs and rules list with rule details.":
     "Список тарифов и правил с подробными данными.",
   "Set the billing window, reading deadline, invoice issue date, and due date. A new period creates a case for each active dwelling. Residents can submit readings through the deadline date in the organization time zone. Administrators can enter readings later.":
@@ -4474,8 +4869,8 @@ const ru: Record<string, string> = {
   "Complete the setup steps to send your first invoices.":
     "Выполните шаги настройки, чтобы отправить первые счета.",
   "Continue setup": "Продолжить настройку",
-  "The guided setup walks you through these steps.":
-    "Пошаговая настройка поможет пройти эти шаги.",
+  "The guided setup covers your organization details, dwellings, first billing period, charges, and meters.":
+    "Пошаговая настройка охватывает данные организации, помещения, первый расчётный период, начисления и счётчики.",
   "Open the setup": "Открыть настройку",
   "Starting readings": "Начальные показания",
   "Meter positions before the first billing month. Not billed.":

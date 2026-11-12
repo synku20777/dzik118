@@ -9,6 +9,12 @@ with a compact-layout addendum and a less-dense addendum. Sections 1 to 6 are th
 describe the page before the change where they say "today". Section 7 marks what
 is done and what is open. Section 10 has the above-the-fold rules.
 
+Status (2026-11-11): the owner chose to keep the money card and the Readings
+card above the next-step band, with the money breakdown always visible. The
+"Layout as built" and "Less dense" paragraphs in section 3 describe the earlier
+order (band first, money panel beside the list). The 2026-11-11 addendum of
+ADR 0015 has the current layout, and section 10 is rewritten for it.
+
 Source: [the research report](../../reports/Dashboard%20UX%20for%20Latvian%20coop%20admin.md)
 and its [working notes](../../research_notes/Dashboard%20UX%20for%20Latvian%20coop%20admin/)
 (`01_current_state_audit.md`, `02_admin_needs_and_content.md`,
@@ -306,41 +312,38 @@ Still open after the build (2026-10-28):
 - The readings drawer shows "Iepriekšējais rādījums: —" for a dwelling that has an
   earlier reading, and its save gives no chip feedback beyond the idle state
   ([KNOWN_GAPS.md](../KNOWN_GAPS.md)).
-- Regenerate `public/guide/dashboard.jpg` and reword the guide step about
-  unmatched payments ([KNOWN_GAPS.md](../KNOWN_GAPS.md)).
+- The guide step wording remains open ([KNOWN_GAPS.md](../KNOWN_GAPS.md)).
+  The guide screenshots were refreshed on 2026-11-12.
 
 ## 10. Above the fold
 
-Added 2026-10-28 with the compact layout (ADR 0015 addendum), re-measured as v7
-on 2026-10-30 after the less-dense pass. The aim: the administrator sees the next
-step, the first work items and the money total without scrolling, without the
-page feeling crowded. The positions are measured on the live page (Latvian) with
-demo state "a" (a month with arrears and overdue rows). They are distances from
-the top of the page.
+Rewritten 2026-11-11 for the cards-on-top order (ADR 0015, 2026-11-11 addendum).
+The owner chose this order knowing that the attention list starts lower than in
+the band-first layout. The positions are measured on the live page (Latvian) in
+the September 2026 demo month (arrears, overdue rows, two passed deadlines). They
+are distances from the top of the page.
 
-| Viewport | Status band bottom | Attention list top | Attention rows 1, 2, 3 | Money total |
+| Viewport | Cards bottom | Primary button | Band bottom | Attention rows 1, 2, 3 |
 |---|---|---|---|---|
-| 1440 x 900 | 240 px | 316 px | 349, 418, 487 px | 476 px |
-| 1280 x 720 | not re-measured | not re-measured | not re-measured | not re-measured |
-| 1024 x 768 | 296 px | not recorded | 405, 470, 535 px | 875 px (below the list) |
-| 375 x 812 | 503 px | not recorded | first row at 640 px | not recorded |
+| 1440 x 900 | 340 px | 380-424 px | 533 px | 664, 728, 792 px |
+| 1280 x 720 | 340 px | 380-424 px | 533 px | 664, 728, 792 px |
+| 1024 x 768 | 403 px | 443-487 px | 596 px | 727, 791, 855 px |
+| 768 x 1024 | 559 px | 599-643 px | 805 px | 936, 1000, 1064 px |
+| 390 x 812 | 649 px | 722-766 px | 1004 px | 1127 px (row 1) |
 
-History at 1440 x 900: v5 had the band at 238 px, rows at 307, 372, 437 px and the
-money total at 472 px. The first declutter pass (v6) pushed these to 266 px, rows
-387, 462, 537 px and the money total at 502 px. A Codex refinement won most of it
-back (v7). At 1919 x 905 in dark mode the whole page fits in about 955 px. The
-tradeoff, recorded: calmer costs about one attention row of fold space against v5.
+History at 1440 x 900: the band-first layouts had the band at 238 to 266 px and
+the first row at 307 to 387 px (v5 to v7). The cards-on-top layout before this
+pass had the band at 562 px and the first row at 693 px.
 
 Rules:
 
-- **1440 x 900:** the header, the whole status band (sentence, primary button,
-  progress strip with the deadlines), the first three attention rows and the money
-  total are visible without scrolling.
-- **1024 x 768:** the status band and the first three attention rows are visible.
-  The money panel stacks below the list (875 px). That is accepted.
-- **375 x 812:** the header, the status band with the primary button and the
-  first attention row (640 px) are visible. The columns are stacked and the idle
-  status chip is hidden.
+- **1440 x 900:** the header, both cards, the whole status band and the first
+  three attention rows are visible without scrolling.
+- **1280 x 720 and 1024 x 768:** the cards and the whole status band with the
+  primary button are visible. The attention list starts at the fold. That is
+  accepted.
+- **390 x 812:** the header, the money card (breakdown closed) and the primary
+  button are visible. The attention list starts below the fold.
 - The primary button is always inside the status band, never below the list.
 - Do not put anything between the band and the list. New blocks go into the
   closed "Papildu informācija" section or after the list.
@@ -349,15 +352,15 @@ Rules:
   button is omitted.
 - Density comes from equal-weight fragments: one focal point per block, group
   instead of repeating badges, put each deadline where it belongs.
-- The two columns start at 56 rem. Below that the attention list comes before the
-  money panel. The progress strip becomes 2 by 2 below about 48 rem of band
-  width, which also holds for the longer Russian labels.
-- The header stays on one row. The month title may truncate at 1024 px (this fix
-  is not browser-verified).
-- Re-measure after any change to the header, the band or the row height. The
-  numbers above are from one demo state. More rows, longer labels or more money
-  lines move them.
+- The two cards share a row while the money card has 35 rem. The money card puts
+  the breakdown beside the total from 32 rem of card width. The progress strip
+  is four across from 48 rem of band width and 2 by 2 below.
+- A step shows a passed deadline only as a warning with its icon and the days
+  late. The invoice issue date is not a deadline and is not shown in a step.
+- Re-measure after any change to the header, the cards, the band or the row
+  height. The numbers above are from one demo state. More rows, longer labels,
+  a manual-adjustment line or a late deadline move them.
 
 The fixed status chip must not cover content. It is a 44 px circle when idle and
-expands on hover, focus and activity. Chip clearance at 1024 px is not
-browser-verified ([KNOWN_GAPS.md](../KNOWN_GAPS.md)).
+expands on hover, focus and activity. It still overlaps the right edge of the
+panels ([KNOWN_GAPS.md](../KNOWN_GAPS.md)).

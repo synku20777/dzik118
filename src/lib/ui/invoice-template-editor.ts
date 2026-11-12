@@ -34,7 +34,12 @@
 // <details>/<summary> popover (zero extra JS, keyboard accessible by
 // default) holding that row's Spacing control.
 import Sortable from "sortablejs";
+import { actions } from "astro:actions";
 import { onPageLoad } from "./page-lifecycle";
+import {
+  missingTranslationCount,
+  textBlockName,
+} from "./invoice-template-translations";
 import {
   renderInvoiceHtml,
   rowPresentationKey,
@@ -94,7 +99,7 @@ onPageLoad(() => {
   );
   const s = (key: string) => bootstrap.strings[key] ?? key;
 
-  const sampleRows: SampleRow[] = bootstrap.sampleLines.map((line) => ({
+  let sampleRows: SampleRow[] = bootstrap.sampleLines.map((line) => ({
     key: rowPresentationKey(line),
     label: line.description,
   }));
@@ -112,10 +117,9 @@ onPageLoad(() => {
   const expandedBlockIds = new Set<string>();
 
   // Which language the preview renders in AND which language's text the
-  // translatable fields below show/edit -- one control drives both (a
-  // design-review correction: separate per-field language tabs were judged
-  // likely to overload the editor). Purely local UI state: switching it
-  // never mutates saved data, only what's currently displayed.
+  // translatable fields below show/edit -- the language tabs above both
+  // columns drive both. Purely local UI state: switching it never mutates
+  // saved data, only what's currently displayed.
   let editingLocale: InvoiceLocale = "lv";
 
   const form = document.querySelector<HTMLFormElement>(
@@ -123,6 +127,9 @@ onPageLoad(() => {
   )!;
   const blockListEl = root.querySelector<HTMLUListElement>("#tpl-blocks")!;
   const previewFrame = root.querySelector<HTMLIFrameElement>("#tpl-preview")!;
+  const previewCanvas = root.querySelector<HTMLElement>(
+    "#tpl-preview-container"
+  )!;
   const previewZoomWrap = root.querySelector<HTMLElement>(
     "#tpl-preview-zoom-wrap"
   )!;
@@ -133,30 +140,184 @@ onPageLoad(() => {
   const zoomSelect = root.querySelector(
     "#tpl-zoom-select"
   ) as unknown as HTMLSelectElement;
-  const localeSelect = root.querySelector(
-    "#tpl-locale-select"
-  ) as unknown as HTMLSelectElement;
+  const periodSelect = root.querySelector(
+    "#tpl-preview-period"
+  ) as unknown as HTMLSelectElement | null;
+  const periodError = root.querySelector<HTMLElement>("#tpl-period-error")!;
+  const localeRadios = [
+    ...root.querySelectorAll<HTMLInputElement>('input[name="tpl-locale"]'),
+  ];
+  const langHint = root.querySelector<HTMLElement>("#tpl-lang-hint")!;
+  const missingBadges = {
+    en: root.querySelector<HTMLElement>('[data-missing-for="en"]'),
+    ru: root.querySelector<HTMLElement>('[data-missing-for="ru"]'),
+  };
   const addTextButton = root.querySelector<HTMLButtonElement>("#tpl-add-text")!;
   const resetButton =
     root.querySelector<HTMLButtonElement>("#tpl-reset-layout")!;
+  const statusEl = root.querySelector<HTMLElement>("#tpl-status")!;
+  const saveBar = root.querySelector<HTMLElement>("#tpl-savebar")!;
+  const saveBarText = root.querySelector<HTMLElement>("#tpl-savebar-text")!;
+  const discardButton = root.querySelector<HTMLButtonElement>("#tpl-discard")!;
+  const saveButton = root.querySelector<HTMLButtonElement>("#tpl-save")!;
+  const organizationId = (
+    form.elements.namedItem("organizationId") as HTMLInputElement
+  ).value;
+  const fill = (text: string, values: Record<string, string | number>) =>
+    text.replace(/\{(\w+)\}/g, (match, key) =>
+      key in values ? String(values[key]) : match
+    );
+  const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
-  let dirty = false;
+  // --- Unsaved changes ---------------------------------------------------
+  // "Dirty" is computed, not flagged: an edit that is changed back to the
+  // saved value is no longer a change (the bar closes again).
+  // For comparison only (never sent): an empty translation is the same as no
+  // translation (Latvian is used), so typing one and deleting it again is not
+  // a change.
+  function withoutEmpty(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(withoutEmpty);
+    if (!value || typeof value !== "object") return value;
+    const kept: Record<string, unknown> = {};
+    for (const [key, inner] of Object.entries(value)) {
+      const next = withoutEmpty(inner);
+      const emptyObject =
+        !!next &&
+        typeof next === "object" &&
+        !Array.isArray(next) &&
+        Object.keys(next).length === 0;
+      if (next !== "" && !emptyObject) kept[key] = next;
+    }
+    return kept;
+  }
+  const draft = () =>
+    JSON.stringify(
+      withoutEmpty([
+        state.headerText,
+        state.footerText,
+        state.paymentInstructions,
+        state.defaultNote,
+        state.config,
+      ])
+    );
+  let savedDraft = draft();
+  let savedState = clone(state);
+  const isDirty = () => draft() !== savedDraft;
+  let saving = false;
+  let saveFailed = false;
+  let savedNotice = false;
+  let savedNoticeTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function updateSaveBar() {
+    const focused = saveBar.contains(document.activeElement)
+      ? document.activeElement
+      : null;
+    const dirty = isDirty();
+    const show = dirty || saving || saveFailed || savedNotice;
+    saveBar.hidden = !show;
+    saveBar.dataset.state = saveFailed
+      ? "error"
+      : saving
+        ? "saving"
+        : dirty
+          ? "dirty"
+          : "saved";
+    saveBarText.textContent = saveFailed
+      ? s("Could not save the template. Your changes are still here.")
+      : saving
+        ? s("Saving…")
+        : dirty
+          ? s("Unsaved changes")
+          : s("Template saved.");
+    // Once saved only the confirmation stays; Save and Discard have nothing
+    // left to do.
+    const idle = !dirty && !saving;
+    saveButton.hidden = idle;
+    discardButton.hidden = idle;
+    discardButton.disabled = saving;
+    // Keyboard focus must not be left on a button that just went away. Read
+    // before hiding: once an element is hidden, activeElement already
+    // reports the body.
+    if (focused && (saveBar.hidden || (focused as HTMLButtonElement).hidden)) {
+      addTextButton.focus();
+    }
+  }
+
   function markDirty() {
-    dirty = true;
+    saveFailed = false;
+    savedNotice = false;
+    clearTimeout(savedNoticeTimer);
+    updateSaveBar();
+    updateLanguageHints();
   }
   window.addEventListener(
     "beforeunload",
     (event) => {
-      if (!dirty) return;
+      if (!isDirty()) return;
       event.preventDefault();
     },
     { signal: controller.signal }
   );
-  form.addEventListener("submit", () => {
-    dirty = false;
-  });
 
-  function refreshPreview() {
+  // --- Language tabs -------------------------------------------------------
+  // A count next to EN/RU: fields that have Latvian text but no translation
+  // yet. Information only -- an empty translation falls back to Latvian.
+  function updateLanguageHints() {
+    const texts = {
+      headerText: state.headerText,
+      footerText: state.footerText,
+      paymentInstructions: state.paymentInstructions,
+      defaultNote: state.defaultNote,
+      config: state.config,
+    };
+    for (const code of ["en", "ru"] as const) {
+      const missing = missingTranslationCount(texts, code);
+      const badge = missingBadges[code];
+      if (!badge) continue;
+      badge.hidden = missing === 0;
+      badge.textContent = String(missing);
+      badge.setAttribute(
+        "aria-label",
+        fill(s("Without translation: {n}"), { n: missing })
+      );
+    }
+    if (editingLocale === "lv") {
+      langHint.textContent = s("Latvian is the main invoice language.");
+      return;
+    }
+    const missing = missingTranslationCount(texts, editingLocale);
+    langHint.textContent = [
+      s("An empty field uses the Latvian text."),
+      missing ? fill(s("Without translation: {n}"), { n: missing }) : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  for (const radio of localeRadios) {
+    radio.addEventListener(
+      "change",
+      () => {
+        if (!radio.checked) return;
+        editingLocale = radio.value as InvoiceLocale;
+        // Re-render the block list too, not just the preview: translatable
+        // fields must now show/edit the newly selected language's text.
+        renderBlockList();
+        renderPreviewNow();
+        updateLanguageHints();
+      },
+      { signal: controller.signal }
+    );
+  }
+
+  // --- Preview ---------------------------------------------------------------
+  // The iframe is always laid out at true A4 width and scaled to fit the
+  // column (or to a chosen zoom), so the invoice looks the same on every
+  // screen instead of reflowing narrow. Its height follows the document.
+  const A4_HEIGHT_PX = 1123;
+  let previewTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function renderPreviewNow() {
     const draftInvoice: InvoiceHtmlInvoice = {
       ...bootstrap.sampleInvoice,
       templateSnapshot: {
@@ -176,31 +337,156 @@ onPageLoad(() => {
       editingLocale
     );
   }
+  // Typing re-renders the preview, but not on every single keystroke.
+  function refreshPreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(renderPreviewNow, 80);
+  }
 
-  localeSelect.addEventListener("change", () => {
-    editingLocale = localeSelect.value as InvoiceLocale;
-    // Re-render the block list too, not just the preview: translatable
-    // fields must now show/edit the newly selected language's text.
-    renderBlockList();
-    refreshPreview();
-  });
+  previewFrame.addEventListener(
+    "load",
+    () => {
+      const contentHeight =
+        previewFrame.contentDocument?.documentElement.scrollHeight ?? 0;
+      previewFrame.style.height = `${Math.max(contentHeight, A4_HEIGHT_PX)}px`;
+      applyZoom();
+    },
+    { signal: controller.signal }
+  );
 
   function applyZoom() {
-    const zoom = Number(zoomSelect.value) || 1;
+    const naturalWidth = previewFrame.offsetWidth;
+    const naturalHeight = previewFrame.offsetHeight;
+    let zoom = Number(zoomSelect.value);
+    if (zoomSelect.value === "fit" || !zoom) {
+      const style = getComputedStyle(previewCanvas);
+      const available =
+        previewCanvas.clientWidth -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight);
+      // Hidden (the phone's Edit view): the observer below runs this again
+      // as soon as the canvas has a width.
+      if (available <= 0 || !naturalWidth) return;
+      zoom = Math.min(1, available / naturalWidth);
+    }
     previewFrame.style.transform = `scale(${zoom})`;
     // A CSS transform never changes an element's own layout size, only how
     // it paints -- so the wrapping element's box must be resized to match
     // the iframe's actual visible (scaled) size, or the surrounding
     // .tpl-editor-canvas's `overflow: auto` has no scaled area to compute
-    // scrollbars for, and the wrong side of the iframe can end up
-    // unreachable (at zoom > 1) or the canvas keeps the unscaled iframe's
-    // full height as dead space (at zoom < 1).
-    const naturalWidth = previewFrame.offsetWidth;
-    const naturalHeight = previewFrame.offsetHeight;
+    // scrollbars for.
     previewZoomWrap.style.width = `${naturalWidth * zoom}px`;
     previewZoomWrap.style.height = `${naturalHeight * zoom}px`;
   }
-  zoomSelect.addEventListener("change", applyZoom);
+  zoomSelect.addEventListener("change", applyZoom, {
+    signal: controller.signal,
+  });
+  let observedWidth = 0;
+  const canvasObserver = new ResizeObserver(() => {
+    const width = previewCanvas.clientWidth;
+    if (zoomSelect.value !== "fit" || Math.abs(width - observedWidth) < 1) {
+      return;
+    }
+    observedWidth = width;
+    applyZoom();
+  });
+  canvasObserver.observe(previewCanvas);
+
+  // --- Sample charges for another billing period ---------------------------
+  // Fetched in place, so switching the period never reloads the page (which
+  // would throw away unsaved edits).
+  const sampleRowsFor = (lines: InvoiceHtmlLine[]): SampleRow[] =>
+    lines.map((line) => ({
+      key: rowPresentationKey(line),
+      label: line.description,
+    }));
+  let currentPeriodId = periodSelect?.value ?? "";
+  periodSelect?.addEventListener(
+    "change",
+    async () => {
+      const select = periodSelect;
+      const periodId = select.value;
+      periodError.hidden = true;
+      select.disabled = true;
+      try {
+        const { data, error } = await actions.invoiceTemplates.previewLines({
+          organizationId,
+          periodId,
+        });
+        if (error || !data) throw error ?? new Error("previewLines");
+        bootstrap.sampleLines = data.sampleLines;
+        sampleRows = sampleRowsFor(data.sampleLines);
+        bootstrap.sampleInvoice = {
+          ...bootstrap.sampleInvoice,
+          issueDate: data.issueDate,
+          dueDate: data.dueDate,
+          subtotal: data.totals.subtotal,
+          vatTotal: data.totals.vatTotal,
+          currentCharges: data.totals.currentCharges,
+          amountDue: data.totals.currentCharges,
+        };
+        currentPeriodId = periodId;
+        const url = new URL(location.href);
+        url.searchParams.set("previewPeriodId", periodId);
+        history.replaceState(null, "", url);
+        renderBlockList();
+        renderPreviewNow();
+      } catch {
+        select.value = currentPeriodId;
+        periodError.textContent = s(
+          "Could not load the sample charges. Try again."
+        );
+        periodError.hidden = false;
+      } finally {
+        select.disabled = false;
+        select.focus();
+      }
+    },
+    { signal: controller.signal }
+  );
+
+  // --- Phone: one column at a time -------------------------------------------
+  const viewButtons = [
+    ...root.querySelectorAll<HTMLButtonElement>("[data-tpl-view]"),
+  ];
+  for (const button of viewButtons) {
+    button.addEventListener(
+      "click",
+      () => {
+        root.dataset.view = button.dataset.tplView;
+        for (const other of viewButtons) {
+          other.setAttribute("aria-pressed", String(other === button));
+        }
+      },
+      { signal: controller.signal }
+    );
+  }
+
+  // --- Status line (reset and its Undo, section limit) -------------------------
+  let statusTimer: ReturnType<typeof setTimeout> | undefined;
+  function clearStatus() {
+    clearTimeout(statusTimer);
+    statusEl.replaceChildren();
+    statusEl.hidden = true;
+  }
+  function showStatus(message: string, undo?: () => void) {
+    clearTimeout(statusTimer);
+    statusEl.textContent = message;
+    if (undo) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "tpl-undo";
+      button.textContent = s("Undo");
+      button.addEventListener("click", () => {
+        clearStatus();
+        undo();
+      });
+      statusEl.appendChild(document.createTextNode(" "));
+      statusEl.appendChild(button);
+    }
+    statusEl.hidden = false;
+    statusTimer = setTimeout(clearStatus, 10_000);
+  }
 
   // Concrete element types, not HTMLElement: @cloudflare/workers-types'
   // ambient globals (bundled for the Worker runtime) collide with
@@ -268,6 +554,16 @@ onPageLoad(() => {
     return label;
   }
 
+  // The values are the schema's 0-4 steps (invoice-template-schema.ts's
+  // SPACING_CSS); only the names shown to the admin are words.
+  const SPACING_LABELS: Record<SpacingValue, string> = {
+    0: "None",
+    1: "Small",
+    2: "Medium",
+    3: "Large",
+    4: "Extra large",
+  };
+
   function spacingSelect(
     value: SpacingValue | undefined,
     onChange: (next: SpacingValue) => void
@@ -277,7 +573,7 @@ onPageLoad(() => {
     for (const spacing of SPACING_VALUES) {
       const option = document.createElement("option");
       option.value = String(spacing);
-      option.textContent = String(spacing);
+      option.textContent = s(SPACING_LABELS[spacing]);
       option.selected = (value ?? 0) === spacing;
       select.appendChild(option);
     }
@@ -369,15 +665,8 @@ onPageLoad(() => {
     li.className = "tpl-row";
     const override = state.config.rowOverrides[row.key] ?? {};
 
-    // Decorative only -- no Sortable instance is attached to this list, so
-    // dragging this handle does nothing. Reordering individual charge rows
-    // is out of V1 scope; the handle stays for visual parity only.
-    const handle = document.createElement("span");
-    handle.className = "tpl-drag-handle-static";
-    handle.setAttribute("aria-hidden", "true");
-    handle.textContent = "⋮⋮";
-    li.appendChild(handle);
-
+    // No drag handle here: individual charge rows cannot be reordered (they
+    // follow billing rule order), so nothing should look draggable.
     const title = document.createElement("span");
     title.className = "tpl-row-title";
     title.textContent = row.label;
@@ -559,23 +848,14 @@ onPageLoad(() => {
     };
   }
 
-  function textInput(
-    value: string,
-    placeholder: string,
-    maxLength: number,
-    onChange: (value: string) => void
-  ): HTMLInputElement {
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "tpl-input";
-    input.value = value;
-    input.placeholder = placeholder;
-    input.maxLength = maxLength;
-    input.addEventListener("input", () => {
-      onChange(input.value);
-      markDirty();
-    });
-    return input;
+  // Sections keep their fixed names; a custom text block is named from its
+  // first words (the old per-section "title" was an editor-only label that
+  // never reached the invoice, so it is no longer offered).
+  function displayName(block: InvoiceTemplateBlock): string {
+    const fallback = defaultLabelFor(block);
+    return block.type === "text"
+      ? textBlockName(block.text, fallback)
+      : fallback;
   }
 
   function renderBlockLi(
@@ -585,8 +865,6 @@ onPageLoad(() => {
     const li = document.createElement("li");
     li.className = "tpl-block";
     li.dataset.blockId = block.id;
-    const defaultLabel = defaultLabelFor(block);
-
     const header = document.createElement("div");
     header.className = "tpl-block-header";
 
@@ -603,7 +881,7 @@ onPageLoad(() => {
 
     const name = document.createElement("span");
     name.className = "tpl-block-name";
-    name.textContent = block.title || defaultLabel;
+    name.textContent = displayName(block);
     header.appendChild(name);
 
     const headerActions = document.createElement("div");
@@ -615,7 +893,7 @@ onPageLoad(() => {
     if (!(MANDATORY_BLOCK_TYPES as readonly string[]).includes(block.type)) {
       const showToggle = toggle(
         block.visible,
-        `${s("Show")}: ${block.title || defaultLabel}`,
+        `${s("Show")}: ${displayName(block)}`,
         (checked) => updateBlock(block.id, (b) => (b.visible = checked))
       );
       showToggle.addEventListener("click", (event) => event.stopPropagation());
@@ -658,21 +936,6 @@ onPageLoad(() => {
       setExpanded(!expandedBlockIds.has(block.id));
     });
 
-    // Editor-only display label -- never read by invoice-html.ts. Updates
-    // the header's name directly rather than a full re-render, so the
-    // input never loses focus/cursor position while typing.
-    detail.appendChild(
-      field(
-        s("Section title"),
-        textInput(block.title ?? "", defaultLabel, 100, (v) => {
-          updateBlock(block.id, (b) => {
-            b.title = v;
-          });
-          name.textContent = v || defaultLabel;
-        })
-      )
-    );
-
     if (block.type === "meta") {
       detail.appendChild(
         field(s("Invoice details"), localizedTextField(headerTextField(), 500))
@@ -693,12 +956,16 @@ onPageLoad(() => {
         field(s("Footer"), localizedTextField(footerTextField(), 1000))
       );
     } else if (block.type === "text") {
-      detail.appendChild(
-        field(
-          s("Custom text"),
-          localizedTextField(customTextField(block.id), 5000)
-        )
-      );
+      const customText = localizedTextField(customTextField(block.id), 5000);
+      // The list shows the Latvian text's first words; keep it in step while
+      // typing (not a full re-render, so the field keeps focus and cursor).
+      customText.addEventListener("input", () => {
+        const current = state.config.document.blocks.find(
+          (b) => b.id === block.id
+        );
+        if (current) name.textContent = displayName(current);
+      });
+      detail.appendChild(field(s("Custom text"), customText));
       detail.appendChild(
         labeled(
           s("Bold"),
@@ -711,10 +978,15 @@ onPageLoad(() => {
       );
       const alignSelect = document.createElement("select");
       alignSelect.className = "tpl-select";
+      const ALIGN_LABELS = {
+        left: "Left",
+        center: "Center",
+        right: "Right",
+      } as const;
       for (const align of ["left", "center", "right"] as const) {
         const option = document.createElement("option");
         option.value = align;
-        option.textContent = align;
+        option.textContent = s(ALIGN_LABELS[align]);
         option.selected = (block.align ?? "left") === align;
         alignSelect.appendChild(option);
       }
@@ -790,7 +1062,7 @@ onPageLoad(() => {
   function duplicateTextBlock(id: string) {
     const blocks = state.config.document.blocks;
     if (blocks.length >= MAX_BLOCKS) {
-      window.alert(
+      showStatus(
         s("This invoice layout has reached the maximum of 30 sections.")
       );
       return;
@@ -814,50 +1086,67 @@ onPageLoad(() => {
     refreshPreview();
   }
 
-  addTextButton.addEventListener("click", () => {
-    if (state.config.document.blocks.length >= MAX_BLOCKS) {
-      window.alert(
-        s("This invoice layout has reached the maximum of 30 sections.")
-      );
-      return;
-    }
-    const id = crypto.randomUUID();
-    state.config.document.blocks.push({
-      id,
-      type: "text",
-      visible: true,
-      text: "",
-      emphasis: "normal",
-      align: "left",
-    });
-    expandedBlockIds.add(id);
-    markDirty();
-    renderBlockList();
-    refreshPreview();
-  });
+  addTextButton.addEventListener(
+    "click",
+    () => {
+      if (state.config.document.blocks.length >= MAX_BLOCKS) {
+        showStatus(
+          s("This invoice layout has reached the maximum of 30 sections.")
+        );
+        return;
+      }
+      clearStatus();
+      const id = crypto.randomUUID();
+      state.config.document.blocks.push({
+        id,
+        type: "text",
+        visible: true,
+        text: "",
+        emphasis: "normal",
+        align: "left",
+      });
+      expandedBlockIds.add(id);
+      markDirty();
+      renderBlockList();
+      refreshPreview();
+      // The new block is at the end of the list, usually out of sight:
+      // take the cursor there so typing starts straight away.
+      blockListEl
+        .querySelector<HTMLElement>(`[data-block-id="${id}"] textarea`)
+        ?.focus();
+    },
+    { signal: controller.signal }
+  );
 
-  resetButton.addEventListener("click", () => {
-    if (
-      !window.confirm(
-        s(
-          "Reset the invoice layout to the default template? Custom text blocks, section titles, and any per-row formatting will be removed. Your header, footer, payment instructions, and note text are kept."
-        )
-      )
-    ) {
-      return;
-    }
-    // The confirmation promises header/footer/payment-instructions/note
-    // TEXT is kept -- that must include their EN/RU translations too, not
-    // just the Latvian value. Custom text blocks' own translations are
-    // correctly lost, since the blocks themselves are removed by the reset.
-    const textTranslations = state.config.textTranslations;
-    state.config = createDefaultInvoiceTemplateConfig();
-    if (textTranslations) state.config.textTranslations = textTranslations;
-    expandedBlockIds.clear();
-    markDirty();
-    renderBlockList();
-    refreshPreview();
-  });
+  // No confirmation: Reset applies at once and offers Undo for a few seconds,
+  // which is easier to recover from than a pop-up that is clicked through.
+  resetButton.addEventListener(
+    "click",
+    () => {
+      const before = clone(state.config);
+      const expandedBefore = [...expandedBlockIds];
+      // Header/footer/payment-instructions/note TEXT is kept -- that must
+      // include their EN/RU translations too, not just the Latvian value.
+      // Custom text blocks' own translations are lost with the blocks.
+      const textTranslations = state.config.textTranslations;
+      state.config = createDefaultInvoiceTemplateConfig();
+      if (textTranslations) state.config.textTranslations = textTranslations;
+      expandedBlockIds.clear();
+      markDirty();
+      renderBlockList();
+      refreshPreview();
+      showStatus(s("Layout reset to the default."), () => {
+        state.config = before;
+        // Which sections were open is part of what Undo puts back.
+        for (const id of expandedBefore) expandedBlockIds.add(id);
+        markDirty();
+        renderBlockList();
+        refreshPreview();
+        showStatus(s("Reset undone."));
+      });
+    },
+    { signal: controller.signal }
+  );
 
   const sortable = new Sortable(blockListEl, {
     handle: ".tpl-drag-handle",
@@ -901,24 +1190,98 @@ onPageLoad(() => {
     { capture: true, signal: controller.signal }
   );
 
-  form.addEventListener("submit", () => {
-    (form.elements.namedItem("headerText") as HTMLInputElement).value =
-      state.headerText;
-    (form.elements.namedItem("footerText") as HTMLInputElement).value =
-      state.footerText;
-    (form.elements.namedItem("paymentInstructions") as HTMLInputElement).value =
-      state.paymentInstructions;
-    (form.elements.namedItem("defaultNote") as HTMLInputElement).value =
-      state.defaultNote;
-    (form.elements.namedItem("config") as HTMLInputElement).value =
-      JSON.stringify(state.config);
-  });
+  // Back to the last saved version, after asking: the edits cannot be
+  // recovered.
+  discardButton.addEventListener(
+    "click",
+    () => {
+      if (saving || !isDirty()) return;
+      if (
+        !window.confirm(
+          s("Discard unsaved changes? Your edits have not been saved.")
+        )
+      ) {
+        return;
+      }
+      Object.assign(state, clone(savedState));
+      clearStatus();
+      markDirty();
+      renderBlockList();
+      renderPreviewNow();
+    },
+    { signal: controller.signal }
+  );
+
+  // Saved without leaving the page: a rejected save keeps every edit (the old
+  // full-page post reloaded from the database and lost them).
+  form.addEventListener(
+    "submit",
+    async (event) => {
+      event.preventDefault();
+      if (saving || !isDirty()) return;
+      saving = true;
+      saveFailed = false;
+      updateSaveBar();
+      // What was sent, so an edit made while saving still counts as unsaved.
+      const sentDraft = draft();
+      const sentState = clone(state);
+      const data = new FormData();
+      data.set("organizationId", organizationId);
+      data.set("headerText", state.headerText);
+      data.set("footerText", state.footerText);
+      data.set("paymentInstructions", state.paymentInstructions);
+      data.set("defaultNote", state.defaultNote);
+      data.set("config", JSON.stringify(state.config));
+      try {
+        const { error } = await actions.invoiceTemplates.update(data);
+        if (error) {
+          saveFailed = true;
+        } else {
+          savedDraft = sentDraft;
+          savedState = sentState;
+          savedNotice = true;
+          clearTimeout(savedNoticeTimer);
+          savedNoticeTimer = setTimeout(() => {
+            savedNotice = false;
+            updateSaveBar();
+          }, 3000);
+        }
+      } catch {
+        saveFailed = true;
+      } finally {
+        saving = false;
+        updateSaveBar();
+      }
+    },
+    { signal: controller.signal }
+  );
+
+  // Ctrl/Cmd+S saves instead of opening the browser's own save dialog.
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.key.toLowerCase() !== "s"
+      ) {
+        return;
+      }
+      event.preventDefault();
+      if (isDirty() && !saving) form.requestSubmit();
+    },
+    { signal: controller.signal }
+  );
 
   renderBlockList();
-  refreshPreview();
-  applyZoom();
+  renderPreviewNow();
+  updateLanguageHints();
+  updateSaveBar();
   return () => {
     controller.abort();
     sortable.destroy();
+    canvasObserver.disconnect();
+    clearTimeout(previewTimer);
+    clearTimeout(statusTimer);
+    clearTimeout(savedNoticeTimer);
   };
 });

@@ -1,10 +1,13 @@
 ---
 import "../styles/global.css";
+import "../styles/resident.css";
 import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
 import ThemeToggle from "../components/ui/ThemeToggle.astro";
 import BrandMark from "../components/ui/BrandMark.astro";
+import Icon from "../components/ui/Icon.astro";
 import Tooltips from "../components/ui/Tooltips.astro";
 import { translate, uiLocale } from "../lib/ui/i18n";
+import type { IconName } from "../lib/ui/icons";
 interface Props {
   title?: string;
 }
@@ -15,6 +18,12 @@ const id = Astro.params.dwellingId ?? Astro.url.searchParams.get("dwellingId");
 const auth = Astro.locals.auth;
 const dwellingId = id && auth?.dwellingIds.includes(id) ? id : null;
 const base = "/portal/dwellings/" + dwellingId;
+const path = Astro.url.pathname;
+const tabs: [string, string, IconName][] = [
+  [base, "Home", "home"],
+  [base + "/invoices", "Invoices", "receipt-euro"],
+  [base + "/messages", "Contact administrator", "message"],
+];
 ---
 
 <!doctype html>
@@ -40,7 +49,7 @@ const base = "/portal/dwellings/" + dwellingId;
     </script>
     <title>{title}</title>
   </head>
-  <body data-working-label={t("Working…")}>
+  <body class="resident-portal" data-working-label={t("Working…")}>
     <a class="skip-link" href="#main-content">
       {t("Skip to content")}
     </a>
@@ -50,44 +59,59 @@ const base = "/portal/dwellings/" + dwellingId;
           <BrandMark />
           {t("Namkopa")}
         </a>
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div class="resident-prefs">
           <ThemeToggle />
-          <LanguageSwitch />
+          <LanguageSwitch fullNames />
+        </div>
+        <div class="resident-account">
           {(auth?.organizationIds.length ?? 0) > 0 && (
-            <a href="/admin" class="text-sm text-muted hover:underline">
+            <a href="/admin" class="resident-header-link">
               {t("Switch to admin view")}
             </a>
           )}
-          <a href="/portal/profile" class="text-sm text-muted">
+          <a
+            href="/portal/profile"
+            class="resident-header-link"
+            aria-current={path === "/portal/profile" ? "page" : undefined}
+          >
+            <Icon name="user" />
             {t("Profile")}
           </a>
+          <form method="POST" action="/logout">
+            <button type="submit" class="resident-header-link">
+              <Icon name="logout" />
+              {t("Sign out")}
+            </button>
+          </form>
         </div>
       </div>
     </header>
     <main id="main-content" tabindex="-1" class="resident-content app-content">
       {dwellingId && (
         <nav class="resident-nav" aria-label={t("Navigation")}>
-          {[
-            [base, "Overview"],
-            [base + "/invoices", "Invoices"],
-            [base + "/messages", "Messages"],
-          ].map(([href, label]) => (
+          {tabs.map(([href, label, icon]) => (
             <a
               href={href}
               aria-current={
-                Astro.url.pathname === href ||
-                (label === "Invoices" &&
-                  Astro.url.pathname.startsWith("/portal/invoices/"))
+                path === href ||
+                (label === "Invoices" && path.startsWith("/portal/invoices/"))
                   ? "page"
                   : undefined
               }
             >
+              <Icon name={icon} />
               {t(label)}
             </a>
           ))}
         </nav>
       )}
       <slot />
+      {dwellingId && (
+        <footer class="resident-help">
+          <a href={base + "/messages"}>{t("Contact administrator")}</a>
+          <a href={base + "/payments"}>{t("Payment history")}</a>
+        </footer>
+      )}
     </main>
     <Tooltips />
     <script>

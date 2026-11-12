@@ -650,7 +650,7 @@ export async function listInvoicesForDwelling(db: Db, dwellingId: string) {
         inArray(billingCases.status, ["SENT", "PAID", "OVERDUE"])
       )
     )
-    .orderBy(invoices.issueDate);
+    .orderBy(invoices.issueDate, invoices.createdAt);
 }
 
 // Phase I (Resident UX) - "current invoice" for the resident dwelling

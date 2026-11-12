@@ -215,14 +215,38 @@ the unmatched-payment and delivery-failure counts, the deadlines line, the
 READY and OVERDUE colours, 16 px text and 44 px controls, the database error
 state, and the dead CSS.
 
-- [ ] **Stale guide screenshot.** `public/guide/dashboard.jpg` (2026-09-15)
-  shows the old "Property Billing" name and demo values near 70 million euro, and
-  the old page layout. Regenerate it.
+- [x] **Stale guide screenshot.** Refreshed all nine guide screenshots from the
+  current local demo on 2026-11-12 and added the invoice-template screenshot.
 - [ ] **Guide step wording.** The guide step about the dashboard still describes
   the old page. Reword it for the next-step band, the money block and the
   attention list.
-- [ ] **Overdue rows link to plain Payments.** The Payments page has no dwelling
-  filter.
+- [x] **Overdue rows link to plain Payments.** Fixed: the row links to
+  `/payments?q=<dwelling number>`.
+- [x] **Phone: primary button below the fold (2026-11-11).** Fixed: where the
+  money card is one column, the breakdown starts closed behind "Invoice
+  breakdown", and the button sits at 722-766 px at 390 x 812. The breakdown is
+  one tap away on phones. A script closes it after load, so there is a brief
+  open state before it collapses.
+- [ ] **Status chip covers content.** The fixed `MutationStatus` chip overlaps
+  the right edge of the dashboard panels. At 1024 px in Russian it covered the
+  overdue group count (seen 2026-11-11).
+- [ ] **Unused after the 2026-11-11 pass.** `installDismissableDetails`
+  (`src/lib/ui/dismissable-details.ts`) has no `details[data-dismiss]` left to
+  serve, and the strings "Invoice breakdown", "of total to pay", "Earlier month"
+  and "Next" are no longer used by the dashboard.
+- [ ] **Workbench (2026-11-11).** The second pass is described in
+  [CURRENT_MONTH_REDESIGN.md](product/CURRENT_MONTH_REDESIGN.md). Still open: the
+  status badge is 16 px in the table; the stage tabs take four rows on a phone;
+  `ui.spec.ts` "admin routes" fails at login because the demo admin lands on the
+  organization list, so its workbench checks do not run.
+- [ ] **Validation messages in English.** Zod's built-in messages reach the
+  screen in English. "Invalid email address" is translated since 2026-11-12;
+  others (wrong type, too small, too long) are not. The dwelling page caps
+  lengths with `maxlength`, so there they cannot occur.
+- [ ] **Adjustments have no idempotency key from the client.** Each
+  `createDwellingAccountAdjustment` call makes a new random ledger key, so the
+  server cannot recognise a repeat. The dwelling page offers no Retry for an
+  adjustment; a proper fix is a client mutation id on the action.
 - [ ] **Latvian wording.** No native review of the new strings.
 - [ ] **Drawer previous reading.** The readings drawer (opened from a dashboard
   row) shows "Iepriekšējais rādījums: —" for a dwelling that does have an earlier

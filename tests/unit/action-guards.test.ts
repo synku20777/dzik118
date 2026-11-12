@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 
 const ALLOWED_READ_GUARD_CALLS: Record<string, number> = {
   "organizations.ts": 2, // archive, restore (restore must work when archived)
+  "invoice-templates.ts": 1, // previewLines (read-only sample charges for the editor preview)
   "messages.ts": 1, // getThread
   "mutations.ts": 1, // lookup
   "workbench.ts": 1, // getDrawerData

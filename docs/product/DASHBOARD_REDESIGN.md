@@ -1,8 +1,12 @@
 # Main dashboard redesign
 
-The dashboard now uses a compact operational layout: four comparable headline
-scores, the next billing action with proportional workflow progress, a priority
-queue, and a real collection summary with an expandable invoice ledger.
+Current layout (2026-11-11): a money card ("Total to pay" with the visible
+breakdown, received and still unpaid) and a Readings card, then the next billing
+action with proportional workflow progress, then the priority queue. The
+decisions and measurements are in the 2026-11-11 addendum of
+[ADR 0015](../decisions/0015-dashboard-redesign.md). The rest of this file
+records the earlier pass, which had four headline scores and an expandable
+invoice ledger; neither exists now.
 
 ## Design references
 

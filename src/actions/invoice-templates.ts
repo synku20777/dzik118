@@ -3,12 +3,53 @@
 // it to billing-rule CRUD and invoice generation/status actions.
 import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
-import { requireActiveOrganization } from "../domain/authorization/guards";
+import {
+  requireActiveOrganization,
+  requireOrganizationAccess,
+} from "../domain/authorization/guards";
 import { updateInvoiceTemplate } from "../domain/billing/invoice-templates";
+import {
+  buildPreviewLines,
+  buildPreviewTotals,
+  previewPeriodDateRange,
+} from "../domain/billing/invoice-template-preview";
+import { getEffectiveRules } from "../domain/billing/rules";
+import { listPeriods } from "../domain/periods/periods";
+import { NotFoundError } from "../domain/errors";
 import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
 
 export const invoiceTemplates = {
+  // Read-only: the sample charges and dates the editor's preview shows for one
+  // billing period, so switching the preview period needs no page reload (a
+  // reload would throw away unsaved edits). Same functions as the page's own
+  // first render.
+  previewLines: defineAction({
+    input: z.object({ organizationId: z.uuid(), periodId: z.uuid() }),
+    handler: safeHandler(async ({ organizationId, periodId }, { locals }) => {
+      requireOrganizationAccess(locals.auth, organizationId);
+      return withDb(async (db) => {
+        const period = (await listPeriods(db, organizationId)).find(
+          (p) => p.id === periodId
+        );
+        if (!period) throw new NotFoundError("Billing period not found");
+        const rules = await getEffectiveRules(
+          db,
+          organizationId,
+          previewPeriodDateRange(period)
+        );
+        const sampleLines = buildPreviewLines(rules);
+        return {
+          periodId,
+          issueDate: period.invoiceIssueDate,
+          dueDate: period.invoiceDueDate,
+          sampleLines,
+          totals: buildPreviewTotals(sampleLines),
+        };
+      });
+    }),
+  }),
+
   update: defineAction({
     accept: "form",
     input: z.object({

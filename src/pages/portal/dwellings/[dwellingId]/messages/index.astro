@@ -1,5 +1,5 @@
 ---
-import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
 import {
   translate,
   uiLocale,
@@ -15,7 +15,11 @@ import {
   requireDwellingAccess,
 } from "../../../../../domain/authorization/guards";
 import { getDwellingForResident } from "../../../../../domain/organizations/dwellings";
-import { listConversationsWithMessagesForDwelling } from "../../../../../domain/messaging/conversations";
+import { getOrganization } from "../../../../../domain/organizations/organizations";
+import {
+  listConversationsWithMessagesForDwelling,
+  subjectFromBody,
+} from "../../../../../domain/messaging/conversations";
 import { withRequestDb } from "../../../../../lib/db-request";
 import { rethrowUnexpected } from "../../../../../domain/errors";
 
@@ -27,16 +31,19 @@ try {
   throw err;
 }
 
-const createResult = Astro.getActionResult(actions.messages.createConversation);
-const replyResult = Astro.getActionResult(actions.messages.reply);
-// Post-redirect-get after a successful mutation: without this, the POST
-// response itself is what's rendered, so a browser refresh/resubmit of
-// that response would resend the create/reply action a second time.
-if (
-  (createResult && !createResult.error) ||
-  (replyResult && !replyResult.error)
-) {
+const sendResult = Astro.getActionResult(actions.messages.residentSend);
+// Post-redirect-get after a successful send: without this a browser refresh
+// of the POST response would send the message a second time.
+if (sendResult && !sendResult.error) {
   return Astro.redirect(Astro.url.pathname);
+}
+let unsent = "";
+if (sendResult?.error) {
+  try {
+    unsent = String((await Astro.request.formData()).get("body") ?? "");
+  } catch {
+    unsent = "";
+  }
 }
 
 let dwelling: Awaited<ReturnType<typeof getDwellingForResident>>;
@@ -49,139 +56,207 @@ try {
   return Astro.redirect("/portal/dwellings");
 }
 
-const conversations = await withRequestDb((db) =>
-  listConversationsWithMessagesForDwelling(db, dwellingId)
-);
+const { conversations, timezone } = await withRequestDb(async (db) => ({
+  timezone: (await getOrganization(db, dwelling.organizationId)).timezone,
+  conversations: await listConversationsWithMessagesForDwelling(db, dwellingId),
+}));
+
+// One timeline for the whole dwelling. The administrator still has separate
+// conversations; here a resolved one only leaves a line in the chat.
+type Item =
+  | { kind: "message"; at: Date; body: string; mine: boolean; topic?: string }
+  | { kind: "resolved"; at: Date };
+const items: Item[] = conversations
+  .flatMap(({ conversation, messages }): Item[] => [
+    ...messages.map((message, index): Item => ({
+      kind: "message",
+      at: message.createdAt,
+      body: message.body,
+      mine: message.senderRole === "RESIDENT",
+      // A subject somebody typed is shown; one taken from the message's own
+      // first words would only repeat it.
+      topic:
+        index === 0 && conversation.subject !== subjectFromBody(message.body)
+          ? conversation.subject
+          : undefined,
+    })),
+    ...(conversation.resolvedAt
+      ? [{ kind: "resolved" as const, at: conversation.resolvedAt }]
+      : []),
+  ])
+  .sort((a, b) => a.at.getTime() - b.at.getTime());
+const day = (at: Date) => formatDate(at, locale, timezone);
+const time = (at: Date) =>
+  new Intl.DateTimeFormat(locale, {
+    timeStyle: "short",
+    timeZone: timezone,
+  }).format(at);
 ---
 
 <ResidentLayout
   title={`${t("Messages")} - ${t("Dwelling")} ${dwelling.number}`}
 >
-  <div class="mx-auto max-w-2xl p-6">
-    <div class="space-y-6">
-      <a
-        href={`/portal/dwellings/${dwellingId}`}
-        class="text-sm text-muted hover:underline"
+  <div>
+    <header class="resident-title">
+      <h1 class="font-display">{t("Contact administrator")}</h1>
+      <p>
+        {t("Dwelling")} {dwelling.number}
+      </p>
+    </header>
+
+    <section class="resident-chat" aria-label={t("Messages")}>
+      <div
+        class="resident-chat-log"
+        role="log"
+        aria-label={t("Messages")}
+        tabindex="0"
+        data-chat-log
       >
-        ← {t("Dwelling")} {dwelling.number}
-      </a>
-
-      <h1 class="text-xl font-bold text-foreground">{t("Messages")}</h1>
-
-      {createResult?.error && (
-        <p
-          class="rounded-control bg-danger-surface p-3 text-sm text-destructive"
-          role="alert"
-        >
-          {friendlyActionErrorMessage(createResult.error, locale)}
+        <div>
+          {items.length === 0 && (
+            <p class="resident-chat-empty" data-chat-empty>
+              {t("No messages yet. Write your question below.")}
+            </p>
+          )}
+          {items.map((item, index) => {
+            const previous = items[index - 1];
+            const newDay = !previous || day(previous.at) !== day(item.at);
+            return (
+              <>
+                {newDay && <p class="resident-chat-day">{day(item.at)}</p>}
+                {item.kind === "resolved" ? (
+                  <p class="resident-chat-event">
+                    <Icon name="check" size="sm" />
+                    {t("The administrator marked this as resolved.")}
+                  </p>
+                ) : (
+                  <>
+                    {item.topic && (
+                      <p class="resident-chat-topic">{item.topic}</p>
+                    )}
+                    <div
+                      class="resident-chat-msg"
+                      data-from={item.mine ? "me" : "admin"}
+                    >
+                      {(newDay ||
+                        item.topic ||
+                        previous?.kind !== "message" ||
+                        previous.mine !== item.mine) && (
+                        <p class="resident-chat-author">
+                          {t(item.mine ? "You" : "Administrator")}
+                        </p>
+                      )}
+                      <p class="resident-chat-bubble">{item.body}</p>
+                      <p class="resident-chat-time">{time(item.at)}</p>
+                    </div>
+                  </>
+                )}
+              </>
+            );
+          })}
+        </div>
+      </div>
+      {sendResult?.error && (
+        <p class="notice notice-danger form-inline-error" role="alert">
+          {friendlyActionErrorMessage(sendResult.error, locale)}
         </p>
       )}
-      {replyResult?.error && (
-        <p
-          class="rounded-control bg-danger-surface p-3 text-sm text-destructive"
-          role="alert"
-        >
-          {friendlyActionErrorMessage(replyResult.error, locale)}
-        </p>
-      )}
-
-      <section class="rounded-panel contained bg-surface p-4">
-        <h2 class="text-base font-semibold text-foreground">
-          {t("New message")}
-        </h2>
-        <form
-          method="POST"
-          action={actions.messages.createConversation}
-          class="mt-4 space-y-4"
-        >
-          <input type="hidden" name="dwellingId" value={dwellingId} />
-          <div>
-            <label for="subject" class="field-label">
-              {t("Subject")}
-            </label>
-            <input
-              id="subject"
-              name="subject"
-              type="text"
-              required
-              placeholder={t("What's this about?")}
-              class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <label for="body" class="field-label">
-              {t("Message")}
-            </label>
-            <textarea
-              id="body"
-              name="body"
-              required
-              rows="3"
-              class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
-            ></textarea>
-          </div>
-          <button type="submit" class="btn-primary w-full sm:w-auto">
+      <form
+        method="POST"
+        action={actions.messages.residentSend}
+        class="resident-composer"
+        data-chat-form
+        data-sending={t("Sending…")}
+        data-failed={t(
+          "The message could not be sent. Check your connection and try again."
+        )}
+        data-you={t("You")}
+      >
+        <input type="hidden" name="dwellingId" value={dwellingId} />
+        <label class="field-label" for="chat-body">
+          {t("Your message")}
+        </label>
+        <div>
+          <textarea
+            id="chat-body"
+            name="body"
+            required
+            maxlength="4000"
+            rows="2"
+          >{unsent}</textarea>
+          <button type="submit" class="btn-primary">
+            <Icon name="send" />
             {t("Send")}
           </button>
-        </form>
-      </section>
-
-      {conversations.length === 0 ? (
-        <p class="text-sm text-muted">{t("No conversations yet.")}</p>
-      ) : (
-        conversations.map(({ conversation, messages }) => (
-          <section class="rounded-panel contained bg-surface p-4">
-            <div class="flex items-center justify-between">
-              <h3 class="font-medium text-foreground">
-                {conversation.subject}
-              </h3>
-              <StatusBadge status={conversation.status} />
-            </div>
-
-            <div class="mt-3 space-y-2">
-              {messages.map((message) => (
-                <div class="rounded-control bg-surface-hover p-3">
-                  <p class="whitespace-pre-wrap break-words text-sm text-foreground">
-                    {message.body}
-                  </p>
-                  <p class="mt-1 text-xs text-muted">
-                    {formatDate(message.createdAt, locale)}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            {conversation.status !== "RESOLVED" ? (
-              <form
-                method="POST"
-                action={actions.messages.reply}
-                class="mt-3 space-y-2"
-              >
-                <input
-                  type="hidden"
-                  name="conversationId"
-                  value={conversation.id}
-                />
-                <input type="hidden" name="sentAs" value="RESIDENT" />
-                <textarea
-                  aria-label={t("Reply")}
-                  name="body"
-                  required
-                  rows="2"
-                  class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
-                />
-                <button type="submit" class="btn-primary w-full sm:w-auto">
-                  {t("Reply")}
-                </button>
-              </form>
-            ) : (
-              <p class="mt-2 text-xs text-muted">
-                {t("This conversation is resolved.")}
-              </p>
-            )}
-          </section>
-        ))
-      )}
-    </div>
+        </div>
+      </form>
+    </section>
   </div>
 </ResidentLayout>
+
+<script>
+  import { actions } from "astro:actions";
+  import { bindMutationForm } from "../../../../../lib/ui/mutate-form";
+  import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
+
+  onPageLoad(() => {
+    const form = document.querySelector<HTMLFormElement>("[data-chat-form]");
+    const log = document.querySelector<HTMLElement>("[data-chat-log]");
+    if (!form || !log) return;
+    const field = form.querySelector<HTMLTextAreaElement>("textarea")!;
+    const button = form.querySelector<HTMLButtonElement>("button")!;
+    const buttonHtml = button.innerHTML;
+    const el = (tag: string, className: string, text: string) => {
+      const node = document.createElement(tag);
+      node.className = className;
+      node.textContent = text;
+      return node;
+    };
+
+    bindMutationForm({
+      form,
+      action: actions.messages.residentSend,
+      savingLabel: form.dataset.sending!,
+      fallbackErrorMessage: form.dataset.failed!,
+      onError: () => field.focus(),
+      // The helper restores the button's text only; put the icon back too.
+      onSettled: () => (button.innerHTML = buttonHtml),
+      onSuccess: (message) => {
+        const list = log.firstElementChild!;
+        list.querySelector("[data-chat-empty]")?.remove();
+        const last = list.lastElementChild as HTMLElement | null;
+        const bubble = el("div", "resident-chat-msg resident-enter", "");
+        bubble.dataset.from = "me";
+        if (last?.dataset.from !== "me") {
+          bubble.appendChild(
+            el("p", "resident-chat-author", form.dataset.you!)
+          );
+        }
+        bubble.appendChild(el("p", "resident-chat-bubble", message.body));
+        bubble.appendChild(
+          el(
+            "p",
+            "resident-chat-time",
+            new Intl.DateTimeFormat(document.documentElement.lang, {
+              timeStyle: "short",
+            }).format(new Date(message.createdAt))
+          )
+        );
+        list.appendChild(bubble);
+        // column-reverse: the newest message is at scroll position 0.
+        log.scrollTop = 0;
+        field.value = "";
+        field.focus();
+      },
+    });
+
+    // Ctrl/Cmd+Enter sends. Enter alone stays a new line, so a half-written
+    // message is not sent by accident.
+    field.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+  });
+</script>

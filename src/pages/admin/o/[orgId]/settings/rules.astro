@@ -4,14 +4,54 @@ import {
   uiLocale,
   friendlyActionErrorMessage,
   formatTrimmed,
+  formatDate,
+  entityLabel,
+  fill,
+  plural,
+  formatPeriod,
 } from "../../../../../lib/ui/i18n";
+import { errorTranslations } from "../../../../../lib/ui/error-translations";
+import { unitLabel } from "../../../../../lib/ui/units";
+import rulesDomain from "../../../../../domain/billing/rules.ts?raw";
+import billingActions from "../../../../../actions/billing.ts?raw";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
+const pluralRules = new Intl.PluralRules(locale);
+function pluralStrings(key: string, one: string, other: string) {
+  return Object.fromEntries(
+    pluralRules.resolvedOptions().pluralCategories.map((category) => {
+      const translated = t(`${other}|${category}`);
+      const fallback = t(`${other}|other`);
+      return [
+        `${key}|${category}`,
+        locale === "en"
+          ? category === "one"
+            ? one
+            : other
+          : translated !== `${other}|${category}`
+            ? translated
+            : fallback !== `${other}|other`
+              ? fallback
+              : t(other),
+      ];
+    })
+  );
+}
+const errorMapJson = JSON.stringify(
+  errorTranslations([rulesDomain, billingActions], locale, [
+    "Enter a valid unit price, for example 0.35 or 12.50. Use up to 4 decimal places.",
+    "Enter a valid VAT percentage, for example 21 or 21.5.",
+  ])
+).replace(/</g, "\\u003c");
+const normalizeSearch = (value: string) =>
+  value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 // Phase F (Billing configuration) - tariffs/rules settings (spec Section
 // 9.2, 27, BILL-RULE-001/002/003).
 import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
-import type { IconName } from "../../../../../lib/ui/icons";
+import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
+import { orgLocalDateString } from "../../../../../lib/org-time";
+import { listPeriods } from "../../../../../domain/periods/periods";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import {
   ForbiddenError,
@@ -41,27 +81,66 @@ const archiveResult = Astro.getActionResult(actions.billing.archiveRule);
 
 const base = `/admin/o/${organizationId}`;
 
-const search = Astro.url.searchParams.get("search")?.trim().toLowerCase() ?? "";
+const search = Astro.url.searchParams.get("search") ?? "";
 const typeFilter = Astro.url.searchParams.get("type") ?? "";
-const rawStatus = Astro.url.searchParams.get("status");
-const statusFilter =
-  rawStatus === "ACTIVE" || rawStatus === "DISABLED" || rawStatus === "ARCHIVED"
-    ? rawStatus
-    : "";
-const showArchivedChecked =
-  Astro.url.searchParams.get("includeArchived") === "1";
-const includeArchived = showArchivedChecked || statusFilter === "ARCHIVED";
-
-const { organization, allRules, assignmentsByRule, dwellingOptions } =
+const rawStatus = Astro.url.searchParams.get("status") ?? "";
+// Same filter shape as the Dwellings list: a status select for live tariffs
+// plus a separate "Show archived" box. Old ?status=ARCHIVED / ?status=all
+// links (before the box existed) map onto the box.
+const includeArchived =
+  Astro.url.searchParams.get("includeArchived") === "1" ||
+  rawStatus === "ARCHIVED" ||
+  rawStatus === "all";
+const statusFilter = ["ACTIVE", "DISABLED"].includes(rawStatus)
+  ? rawStatus
+  : "";
+const { organization, allRules, assignmentsByRule, dwellingOptions, periods } =
   await withRequestDb(async (db) => ({
     organization: await getOrganization(db, organizationId),
-    allRules: await listRules(db, organizationId, { includeArchived }),
+    allRules: await listRules(db, organizationId, { includeArchived: true }),
     assignmentsByRule: await listRuleAssignmentsWithDwellingNumbers(
       db,
       organizationId
     ),
     dwellingOptions: await listDwellings(db, organizationId, { limit: 1000 }),
+    periods: await listPeriods(db, organizationId),
   }));
+const dwellingCollator = new Intl.Collator(locale, { numeric: true });
+dwellingOptions.sort((a, b) => dwellingCollator.compare(a.number, b.number));
+const openPeriods = periods
+  .filter((p) => p.status === "OPEN" && !p.openingReadings)
+  .map(({ id, year, month, startsOn, endsOn }) => ({
+    id,
+    year,
+    month,
+    startsOn,
+    endsOn,
+    label: formatPeriod(year, month, locale),
+  }));
+const today = orgLocalDateString(new Date(), organization.timezone);
+const priceFormat = new Intl.NumberFormat(locale, {
+  style: "currency",
+  currency: organization.currency,
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+});
+function matchesFilters(rule: RuleRow) {
+  return (
+    (!typeFilter || rule.calculationType === typeFilter) &&
+    (rule.archivedAt
+      ? includeArchived && !statusFilter
+      : !statusFilter ||
+        (statusFilter === "ACTIVE" ? rule.enabled : !rule.enabled)) &&
+    (!search.trim() ||
+      [rule.name, rule.code, rule.nameEn, rule.nameRu].some((value) =>
+        normalizeSearch(value ?? "").includes(normalizeSearch(search.trim()))
+      ))
+  );
+}
+const filtered = allRules.filter(matchesFilters);
+const hasFilters = !!(search || typeFilter || statusFilter || includeArchived);
+const ruleStatus = (rule: RuleRow) =>
+  rule.archivedAt ? "ARCHIVED" : rule.enabled ? "ACTIVE" : "DISABLED";
 
 function appliesToSummary(rule: {
   applicationScope: string;
@@ -78,7 +157,7 @@ function appliesToSummary(rule: {
 
 type RuleRow = (typeof allRules)[number];
 
-// Shared shape for both the per-row Edit button's data-rule payload and the
+// Shared shape for both the row link's data-rule payload and the
 // `?edit=<ruleId>` deep-link's auto-open payload -- one place defining what
 // the client-side drawer needs, so the two entry points can never drift.
 function ruleToDrawerJson(rule: RuleRow) {
@@ -94,45 +173,23 @@ function ruleToDrawerJson(rule: RuleRow) {
     unit: rule.unit,
     unitPrice: rule.unitPrice,
     vatRate: rule.vatRate,
+    unitPriceDisplay:
+      rule.unitPrice === null ? "" : formatTrimmed(rule.unitPrice, locale, 2),
+    vatRateDisplay: formatTrimmed(rule.vatRate, locale, 0),
     effectiveFrom: rule.effectiveFrom,
     effectiveUntil: rule.effectiveUntil,
     applicationScope: rule.applicationScope,
     sortOrder: rule.sortOrder,
     enabled: rule.enabled,
+    archivedAt: rule.archivedAt,
     dwellingIds: (assignmentsByRule.get(rule.id) ?? []).map(
       (a) => a.dwellingId
     ),
   };
 }
 
-// Deep link (?edit=<ruleId>): looked up against allRules (already
-// organization-scoped by listRules -- a cross-org id simply won't be in
-// this array, and a separate single-rule query would be redundant). Archived
-// rules are never editable via this page at all (their row has no Edit
-// button either), so one is never auto-opened even if `includeArchived`
-// happens to also be set. Missing/invalid/archived all resolve to `null`
-// here -- the page renders completely normally, per spec: "do not crash;
-// do not open another arbitrary tariff; ignore the query param."
 const editRuleId = Astro.url.searchParams.get("edit");
-const editRule = editRuleId
-  ? (allRules.find((r) => r.id === editRuleId && !r.archivedAt) ?? null)
-  : null;
-
-const filtered = allRules
-  .filter((r) => !typeFilter || r.calculationType === typeFilter)
-  .filter((r) => {
-    if (statusFilter === "ACTIVE") return !r.archivedAt && r.enabled;
-    if (statusFilter === "DISABLED") return !r.archivedAt && !r.enabled;
-    if (statusFilter === "ARCHIVED") return !!r.archivedAt;
-    return true;
-  })
-  .filter((r) => {
-    if (!search) return true;
-    return (
-      r.name.toLowerCase().includes(search) ||
-      r.code.toLowerCase().includes(search)
-    );
-  });
+const editRule = allRules.find((r) => r.id === editRuleId);
 
 const calculationTypes = [
   "FIXED",
@@ -150,69 +207,24 @@ const calculationTypeLabels: Record<string, string> = {
   MANUAL_QUANTITY: t("Manual quantity"),
   MANUAL_AMOUNT: t("Manual amount"),
 };
-
-function filterHref(overrides: Record<string, string | undefined> = {}) {
-  const params = new URLSearchParams();
-  if (search) params.set("search", search);
-  if (typeFilter) params.set("type", typeFilter);
-  if (statusFilter) params.set("status", statusFilter);
-  if (showArchivedChecked) params.set("includeArchived", "1");
-  for (const [key, value] of Object.entries(overrides)) {
-    if (value === undefined) params.delete(key);
-    else params.set(key, value);
-  }
-  const query = params.toString();
-  return query ? `${Astro.url.pathname}?${query}` : Astro.url.pathname;
-}
-
-// Icon selection: meter-typed rules get a droplet/flame/bolt/thermometer
-// icon; everything else falls back to an icon keyed by calculation type.
-// Purely decorative -- same convention as the dwellings list's type icons
-// and the readings drawer's meter icons elsewhere in this app.
-type RuleIcon =
-  | "cold_water"
-  | "hot_water"
-  | "electricity"
-  | "gas"
-  | "heat"
-  | "generic"
-  | "fixed"
-  | "area"
-  | "users"
-  | "document";
-
-function ruleIcon(rule: {
-  calculationType: string;
-  meterType: string | null;
-}): RuleIcon {
-  if (rule.meterType === "COLD_WATER") return "cold_water";
-  if (rule.meterType === "HOT_WATER") return "hot_water";
-  if (rule.meterType === "ELECTRICITY") return "electricity";
-  if (rule.meterType === "GAS") return "gas";
-  if (rule.meterType === "HEAT") return "heat";
-  if (rule.meterType === "OTHER") return "generic";
-  if (rule.calculationType === "FIXED") return "fixed";
-  if (rule.calculationType === "AREA") return "area";
-  if (rule.calculationType === "RESIDENT_COUNT") return "users";
-  return "document";
-}
-
-const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
-  cold_water: "droplet",
-  hot_water: "droplet-hot",
-  electricity: "bolt",
-  gas: "flame",
-  heat: "thermometer",
-  generic: "tool",
-  fixed: "tool",
-  area: "ruler-2",
-  users: "users",
-  document: "file-description",
-};
+const unitOptions = [
+  { value: "m3", label: "m³" },
+  { value: "m2", label: "m²" },
+  { value: "kWh", label: "kWh" },
+  {
+    value: "month",
+    label: locale === "lv" ? "mēnesis" : locale === "ru" ? "месяц" : "month",
+  },
+  {
+    value: "person",
+    label: locale === "lv" ? "persona" : locale === "ru" ? "человек" : "person",
+  },
+  { value: "dwelling", label: t("Dwelling").toLowerCase() },
+];
 ---
 
 <AdminLayout
-  title="Tariffs & rules"
+  title={t("Tariffs & rules")}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[
@@ -223,17 +235,22 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   <div class="rules-page">
     <PageHeader
       title={t("Tariffs & rules")}
-      description={t(
-        "Manage utility rates, billing formulas, and effective periods."
-      )}
+      description={t("The tariffs invoices are calculated from.")}
       display
     >
-      <a href={`${base}/guide`} class="btn-secondary settings-help">
-        <span class="settings-help-icon" aria-hidden="true">
+      <a href={`${base}/guide`} class="btn-secondary rules-help-link">
+        <span class="rules-help-icon" aria-hidden="true">
           ?
         </span>
-        {t("Help & guidance")}
+        {t("Need help?")}
       </a>
+      <button
+        type="button"
+        class="btn-primary rules-create-link"
+        data-open-tariff-drawer="create"
+      >
+        {t("New tariff")}
+      </button>
     </PageHeader>
 
     {(createResult?.error || updateResult?.error || archiveResult?.error) && (
@@ -245,7 +262,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       </p>
     )}
 
-    <form method="GET" class="filter-bar rules-filter-bar" data-instant-filter>
+    <form method="GET" class="filter-bar" id="tariff-filters">
       <div>
         <label class="field-label" for="search">
           {t("Search")}
@@ -254,20 +271,16 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
           id="search"
           name="search"
           value={search}
-          placeholder={t("Search rules by name or code...")}
+          placeholder={t("Name or code")}
           autocomplete="off"
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-body-sm"
+          class="mt-1"
         />
       </div>
       <div>
         <label class="field-label" for="type-filter">
           {t("Type")}
         </label>
-        <select
-          id="type-filter"
-          name="type"
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-        >
+        <select id="type-filter" name="type" class="mt-1">
           <option value="">{t("All types")}</option>
           {calculationTypes.map((type) => (
             <option value={type} selected={typeFilter === type}>
@@ -280,11 +293,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
         <label class="field-label" for="status-filter">
           {t("Status")}
         </label>
-        <select
-          id="status-filter"
-          name="status"
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-        >
+        <select id="status-filter" name="status" class="mt-1">
           <option value="">{t("All statuses")}</option>
           <option value="ACTIVE" selected={statusFilter === "ACTIVE"}>
             {t("Active")}
@@ -292,261 +301,205 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
           <option value="DISABLED" selected={statusFilter === "DISABLED"}>
             {t("Disabled")}
           </option>
-          <option value="ARCHIVED" selected={statusFilter === "ARCHIVED"}>
-            {t("Archived")}
-          </option>
         </select>
       </div>
-      <label class="flex items-center gap-2 pb-2 text-body-sm text-foreground">
+      <label class="rules-archived-toggle">
         <input
-          id="show-archived"
           type="checkbox"
+          id="archived-filter"
           name="includeArchived"
           value="1"
-          checked={showArchivedChecked}
+          checked={includeArchived}
         />
         {t("Show archived")}
       </label>
-      {(search || typeFilter || statusFilter || showArchivedChecked) && (
-        <a
-          href={filterHref({
-            search: undefined,
-            type: undefined,
-            status: undefined,
-            includeArchived: undefined,
-          })}
-          class="clear-filters"
-        >
-          {t("Clear filters")}
-        </a>
-      )}
-      <button
-        type="button"
-        class="btn-primary rules-create-link"
-        data-open-tariff-drawer="create"
-      >
-        <span aria-hidden="true">+</span>
-        {t("Create tariff")}
+      <button type="submit" class="btn-secondary" data-apply-filters>
+        {t("Apply")}
       </button>
     </form>
-
-    <div class="table-wrap stack-table">
-      <table class="w-full text-left text-sm">
+    <p id="tariff-results" class="text-body-sm text-muted" hidden={!hasFilters}>
+      <span data-result-count>
+        {fill(
+          plural(
+            locale,
+            allRules.length,
+            "Showing {shown} of {total} tariff",
+            "Showing {shown} of {total} tariffs"
+          ),
+          {
+            shown: filtered.length,
+            total: allRules.length,
+          }
+        )}
+      </span>
+      <a href={Astro.url.pathname} class="btn-ghost btn-sm" data-clear-filters>
+        {t("Clear filters")}
+      </a>
+    </p>
+    <p
+      id="tariff-announcer"
+      class="sr-only"
+      aria-live="polite"
+      role="status"
+    ></p>
+    <p
+      id="tariff-page-error"
+      class="notice notice-danger"
+      role="alert"
+      tabindex="-1"
+      hidden
+    ></p>
+    <p id="tariff-operation-status" role="status" hidden></p>
+    <div class="table-wrap rules-table-wrap">
+      <table class="rules-table w-full text-left text-sm">
         <caption class="sr-only">{t("Billing rules")}</caption>
-        <thead class="border-b border-border bg-surface-hover text-muted">
+        <thead>
           <tr>
-            <th scope="col" class="px-4 py-2">
-              {t("Name")}
-            </th>
-            <th scope="col" class="px-4 py-2">
-              {t("Code")}
-            </th>
-            <th scope="col" class="px-4 py-2">
-              {t("Type")}
-            </th>
-            <th scope="col" class="px-4 py-2">
-              {t("Unit")}
-            </th>
-            <th scope="col" class="px-4 py-2 text-right">
-              {t("Unit price")}
-            </th>
-            <th scope="col" class="px-4 py-2">
+            <th scope="col">{t("Tariff")}</th>
+            <th scope="col">{t("Calculation")}</th>
+            <th scope="col" class="text-right">
               {t("VAT")}
             </th>
-            <th scope="col" class="px-4 py-2">
-              {t("Effective period")}
-            </th>
-            <th scope="col" class="px-4 py-2">
-              {t("Applies to")}
-            </th>
-            <th scope="col" class="px-4 py-2">
-              {t("Status")}
-            </th>
-            <th scope="col" class="px-4 py-2 text-right">
+            <th scope="col">{t("Valid")}</th>
+            <th scope="col">{t("Applies to")}</th>
+            <th scope="col">{t("Status")}</th>
+            <th scope="col" class="text-right">
               {t("Actions")}
             </th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-border">
-          {filtered.map((rule) => (
-            <tr>
-              <td class="px-4 py-2">
-                <div class="rule-name-cell">
-                  <span
-                    class="rule-icon"
-                    data-icon={ruleIcon(rule)}
-                    aria-hidden="true"
-                  >
-                    <Icon name={RULE_ICON_NAMES[ruleIcon(rule)]} />
-                  </span>
-                  <div>
-                    <span class="font-medium text-foreground block">
-                      {rule.name}
-                    </span>
-                    <span class="block text-xs text-muted">{rule.code}</span>
-                  </div>
-                </div>
-              </td>
-              <td class="px-4 py-2 font-mono text-xs text-muted">
-                {rule.code}
-              </td>
-              <td class="px-4 py-2">
-                {calculationTypeLabels[rule.calculationType] ??
-                  rule.calculationType}
-              </td>
-              <td class="px-4 py-2">{rule.unit}</td>
-              <td class="px-4 py-2 text-right tabular-nums">
-                {rule.unitPrice ? formatTrimmed(rule.unitPrice, locale) : "—"}
-              </td>
-              <td class="px-4 py-2 tabular-nums">
-                {formatTrimmed(rule.vatRate, locale, 0)}%
-              </td>
-              <td class="px-4 py-2">
-                {rule.effectiveFrom} → {rule.effectiveUntil ?? t("ongoing")}
-              </td>
-              <td class="px-4 py-2 text-muted">{appliesToSummary(rule)}</td>
-              <td class="px-4 py-2">
-                <span
-                  class="rule-status"
-                  data-tone={
-                    rule.archivedAt
-                      ? "archived"
-                      : rule.enabled
-                        ? "active"
-                        : "disabled"
-                  }
+        <tbody id="tariff-rows">
+          {allRules.map((rule) => (
+            <tr
+              class="row-link"
+              data-tariff-row
+              data-rule-id={rule.id}
+              data-search={normalizeSearch(
+                [rule.name, rule.code, rule.nameEn, rule.nameRu].join(" ")
+              )}
+              data-type={rule.calculationType}
+              data-status={ruleStatus(rule)}
+              hidden={!matchesFilters(rule)}
+            >
+              <td class="tariff-name">
+                <a
+                  href={`?edit=${rule.id}`}
+                  class="row-link-target hover:underline"
+                  data-open-tariff-drawer="edit"
+                  data-rule={JSON.stringify(ruleToDrawerJson(rule))}
                 >
-                  <span class="rule-status-dot" aria-hidden="true" />
-                  {rule.archivedAt
-                    ? t("Archived")
-                    : rule.enabled
-                      ? t("Active")
-                      : t("Disabled")}
+                  {rule.name}
+                </a>
+                <span class="tariff-code">{rule.code}</span>
+              </td>
+              <td class="tariff-calculation">
+                {calculationTypeLabels[rule.calculationType]}
+                {rule.calculationType === "METER_CONSUMPTION" &&
+                  rule.meterType &&
+                  ` · ${entityLabel(rule.meterType, locale)}`}
+                <span class="tariff-secondary">
+                  {rule.calculationType === "MANUAL_AMOUNT"
+                    ? t("Amount set per period")
+                    : `${priceFormat.format(Number(rule.unitPrice))} / ${unitLabel(rule.unit, locale)}`}
                 </span>
               </td>
-              <td class="px-4 py-2 text-right">
-                {!rule.archivedAt && (
-                  <div class="rule-actions">
+              <td class="tariff-vat text-right tabular-nums">
+                {formatTrimmed(rule.vatRate, locale, 0)} %
+              </td>
+              <td class="tariff-validity">
+                <span class="tariff-date-range">
+                  {formatDate(rule.effectiveFrom, locale)} –{" "}
+                  {rule.effectiveUntil
+                    ? formatDate(rule.effectiveUntil, locale)
+                    : t("ongoing")}
+                </span>
+                {rule.effectiveUntil && rule.effectiveUntil < today ? (
+                  <span class="tariff-secondary">{t("Ended")}</span>
+                ) : rule.effectiveFrom > today ? (
+                  <span class="tariff-secondary">
+                    {fill(t("Starts {date}"), {
+                      date: formatDate(rule.effectiveFrom, locale),
+                    })}
+                  </span>
+                ) : null}
+              </td>
+              <td class="tariff-scope text-muted">{appliesToSummary(rule)}</td>
+              <td class="tariff-status">
+                <StatusBadge status={ruleStatus(rule)} />
+              </td>
+              <td class="tariff-menu text-right">
+                <details class="row-menu row-link-above">
+                  <summary aria-label={`${t("More actions")}: ${rule.name}`}>
+                    •••
+                  </summary>
+                  <div>
+                    {!rule.archivedAt && (
+                      <button
+                        type="button"
+                        data-rule-operation="toggle"
+                        data-rule-enabled={rule.enabled ? "" : "1"}
+                        data-rule-id={rule.id}
+                        data-rule-name={rule.name}
+                      >
+                        {rule.enabled ? t("Turn off") : t("Turn on")}
+                      </button>
+                    )}
                     <button
                       type="button"
-                      class="btn-secondary btn-sm"
-                      data-open-tariff-drawer="edit"
-                      data-rule={JSON.stringify(ruleToDrawerJson(rule))}
+                      data-rule-operation={
+                        rule.archivedAt ? "restore" : "archive"
+                      }
+                      data-rule-id={rule.id}
+                      data-rule-name={rule.name}
                     >
-                      <Icon name="pencil" size="sm" />
-                      {t("Edit")}
+                      {rule.archivedAt ? t("Restore") : t("Archive")}
                     </button>
-                    <details class="row-menu">
-                      <summary
-                        aria-label={`${t("More actions")}: ${rule.name}`}
-                      >
-                        •••
-                      </summary>
-                      <div>
-                        <form
-                          method="POST"
-                          action={actions.billing.archiveRule}
-                        >
-                          <input
-                            type="hidden"
-                            name="organizationId"
-                            value={organizationId}
-                          />
-                          <input type="hidden" name="ruleId" value={rule.id} />
-                          <button
-                            type="submit"
-                            data-confirm={t(
-                              "Archive this tariff? It will no longer be used for new invoices."
-                            )}
-                          >
-                            {t("Archive")}
-                          </button>
-                        </form>
-                      </div>
-                    </details>
                   </div>
-                )}
+                </details>
               </td>
             </tr>
           ))}
-          {filtered.length === 0 && (
-            <tr>
-              <td colspan="10" class="px-4 py-8 text-center text-muted">
-                {t("No billing rules match this filter.")}
-              </td>
-            </tr>
-          )}
+          <tr id="tariff-empty" hidden={filtered.length !== 0}>
+            <td colspan="7" class="text-center text-muted">
+              {t("No tariffs match these filters.")}{" "}
+              <a
+                href={Astro.url.pathname}
+                class="btn-ghost btn-sm"
+                data-clear-filters
+              >
+                {t("Clear filters")}
+              </a>
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
-
-    <div class="rules-tips-row">
-      <aside class="rules-sidebar">
-        <div class="rule-info-banner">
-          <span class="rule-info-icon" aria-hidden="true">
-            i
-          </span>
-          <div>
-            <p class="rule-info-title">{t("How tariffs are applied")}</p>
-            <p>
-              {t(
-                "Tariffs define how charges are calculated for each billing period."
-              )}{" "}
-              {t(
-                "Each rule has an effective period and can be archived when no longer in use."
-              )}
-            </p>
-          </div>
-        </div>
-
-        <div class="rule-tips">
-          <h3>{t("Good to know")}</h3>
-          <div class="rule-tip">
-            <span
-              class="rule-tip-icon"
-              data-icon="cold_water"
-              aria-hidden="true"
-            >
-              <Icon name="droplet" size="lg" />
-            </span>
-            <div>
-              <p class="rule-tip-title">{t("Meter-based rules")}</p>
-              <p>
-                {t(
-                  "Use meter consumption for utilities like water, heat, or electricity. Charges are calculated from the difference in meter readings."
-                )}
-              </p>
-            </div>
-          </div>
-          <div class="rule-tip">
-            <span class="rule-tip-icon" data-icon="area" aria-hidden="true">
-              <Icon name="tool" size="lg" />
-            </span>
-            <div>
-              <p class="rule-tip-title">{t("Fixed rules")}</p>
-              <p>
-                {t(
-                  "Use fixed rules for regular charges like maintenance fees. The amount is the same each period (per unit)."
-                )}
-              </p>
-            </div>
-          </div>
-          <div class="rule-tip">
-            <span class="rule-tip-icon" data-icon="calendar" aria-hidden="true">
-              <Icon name="calendar-month" size="lg" />
-            </span>
-            <div>
-              <p class="rule-tip-title">{t("Effective periods")}</p>
-              <p>
-                {t(
-                  "Avoid overlapping rules of the same type. When a new rate applies, create a new rule with a later effective date."
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
-      </aside>
-    </div>
+    <details class="disclosure max-w-2xl">
+      <summary>{t("How tariffs work")}</summary>
+      <div class="rules-help">
+        <p>
+          <strong>{t("Meter-based rules")}</strong>{" "}
+          {t(
+            "Tariffs define how charges are calculated for each billing period."
+          )}{" "}
+          {t(
+            "Use meter consumption for utilities like water, heat, or electricity. Charges are calculated from the difference in meter readings."
+          )}
+        </p>
+        <p>
+          <strong>{t("Fixed rules")}</strong>{" "}
+          {t(
+            "Use fixed rules for regular charges like maintenance fees. The amount is the same each period (per unit)."
+          )}
+        </p>
+        <p>
+          <strong>{t("Effective periods")}</strong>{" "}
+          {t(
+            "Edit the existing tariff when its price changes. The effective dates determine which months use it; prepared and sent invoices keep their saved amounts."
+          )}
+        </p>
+      </div>
+    </details>
   </div>
 
   <dialog
@@ -556,8 +509,38 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     data-deep-link-rule={
       editRule ? JSON.stringify(ruleToDrawerJson(editRule)) : ""
     }
+    data-locale={locale}
+    data-open-periods={JSON.stringify(openPeriods)}
+    data-currency={organization.currency}
     data-strings={JSON.stringify({
-      createTitle: t("Create tariff"),
+      refreshError: t(
+        "The tariff was saved, but the list could not be refreshed. Reload the page to see the latest tariffs."
+      ),
+      ...pluralStrings(
+        "resultCount",
+        "Showing {shown} of {total} tariff",
+        "Showing {shown} of {total} tariffs"
+      ),
+      ...pluralStrings(
+        "dwellingCount",
+        "{n} dwelling selected",
+        "{n} dwellings selected"
+      ),
+      archiveConfirm: t(
+        "Archive {name}? It will no longer be used for new invoices."
+      ),
+      saved: t("Tariff saved"),
+      created: t("Tariff created"),
+      archived: t("Tariff archived"),
+      restored: t("Tariff restored. It is disabled until you enable it."),
+      turnedOff: t("«{name}» turned off."),
+      turnedOn: t("«{name}» turned on."),
+      undo: t("Undo"),
+      archivedStatus: t("Archived"),
+      priceWarning: t(
+        "Saving changes what open months bill: {months}. Draft invoices there change when they are generated again; prepared and sent invoices do not change."
+      ),
+      createTitle: t("New tariff"),
       discardConfirm: t(
         "Discard unsaved changes? Your edits have not been saved."
       ),
@@ -566,48 +549,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       savingLabel: t("Saving…"),
       active: t("Active"),
       disabled: t("Disabled"),
-      dwellingsSelected: t("dwellings selected"),
-      dwellingSelected: t("dwelling selected"),
       genericError: t("Something went wrong. Please try again."),
-      // Every Zod field message and domain ValidationError/ConflictError
-      // string createRule/updateRule can throw, keyed by its exact English
-      // text -- same convention as workbench-drawer.ts's `config.strings`.
-      // The client submits via the JS action client directly (not a real
-      // form POST), so Astro.getActionResult/friendlyActionErrorMessage
-      // never run for this flow; translation has to happen client-side by
-      // looking the raw message up in this dictionary.
-      "Enter a valid unit price, for example 0.35 or 12.50. Use up to 4 decimal places.":
-        t(
-          "Enter a valid unit price, for example 0.35 or 12.50. Use up to 4 decimal places."
-        ),
-      "Enter a valid VAT percentage, for example 21 or 21.5.": t(
-        "Enter a valid VAT percentage, for example 21 or 21.5."
-      ),
-      "A meter consumption rule requires a meter type": t(
-        "A meter consumption rule requires a meter type"
-      ),
-      "This rule requires a unit price (it would otherwise always bill 0)": t(
-        "This rule requires a unit price (it would otherwise always bill 0)"
-      ),
-      "A rule that applies to all dwellings cannot also have specific dwelling assignments":
-        t(
-          "A rule that applies to all dwellings cannot also have specific dwelling assignments"
-        ),
-      "A one-to-one rule must be assigned to exactly one dwelling": t(
-        "A one-to-one rule must be assigned to exactly one dwelling"
-      ),
-      "A selected-dwellings rule must be assigned to at least one dwelling": t(
-        "A selected-dwellings rule must be assigned to at least one dwelling"
-      ),
-      "One or more selected dwellings do not belong to this organization": t(
-        "One or more selected dwellings do not belong to this organization"
-      ),
-      "Billing rule not found": t("Billing rule not found"),
+      withVat: t("With VAT: {amount}"),
     })}
   >
     <header class="context-drawer-header">
       <div class="context-drawer-heading">
-        <p class="context-drawer-eyebrow">{t("TARIFF")}</p>
         <div class="context-drawer-title-row">
           <h2 class="context-drawer-title" id="tariff-drawer-title"></h2>
           <span
@@ -631,45 +578,51 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       <p
         class="notice notice-danger"
         role="alert"
+        tabindex="-1"
         data-tariff-drawer-error
         hidden
       ></p>
       <form id="tariff-form" novalidate>
+        <div>
+          <label class="check-row">
+            <input
+              type="checkbox"
+              id="tariff-enabled"
+              name="enabled"
+              value="1"
+              aria-describedby="tariff-enabled-hint"
+              checked
+            />
+            {t("Enabled")}
+          </label>
+          <p class="rule-field-hint" id="tariff-enabled-hint">
+            {t("A tariff that is off is not added to invoices.")}
+          </p>
+        </div>
         <input type="hidden" name="organizationId" value={organizationId} />
         <input type="hidden" name="ruleId" id="tariff-ruleId" />
 
-        <h3 class="drawer-section-heading">{t("General")}</h3>
         <div class="rule-field-row">
           <div class="rule-field">
             <label for="tariff-name">{t("Name")} *</label>
             <input id="tariff-name" name="name" type="text" required />
           </div>
           <div class="rule-field">
-            <label for="tariff-code">{t("Code")} *</label>
-            <input id="tariff-code" name="code" type="text" required />
-            <p class="rule-field-hint">
-              {t("Unique identifier (e.g. cold_water).")}
+            <label for="tariff-code">{t("Code")}</label>
+            <input
+              id="tariff-code"
+              name="code"
+              type="text"
+              maxlength="50"
+              required
+              aria-describedby="tariff-code-hint"
+            />
+            <p id="tariff-code-readonly" class="font-mono" hidden></p>
+            <p class="rule-field-hint" id="tariff-code-hint">
+              {t(
+                "Used to match invoice row styling. It cannot be changed after the tariff is created."
+              )}
             </p>
-          </div>
-        </div>
-        <div class="rule-field-row">
-          <div class="rule-field">
-            <label for="tariff-nameEn">{t("English invoice label")}</label>
-            <input
-              id="tariff-nameEn"
-              name="nameEn"
-              type="text"
-              maxlength="200"
-            />
-          </div>
-          <div class="rule-field">
-            <label for="tariff-nameRu">{t("Russian invoice label")}</label>
-            <input
-              id="tariff-nameRu"
-              name="nameRu"
-              type="text"
-              maxlength="200"
-            />
           </div>
         </div>
         <div class="rule-field">
@@ -683,7 +636,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
         </div>
 
         <h3 class="drawer-section-heading">{t("Calculation")}</h3>
-        <div class="rule-field-row rule-field-row-3">
+        <div class="rule-field-row">
           <div class="rule-field">
             <label for="tariff-calculationType">{t("Type")} *</label>
             <select id="tariff-calculationType" name="calculationType">
@@ -691,16 +644,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
                 <option value={type}>{calculationTypeLabels[type]}</option>
               ))}
             </select>
-          </div>
-          <div class="rule-field">
-            <label for="tariff-unit">{t("Unit")} *</label>
-            <input
-              id="tariff-unit"
-              name="unit"
-              type="text"
-              required
-              placeholder={t("e.g. m3, month, person")}
-            />
           </div>
           <div class="rule-field" data-meter-type-field>
             <label for="tariff-meterType">{t("Meter type")}</label>
@@ -714,17 +657,37 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               <option value="OTHER">{t("Other")}</option>
             </select>
           </div>
-        </div>
-        <div class="rule-field-row">
+          <div class="rule-field">
+            <label for="tariff-unit">{t("Unit")} *</label>
+            <input
+              id="tariff-unit"
+              name="unit"
+              type="text"
+              required
+              list="tariff-unit-options"
+              placeholder={unitOptions
+                .slice(0, 4)
+                .map(({ label }) => label)
+                .join(", ")}
+            />
+            <datalist id="tariff-unit-options">
+              {unitOptions.map(({ value, label }) => (
+                <option value={value} label={label} />
+              ))}
+            </datalist>
+          </div>
+
           <div class="rule-field" data-unit-price-field>
             <label for="tariff-unitPrice">{t("Unit price")} *</label>
             <input
               id="tariff-unitPrice"
               name="unitPrice"
               type="text"
-              placeholder="0.0000"
+              placeholder={locale === "en" ? "0.00" : "0,00"}
+              inputmode="decimal"
+              aria-describedby="tariff-price-hint"
             />
-            <p class="rule-field-hint">
+            <p class="rule-field-hint" id="tariff-price-hint">
               {t("A price of 0.00 is valid and will show on the invoice.")}
             </p>
           </div>
@@ -734,14 +697,26 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               id="tariff-vatRate"
               name="vatRate"
               type="text"
-              placeholder="21.0000"
+              value={formatTrimmed("21", locale, 0)}
+              inputmode="decimal"
             />
           </div>
         </div>
+        <p class="rule-field-hint tariff-gross" data-gross-preview hidden></p>
 
+        <p
+          class="notice notice-warning"
+          data-price-warning
+          role="status"
+          hidden
+        ></p>
         <h3 class="drawer-section-heading">{t("Applies to")}</h3>
         <div class="rule-field">
-          <div class="tariff-scope-options" role="radiogroup">
+          <div
+            class="tariff-scope-options"
+            role="radiogroup"
+            aria-label={t("Applies to")}
+          >
             <label class="tariff-scope-option">
               <input
                 type="radio"
@@ -751,9 +726,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               />
               <span>
                 <strong>{t("All dwellings")}</strong>
-                <p>
-                  {t("Applies to every current and future dwelling.")} (1:All)
-                </p>
+                <p>{t("Applies to every current and future dwelling.")}</p>
               </span>
             </label>
             <label class="tariff-scope-option">
@@ -764,7 +737,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
                   {t(
                     "Applies only to the dwellings you choose. New dwellings are not included automatically."
                   )}{" "}
-                  (1:N)
                 </p>
               </span>
             </label>
@@ -772,7 +744,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               <input type="radio" name="applicationScope" value="ONE_TO_ONE" />
               <span>
                 <strong>{t("One dwelling")}</strong>
-                <p>{t("Applies to exactly one dwelling.")} (1:1)</p>
+                <p>{t("Applies to exactly one dwelling.")}</p>
               </span>
             </label>
           </div>
@@ -843,30 +815,48 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               id="tariff-effectiveUntil"
               name="effectiveUntil"
               type="date"
+              aria-describedby="tariff-until-hint"
             />
-            <p class="rule-field-hint">{t("Leave empty for ongoing.")}</p>
+            <p class="rule-field-hint" id="tariff-until-hint">
+              {t("Leave empty for ongoing.")}
+            </p>
           </div>
         </div>
-        <label class="rule-edit-checkbox">
-          <input
-            type="checkbox"
-            id="tariff-enabled"
-            name="enabled"
-            value="1"
-            checked
-          />
-          {t("Enabled")}
-        </label>
 
-        <h3 class="drawer-section-heading">{t("Advanced")}</h3>
+        <h3 class="drawer-section-heading">{t("On the invoice")}</h3>
+        <div class="rule-field-row">
+          <div class="rule-field">
+            <label for="tariff-nameEn">{t("English invoice label")}</label>
+            <input
+              id="tariff-nameEn"
+              name="nameEn"
+              type="text"
+              maxlength="200"
+            />
+          </div>
+          <div class="rule-field">
+            <label for="tariff-nameRu">{t("Russian invoice label")}</label>
+            <input
+              id="tariff-nameRu"
+              name="nameRu"
+              type="text"
+              maxlength="200"
+            />
+          </div>
+        </div>
+
         <div class="rule-field">
-          <label for="tariff-sortOrder">{t("Sort order")}</label>
+          <label for="tariff-sortOrder">{t("Order on the invoice")}</label>
           <input
             id="tariff-sortOrder"
             name="sortOrder"
             type="number"
             step="1"
+            aria-describedby="tariff-order-hint"
           />
+          <p class="field-hint" id="tariff-order-hint">
+            {t("Lower numbers come first on the invoice.")}
+          </p>
         </div>
       </form>
     </div>
@@ -879,8 +869,16 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       >
         {t("Archive")}
       </button>
+      <button
+        type="button"
+        class="btn-secondary"
+        id="tariff-drawer-restore"
+        hidden
+      >
+        {t("Restore")}
+      </button>
       <button type="button" class="btn-secondary" data-close-tariff-drawer>
-        {t("Cancel")}
+        {t("Close")}
       </button>
       <button
         type="submit"
@@ -892,48 +890,25 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       </button>
     </footer>
   </dialog>
-
-  <form
-    method="POST"
-    action={actions.billing.archiveRule}
-    id="archive-tariff-form"
-    data-confirm={t(
-      "Archive this tariff? It will no longer be used for new invoices."
-    )}
-    hidden
-  >
-    <input type="hidden" name="organizationId" value={organizationId} />
-    <input type="hidden" name="ruleId" id="archive-tariff-ruleId" />
-  </form>
 </AdminLayout>
 
-<script is:inline data-astro-rerun>
-  const filterForm = document.querySelector("[data-instant-filter]");
-  const searchInput = document.querySelector("#search");
-  const typeSelect = document.querySelector("#type-filter");
-  const statusSelect = document.querySelector("#status-filter");
-  const archivedCheckbox = document.querySelector("#show-archived");
-  let searchTimer;
-  document.addEventListener(
-    "astro:before-swap",
-    () => window.clearTimeout(searchTimer),
-    { once: true }
-  );
-  searchInput?.addEventListener("input", () => {
-    window.clearTimeout(searchTimer);
-    searchTimer = window.setTimeout(() => filterForm?.requestSubmit(), 300);
-  });
-  typeSelect?.addEventListener("change", () => filterForm?.requestSubmit());
-  statusSelect?.addEventListener("change", () => filterForm?.requestSubmit());
-  archivedCheckbox?.addEventListener("change", () =>
-    filterForm?.requestSubmit()
-  );
-</script>
-
+<script
+  type="application/json"
+  id="tariff-error-translations"
+  set:html={errorMapJson}
+/>
 <script>
   import { actions, isInputError } from "astro:actions";
-  import { navigate } from "astro:transitions/client";
   import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
+  import { unitLabel } from "../../../../../lib/ui/units";
+  type UnitLocale = Parameters<typeof unitLabel>[1];
+
+  const fill = (text: string, values: Record<string, string | number>) =>
+    text.replace(/\{(\w+)\}/g, (match, key) =>
+      key in values ? String(values[key]) : match
+    );
+  const normalizeSearch = (value: string) =>
+    value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
   interface TariffRule {
     id: string;
@@ -947,12 +922,15 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     unit: string;
     unitPrice: string | null;
     vatRate: string;
+    unitPriceDisplay: string;
+    vatRateDisplay: string;
     effectiveFrom: string;
     effectiveUntil: string | null;
     applicationScope: "ONE_TO_ALL" | "ONE_TO_MANY" | "ONE_TO_ONE";
     sortOrder: number;
     enabled: boolean;
     dwellingIds: string[];
+    archivedAt: string | null;
   }
 
   onPageLoad(() => {
@@ -970,6 +948,11 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     const strings: Record<string, string> = JSON.parse(
       dialog.dataset.strings ?? "{}"
     );
+    const errorMessages: Record<string, string> = JSON.parse(
+      document.querySelector("#tariff-error-translations")?.textContent ?? "{}"
+    );
+    const pluralRules = new Intl.PluralRules(document.documentElement.lang);
+    const numberFormat = new Intl.NumberFormat(document.documentElement.lang);
 
     const titleEl = document.querySelector<HTMLElement>(
       "#tariff-drawer-title"
@@ -1029,13 +1012,327 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       "#tariff-dwelling-single"
     ) as unknown as HTMLSelectElement;
 
+    const locale = dialog.dataset.locale;
+    const openPeriods: {
+      id: string;
+      year: number;
+      month: number;
+      startsOn: string;
+      endsOn: string;
+      label: string;
+    }[] = JSON.parse(dialog.dataset.openPeriods ?? "[]");
+    const restoreButton = document.querySelector<HTMLButtonElement>(
+      "#tariff-drawer-restore"
+    )!;
+    const codeInput = form.querySelector<HTMLInputElement>("#tariff-code")!;
+    const codeText = form.querySelector<HTMLElement>("#tariff-code-readonly")!;
+    const nameInput = form.querySelector<HTMLInputElement>("#tariff-name")!;
+    const priceWarning = form.querySelector<HTMLElement>(
+      "[data-price-warning]"
+    )!;
+    let loadedRule: TariffRule | null = null;
+    let codeEdited = false;
+    let busy = false;
     let mode: "create" | "edit" = "create";
+    const searchInput = document.querySelector<HTMLInputElement>("#search")!;
+    const filterForm =
+      document.querySelector<HTMLFormElement>("#tariff-filters")!;
+    const typeFilter = document.querySelector(
+      "#type-filter"
+    ) as unknown as HTMLSelectElement;
+    const statusFilter = document.querySelector(
+      "#status-filter"
+    ) as unknown as HTMLSelectElement;
+    const operationStatus = document.querySelector<HTMLElement>(
+      "#tariff-operation-status"
+    )!;
+    let operationStatusTimer: ReturnType<typeof setTimeout> | undefined;
+    function clearOperationStatus() {
+      clearTimeout(operationStatusTimer);
+      operationStatus.replaceChildren();
+      operationStatus.hidden = true;
+    }
+    function showOperationStatus(message: string, undo?: () => void) {
+      operationStatus.textContent = message;
+      if (undo) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "tariff-undo";
+        button.textContent = strings.undo;
+        button.onclick = undo;
+        operationStatus.appendChild(document.createTextNode(" "));
+        operationStatus.appendChild(button);
+      }
+      operationStatus.hidden = false;
+      operationStatusTimer = setTimeout(clearOperationStatus, 10_000);
+    }
+    const archivedFilter =
+      document.querySelector<HTMLInputElement>("#archived-filter")!;
+    filterForm.querySelector<HTMLElement>("[data-apply-filters]")!.hidden =
+      true;
+
+    function applyFilters() {
+      const query = normalizeSearch(searchInput.value.trim());
+      const rows = [
+        ...document.querySelectorAll<HTMLElement>("[data-tariff-row]"),
+      ];
+      let shown = 0;
+      for (const row of rows) {
+        const status = row.dataset.status;
+        row.hidden = !!(
+          (query &&
+            !normalizeSearch(row.dataset.search ?? "").includes(query)) ||
+          (typeFilter.value && row.dataset.type !== typeFilter.value) ||
+          (status === "ARCHIVED"
+            ? !archivedFilter.checked || statusFilter.value !== ""
+            : statusFilter.value !== "" && status !== statusFilter.value)
+        );
+        if (!row.hidden) shown++;
+      }
+      const results = document.querySelector<HTMLElement>("#tariff-results")!;
+      results.hidden = !(
+        searchInput.value ||
+        typeFilter.value ||
+        statusFilter.value ||
+        archivedFilter.checked
+      );
+      results.querySelector<HTMLElement>("[data-result-count]")!.textContent =
+        fill(strings[`resultCount|${pluralRules.select(rows.length)}`], {
+          shown,
+          total: rows.length,
+        });
+      document.querySelector<HTMLElement>("#tariff-empty")!.hidden =
+        shown !== 0;
+      const url = new URL(location.href);
+      for (const [key, value] of [
+        ["search", searchInput.value],
+        ["type", typeFilter.value],
+        ["status", statusFilter.value],
+        ["includeArchived", archivedFilter.checked ? "1" : ""],
+      ]) {
+        if (value) url.searchParams.set(key, value);
+        else url.searchParams.delete(key);
+      }
+      url.searchParams.delete("edit");
+      history.replaceState(null, "", url);
+    }
+    filterForm.addEventListener("input", applyFilters, {
+      signal: controller.signal,
+    });
+    filterForm.addEventListener("change", applyFilters, {
+      signal: controller.signal,
+    });
+    filterForm.addEventListener(
+      "submit",
+      (event) => {
+        event.preventDefault();
+        applyFilters();
+      },
+      { signal: controller.signal }
+    );
+    document.addEventListener(
+      "click",
+      (event) => {
+        if (!(event.target as HTMLElement).closest("[data-clear-filters]"))
+          return;
+        event.preventDefault();
+        searchInput.value = typeFilter.value = statusFilter.value = "";
+        archivedFilter.checked = false;
+        applyFilters();
+        searchInput.focus();
+      },
+      { capture: true, signal: controller.signal }
+    );
+    searchInput.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key !== "Escape" || !searchInput.value) return;
+        event.preventDefault();
+        searchInput.value = "";
+        applyFilters();
+      },
+      { signal: controller.signal }
+    );
+
+    async function refreshRules(ruleId: string, message: string) {
+      const url = new URL(location.href);
+      url.searchParams.delete("edit");
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(strings.refreshError);
+      const html = new DOMParser().parseFromString(
+        await response.text(),
+        "text/html"
+      );
+      for (const selector of ["#tariff-rows", "#tariff-results"]) {
+        const current = document.querySelector(selector);
+        const next = html.querySelector(selector);
+        if (!current || !next) throw new Error(strings.refreshError);
+        current.replaceWith(next);
+      }
+      applyFilters();
+      const row = document.querySelector<HTMLElement>(
+        `[data-tariff-row][data-rule-id="${ruleId}"]`
+      );
+      if (row && !row.hidden) {
+        row.querySelector<HTMLAnchorElement>(".row-link-target")?.focus();
+        // Mark the changed row: a fading tint, or under reduced motion (where
+        // global.css cuts every animation to 0.01ms) a tint that just goes.
+        if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          row.classList.add("row-changed-still");
+          setTimeout(() => row.classList.remove("row-changed-still"), 1500);
+        } else {
+          row.classList.add("row-changed");
+          row.addEventListener(
+            "animationend",
+            () => row.classList.remove("row-changed"),
+            { once: true }
+          );
+        }
+      } else searchInput.focus();
+      document.querySelector<HTMLElement>("#tariff-announcer")!.textContent =
+        message;
+    }
+
+    function clearErrors() {
+      for (const error of form.querySelectorAll(".field-error")) error.remove();
+      for (const field of form.querySelectorAll<HTMLElement>(
+        '[aria-invalid="true"]'
+      )) {
+        field.removeAttribute("aria-invalid");
+        const descriptions = (field.getAttribute("aria-describedby") ?? "")
+          .split(" ")
+          .filter((id) => !id.endsWith("-error"));
+        if (descriptions.length)
+          field.setAttribute("aria-describedby", descriptions.join(" "));
+        else field.removeAttribute("aria-describedby");
+      }
+      if (errorBanner) errorBanner.hidden = true;
+    }
+    function showError(message: string) {
+      if (!errorBanner) return;
+      errorBanner.textContent = errorMessages[message] ?? message;
+      errorBanner.hidden = false;
+      dialog.querySelector<HTMLElement>(".context-drawer-body")!.scrollTop = 0;
+      errorBanner.focus();
+    }
+    function showPageError(message: string) {
+      const banner = document.querySelector<HTMLElement>("#tariff-page-error")!;
+      banner.textContent = errorMessages[message] ?? message;
+      banner.hidden = false;
+      banner.focus();
+    }
+    function decimalValue(value: string) {
+      return value
+        .replace(/\s/g, "")
+        .replace(
+          locale === "en" ? /,/g : /,(?=\d)/g,
+          locale === "en" ? "" : "."
+        );
+    }
+    function updatePriceWarning() {
+      const rule = loadedRule;
+      const value = (name: string) =>
+        (form.elements.namedItem(name) as HTMLInputElement).value;
+      const changed =
+        rule &&
+        !rule.archivedAt &&
+        (Number(decimalValue(value("unitPrice"))) !== Number(rule.unitPrice) ||
+          Number(decimalValue(value("vatRate"))) !== Number(rule.vatRate) ||
+          value("calculationType") !== rule.calculationType ||
+          value("unit") !== rule.unit);
+      const months = changed
+        ? openPeriods.filter(
+            (period) =>
+              value("effectiveFrom") <= period.endsOn &&
+              (!value("effectiveUntil") ||
+                value("effectiveUntil") >= period.startsOn)
+          )
+        : [];
+      priceWarning.hidden = months.length === 0;
+      priceWarning.textContent = months.length
+        ? fill(strings.priceWarning, {
+            months: months.map((period) => period.label).join(", "),
+          })
+        : "";
+    }
+    nameInput.addEventListener(
+      "input",
+      () => {
+        if (mode !== "create" || codeEdited) return;
+        codeInput.value = nameInput.value
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/\p{Script=Cyrillic}/gu, "")
+          .toUpperCase()
+          .replace(/[^A-Z0-9]+/g, "_")
+          .replace(/^_+|_+$/g, "")
+          .slice(0, 50)
+          .replace(/_+$/g, "");
+      },
+      { signal: controller.signal }
+    );
+    codeInput.addEventListener(
+      "input",
+      () => {
+        codeEdited = true;
+      },
+      { signal: controller.signal }
+    );
+    form.addEventListener("input", updatePriceWarning, {
+      signal: controller.signal,
+    });
+    form.addEventListener("change", updatePriceWarning, {
+      signal: controller.signal,
+    });
     let returnFocusTo: HTMLElement | null = null;
     // Form state right after the drawer opened; a differing snapshot on
     // close means unsaved edits.
     let openSnapshot = "";
     const snapshotForm = () =>
       JSON.stringify([...new FormData(form).entries()]);
+    // Save is only offered once the form differs from how it opened.
+    function updateSaveState() {
+      if (!busy) saveButton.disabled = snapshotForm() === openSnapshot;
+    }
+
+    const grossPreview = form.querySelector<HTMLElement>(
+      "[data-gross-preview]"
+    )!;
+    const moneyFormat = new Intl.NumberFormat(document.documentElement.lang, {
+      style: "currency",
+      currency: dialog.dataset.currency || "EUR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    });
+    // What a resident pays per unit; hidden until both numbers are valid.
+    function updateGrossPreview() {
+      const field = (name: string) =>
+        (form.elements.namedItem(name) as HTMLInputElement).value.trim();
+      const price = decimalValue(field("unitPrice"));
+      const vat = decimalValue(field("vatRate")) || "0";
+      const valid =
+        calculationTypeSelect.value !== "MANUAL_AMOUNT" &&
+        /^\d{1,10}(\.\d{1,4})?$/.test(price) &&
+        /^\d{1,3}(\.\d{1,4})?$/.test(vat);
+      grossPreview.hidden = !valid;
+      if (!valid) return;
+      const unit = unitLabel(field("unit"), (locale ?? "lv") as UnitLocale);
+      grossPreview.textContent = fill(strings.withVat, {
+        amount:
+          moneyFormat.format(Number(price) * (1 + Number(vat) / 100)) +
+          (unit ? ` / ${unit}` : ""),
+      });
+    }
+    for (const type of ["input", "change"]) {
+      form.addEventListener(
+        type,
+        () => {
+          updateGrossPreview();
+          updateSaveState();
+        },
+        { signal: controller.signal }
+      );
+    }
 
     const meterTypeSelect = form.querySelector(
       "#tariff-meterType"
@@ -1059,11 +1356,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
 
     function updateDwellingCount() {
       const count = dwellingCheckboxes.filter((c) => c.checked).length;
-      const suffix =
-        count === 1
-          ? (strings.dwellingSelected ?? "dwelling selected")
-          : (strings.dwellingsSelected ?? "dwellings selected");
-      dwellingCountLabel.textContent = `${count} ${suffix}`;
+      dwellingCountLabel.textContent = fill(
+        strings[`dwellingCount|${pluralRules.select(count)}`],
+        { n: numberFormat.format(count) }
+      );
+      // "Select all visible" / "Clear selection" change boxes without events.
+      updateSaveState();
     }
 
     function updateScopeVisibility() {
@@ -1125,7 +1423,19 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     );
 
     function resetForm() {
+      for (const control of form.querySelectorAll<
+        HTMLInputElement | HTMLButtonElement
+      >("input, select, textarea, button"))
+        control.disabled = false;
       form.reset();
+      loadedRule = null;
+      codeEdited = false;
+      clearErrors();
+      codeInput.hidden = false;
+      codeText.hidden = true;
+      restoreButton.hidden = true;
+      saveButton.hidden = false;
+      priceWarning.hidden = true;
       for (const checkbox of dwellingCheckboxes) checkbox.checked = false;
       updateMeterTypeVisibility();
       updateScopeVisibility();
@@ -1134,29 +1444,38 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     }
 
     function openCreate() {
+      if (busy) return;
       mode = "create";
       ruleIdField.value = "";
       resetForm();
-      titleEl.textContent = strings.createTitle ?? "Create tariff";
+      titleEl.textContent = strings.createTitle;
       statusEl.hidden = true;
       archiveButton.hidden = true;
       saveButton.textContent = strings.createLabel ?? "Create tariff";
       returnFocusTo = document.activeElement as HTMLElement;
       dialog.showModal();
       openSnapshot = snapshotForm();
+      updateSaveState();
+      updateGrossPreview();
       form.querySelector<HTMLInputElement>("#tariff-name")?.focus();
     }
 
     function openEdit(rule: TariffRule) {
+      if (busy) return;
       mode = "edit";
       resetForm();
+      loadedRule = rule;
       ruleIdField.value = rule.id;
       (form.elements.namedItem("name") as HTMLInputElement).value = rule.name;
       (form.elements.namedItem("nameEn") as HTMLInputElement).value =
         rule.nameEn ?? "";
       (form.elements.namedItem("nameRu") as HTMLInputElement).value =
         rule.nameRu ?? "";
-      (form.elements.namedItem("code") as HTMLInputElement).value = rule.code;
+      codeInput.value = rule.code;
+      codeInput.hidden = true;
+      codeInput.disabled = true;
+      codeText.hidden = false;
+      codeText.textContent = rule.code;
       (form.elements.namedItem("description") as HTMLTextAreaElement).value =
         rule.description ?? "";
       calculationTypeSelect.value = rule.calculationType;
@@ -1165,9 +1484,9 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       ).value = rule.meterType ?? "";
       (form.elements.namedItem("unit") as HTMLInputElement).value = rule.unit;
       (form.elements.namedItem("unitPrice") as HTMLInputElement).value =
-        rule.unitPrice ?? "";
+        rule.unitPriceDisplay;
       (form.elements.namedItem("vatRate") as HTMLInputElement).value =
-        rule.vatRate;
+        rule.vatRateDisplay;
       (form.elements.namedItem("effectiveFrom") as HTMLInputElement).value =
         rule.effectiveFrom;
       (form.elements.namedItem("effectiveUntil") as HTMLInputElement).value =
@@ -1193,19 +1512,41 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
 
       titleEl.textContent = rule.name;
       statusEl.hidden = false;
-      statusEl.dataset.tone = rule.enabled ? "success" : "neutral";
-      statusEl.textContent = rule.enabled
-        ? (strings.active ?? "Active")
-        : (strings.disabled ?? "Disabled");
-      archiveButton.hidden = false;
+      // Same badge (icon, tone, label) as the tariff's row.
+      const rowBadge = document.querySelector<HTMLElement>(
+        `[data-tariff-row][data-rule-id="${rule.id}"] .status-badge`
+      );
+      if (rowBadge) {
+        statusEl.innerHTML = rowBadge.innerHTML;
+        statusEl.dataset.tone = rowBadge.dataset.tone ?? "neutral";
+      } else {
+        statusEl.dataset.tone = rule.enabled ? "success" : "neutral";
+        statusEl.textContent = rule.archivedAt
+          ? strings.archivedStatus
+          : rule.enabled
+            ? (strings.active ?? "Active")
+            : (strings.disabled ?? "Disabled");
+      }
+      archiveButton.hidden = !!rule.archivedAt;
+      restoreButton.hidden = !rule.archivedAt;
+      saveButton.hidden = !!rule.archivedAt;
+      if (rule.archivedAt) {
+        for (const control of form.querySelectorAll<
+          HTMLInputElement | HTMLButtonElement
+        >("input, select, textarea, button"))
+          control.disabled = true;
+      }
       saveButton.textContent = strings.saveLabel ?? "Save changes";
       returnFocusTo = document.activeElement as HTMLElement;
       dialog.showModal();
       openSnapshot = snapshotForm();
+      updateSaveState();
+      updateGrossPreview();
     }
 
     // User-initiated close (X, Cancel, Esc): confirm before dropping edits.
     function requestClose() {
+      if (busy) return;
       if (
         snapshotForm() !== openSnapshot &&
         !window.confirm(
@@ -1220,6 +1561,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     function closeDrawer() {
       if (!dialog.open) return;
       dialog.close();
+      clearErrors();
       if (returnFocusTo && document.contains(returnFocusTo)) {
         returnFocusTo.focus();
       }
@@ -1243,14 +1585,23 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
           "[data-open-tariff-drawer]"
         );
         if (!trigger) return;
+        if (
+          event instanceof MouseEvent &&
+          (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
+        )
+          return;
+        event.preventDefault();
         if (trigger.dataset.openTariffDrawer === "create") {
           openCreate();
         } else {
           const rule = JSON.parse(trigger.dataset.rule || "{}") as TariffRule;
           openEdit(rule);
+          const url = new URL(location.href);
+          url.searchParams.set("edit", rule.id);
+          history.replaceState(null, "", url);
         }
       },
-      { signal: controller.signal }
+      { capture: true, signal: controller.signal }
     );
 
     for (const closeTrigger of document.querySelectorAll<HTMLElement>(
@@ -1269,18 +1620,161 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       { signal: controller.signal }
     );
 
+    async function operateRule(
+      operation: "archive" | "restore",
+      ruleId: string,
+      name: string,
+      button: HTMLButtonElement
+    ) {
+      if (
+        busy ||
+        (operation === "archive" &&
+          !window.confirm(fill(strings.archiveConfirm, { name })))
+      )
+        return;
+      clearOperationStatus();
+      busy = true;
+      button.disabled = true;
+      document.querySelector<HTMLElement>("#tariff-page-error")!.hidden = true;
+      const fd = new FormData();
+      fd.set(
+        "organizationId",
+        (form.elements.namedItem("organizationId") as HTMLInputElement).value
+      );
+      fd.set("ruleId", ruleId);
+      let saved = false;
+      try {
+        const result =
+          operation === "archive"
+            ? await actions.billing.archiveRule(fd)
+            : await actions.billing.restoreRule(fd);
+        if (result.error) {
+          if (dialog.open) showError(result.error.message);
+          else showPageError(result.error.message);
+          return;
+        }
+        saved = true;
+        closeDrawer();
+        await refreshRules(
+          ruleId,
+          operation === "archive" ? strings.archived : strings.restored
+        );
+      } catch {
+        const message = saved ? strings.refreshError : strings.genericError;
+        if (dialog.open) showError(message);
+        else showPageError(message);
+      } finally {
+        busy = false;
+        button.disabled = false;
+      }
+    }
+    async function toggleRule(
+      ruleId: string,
+      name: string,
+      enabled: boolean,
+      button: HTMLButtonElement,
+      allowUndo = true
+    ) {
+      if (busy) return;
+      clearOperationStatus();
+      busy = true;
+      button.disabled = true;
+      const row = document.querySelector<HTMLElement>(
+        `[data-tariff-row][data-rule-id="${ruleId}"]`
+      );
+      row?.setAttribute("aria-busy", "true");
+      document.querySelector<HTMLElement>("#tariff-page-error")!.hidden = true;
+      const fd = new FormData();
+      fd.set(
+        "organizationId",
+        (form.elements.namedItem("organizationId") as HTMLInputElement).value
+      );
+      fd.set("ruleId", ruleId);
+      fd.set("enabled", enabled ? "1" : "");
+      let saved = false;
+      try {
+        const { error } = await actions.billing.setRuleEnabled(fd);
+        if (error) {
+          showPageError(error.message);
+          return;
+        }
+        saved = true;
+        const message = fill(enabled ? strings.turnedOn : strings.turnedOff, {
+          name,
+        });
+        await refreshRules(ruleId, message);
+        showOperationStatus(
+          message,
+          allowUndo
+            ? () => {
+                void toggleRule(
+                  ruleId,
+                  name,
+                  !enabled,
+                  operationStatus.querySelector("button") as HTMLButtonElement,
+                  false
+                );
+              }
+            : undefined
+        );
+      } catch {
+        showPageError(saved ? strings.refreshError : strings.genericError);
+      } finally {
+        busy = false;
+        button.disabled = false;
+        row?.removeAttribute("aria-busy");
+      }
+    }
     archiveButton.addEventListener(
       "click",
       () => {
-        const archiveForm = document.querySelector<HTMLFormElement>(
-          "#archive-tariff-form"
-        )!;
-        (
-          archiveForm.querySelector(
-            "#archive-tariff-ruleId"
-          ) as HTMLInputElement
-        ).value = ruleIdField.value;
-        archiveForm.requestSubmit();
+        if (loadedRule)
+          void operateRule(
+            "archive",
+            loadedRule.id,
+            loadedRule.name,
+            archiveButton
+          );
+      },
+      { signal: controller.signal }
+    );
+    restoreButton.addEventListener(
+      "click",
+      () => {
+        if (loadedRule)
+          void operateRule(
+            "restore",
+            loadedRule.id,
+            loadedRule.name,
+            restoreButton
+          );
+      },
+      { signal: controller.signal }
+    );
+    document.addEventListener(
+      "click",
+      (event) => {
+        const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
+          "[data-rule-operation]"
+        );
+        if (!button) return;
+        const menu = button.closest("details");
+        if (menu) menu.open = false;
+        if (button.dataset.ruleOperation === "toggle") {
+          void toggleRule(
+            button.dataset.ruleId!,
+            button.dataset.ruleName!,
+            button.dataset.ruleEnabled === "1",
+            button
+          );
+          return;
+        }
+        void operateRule(
+          button.dataset.ruleOperation as "archive" | "restore",
+          button.dataset.ruleId!,
+          button.dataset.ruleName!,
+          button
+        );
       },
       { signal: controller.signal }
     );
@@ -1289,6 +1783,11 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       "submit",
       async (event) => {
         event.preventDefault();
+        if (busy || loadedRule?.archivedAt) return;
+        clearOperationStatus();
+        clearErrors();
+        document.querySelector<HTMLElement>("#tariff-page-error")!.hidden =
+          true;
         const scope = scopeRadios.find((r) => r.checked)?.value ?? "ONE_TO_ALL";
         const fd = new FormData(form);
         fd.delete("dwellingIds");
@@ -1314,35 +1813,64 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
             : ""
         );
 
+        for (const key of ["unitPrice", "vatRate"]) {
+          const value = fd.get(key);
+          if (typeof value === "string") fd.set(key, decimalValue(value));
+        }
+        busy = true;
         saveButton.disabled = true;
         const originalLabel = saveButton.textContent;
         saveButton.textContent = strings.savingLabel ?? "Saving…";
-        const { error } =
-          mode === "create"
-            ? await actions.billing.createRule(fd)
-            : await actions.billing.updateRule(fd);
-        saveButton.disabled = false;
-        saveButton.textContent = originalLabel;
-
-        if (error) {
-          if (errorBanner) {
-            const rawMessage = isInputError(error)
-              ? (Object.values(error.fields).flat()[0] ?? error.message)
-              : error.message;
-            // The action client returns the raw English message (Zod
-            // regex message or a domain Error's own text) -- translate it
-            // through the same dictionary the drawer's static labels use,
-            // falling back to the raw string for a message this dictionary
-            // doesn't have an entry for (e.g. a dynamic "code already
-            // exists" conflict, which embeds the submitted code and so
-            // can't be a fixed dictionary key).
-            errorBanner.textContent = strings[rawMessage] ?? rawMessage;
-            errorBanner.hidden = false;
+        let saved = false;
+        try {
+          const { data, error } =
+            mode === "create"
+              ? await actions.billing.createRule(fd)
+              : await actions.billing.updateRule(fd);
+          if (error) {
+            if (isInputError(error)) {
+              for (const [name, messages] of Object.entries(error.fields)) {
+                const field = form.elements.namedItem(name);
+                if (!(field instanceof HTMLElement) || !messages?.length)
+                  continue;
+                const paragraph = document.createElement("p");
+                paragraph.className = "field-error";
+                paragraph.id = `${field.id}-error`;
+                paragraph.textContent = messages
+                  .map((message) => errorMessages[message] ?? message)
+                  .join(" ");
+                field.setAttribute("aria-invalid", "true");
+                field.setAttribute(
+                  "aria-describedby",
+                  [field.getAttribute("aria-describedby"), paragraph.id]
+                    .filter(Boolean)
+                    .join(" ")
+                );
+                field.insertAdjacentElement("afterend", paragraph);
+              }
+            }
+            showError(
+              isInputError(error)
+                ? (Object.values(error.fields).flat()[0] ??
+                    strings.genericError)
+                : error.message
+            );
+            return;
           }
-          return;
+          saved = true;
+          closeDrawer();
+          await refreshRules(
+            data?.id ?? String(fd.get("ruleId") ?? ""),
+            mode === "create" ? strings.created : strings.saved
+          );
+        } catch {
+          if (saved) showPageError(strings.refreshError);
+          else showError(strings.genericError);
+        } finally {
+          busy = false;
+          saveButton.textContent = originalLabel;
+          updateSaveState();
         }
-        closeDrawer();
-        await navigate(window.location.pathname + window.location.search);
       },
       { signal: controller.signal }
     );
@@ -1353,7 +1881,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
 
     // Deep link (?edit=<ruleId>, e.g. the dwelling page's "Edit tariff"
     // shortcut): the server already validated the id (belongs to this org,
-    // not archived) and embedded that rule's data on the dialog if so --
+    // including archived rules) and embedded its data on the dialog --
     // runs on every onPageLoad firing (direct load AND ClientRouter
     // navigation to this URL), so no separate one-time-init path is
     // needed. Nothing to do if the param was missing/invalid -- the
@@ -1363,42 +1891,26 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       openEdit(JSON.parse(deepLinkRuleJson) as TariffRule);
     }
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      clearTimeout(operationStatusTimer);
+    };
   });
 </script>
-
-<style is:global>
-  /* Table-row icon -- bare, no badge container (per the icon system's
-     container rule: table rows/buttons/chips stay bare; only category
-     cards, empty states, and summary/KPI cards keep the badge treatment). */
-  .rule-icon {
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    color: var(--color-muted);
-  }
-  .rule-icon[data-icon="cold_water"] {
-    color: var(--color-meter-cold-text);
-  }
-  .rule-icon[data-icon="hot_water"] {
-    color: var(--color-meter-hot-text);
-  }
-  .rule-field select {
-    padding-inline-end: 2.25rem;
-  }
-</style>
 
 <style>
   .rules-page {
     display: grid;
-    gap: 1.25rem;
+    gap: var(--gap-section);
+    min-width: 0;
   }
-  .settings-help {
+  /* Same help button as the Settings page. */
+  .rules-help-link {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
   }
-  .settings-help-icon {
+  .rules-help-icon {
     display: grid;
     width: 1.1rem;
     height: 1.1rem;
@@ -1409,63 +1921,146 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     font-weight: 700;
     line-height: 1;
   }
-  .rules-filter-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: end;
-    gap: 1rem;
-  }
-  .rules-filter-bar > div {
-    min-width: 10rem;
-  }
-  .rules-create-link {
-    margin-left: auto;
-  }
-  .rule-name-cell {
+  /* Same as the Dwellings filter row's checkbox. */
+  .rules-archived-toggle {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-  }
-  .rule-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
+    gap: var(--space-2);
+    padding-block-end: var(--space-2);
     font-size: var(--text-sm);
   }
-  .rule-status-dot {
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 50%;
-    background: var(--color-muted);
+  .tariff-gross {
+    margin-block-start: calc(var(--gap-field) * -0.5);
+    color: var(--color-foreground);
+    font-variant-numeric: tabular-nums;
   }
-  .rule-status[data-tone="active"] .rule-status-dot {
-    background: var(--color-success);
+  .tariff-undo {
+    min-height: 1.5rem;
+    padding-inline: var(--space-2);
+    color: var(--color-primary);
+    text-decoration: underline;
   }
-  .rule-status[data-tone="disabled"] .rule-status-dot {
-    background: var(--color-muted);
+  /* The table answers to its own width, not the screen's: the sidebar comes
+     and goes, and Russian labels run long. Inline-size containment also stops
+     the table from pushing the whole page wider than the screen. */
+  .rules-table-wrap {
+    overflow: visible;
+    container: rules-table / inline-size;
   }
-  .rule-status[data-tone="archived"] .rule-status-dot {
-    background: var(--color-destructive);
+  /* `.table-wrap` rounds its corners by clipping (overflow-x: auto), which
+     would cut off the row menu of the last rows here. So the corner cells
+     carry the panel radius themselves: the header's two outer cells, and the
+     outer cells of the last visible row (filtering hides rows, so :last-child
+     is not enough). The row tint moves from <tr> to its cells so the radius
+     clips it too. */
+  .rules-table thead th:first-child {
+    border-top-left-radius: var(--radius-panel);
   }
-  .rule-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
+  .rules-table thead th:last-child {
+    border-top-right-radius: var(--radius-panel);
+  }
+  .rules-table
+    tbody
+    tr:not([hidden]):not(:has(~ tr:not([hidden])))
+    > td:first-child {
+    border-bottom-left-radius: var(--radius-panel);
+  }
+  .rules-table
+    tbody
+    tr:not([hidden]):not(:has(~ tr:not([hidden])))
+    > td:last-child {
+    border-bottom-right-radius: var(--radius-panel);
+  }
+  .rules-table-wrap .rules-table tbody tr:hover {
+    background: transparent;
+  }
+  .rules-table-wrap .rules-table tbody tr:hover > td {
+    background: var(--color-hover);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .rules-table td {
+      transition: background-color var(--duration-fast) ease;
+    }
+  }
+  /* One-line date ranges once the table has room for them (1024px and up). */
+  @container rules-table (width >= 60rem) {
+    .tariff-date-range {
+      white-space: nowrap;
+    }
+  }
+  /* Cell spacing, alignment and the row menu match the Dwellings table. */
+  .rules-table th {
+    padding: var(--space-3) var(--space-4);
+  }
+  .rules-table td {
+    padding: var(--space-4);
+    vertical-align: middle;
+  }
+  /* The global tablet padding (below 70rem), carried on to 90rem: with seven
+     columns and the one-line date range, Russian needs it until ~1400px. */
+  @media (40rem <= width < 90rem) {
+    .rules-table th,
+    .rules-table td {
+      padding-inline: 0.625rem;
+    }
+  }
+  .tariff-vat {
+    white-space: nowrap;
+  }
+  .rules-table tr[hidden] {
+    display: none;
+  }
+  .rules-table tbody tr {
+    border-bottom: 1px solid var(--color-border);
+  }
+  /* The last *visible* row: the tbody's last child is the hidden "no
+     matches" row, so :last-child never matched a tariff. */
+  .rules-table tbody tr:not([hidden]):not(:has(~ tr:not([hidden]))) {
+    border-bottom: 0;
+  }
+  .tariff-name a {
+    font-weight: 500;
+  }
+  .tariff-code,
+  .tariff-secondary {
+    display: block;
+    margin-block-start: var(--space-1);
+    color: var(--color-muted);
+  }
+  .tariff-code {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    overflow-wrap: anywhere;
+  }
+  /* Off and archived tariffs recede; the badge still says why. */
+  [data-tariff-row]:not([data-status="ACTIVE"])
+    :is(.tariff-name a, .tariff-calculation, .tariff-vat, .tariff-validity) {
+    color: var(--color-muted);
+  }
+  /* A just-changed row: the hover tint, fading out. */
+  .row-changed > td {
+    animation: tariff-row-changed 1.5s ease-out;
+  }
+  @keyframes tariff-row-changed {
+    from {
+      background: var(--color-hover);
+    }
+  }
+  /* Reduced motion: no fade; the script removes this after 1.5 s. */
+  .row-changed-still > td {
+    background: var(--color-hover);
+  }
+  .row-link:has(.row-menu[open]) {
+    z-index: 2;
   }
   .row-menu {
     position: relative;
     display: inline-block;
   }
-  .rule-edit-checkbox {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: var(--text-sm);
-  }
   .row-menu summary {
     display: grid;
-    min-width: 2.25rem;
-    min-height: 2.25rem;
+    min-width: var(--control-size-sm);
+    min-height: var(--control-size-sm);
     place-items: center;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
@@ -1474,18 +2069,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     list-style: none;
     cursor: pointer;
   }
-  @media (pointer: coarse) {
-    .row-menu summary {
-      min-width: var(--control-size-md);
-      min-height: var(--control-size-md);
-    }
-  }
   .row-menu summary::-webkit-details-marker {
     display: none;
   }
   .row-menu > div {
     position: absolute;
-    z-index: 20;
+    z-index: 100;
     top: calc(100% + 0.35rem);
     right: 0;
     min-width: 9rem;
@@ -1500,271 +2089,245 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     width: 100%;
     padding: 0.5rem 0.75rem;
     border-radius: var(--radius-badge);
-    color: var(--color-destructive);
+    color: var(--color-foreground);
     font-size: var(--text-sm);
     text-align: left;
   }
   .row-menu button:hover {
     background: var(--color-hover);
   }
+  @media (pointer: coarse) {
+    .tariff-undo {
+      min-height: var(--control-size-md);
+    }
+    .row-menu summary {
+      min-width: var(--control-size-md);
+      min-height: var(--control-size-md);
+    }
+  }
+  .rules-help {
+    display: grid;
+    gap: var(--gap-field);
+    padding: var(--pad-panel-compact);
+    font-size: var(--text-sm);
+  }
+  .rules-help p {
+    max-width: 80ch;
+  }
   .rule-field-row {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
+    gap: var(--gap-field);
   }
-  .rule-field-row-3 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .rule-field {
+    min-width: 0;
   }
   .rule-field label {
-    margin-bottom: 0.5rem;
+    display: block;
+    margin-block-end: var(--gap-label);
     font-size: var(--text-sm);
     font-weight: 600;
   }
-  .rule-field input,
-  .rule-field select {
+  .rule-field input:not([type="radio"]):not([type="checkbox"]),
+  .rule-field select,
+  .rule-field textarea {
     width: 100%;
-    padding: 0.75rem 0.75rem;
-    border-radius: var(--radius-control);
-    /* background-color, not the background shorthand -- the shorthand
-       resets background-image to none, wiping out the global select
-       chevron (src/styles/global.css) since this scoped style is
-       unlayered and always wins over that layered default. */
-    background-color: var(--color-surface);
-    color: var(--color-foreground);
-    font: inherit;
+    min-width: 0;
     font-size: var(--text-sm);
-    box-sizing: border-box;
   }
-  .rule-field input:focus-visible,
-  .rule-field select:focus-visible {
-    outline: 2px solid var(--color-focus-ring);
-    outline-offset: 2px;
-    border-color: var(--color-primary);
+  .rule-field select {
+    padding-inline-end: var(--space-10);
   }
   .rule-field-hint {
-    margin-top: 0.5rem;
-    color: var(--color-muted);
-    font-size: var(--text-xs);
-  }
-  .rule-field-error {
-    margin-top: 0.5rem;
-    color: var(--color-destructive);
-    font-size: var(--text-xs);
-  }
-  .rule-field input[aria-invalid="true"],
-  .rule-field select[aria-invalid="true"] {
-    border-color: var(--color-destructive);
-  }
-  .rule-form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--color-border);
-  }
-  .rules-sidebar {
-    display: grid;
-    gap: 1.25rem;
-  }
-  .rule-info-banner {
-    display: flex;
-    gap: 0.75rem;
-    padding: 1rem;
-    border-radius: var(--radius-panel);
-    background: var(--tone-info-bg);
-    color: var(--tone-info-text);
-  }
-  .rule-info-icon {
-    display: grid;
-    flex: 0 0 auto;
-    width: 1.5rem;
-    height: 1.5rem;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--color-primary);
-    color: var(--color-on-primary);
-    font-size: var(--text-xs);
-    font-weight: 700;
-    font-style: italic;
-  }
-  .rule-info-title {
-    font-weight: 650;
-    font-size: var(--text-sm);
-  }
-  .rule-info-banner p:not(.rule-info-title) {
-    margin-top: 0.25rem;
-    font-size: var(--text-sm);
-    line-height: 1.5;
-  }
-  .rule-tips {
-    padding: 1.25rem;
-    border: var(--panel-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-  }
-  .rule-tips h3 {
-    font-size: var(--text-sm);
-    font-weight: 700;
-  }
-  .rule-tip {
-    display: flex;
-    gap: 0.75rem;
-    margin-top: 1rem;
-  }
-  .rule-tip-icon {
-    display: grid;
-    flex: 0 0 auto;
-    width: 2rem;
-    height: 2rem;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--tone-neutral-bg);
-    color: var(--color-muted);
-  }
-  .rule-tip-icon svg {
-    width: 1rem;
-    height: 1rem;
-  }
-  .rule-tip-icon[data-icon="cold_water"] {
-    background: var(--color-meter-cold-bg);
-    color: var(--color-meter-cold-text);
-  }
-  .rule-tip-title {
-    font-size: var(--text-sm);
-    font-weight: 650;
-  }
-  .rule-tip p:not(.rule-tip-title) {
-    margin-top: 0.25rem;
+    margin-block-start: var(--gap-label);
     color: var(--color-muted);
     font-size: var(--text-sm);
-    line-height: 1.5;
   }
-
-  @media (width < 40rem) {
-    .rule-field-row,
-    .rule-field-row-3 {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .rules-tips-row {
-    display: grid;
-  }
-
-  /* Tariff drawer: same .context-drawer shell as the workbench's meter/
-     billing-details drawer (src/styles/global.css), just wider -- this is
-     a full tariff editor, not a couple of reading inputs. */
   .tariff-drawer {
-    width: min(600px, 100vw);
+    width: min(40rem, 100vw);
+  }
+  .tariff-drawer,
+  .tariff-drawer[open] {
+    translate: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .tariff-drawer {
+      transition:
+        opacity var(--duration-normal) ease,
+        overlay var(--duration-normal) allow-discrete,
+        display var(--duration-normal) allow-discrete;
+    }
   }
   #tariff-form {
     display: grid;
-    gap: 1rem;
+    gap: var(--gap-field);
   }
-  /* Copied verbatim from AdminContextDrawer.astro's component-scoped
-     globals -- that component isn't rendered on this page, so its classes
-     never bundle here (Astro only ships a component's <style> onto pages
-     that render it). Not a new design language, the same rules. */
   .drawer-section-heading {
-    margin-top: 1.5rem;
-    margin-bottom: 0.75rem;
+    margin-block-start: var(--gap-section);
     font-size: var(--text-base);
-    font-weight: 650;
-  }
-  .drawer-section-heading:first-of-type {
-    margin-top: 0;
+    font-weight: 600;
   }
   .drawer-textarea-box {
-    display: block;
-    width: 100%;
-    min-height: 4.5rem;
-    padding: 0.75rem;
-    border-radius: var(--radius-control);
-    font-size: var(--text-sm);
-    font-family: inherit;
     resize: vertical;
-    box-sizing: border-box;
-    margin-top: 0.5rem;
   }
   .tariff-scope-options {
     display: grid;
-    gap: 0.5rem;
+    gap: var(--space-2);
   }
-  label.tariff-scope-option {
+  .rule-field label.tariff-scope-option {
     display: flex;
-    gap: 0.625rem;
-    padding: 0.75rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-control);
+    align-items: start;
+    gap: var(--space-3);
+    min-height: var(--control-size-md);
+    padding-block: var(--space-2);
     cursor: pointer;
   }
-  .tariff-scope-option:has(input:checked) {
-    background: var(--color-surface-hover);
-  }
   .tariff-scope-option input {
-    /* Resets the shared `.rule-field input` text-input styling (width:100%,
-       padding, border, background) that would otherwise stretch this radio
-       button to fill the row -- that rule and this one have equal
-       specificity, so properties THIS rule doesn't set (width, padding,
-       border, ...) still fall through from it. */
-    width: auto;
-    padding: 0;
-    margin-top: 0.2rem;
-    border: none;
-    background: none;
+    flex: 0 0 auto;
+    margin-block-start: var(--gap-label);
   }
   .tariff-scope-option strong {
     display: block;
-    font-size: var(--text-sm);
+    font-weight: 600;
   }
   .tariff-scope-option p {
-    margin-top: 0.15rem;
     color: var(--color-muted);
-    font-size: var(--text-sm);
+    font-weight: 400;
   }
   .tariff-dwelling-actions {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
+    gap: var(--space-2);
+    margin-block-start: var(--space-2);
   }
   .tariff-dwelling-actions span {
-    margin-left: auto;
+    margin-inline-start: auto;
     color: var(--color-muted);
     font-size: var(--text-sm);
   }
   .tariff-dwelling-list {
     display: grid;
-    gap: 0.25rem;
+    gap: var(--gap-label);
     max-height: 12rem;
-    margin-top: 0.75rem;
-    padding: 0.5rem;
+    margin-block-start: var(--space-3);
     overflow-y: auto;
-    border: var(--panel-border);
-    border-radius: var(--radius-control);
   }
-  label.tariff-dwelling-row {
+  .rule-field label.tariff-dwelling-row {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.375rem 0.5rem;
-    border-radius: var(--radius-control);
-    font-size: var(--text-sm);
+    gap: var(--space-2);
+    min-height: var(--control-size-md);
+    padding: var(--space-2);
+    font-weight: 400;
   }
   .tariff-dwelling-row:hover {
     background: var(--color-hover);
   }
-  .tariff-dwelling-row input {
-    /* Same reset as .tariff-scope-option input above -- without it, the
-       shared `.rule-field input` rule stretches this checkbox to fill the
-       row instead of its natural checkbox size. */
-    width: auto;
-    padding: 0;
-    border: none;
-    background: none;
+  @media (width >= 48rem) {
+    .rule-field-row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
-  .rule-field select {
-    padding-inline-end: 2.25rem;
+  @media (width < 40rem) {
+    .rules-archived-toggle {
+      flex-basis: 100%;
+    }
+    /* The shared filter bar stretches its inputs on phones; not a checkbox. */
+    .rules-archived-toggle input {
+      width: auto;
+    }
+    .rules-page :global(.page-header) {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .rules-page :global(.page-actions) {
+      justify-content: start;
+    }
+    .tariff-drawer .context-drawer-footer {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    #tariff-drawer-save {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      width: 100%;
+    }
+    .tariff-drawer .context-drawer-footer > [data-close-tariff-drawer] {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    #tariff-drawer-archive,
+    #tariff-drawer-restore {
+      grid-column: 1;
+      grid-row: 1;
+    }
+  }
+  /* Cards once seven columns no longer fit (phones, and tablets without the
+     sidebar). */
+  @container rules-table (width < 50rem) {
+    /* Cards: the row is the box, so it carries the tint and the outer radius. */
+    .rules-table-wrap .rules-table tbody tr:hover {
+      background: var(--color-hover);
+    }
+    .rules-table-wrap .rules-table tbody tr:hover > td {
+      background: transparent;
+    }
+    .rules-table tbody tr:not([hidden]):not(tr:not([hidden]) ~ tr) {
+      border-top-left-radius: var(--radius-panel);
+      border-top-right-radius: var(--radius-panel);
+    }
+    .rules-table tbody tr:not([hidden]):not(:has(~ tr:not([hidden]))) {
+      border-bottom-left-radius: var(--radius-panel);
+      border-bottom-right-radius: var(--radius-panel);
+    }
+    .rules-table,
+    .rules-table tbody {
+      display: block;
+      width: 100%;
+    }
+    .rules-table thead {
+      display: none;
+    }
+    .rules-table tbody tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: var(--space-2);
+      padding: var(--pad-panel-compact);
+    }
+    .rules-table td {
+      display: block;
+      padding: 0;
+    }
+    .rules-table .tariff-name {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .rules-table .tariff-status {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .rules-table .tariff-menu {
+      grid-column: 3;
+      grid-row: 1;
+    }
+    .rules-table .tariff-calculation {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+    .rules-table .tariff-validity {
+      grid-column: 1 / -1;
+      grid-row: 3;
+    }
+    .rules-table .tariff-vat,
+    .rules-table .tariff-scope {
+      display: none;
+    }
+    .tariff-calculation .tariff-secondary {
+      display: inline;
+      margin-inline-start: var(--space-2);
+    }
+    #tariff-empty td {
+      grid-column: 1 / -1;
+    }
   }
 </style>

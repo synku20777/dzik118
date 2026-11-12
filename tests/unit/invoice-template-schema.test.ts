@@ -211,7 +211,7 @@ describe("buildInvoiceTemplateSnapshot", () => {
       footerText: "Footer",
       paymentInstructions: "Pay now",
       defaultNote: "Note",
-      labelSetVersion: 3,
+      labelSetVersion: 4,
       config: createDefaultInvoiceTemplateConfig(),
     });
   });
@@ -224,13 +224,13 @@ describe("buildInvoiceTemplateSnapshot", () => {
       footerText: null,
       paymentInstructions: null,
       defaultNote: null,
-      labelSetVersion: 3,
+      labelSetVersion: 4,
       config: createDefaultInvoiceTemplateConfig(),
     });
   });
 
   it("treats a stored snapshot with no labelSetVersion as label set 1, but stamps new ones with the current set", () => {
     expect(normalizeInvoiceTemplateSnapshot({}).labelSetVersion).toBe(1);
-    expect(buildInvoiceTemplateSnapshot(null).labelSetVersion).toBe(3);
+    expect(buildInvoiceTemplateSnapshot(null).labelSetVersion).toBe(4);
   });
 });

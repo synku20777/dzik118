@@ -725,7 +725,6 @@ textarea:disabled {
   .row-menu > div,
   .more-menu > div,
   .case-menu,
-  .info-tip-panel,
   .tpl-popover,
   .context-drawer,
   dialog
@@ -1749,34 +1748,6 @@ textarea:disabled {
   .resident-nav a[aria-current="page"] {
     color: var(--color-primary);
     font-weight: 650;
-  }
-  .current-invoice {
-    padding: 1.5rem;
-    border: var(--panel-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-  }
-  .current-invoice .amount {
-    font-size: var(--text-display-lg);
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    overflow-wrap: anywhere;
-    font-variant-numeric: tabular-nums;
-  }
-  .invoice-list {
-    border: var(--panel-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-    overflow: hidden;
-  }
-  .invoice-list > a {
-    border-bottom: 1px solid var(--color-border);
-    border-radius: 0;
-    margin: 0;
-    border-width: 0 0 1px;
-  }
-  .invoice-list > a:last-child {
-    border-bottom: 0;
   }
   .disclosure {
     background: var(--color-surface);

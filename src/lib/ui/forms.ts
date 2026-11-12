@@ -26,7 +26,9 @@ document.addEventListener("submit", (event) => {
   const form = event.target;
   if (
     !(form instanceof HTMLFormElement) ||
-    form.method.toLowerCase() !== "post" ||
+    // getAttribute, not form.method: a field named "method" (the payment
+    // form's) shadows the property and made this throw.
+    (form.getAttribute("method") ?? "get").toLowerCase() !== "post" ||
     event.defaultPrevented
   )
     return;

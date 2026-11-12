@@ -252,7 +252,9 @@ an empty message list.
 `src/lib/ui/invoice-status.ts` supplies label, tone and icon; the markup is
 `status-badge` with `data-tone` of neutral, info, success, warning or danger.
 Colors are the `--tone-*` pair. State is carried by icon and text, never color
-alone; forced-colors mode draws a system-color outline.
+alone; forced-colors mode draws a system-color outline. List pages use it for
+their Status column (Dwellings, Periods, Tariffs); `DISABLED` (neutral,
+`player-pause`) is a tariff that is switched off.
 
 ### Notice
 
@@ -373,6 +375,7 @@ strings. States: saving, saved, needs attention (retry, dismiss), and
 verifying or outcome-not-confirmed (check again). Retry and dismiss are 24px
 tall, 44px on coarse pointers. Live region semantics belong to the component;
 pages only register mutations.
+The chip is hidden at idle, shows a full saved pill for four seconds after the last pending save, then fades out over 150ms (no fade with reduced motion); an open panel, hover or keyboard focus keeps it visible, and announcements use an always-rendered visually hidden live region.
 
 ### Navigation chrome
 
@@ -500,12 +503,16 @@ form-level alert; the in-app forms follow the pattern).
 Below `md` the line drawing is hidden.
 
 **Admin dashboard.** Width `--width-content`. The setup card comes first when
-setup is unfinished, then the dashboard header with the period navigation. A
-grid holds the collection panel and the readings panel: two thirds and one third
-from `lg`, two equal columns from `md`, one column below. The month status is a
-full-width section under it; its progress steps run four across down to `md` and
-two below, and the setup steps run five across from `lg`, three from `md` to
-`lg` and one column below `md`.
+setup is unfinished, then the dashboard header with the period navigation (a
+period with no neighbour gets no placeholder button). A wrapping row holds the
+money card and the readings card: about two thirds and one third while the money
+card has 35rem, a full row each below that. The money card shows the total and
+what has come in beside the sum that makes the total, and one column when it is
+narrower than 32rem (a container query), where the breakdown becomes a
+disclosure that starts closed. The month status is a full-width
+section under it; its progress steps run four across while the section is at
+least 48rem wide (a container query) and two below, and the setup steps run five
+across from `lg`, three from `md` to `lg` and one column below `md`.
 The attention list is one column at the bottom.
 
 **Dwellings list.** Header with the create and import actions, a `filter-bar`,
@@ -513,11 +520,17 @@ then a `stack-table` of dwellings. Each row links through `row-link`; the row
 menu holds secondary actions. Cards below `sm`.
 
 **Dwelling detail.** A summary strip (`dwelling-summary`, four figures, two
-columns below `md`) with the balance first, a section filter, then a two-pane
-region: overview, account balance, tariffs and messages in the main column;
-invoice delivery, residents and meters in the 26rem side column. It collapses to
-one column when the area is narrower than 60rem. Period history, the audit trail
-and additional information follow as full-width panels.
+columns below `md`) with the balance first, then six tabs: Overview, Account
+balance, Meters, Recurring tariffs, Messages and History. A tab shows only its
+own panel and is kept in `?tab=`. Overview is basic information on the left
+and invoice delivery and portal access in a 26rem column beside it, once the
+page area is at least 60rem (a container query on `[data-dwelling-detail]`);
+below that, one column. Editing is in place: an Edit or Add link
+(`?tab=…&edit=<key>`, so it works without the script) turns its panel or row
+into the form in normal flow, one editor at a time; Cancel and Escape put the
+saved values back and return focus to the link. Saves go through
+`mutate-form`, so typed input survives an error, and an add, remove or money
+change refreshes only its own section.
 
 **Payments.** A metric strip of the totals, a review queue of payments that need
 a decision, then the history table with a date and status filter. Each payment
@@ -525,22 +538,37 @@ links to its own page that explains where the money went. Tables stack into
 cards below `sm`; the ledger is a separate page.
 
 **Current month and periods.** The periods list is a `stack-table`. A period
-page opens with previous and next period as two equal buttons at least 56px tall, then
-its finance metric strip, then the billing workbench: filters,
-the case table with a select-all checkbox (not offered below `sm`) and a bulk
-toolbar (`--elevation-raised`), and a drawer for editing one case. The header
-stacks below `md`; its action row wraps at every width.
+page opens with a header row: title and status on the left; previous and next
+period as one joined 44px control, then the period actions, on the right (the
+right group wraps to its own row when it does not fit). Then one line of money
+figures, then the billing workbench: a search field, stage tabs that wrap
+instead of scrolling, the case table with a select-all checkbox and a bulk
+toolbar (`--elevation-raised`), and a drawer for editing one case. The table
+has five columns and no minimum width. When the workbench panel is narrower than
+54rem (a container query) each case becomes three short lines instead of a table
+row; this page does not use `stack-table`, and select-all is not offered in
+that layout.
 
 **Setup wizard.** `SetupLayout` at `--width-wizard`: a step trail (a 13.5rem
 column from `lg`, a three-column grid from `sm` to `lg`, a single row of
 numbered icons on phones), then the step content at up to 52rem. One primary
 action per step; errors keep the user's input and focus the first invalid field.
 
-**Resident portal.** Resident shell. The home page leads with the current
-invoice (`current-invoice`) and its amount in `--text-display-lg`, then recent
-invoices as a list (`invoice-list`) and a link to all of them. Everything is one
-column. Header links are 44px tall on a coarse pointer; links elsewhere follow
-the WCAG 2.5.8 rule.
+**Resident portal.** Resident shell with scoped styles in `resident.css`. One
+column: latest published bill and remaining balance, then this month's meter
+readings; history lives in disclosures below. Use 18px body text, at least 16px
+instructions and 48px form controls. The invoice page puts bank-transfer details
+above the document, with copy buttons and an optional QR for the remaining
+balance. The document preview omits its original-amount QR; stored PDFs keep
+their original rendering. See [Resident portal redesign](RESIDENT_PORTAL_REDESIGN.md).
+
+Every resident page starts at the left edge of the tabs; the header uses the
+same column. Sign out is in the header. A back link (`.resident-back`) is used
+only where the tabs do not lead. Disclosures are panels with a chevron
+(`.resident-details`). Link rows use `.resident-list`. Contact administrator is
+one chat (`.resident-chat`): resident on the right, administrator on the left,
+one message box. Motion is color and opacity only, 140-220ms, and off under
+reduced motion.
 
 **Invoice view.** The page is a header and actions around an `<iframe srcdoc>`
 that shows the invoice as standalone HTML (`src/domain/billing/invoice-html.ts`,
@@ -589,8 +617,8 @@ Disclosures are opened first. It fails on:
 - a missing keyboard focus indicator among the first 12 tab stops of the main
   content at each width and theme.
 
-It also checks the exact `sm` and `lg` breakpoint edges, the dwelling two-pane
-switch at 60rem of container width (959 and 960px host widths), and the contrast of the semantic token
+It also checks the exact `sm` and `lg` breakpoint edges, the dwelling overview's two
+columns at 60rem of container width (959 and 960px host widths), and the contrast of the semantic token
 pairs (text 4.5:1, field border and focus ring 3:1) in both themes. It needs the
 local Supabase stack with demo data and the local mailbox; it logs in as admin
 once and requests one resident sign-in link per run (the auth rate limit is 5
