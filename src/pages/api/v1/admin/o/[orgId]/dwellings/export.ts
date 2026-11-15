@@ -4,23 +4,16 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { createDb } from "../../../../../../../db/client";
-import { requireOrganizationAccess } from "../../../../../../../domain/authorization/guards";
 import { exportDwellingsCsv } from "../../../../../../../domain/organizations/csv-import";
 import { toApiErrorResponse } from "../../../../../../../lib/http/api-error";
 import { ValidationError } from "../../../../../../../domain/errors";
 
-export const GET: APIRoute = async ({ params, locals }) => {
+export const GET: APIRoute = async ({ params }) => {
   const organizationId = params.orgId;
   if (!organizationId) {
     return toApiErrorResponse(
       new ValidationError("An organization id is required")
     );
-  }
-
-  try {
-    requireOrganizationAccess(locals.auth, organizationId);
-  } catch (err) {
-    return toApiErrorResponse(err);
   }
 
   let csv: string;

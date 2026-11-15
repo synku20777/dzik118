@@ -53,18 +53,8 @@ import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
 import { orgLocalDateString } from "../../../../../lib/org-time";
 import { listPeriods } from "../../../../../domain/periods/periods";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../domain/authorization/guards";
 
 const organizationId = Astro.params.orgId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 import { actions } from "astro:actions";
 import { getOrganization } from "../../../../../domain/organizations/organizations";

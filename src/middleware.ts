@@ -11,6 +11,8 @@ import {
 } from "astro:env/server";
 import { createDb } from "./db/client";
 import { loadAuthContext } from "./domain/authorization/context";
+import { ForbiddenError } from "./domain/authorization/guards";
+import { toApiErrorResponse } from "./lib/http/api-error";
 import {
   getRequestContext,
   hashIp,
@@ -127,6 +129,22 @@ const handle = defineMiddleware(async (context, next) => {
         redirect(locals.auth.closedDwellingCount ? "/closed" : "/unauthorized")
       );
     }
+  }
+
+  // Default deny for every page and API whose path names an organization or
+  // a dwelling, so a new page cannot forget the check (guards are in-memory,
+  // so Section 15.3's "no database-heavy authorization globally" holds).
+  const orgId = /^\/(?:api\/v1\/)?admin\/o\/([^/]+)/.exec(url.pathname)?.[1];
+  const dwellingId = /^\/portal\/dwellings\/([^/]+)/.exec(url.pathname)?.[1];
+  if (
+    (orgId && !locals.auth?.organizationIds.includes(orgId)) ||
+    (dwellingId && !locals.auth?.dwellingIds.includes(dwellingId))
+  ) {
+    return respond(
+      url.pathname.startsWith("/api/")
+        ? toApiErrorResponse(new ForbiddenError())
+        : redirect("/unauthorized")
+    );
   }
 
   // See docs/decisions/0002-admin-aal2-boundary.md. Also covers /_actions/**

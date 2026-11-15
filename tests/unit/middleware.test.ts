@@ -130,6 +130,36 @@ describe("middleware", () => {
     );
   });
 
+  it("refuses an organization or dwelling the user has no access to", async () => {
+    await signedIn(admin);
+    expect(
+      (await visit("/admin/o/org-2/dwellings")).headers.get("Location")
+    ).toBe("/unauthorized");
+    const api = await visit("/api/v1/admin/o/org-2/dwellings/export");
+    expect(api.status).toBe(403);
+    expect(((await api.json()) as { error: { code: string } }).error.code).toBe(
+      "FORBIDDEN"
+    );
+    expect(await (await visit("/admin/o/org-1/dwellings")).text()).toBe("page");
+    expect(
+      await (await visit("/api/v1/admin/o/org-1/dwellings/export")).text()
+    ).toBe("page");
+
+    await signedIn(resident);
+    expect(
+      (await visit("/portal/dwellings/dw-2/invoices")).headers.get("Location")
+    ).toBe("/unauthorized");
+    expect(await (await visit("/portal/dwellings/dw-1/invoices")).text()).toBe(
+      "page"
+    );
+  });
+
+  it("refuses the admin API to a visitor with no session", async () => {
+    expect((await visit("/api/v1/admin/o/org-1/audit/export")).status).toBe(
+      403
+    );
+  });
+
   it("tells a resident of an archived organization why", async () => {
     await signedIn({ ...resident, dwellingIds: [], closedDwellingCount: 2 });
     expect((await visit("/portal/dwellings")).headers.get("Location")).toBe(

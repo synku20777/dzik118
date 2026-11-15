@@ -1,9 +1,5 @@
 // GET: the reconciliation report of an opening balance import as a CSV file.
 import type { APIRoute } from "astro";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../../../domain/authorization/guards";
 import { NotFoundError } from "../../../../../../../domain/errors";
 import { getBalanceReport } from "../../../../../../../domain/migration/balances";
 import {
@@ -13,19 +9,11 @@ import {
 import { withRequestDb } from "../../../../../../../lib/db-request";
 import { translate, uiLocale } from "../../../../../../../lib/ui/i18n";
 
-export const GET: APIRoute = async ({ params, locals, url, cookies }) => {
+export const GET: APIRoute = async ({ params, url, cookies }) => {
   const organizationId = params.orgId;
   const importId = params.importId;
   if (!organizationId || !importId || !/^[0-9a-f-]{36}$/i.test(importId)) {
     return new Response("Not found", { status: 404 });
-  }
-  try {
-    requireOrganizationAccess(locals.auth, organizationId);
-  } catch (err) {
-    if (err instanceof ForbiddenError) {
-      return new Response("Forbidden", { status: 403 });
-    }
-    throw err;
   }
   try {
     const report = await withRequestDb((db) =>
