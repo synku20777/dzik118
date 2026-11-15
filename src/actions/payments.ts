@@ -3,9 +3,7 @@
 // (src/pages/admin/o/[orgId]/payments/import.astro), not an action, for
 // the same reason the dwellings CSV import is: raw multipart file upload
 // doesn't fit an action's input shape.
-import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
-import { requireActiveOrganization } from "../domain/authorization/guards";
 import {
   recordDwellingPayment,
   reverseDwellingPayment,
@@ -18,90 +16,79 @@ import {
 } from "../domain/payments/manual";
 import { reversePayment } from "../domain/payments/reversal";
 import { decimalInput } from "../lib/decimal-input";
-import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
+import { orgAction } from "./_org-action";
 
 const POSITIVE_AMOUNT_MESSAGE =
   "Enter a valid amount, for example 12.50. Use up to 2 decimal places.";
 
 export const payments = {
-  confirmMatch: defineAction({
+  confirmMatch: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       matchId: z.uuid(),
     }),
-    handler: safeHandler(async ({ organizationId, matchId }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, matchId }, { locals }) => {
       return withDb((db) =>
         confirmMatch(db, organizationId, matchId, locals.auth!.userId)
       );
-    }),
+    },
   }),
 
-  rejectMatch: defineAction({
+  rejectMatch: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       matchId: z.uuid(),
     }),
-    handler: safeHandler(async ({ organizationId, matchId }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, matchId }, { locals }) => {
       return withDb((db) =>
         rejectMatch(db, organizationId, matchId, locals.auth!.userId)
       );
-    }),
+    },
   }),
 
-  reverseMatch: defineAction({
+  reverseMatch: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       matchId: z.uuid(),
       reason: z.string().trim().min(1).max(500),
     }),
-    handler: safeHandler(
-      async ({ organizationId, matchId, reason }, { locals }) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        return withDb((db) =>
-          reversePayment(
-            db,
-            organizationId,
-            matchId,
-            reason,
-            locals.auth!.userId
-          )
-        );
-      }
-    ),
+    handler: async ({ organizationId, matchId, reason }, { locals }) => {
+      return withDb((db) =>
+        reversePayment(db, organizationId, matchId, reason, locals.auth!.userId)
+      );
+    },
   }),
 
-  matchTransaction: defineAction({
+  matchTransaction: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       transactionId: z.uuid(),
       invoiceId: z.uuid(),
     }),
-    handler: safeHandler(
-      async ({ organizationId, transactionId, invoiceId }, { locals }) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        return withDb((db) =>
-          matchTransactionToInvoice(
-            db,
-            organizationId,
-            transactionId,
-            invoiceId,
-            locals.auth!.userId
-          )
-        );
-      }
-    ),
+    handler: async (
+      { organizationId, transactionId, invoiceId },
+      { locals }
+    ) => {
+      return withDb((db) =>
+        matchTransactionToInvoice(
+          db,
+          organizationId,
+          transactionId,
+          invoiceId,
+          locals.auth!.userId
+        )
+      );
+    },
   }),
 
   // One form for both targets: an open invoice, or a dwelling account that has
   // no open invoice. `target` is "invoice:<id>" or "dwelling:<id>".
-  recordManual: defineAction({
+  recordManual: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
@@ -115,57 +102,51 @@ export const payments = {
       // Required: a retry of a cash payment has no other duplicate check.
       submissionId: z.uuid(),
     }),
-    handler: safeHandler(
-      async ({ organizationId, target, ...input }, { locals }) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        const [kind, id] = target.split(":");
-        const actor = locals.auth!.userId;
-        await withDb(async (db) => {
-          if (kind === "invoice") {
-            await recordManualPayment(
-              db,
-              organizationId,
-              { ...input, invoiceId: id },
-              actor
-            );
-          } else {
-            await recordDwellingPayment(
-              db,
-              organizationId,
-              { ...input, dwellingId: id },
-              actor
-            );
-          }
-        });
-        return { recorded: true };
-      }
-    ),
+    handler: async ({ organizationId, target, ...input }, { locals }) => {
+      const [kind, id] = target.split(":");
+      const actor = locals.auth!.userId;
+      await withDb(async (db) => {
+        if (kind === "invoice") {
+          await recordManualPayment(
+            db,
+            organizationId,
+            { ...input, invoiceId: id },
+            actor
+          );
+        } else {
+          await recordDwellingPayment(
+            db,
+            organizationId,
+            { ...input, dwellingId: id },
+            actor
+          );
+        }
+      });
+      return { recorded: true };
+    },
   }),
 
-  reverseDwellingPayment: defineAction({
+  reverseDwellingPayment: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       transactionId: z.uuid(),
       reason: z.string().trim().min(1).max(500),
     }),
-    handler: safeHandler(
-      async ({ organizationId, transactionId, reason }, { locals }) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        return withDb((db) =>
-          reverseDwellingPayment(
-            db,
-            organizationId,
-            transactionId,
-            reason,
-            locals.auth!.userId
-          )
-        );
-      }
-    ),
+    handler: async ({ organizationId, transactionId, reason }, { locals }) => {
+      return withDb((db) =>
+        reverseDwellingPayment(
+          db,
+          organizationId,
+          transactionId,
+          reason,
+          locals.auth!.userId
+        )
+      );
+    },
   }),
 
-  editUnmatched: defineAction({
+  editUnmatched: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
@@ -176,19 +157,19 @@ export const payments = {
       reference: z.string().trim().max(140).optional(),
       reason: z.string().trim().min(1).max(500),
     }),
-    handler: safeHandler(
-      async ({ organizationId, transactionId, ...input }, { locals }) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        return withDb((db) =>
-          updateUnmatchedTransaction(
-            db,
-            organizationId,
-            transactionId,
-            input,
-            locals.auth!.userId
-          )
-        );
-      }
-    ),
+    handler: async (
+      { organizationId, transactionId, ...input },
+      { locals }
+    ) => {
+      return withDb((db) =>
+        updateUnmatchedTransaction(
+          db,
+          organizationId,
+          transactionId,
+          input,
+          locals.auth!.userId
+        )
+      );
+    },
   }),
 };

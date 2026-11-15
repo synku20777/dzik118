@@ -4,11 +4,7 @@
 // it never trusts that the caller only reached this via an /admin page.
 import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
-import {
-  requireActiveOrganization,
-  requireAdminRole,
-  requireOrganizationAccess,
-} from "../domain/authorization/guards";
+import { requireAdminRole } from "../domain/authorization/guards";
 import {
   addAdminMembership,
   archiveOrganization,
@@ -20,6 +16,7 @@ import {
 import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
 import { getSupabaseAdmin } from "./_supabase_admin";
+import { orgAction } from "./_org-action";
 
 const organizationFields = {
   name: z.string().min(1).max(200),
@@ -49,7 +46,7 @@ export const organizations = {
   }),
 
   // ORG-002
-  update: defineAction({
+  update: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
@@ -74,22 +71,20 @@ export const organizations = {
       autoSendDay: z.number().int().min(1).max(28).nullable().optional(),
       carryForwardReadingsEnabled: z.boolean().optional(),
     }),
-    handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, ...input }, { locals }) => {
       return withDb((db) =>
         updateOrganization(db, organizationId, input, locals.auth!.userId)
       );
-    }),
+    },
   }),
 
-  addAdminMember: defineAction({
+  addAdminMember: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       email: z.email(),
     }),
-    handler: safeHandler(async ({ organizationId, email }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, email }, { locals }) => {
       return withDb((db) =>
         addAdminMembership(
           db,
@@ -99,47 +94,46 @@ export const organizations = {
           getSupabaseAdmin()
         )
       );
-    }),
+    },
   }),
 
-  // ADR 0009. Restore keeps requireOrganizationAccess: it must work on an
-  // archived organization.
-  archive: defineAction({
+  // ADR 0009. Archive and restore allow an archived organization: restore
+  // must work on one.
+  archive: orgAction({
+    allowArchived: true,
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       reason: z.string().trim().min(1).max(500),
     }),
-    handler: safeHandler(async ({ organizationId, reason }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+    handler: async ({ organizationId, reason }, { locals }) => {
       await withDb((db) =>
         archiveOrganization(db, organizationId, reason, locals.auth!.userId)
       );
-    }),
+    },
   }),
 
-  restore: defineAction({
+  restore: orgAction({
+    allowArchived: true,
     accept: "form",
     input: z.object({ organizationId: z.uuid() }),
-    handler: safeHandler(async ({ organizationId }, { locals }) => {
-      requireOrganizationAccess(locals.auth, organizationId);
+    handler: async ({ organizationId }, { locals }) => {
       await withDb((db) =>
         restoreOrganization(db, organizationId, locals.auth!.userId)
       );
-    }),
+    },
   }),
 
-  removeAdminMember: defineAction({
+  removeAdminMember: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       userId: z.uuid(),
     }),
-    handler: safeHandler(async ({ organizationId, userId }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, userId }, { locals }) => {
       await withDb((db) =>
         removeAdminMembership(db, organizationId, userId, locals.auth!.userId)
       );
-    }),
+    },
   }),
 };

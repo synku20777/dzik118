@@ -1,10 +1,8 @@
 // Phase G (Invoices/delivery) - invoice sending actions (spec Section 10,
 // INV-006).
-import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
 import { env } from "cloudflare:workers";
 import { APP_BASE_URL, INVOICE_TOKEN_SECRET } from "astro:env/server";
-import { requireActiveOrganization } from "../domain/authorization/guards";
 import {
   bulkSendInvoices,
   recordPaperDispatch,
@@ -13,10 +11,10 @@ import {
 } from "../domain/billing/sending";
 import { revokeInvoiceAccessTokens } from "../domain/billing/invoice-tokens";
 import { renderPdf } from "../lib/pdf/render";
-import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
 import { getSupabaseAdmin } from "./_supabase_admin";
 import { getEmailService } from "./_email";
+import { orgAction } from "./_org-action";
 
 function sendDeps() {
   return {
@@ -29,14 +27,13 @@ function sendDeps() {
 }
 
 export const invoices = {
-  send: defineAction({
+  send: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       invoiceId: z.uuid(),
     }),
-    handler: safeHandler(async ({ organizationId, invoiceId }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, invoiceId }, { locals }) => {
       return withDb((db) =>
         sendInvoice(
           db,
@@ -46,10 +43,10 @@ export const invoices = {
           locals.auth!.userId
         )
       );
-    }),
+    },
   }),
 
-  resend: defineAction({
+  resend: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
@@ -59,46 +56,41 @@ export const invoices = {
       // SAME form back to one logical click; see claimSendCommand.
       commandId: z.string().min(1).max(100),
     }),
-    handler: safeHandler(
-      async ({ organizationId, invoiceId, commandId }, { locals }) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        return withDb((db) =>
-          resendInvoice(
-            db,
-            organizationId,
-            invoiceId,
-            sendDeps(),
-            locals.auth!.userId,
-            commandId
-          )
-        );
-      }
-    ),
+    handler: async ({ organizationId, invoiceId, commandId }, { locals }) => {
+      return withDb((db) =>
+        resendInvoice(
+          db,
+          organizationId,
+          invoiceId,
+          sendDeps(),
+          locals.auth!.userId,
+          commandId
+        )
+      );
+    },
   }),
 
-  recordPaperDispatch: defineAction({
+  recordPaperDispatch: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       invoiceId: z.uuid(),
     }),
-    handler: safeHandler(async ({ organizationId, invoiceId }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, invoiceId }, { locals }) => {
       return withDb((db) =>
         recordPaperDispatch(db, organizationId, invoiceId, locals.auth!.userId)
       );
-    }),
+    },
   }),
 
   // spec Section 27: workbench bulk selection.
-  bulkSend: defineAction({
+  bulkSend: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       invoiceIds: z.array(z.uuid()).min(1).max(200),
     }),
-    handler: safeHandler(async ({ organizationId, invoiceIds }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, invoiceIds }, { locals }) => {
       return withDb((db) =>
         bulkSendInvoices(
           db,
@@ -108,17 +100,16 @@ export const invoices = {
           locals.auth!.userId
         )
       );
-    }),
+    },
   }),
 
-  revokeAccess: defineAction({
+  revokeAccess: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       invoiceId: z.uuid(),
     }),
-    handler: safeHandler(async ({ organizationId, invoiceId }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, invoiceId }, { locals }) => {
       return withDb((db) =>
         revokeInvoiceAccessTokens(
           db,
@@ -127,6 +118,6 @@ export const invoices = {
           locals.auth!.userId
         )
       );
-    }),
+    },
   }),
 };

@@ -1,13 +1,11 @@
 // Phase F (Billing) - Billing rule CRUD and invoice generation actions
 // (spec Section 10, BIL-001..005, INV-001/002/004).
-import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
 import {
   billingCalculationTypeEnum,
   billingRuleScopeEnum,
 } from "../db/schema/billing";
 import { meterTypeEnum } from "../db/schema/dwellings";
-import { requireActiveOrganization } from "../domain/authorization/guards";
 import {
   archiveRule,
   createRule,
@@ -23,8 +21,8 @@ import {
   overrideCaseStatus,
   prepareInvoice,
 } from "../domain/billing/generation";
-import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
+import { orgAction } from "./_org-action";
 
 const UNIT_PRICE_MESSAGE =
   "Enter a valid unit price, for example 0.35 or 12.50. Use up to 4 decimal places.";
@@ -43,7 +41,7 @@ const billingCaseStatus = z.enum([
 
 export const billing = {
   // BIL-001..005
-  createRule: defineAction({
+  createRule: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
@@ -80,15 +78,14 @@ export const billing = {
       sortOrder: z.coerce.number().int().optional(),
       enabled: z.coerce.boolean().optional(),
     }),
-    handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, ...input }, { locals }) => {
       return withDb((db) =>
         createRule(db, organizationId, input, locals.auth!.userId)
       );
-    }),
+    },
   }),
 
-  updateRule: defineAction({
+  updateRule: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
@@ -124,135 +121,115 @@ export const billing = {
       sortOrder: z.coerce.number().int().optional(),
       enabled: z.coerce.boolean().optional(),
     }),
-    handler: safeHandler(
-      async ({ organizationId, ruleId, ...input }, { locals }) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        return withDb((db) =>
-          updateRule(db, organizationId, ruleId, input, locals.auth!.userId)
-        );
-      }
-    ),
+    handler: async ({ organizationId, ruleId, ...input }, { locals }) => {
+      return withDb((db) =>
+        updateRule(db, organizationId, ruleId, input, locals.auth!.userId)
+      );
+    },
   }),
 
-  setRuleEnabled: defineAction({
+  setRuleEnabled: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       ruleId: z.uuid(),
       enabled: z.coerce.boolean(),
     }),
-    handler: safeHandler(
-      async ({ organizationId, ruleId, enabled }, { locals }) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        return withDb((db) =>
-          setRuleEnabled(
-            db,
-            organizationId,
-            ruleId,
-            enabled,
-            locals.auth!.userId
-          )
-        );
-      }
-    ),
+    handler: async ({ organizationId, ruleId, enabled }, { locals }) => {
+      return withDb((db) =>
+        setRuleEnabled(db, organizationId, ruleId, enabled, locals.auth!.userId)
+      );
+    },
   }),
 
-  archiveRule: defineAction({
+  archiveRule: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       ruleId: z.uuid(),
     }),
-    handler: safeHandler(async ({ organizationId, ruleId }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, ruleId }, { locals }) => {
       return withDb((db) =>
         archiveRule(db, organizationId, ruleId, locals.auth!.userId)
       );
-    }),
+    },
   }),
 
-  restoreRule: defineAction({
+  restoreRule: orgAction({
     accept: "form",
     input: z.object({ organizationId: z.uuid(), ruleId: z.uuid() }),
-    handler: safeHandler(async ({ organizationId, ruleId }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, ruleId }, { locals }) => {
       return withDb((db) =>
         restoreRule(db, organizationId, ruleId, locals.auth!.userId)
       );
-    }),
+    },
   }),
 
   // INV-001
-  generate: defineAction({
+  generate: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       periodId: z.uuid(),
       dwellingId: z.uuid(),
     }),
-    handler: safeHandler(
-      async ({ organizationId, periodId, dwellingId }, { locals }) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        return withDb((db) =>
-          generateInvoice(
-            db,
-            organizationId,
-            periodId,
-            dwellingId,
-            locals.auth!.userId
-          )
-        );
-      }
-    ),
+    handler: async ({ organizationId, periodId, dwellingId }, { locals }) => {
+      return withDb((db) =>
+        generateInvoice(
+          db,
+          organizationId,
+          periodId,
+          dwellingId,
+          locals.auth!.userId
+        )
+      );
+    },
   }),
 
   // INV-002
-  bulkGenerate: defineAction({
+  bulkGenerate: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       periodId: z.uuid(),
     }),
-    handler: safeHandler(async ({ organizationId, periodId }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, periodId }, { locals }) => {
       return withDb((db) =>
         bulkGenerateInvoices(db, organizationId, periodId, locals.auth!.userId)
       );
-    }),
+    },
   }),
 
   // INV-004
-  prepare: defineAction({
+  prepare: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       invoiceId: z.uuid(),
     }),
-    handler: safeHandler(async ({ organizationId, invoiceId }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, invoiceId }, { locals }) => {
       return withDb((db) =>
         prepareInvoice(db, organizationId, invoiceId, locals.auth!.userId)
       );
-    }),
+    },
   }),
 
   // spec Section 27: workbench bulk selection.
-  bulkPrepare: defineAction({
+  bulkPrepare: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       invoiceIds: z.array(z.uuid()).min(1).max(200),
     }),
-    handler: safeHandler(async ({ organizationId, invoiceIds }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, invoiceIds }, { locals }) => {
       return withDb((db) =>
         bulkPrepareInvoices(db, organizationId, invoiceIds, locals.auth!.userId)
       );
-    }),
+    },
   }),
 
   // spec Section 19: manual admin status override, requires a reason.
-  overrideStatus: defineAction({
+  overrideStatus: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
@@ -260,20 +237,17 @@ export const billing = {
       status: billingCaseStatus,
       reason: z.string().min(1).max(500),
     }),
-    handler: safeHandler(
-      async ({ organizationId, caseId, status, reason }, { locals }) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        return withDb((db) =>
-          overrideCaseStatus(
-            db,
-            organizationId,
-            caseId,
-            status,
-            reason,
-            locals.auth!.userId
-          )
-        );
-      }
-    ),
+    handler: async ({ organizationId, caseId, status, reason }, { locals }) => {
+      return withDb((db) =>
+        overrideCaseStatus(
+          db,
+          organizationId,
+          caseId,
+          status,
+          reason,
+          locals.auth!.userId
+        )
+      );
+    },
   }),
 };
