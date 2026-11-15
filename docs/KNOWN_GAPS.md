@@ -274,6 +274,57 @@ state, and the dead CSS.
   status badge (14 px) and eyebrow (12 px) sizes, and `getCurrentOpenPeriod`
   can still return the starting-readings period (the dashboard skips it itself).
 
+## Bugs from the council audit (2026-11-15)
+
+Three reviewers (Claude Opus, GPT Sol, and Gemini) read the code. A person
+confirmed each bug in the code. These bugs are not fixed yet.
+
+- [ ] **Late fees charge too much.** `resolveStatementFinancials` in
+  `src/domain/accounts/statements.ts` calculates the late fee for each new
+  invoice. It uses the full late balance, and this balance includes the late
+  fees of earlier invoices. It counts the days from the due date of the oldest
+  unpaid invoice. Each new invoice counts these days again, so the resident
+  pays for the same days more than one time. ADR 0003 says that late fees do
+  not compound. Before the fix, confirm the rule: which debt gets a fee, and
+  from which date. Latvian law can limit contractual late fees.
+- [ ] **A paid debt stays open on the older invoice.** Each invoice carries
+  the unpaid amount of the earlier invoices. When a resident pays a later
+  invoice in full, the app marks only that invoice as paid. The older invoice
+  stays unpaid, because only `confirmMatch` sets `paidAt`, and only on the
+  matched invoice. The older invoice then becomes Overdue, and the portal shows
+  it as owed. It also blocks direct payments to the dwelling, and the late fee
+  continues to count from its due date. Fix this bug together with the late-fee
+  bug. The fix must also handle a payment reversal.
+- [?] **A new resident sees the data of the previous resident.**
+  `dwelling_access` has no start date. A new resident of a dwelling sees the
+  earlier invoices (with the previous name and address), payments, and
+  conversations. Owner rule: when an admin removes the access of a resident,
+  the next resident must not see the data of the removed resident. Discuss the
+  details before the fix.
+- [ ] **The same bank payment can be imported two times.** The bank CSV import
+  finds a duplicate only by the file hash or by `external_transaction_id`. When
+  two files overlap and the rows have no transaction ID, the import adds the
+  same payment again. Owner rule: check each payment for a duplicate, not each
+  file. Decide which fields identify the same payment, for example the date,
+  the amount, the payer account, and the reference.
+- [ ] **Payments match only by the invoice number.** Today a payment matches an
+  invoice only when its reference contains the invoice number. Owner rule: a
+  payment must also match when the payer name is the same as the resident
+  name.
+- [ ] **Automatic invoices do not wait for the reading deadline.** This bug
+  applies only when automatic invoices are on. Each night, the scheduler
+  generates and prepares an invoice for each dwelling that has all its
+  readings. It does not wait for the reading deadline. After the scheduler
+  prepares the invoice, the resident cannot change a reading. Thus a resident
+  who enters a wrong value cannot correct it, although the deadline is still
+  in the future. Also, when an admin moves a prepared invoice back to Draft to
+  correct it, the scheduler prepares it again the next night.
+- [ ] **Meter units are not checked.** The app adds the consumption of the
+  meters in a rule without a unit check. For example, 2 m³ and 1,000 liters
+  give 1,002 units. Owner decision: the app must check the units. Units are
+  free text with aliases (`src/lib/ui/units.ts`). Thus the fix first needs a
+  rule that changes each alias to one standard unit.
+
 ## Checked and not gaps
 
 - Test data in the demo database (`00-E2E-…`, "Zero price repro test", payers
