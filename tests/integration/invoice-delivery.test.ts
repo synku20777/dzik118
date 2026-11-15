@@ -1280,16 +1280,73 @@ describe("invoice sending", () => {
     const actions = (await listAuditLogs(db, org.id)).map((l) => l.action);
     expect(actions).not.toContain("INVOICE_SEND_UNKNOWN");
 
-    // The late answer's own delivery row is UNKNOWN (there was no row to
-    // confirm), yet a first send under the lock still sees it as delivered.
+    // There was no delivery row to confirm, so confirmation wrote a SENT one;
+    // the late answer then added its own UNKNOWN row.
     const deliveries = await db.$client
-      .query("select status from invoice_deliveries where invoice_id = $1", [
-        invoice.id,
-      ])
+      .query(
+        "select status from invoice_deliveries where invoice_id = $1 order by status",
+        [invoice.id]
+      )
       .then((r) => r.rows.map((row) => row.status));
-    expect(deliveries).toEqual(["UNKNOWN"]);
+    expect(deliveries).toEqual(["SENT", "UNKNOWN"]);
+
+    // Even after a later resend fails, the confirmation still counts: a
+    // first send under the claim lock sees the invoice as already sent.
+    await resendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => ({
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "FAKE_REJECTED",
+            failureClassification: "DEFINITIVE" as const,
+          }),
+        },
+      }),
+      seedAdminId,
+      "resend-fails"
+    );
     const claim = await claimSendCommand(db, org.id, invoice.id, "FIRST_SEND");
     expect(claim.outcome).toBe("ALREADY_SENT");
+
+    await cleanupOrg(org.id);
+  });
+
+  it("a late definitive failure replaces a stale UNKNOWN, so a first send may retry", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org Late Failure",
+      12
+    );
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          // The attempt goes stale to UNKNOWN while the provider call hangs.
+          await db.$client.query(
+            "update invoice_send_attempts set status = 'UNKNOWN', error_code = 'STALE_DISPATCH_NO_CONFIRMATION' where invoice_id = $1 and status = 'DISPATCHING'",
+            [invoice.id]
+          );
+          return {
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "FAKE_REJECTED",
+            failureClassification: "DEFINITIVE" as const,
+          };
+        },
+      },
+    });
+    await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
+
+    const [attempt] = await db.$client
+      .query("select status from invoice_send_attempts where invoice_id = $1", [
+        invoice.id,
+      ])
+      .then((r) => r.rows);
+    expect(attempt.status).toBe("FAILED");
+    const claim = await claimSendCommand(db, org.id, invoice.id, "FIRST_SEND");
+    expect(claim.outcome).toBe("CLAIMED");
 
     await cleanupOrg(org.id);
   });

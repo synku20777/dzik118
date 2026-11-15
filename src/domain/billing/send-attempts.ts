@@ -280,9 +280,7 @@ export async function claimSendCommand(
           )
         )
         .limit(1);
-      // A SENT attempt is delivered even with no SENT row: an admin's
-      // markInvoiceDelivered can confirm one whose row was never written.
-      if (confirmedEmailDelivery || latestAttempt?.status === "SENT") {
+      if (confirmedEmailDelivery) {
         return { outcome: "ALREADY_SENT", invoice };
       }
     }

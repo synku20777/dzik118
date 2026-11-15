@@ -1440,9 +1440,11 @@ export async function markInvoiceDelivered(
       attemptTargetStatus: "SENT",
       expectedAttemptStatus: "UNKNOWN",
     });
-    // The email history then shows a confirmed delivery, which is what
-    // makes Resend available and stops a first send from going out again.
-    await tx
+    // The email history must then hold a SENT row: every "already
+    // delivered" check (Resend on the page, claimSendCommand's first-send
+    // guard) looks for one. A worker that died before writing its row
+    // leaves none to update, so write one.
+    const confirmed = await tx
       .update(invoiceDeliveries)
       .set({ status: "SENT", errorCode: null, sentAt: new Date() })
       .where(
@@ -1450,7 +1452,21 @@ export async function markInvoiceDelivered(
           eq(invoiceDeliveries.attemptId, attemptId),
           eq(invoiceDeliveries.status, "UNKNOWN")
         )
-      );
+      )
+      .returning({ id: invoiceDeliveries.id });
+    if (confirmed.length === 0) {
+      await tx.insert(invoiceDeliveries).values({
+        organizationId,
+        invoiceId,
+        attemptId,
+        method: "EMAIL",
+        destinationEmail: invoiceDelivery(invoice.recipientSnapshot)
+          .billingEmail,
+        provider: "manual",
+        status: "SENT",
+        sentAt: new Date(),
+      });
+    }
     await recordAuditEvent(tx, {
       organizationId,
       scopeDwellingId: invoice.dwellingId,

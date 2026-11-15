@@ -140,10 +140,7 @@ const hasLegacyEmailFailed =
 // (issue: "electronic state is too lossy").
 const hasConfirmedEmailDelivery =
   deliveries.some((d) => d.method === "EMAIL" && d.status === "SENT") ||
-  hasLegacyEmailSent ||
-  // Covers a confirmation with no matching delivery row (a worker that died
-  // before writing it, or a late provider answer written after).
-  latestAttempt?.status === "SENT";
+  hasLegacyEmailSent;
 
 let electronicState: ElectronicState;
 if (
