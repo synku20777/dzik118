@@ -748,9 +748,6 @@ export async function prepareInvoice(
       throw new ConflictError("Only a DRAFT invoice can be prepared");
     }
 
-    const problem = missingBillingDetails(parseInvoiceSnapshots(invoice));
-    if (problem) throw new ValidationError(problem);
-
     // Only after an override back to Draft. The payment was matched against
     // the amount due the invoice had then; a new amount due under it would
     // let the invoice count as paid while money is still owed.
@@ -764,6 +761,18 @@ export async function prepareInvoice(
         "This invoice already has a payment. Reverse the payment before preparing the invoice again"
       );
     }
+    // Same rule as generateInvoice: a status override back to Draft does not
+    // make a sent or paid invoice changeable. Preparing would give it a new
+    // amount due under the PDF the resident already has. After the payment
+    // check, so an invoice paid before it was sent gets that message.
+    if (invoice.sentAt || invoice.paidAt) {
+      throw new ConflictError(
+        "This invoice has already been sent and can no longer be prepared again; issue a correction document instead"
+      );
+    }
+
+    const problem = missingBillingDetails(parseInvoiceSnapshots(invoice));
+    if (problem) throw new ValidationError(problem);
 
     const financials = await resolveStatementFinancials(tx, {
       organizationId,

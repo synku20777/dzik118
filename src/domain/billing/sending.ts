@@ -7,7 +7,7 @@
 // the first successful send -- a resend reuses the same pdf_object_key/
 // pdf_sha256, never regenerates it (Section 21: "canonical PDF
 // immutable").
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import type { Db, Tx } from "../../db/client";
 import { billingCases, billingPeriods } from "../../db/schema/billing";
 import { dwellings } from "../../db/schema/dwellings";
@@ -568,7 +568,13 @@ async function finalizeInvoiceSentInTx(
     await tx
       .update(billingCases)
       .set({ status: "SENT", statusUpdatedAt: new Date() })
-      .where(eq(billingCases.id, params.billingCaseId));
+      // An invoice paid before its first delivery stays PAID.
+      .where(
+        and(
+          eq(billingCases.id, params.billingCaseId),
+          ne(billingCases.status, "PAID")
+        )
+      );
 
     await recordAuditEvent(tx, {
       organizationId: params.organizationId,

@@ -35,6 +35,7 @@ import {
 } from "../../src/domain/billing/generation";
 import { prepareInvoice } from "../../src/domain/billing/generation";
 import { getDwellingAccountBalance } from "../../src/domain/accounts/ledger";
+import { recordManualPayment } from "../../src/domain/payments/manual";
 import {
   ConflictError,
   ensureCanonicalPdf,
@@ -200,6 +201,40 @@ describe("invoice sending", () => {
       )
       .then((r) => r.rows);
     expect(caseRow.status).toBe("SENT");
+
+    await cleanupOrg(org.id);
+  });
+
+  it("an invoice paid before its first delivery stays PAID when it is sent", async () => {
+    const { org, invoice } = await setupPreparedInvoice("IT-G Org Paid", 1);
+    await recordManualPayment(
+      db,
+      org.id,
+      {
+        invoiceId: invoice.id,
+        amount: invoice.amountDue,
+        bookingDate: "2026-01-29",
+        reference: "PAID-BEFORE-SEND",
+        reason: "Paid at the office",
+      },
+      seedAdminId
+    );
+    const sent = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps(),
+      seedAdminId
+    );
+    expect(sent.sentAt).not.toBeNull();
+    expect(sent.paidAt).not.toBeNull();
+
+    const [caseRow] = await db.$client
+      .query("select status from billing_cases where id = $1", [
+        invoice.billingCaseId,
+      ])
+      .then((r) => r.rows);
+    expect(caseRow.status).toBe("PAID");
 
     await cleanupOrg(org.id);
   });

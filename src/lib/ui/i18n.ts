@@ -1467,6 +1467,8 @@ const lv: Record<string, string> = {
     "Šis rēķins jau ir nosūtīts, un to vairs nevar pārrēķināt; tā vietā izrakstiet korekcijas dokumentu",
   "This invoice has already moved past DRAFT and can no longer be regenerated":
     "Šis rēķins vairs nav statusā “Melnraksts”, un to vairs nevar pārrēķināt",
+  "This invoice has already been sent and can no longer be prepared again; issue a correction document instead":
+    "Šis rēķins jau ir nosūtīts, un to vairs nevar sagatavot atkārtoti; tā vietā izrakstiet korekcijas dokumentu",
   "Only a DRAFT invoice can be prepared":
     "Sagatavot var tikai rēķinu statusā “Melnraksts”",
   "Issuer details are incomplete; update organization settings before preparing":
@@ -3998,6 +4000,8 @@ const ru: Record<string, string> = {
     "Этот счёт уже отправлен, и его больше нельзя пересчитать; оформите вместо этого корректирующий документ",
   "This invoice has already moved past DRAFT and can no longer be regenerated":
     "Этот счёт уже вышел из статуса «Черновик», и его больше нельзя пересчитать",
+  "This invoice has already been sent and can no longer be prepared again; issue a correction document instead":
+    "Этот счёт уже отправлен, и его больше нельзя подготовить повторно; оформите вместо этого корректирующий документ",
   "Only a DRAFT invoice can be prepared":
     "Подготовить можно только счёт в статусе «Черновик»",
   "Issuer details are incomplete; update organization settings before preparing":
