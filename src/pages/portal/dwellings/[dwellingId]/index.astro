@@ -96,7 +96,6 @@ const {
 });
 
 const submitResult = Astro.getActionResult(actions.readings.residentSubmit);
-if (submitResult?.data) return Astro.redirect(Astro.url.pathname + "#readings");
 let submitted: FormData | null = null;
 if (submitResult?.error) {
   try {
@@ -310,7 +309,7 @@ const canSubmit = !deadlinePassed && missingReadings > 0;
                 {meter.currentValue === null && !deadlinePassed && (
                   <form
                     method="POST"
-                    action={actions.readings.residentSubmit}
+                    action={`${actions.readings.residentSubmit}#readings`}
                     data-resident-reading
                     data-saving={t("Saving…")}
                     data-failed={t(

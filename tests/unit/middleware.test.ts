@@ -12,6 +12,22 @@ const state = vi.hoisted(() => ({
   } | null,
   aal: "aal1",
   requireAal2: false,
+  action: undefined as
+    | { calledFrom: string; name: string; handler: () => Promise<unknown> }
+    | undefined,
+  cookie: undefined as string | undefined,
+  cookieSets: [] as { name: string; value: string; options: unknown }[],
+  cookieDeletes: [] as { name: string; options: unknown }[],
+  results: [] as [string, unknown][],
+}));
+
+vi.mock("astro:actions", () => ({
+  getActionContext: () => ({
+    action: state.action,
+    setActionResult: (name: string, result: unknown) =>
+      state.results.push([name, result]),
+    serializeActionResult: (result: unknown) => result,
+  }),
 }));
 
 vi.mock("astro:middleware", () => ({
@@ -65,13 +81,24 @@ const resident = {
 
 function visit(
   path: string,
-  origin = "https://app.example.test"
+  origin = "https://app.example.test",
+  method = "GET"
 ): Promise<Response> {
   const url = new URL(path, origin);
   const context = {
-    request: new Request(url),
+    request: new Request(url, { method }),
     url,
-    cookies: { has: () => true, set: () => {} },
+    cookies: {
+      has: () => true,
+      get: (name: string) =>
+        name === "action_result" && state.cookie
+          ? { json: () => JSON.parse(state.cookie!) }
+          : undefined,
+      set: (name: string, value: string, options: unknown) =>
+        state.cookieSets.push({ name, value, options }),
+      delete: (name: string, options: unknown) =>
+        state.cookieDeletes.push({ name, options }),
+    },
     locals: { cfContext: { waitUntil: () => {} } },
     redirect: (to: string, status = 302) =>
       new Response(null, { status, headers: { Location: to } }),
@@ -92,6 +119,11 @@ beforeEach(() => {
   state.auth = null;
   state.aal = "aal1";
   state.requireAal2 = false;
+  state.action = undefined;
+  state.cookie = undefined;
+  state.cookieSets = [];
+  state.cookieDeletes = [];
+  state.results = [];
 });
 
 describe("middleware", () => {
@@ -194,6 +226,79 @@ describe("middleware", () => {
     state.requireAal2 = true;
     await signedIn(resident);
     expect(await (await visit("/portal/dwellings")).text()).toBe("page");
+  });
+
+  it("redirects after a successful form action and carries the result", async () => {
+    await signedIn(admin);
+    const data = { type: "data", body: "{}" };
+    state.action = {
+      calledFrom: "form",
+      name: "meters.create",
+      handler: async () => data,
+    };
+    const post = await visit(
+      "/admin/o/org-1/dwellings?tab=meters&_action=meters.create",
+      undefined,
+      "POST"
+    );
+    expect(post.status).toBe(303);
+    expect(post.headers.get("Location")).toBe(
+      "/admin/o/org-1/dwellings?tab=meters"
+    );
+    expect(state.cookieSets).toEqual([
+      {
+        name: "action_result",
+        value: JSON.stringify({ name: "meters.create", result: data }),
+        options: expect.objectContaining({
+          path: "/admin/o/org-1/dwellings",
+          httpOnly: true,
+        }),
+      },
+    ]);
+
+    state.action = undefined;
+    state.cookie = state.cookieSets[0].value;
+    const get = await visit("/admin/o/org-1/dwellings?tab=meters");
+    expect(await get.text()).toBe("page");
+    expect(state.results).toEqual([["meters.create", data]]);
+    expect(state.cookieDeletes).toEqual([
+      { name: "action_result", options: { path: "/admin/o/org-1/dwellings" } },
+    ]);
+  });
+
+  it("renders a failed form action in place", async () => {
+    await signedIn(admin);
+    const error = { type: "error", body: "{}" };
+    state.action = {
+      calledFrom: "form",
+      name: "meters.create",
+      handler: async () => error,
+    };
+    const post = await visit(
+      "/admin/o/org-1/dwellings?_action=meters.create",
+      undefined,
+      "POST"
+    );
+    expect(await post.text()).toBe("page");
+    expect(state.cookieSets).toEqual([]);
+    expect(state.results).toEqual([["meters.create", error]]);
+  });
+
+  it("renders an oversized result in place instead of redirecting", async () => {
+    await signedIn(admin);
+    const big = { type: "data", body: "x".repeat(4000) };
+    state.action = {
+      calledFrom: "form",
+      name: "meters.create",
+      handler: async () => big,
+    };
+    const post = await visit(
+      "/admin/o/org-1/dwellings?_action=meters.create",
+      undefined,
+      "POST"
+    );
+    expect(await post.text()).toBe("page");
+    expect(state.results).toEqual([["meters.create", big]]);
   });
 
   it("moves the workers.dev address to the real one", async () => {

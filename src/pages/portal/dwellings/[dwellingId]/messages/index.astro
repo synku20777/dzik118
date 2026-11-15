@@ -22,11 +22,6 @@ import { rethrowUnexpected } from "../../../../../domain/errors";
 const dwellingId = Astro.params.dwellingId!;
 
 const sendResult = Astro.getActionResult(actions.messages.residentSend);
-// Post-redirect-get after a successful send: without this a browser refresh
-// of the POST response would send the message a second time.
-if (sendResult && !sendResult.error) {
-  return Astro.redirect(Astro.url.pathname);
-}
 let unsent = "";
 if (sendResult?.error) {
   try {
