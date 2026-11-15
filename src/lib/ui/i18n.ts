@@ -1718,6 +1718,12 @@ const lv: Record<string, string> = {
     "Atkārtota nosūtīšana uzsākta. Pārbaudiet piegādes statusu.",
   "Access link revoked.": "Piekļuves saite atsaukta.",
   "Paper dispatch recorded.": "Nosūtīšana pa pastu atzīmēta.",
+  "Invoice marked as delivered.": "Rēķins atzīmēts kā piegādāts.",
+  "Mark as delivered": "Atzīmēt kā piegādātu",
+  "Mark this invoice as delivered? Do this only after you have confirmed that the resident received the email. No email is sent.":
+    "Atzīmēt šo rēķinu kā piegādātu? Dariet to tikai tad, kad esat pārliecinājies, ka iedzīvotājs e-pastu saņēma. E-pasts netiek sūtīts.",
+  "Only the latest delivery with an unconfirmed outcome can be marked as delivered":
+    "Kā piegādātu var atzīmēt tikai pēdējo piegādi ar neapstiprinātu iznākumu",
   "1 change saving": "Tiek saglabāta 1 izmaiņa",
   "{n} changes saving": "Tiek saglabātas {n} izmaiņas",
   "1 change needs attention": "1 izmaiņai jāpievērš uzmanība",
@@ -4252,6 +4258,12 @@ const ru: Record<string, string> = {
     "Повторная отправка запущена. Проверьте статус доставки.",
   "Access link revoked.": "Ссылка доступа отозвана.",
   "Paper dispatch recorded.": "Отправка по почте отмечена.",
+  "Invoice marked as delivered.": "Счёт отмечен как доставленный.",
+  "Mark as delivered": "Отметить как доставленный",
+  "Mark this invoice as delivered? Do this only after you have confirmed that the resident received the email. No email is sent.":
+    "Отметить этот счёт как доставленный? Делайте это только после того, как убедились, что житель получил письмо. Письмо не отправляется.",
+  "Only the latest delivery with an unconfirmed outcome can be marked as delivered":
+    "Отметить как доставленную можно только последнюю доставку с неподтверждённым результатом",
   "1 change saving": "Сохраняется 1 изменение",
   "{n} changes saving": "Сохраняется изменений: {n}",
   "1 change needs attention": "1 изменение требует внимания",

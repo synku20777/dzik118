@@ -39,6 +39,7 @@ import { recordManualPayment } from "../../src/domain/payments/manual";
 import {
   ConflictError,
   ensureCanonicalPdf,
+  markInvoiceDelivered,
   recordPaperDispatch,
   resendInvoice,
   sendInvoice,
@@ -1132,6 +1133,77 @@ describe("invoice sending", () => {
       status: "UNKNOWN",
       error_code: "FAKE_AMBIGUOUS",
     });
+
+    await cleanupOrg(org.id);
+  });
+
+  it("an admin can mark an UNKNOWN delivery as delivered: the invoice becomes sent and no email goes out", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org Mark Delivered",
+      10
+    );
+    let emailCallCount = 0;
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          return {
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "FAKE_AMBIGUOUS",
+            failureClassification: "AMBIGUOUS" as const,
+          };
+        },
+      },
+    });
+    await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
+    const [attempt] = await db.$client
+      .query("select id from invoice_send_attempts where invoice_id = $1", [
+        invoice.id,
+      ])
+      .then((r) => r.rows);
+
+    // A wrong attempt id (not the latest UNKNOWN one) is refused.
+    await expect(
+      markInvoiceDelivered(
+        db,
+        org.id,
+        invoice.id,
+        "00000000-0000-4000-8000-000000000000",
+        seedAdminId
+      )
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    const result = await markInvoiceDelivered(
+      db,
+      org.id,
+      invoice.id,
+      attempt.id,
+      seedAdminId
+    );
+    expect(result.sentAt).toBeInstanceOf(Date);
+    expect(emailCallCount).toBe(1);
+
+    const [row] = await db.$client
+      .query(
+        `select a.status as attempt, c.status as case_status
+           from invoice_send_attempts a
+           join invoices i on i.id = a.invoice_id
+           join billing_cases c on c.id = i.billing_case_id
+          where a.id = $1`,
+        [attempt.id]
+      )
+      .then((r) => r.rows);
+    expect(row).toEqual({ attempt: "SENT", case_status: "SENT" });
+
+    const actions = (await listAuditLogs(db, org.id)).map((l) => l.action);
+    expect(actions).toContain("INVOICE_DELIVERY_CONFIRMED");
+    expect(actions.filter((a) => a === "INVOICE_SENT")).toHaveLength(1);
+
+    // Once confirmed it is no longer UNKNOWN, so a second press is refused.
+    await expect(
+      markInvoiceDelivered(db, org.id, invoice.id, attempt.id, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
 
     await cleanupOrg(org.id);
   });

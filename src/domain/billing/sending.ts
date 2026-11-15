@@ -1369,6 +1369,68 @@ export async function resendInvoice(
  * Never touches invoice_send_attempts (electronic attempts only). Never
  * rewrites an existing EMAIL attempt/delivery outcome.
  */
+/**
+ * An admin confirms, by other means (asking the resident, provider logs),
+ * that an email whose outcome is UNKNOWN did arrive. The attempt becomes
+ * SENT and the invoice is finalized exactly as a confirmed send would be;
+ * no email is sent. Until then the invoice stays unsent (ADR-style policy:
+ * UNKNOWN is never treated as delivered on its own).
+ */
+export async function markInvoiceDelivered(
+  db: Db,
+  organizationId: string,
+  invoiceId: string,
+  attemptId: string,
+  actorUserId: string
+): Promise<{ sentAt: Date | null }> {
+  return db.transaction(async (tx) => {
+    // Same lock order as claimSendCommand: invoice, then case, then attempt.
+    const [invoice] = await tx
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.id, invoiceId),
+          eq(invoices.organizationId, organizationId)
+        )
+      )
+      .for("update")
+      .limit(1);
+    if (!invoice) throw new NotFoundError("Invoice not found");
+    await tx
+      .select({ id: billingCases.id })
+      .from(billingCases)
+      .where(eq(billingCases.id, invoice.billingCaseId))
+      .for("update");
+
+    const latest = await getLatestSendAttempt(tx, organizationId, invoiceId);
+    if (latest?.id !== attemptId || latest.status !== "UNKNOWN") {
+      throw new ConflictError(
+        "Only the latest delivery with an unconfirmed outcome can be marked as delivered"
+      );
+    }
+
+    const result = await finalizeInvoiceSentInTx(tx, {
+      organizationId,
+      invoiceId,
+      billingCaseId: invoice.billingCaseId,
+      actorUserId,
+      attemptId,
+      attemptTargetStatus: "SENT",
+      expectedAttemptStatus: "UNKNOWN",
+    });
+    await recordAuditEvent(tx, {
+      organizationId,
+      scopeDwellingId: invoice.dwellingId,
+      actorUserId,
+      action: "INVOICE_DELIVERY_CONFIRMED",
+      entityType: "invoice",
+      entityId: invoiceId,
+    });
+    return { sentAt: result.invoice.sentAt };
+  });
+}
+
 export async function recordPaperDispatch(
   db: Db,
   organizationId: string,

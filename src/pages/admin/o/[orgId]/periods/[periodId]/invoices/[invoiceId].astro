@@ -58,6 +58,9 @@ const revokeResult = Astro.getActionResult(actions.invoices.revokeAccess);
 const recordPaperDispatchResult = Astro.getActionResult(
   actions.invoices.recordPaperDispatch
 );
+const markDeliveredResult = Astro.getActionResult(
+  actions.invoices.markDelivered
+);
 
 let organization, period, invoice, lines, caseStatus, deliveries, latestAttempt;
 try {
@@ -372,13 +375,15 @@ const overrideStatuses: string[] = [
       sendResult?.error ||
       resendResult?.error ||
       revokeResult?.error ||
-      recordPaperDispatchResult?.error) && (
+      recordPaperDispatchResult?.error ||
+      markDeliveredResult?.error) && (
       <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
         {prepareResult?.error?.message ??
           sendResult?.error?.message ??
           resendResult?.error?.message ??
           revokeResult?.error?.message ??
-          recordPaperDispatchResult?.error?.message}
+          recordPaperDispatchResult?.error?.message ??
+          markDeliveredResult?.error?.message}
       </p>
     )}
 
@@ -387,13 +392,15 @@ const overrideStatuses: string[] = [
       sendResult?.error ||
       resendResult?.error ||
       revokeResult?.error ||
-      recordPaperDispatchResult?.error
+      recordPaperDispatchResult?.error ||
+      markDeliveredResult?.error
     ) &&
       (prepareResult ||
         sendResult ||
         resendResult ||
         revokeResult ||
-        recordPaperDispatchResult) && (
+        recordPaperDispatchResult ||
+        markDeliveredResult) && (
         <p class="notice" role="status">
           {prepareResult
             ? t("Invoice prepared.")
@@ -405,7 +412,9 @@ const overrideStatuses: string[] = [
                 ? t("Resend submitted. Check the delivery status.")
                 : revokeResult
                   ? t("Access link revoked.")
-                  : t("Paper dispatch recorded.")}
+                  : markDeliveredResult
+                    ? t("Invoice marked as delivered.")
+                    : t("Paper dispatch recorded.")}
         </p>
       )}
 
@@ -509,6 +518,30 @@ const overrideStatuses: string[] = [
             <p class="mt-2 text-xs font-semibold">
               {t("Email")} — {t("Needs attention")}
             </p>
+          )}
+          {latestAttempt && (
+            <form
+              method="POST"
+              action={actions.invoices.markDelivered}
+              class="mt-3"
+            >
+              <input
+                type="hidden"
+                name="organizationId"
+                value={organizationId}
+              />
+              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <input type="hidden" name="attemptId" value={latestAttempt.id} />
+              <button
+                type="submit"
+                data-confirm={t(
+                  "Mark this invoice as delivered? Do this only after you have confirmed that the resident received the email. No email is sent."
+                )}
+                class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-hover"
+              >
+                {t("Mark as delivered")}
+              </button>
+            </form>
           )}
         </div>
       )}

@@ -5,6 +5,7 @@ import { env } from "cloudflare:workers";
 import { APP_BASE_URL, INVOICE_TOKEN_SECRET } from "astro:env/server";
 import {
   bulkSendInvoices,
+  markInvoiceDelivered,
   recordPaperDispatch,
   resendInvoice,
   sendInvoice,
@@ -79,6 +80,26 @@ export const invoices = {
     handler: async ({ organizationId, invoiceId }, { locals }) => {
       return withDb((db) =>
         recordPaperDispatch(db, organizationId, invoiceId, locals.auth!.userId)
+      );
+    },
+  }),
+
+  markDelivered: orgAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      invoiceId: z.uuid(),
+      attemptId: z.uuid(),
+    }),
+    handler: async ({ organizationId, invoiceId, attemptId }, { locals }) => {
+      return withDb((db) =>
+        markInvoiceDelivered(
+          db,
+          organizationId,
+          invoiceId,
+          attemptId,
+          locals.auth.userId
+        )
       );
     },
   }),
