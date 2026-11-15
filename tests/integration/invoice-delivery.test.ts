@@ -1318,7 +1318,7 @@ describe("invoice sending", () => {
   it("a late definitive failure replaces a stale UNKNOWN, so a first send may retry", async () => {
     const { org, invoice } = await setupPreparedInvoice(
       "IT-G Org Late Failure",
-      12
+      9
     );
     const deps = stubDeps({
       emailService: {
