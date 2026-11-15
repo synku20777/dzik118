@@ -1280,6 +1280,17 @@ describe("invoice sending", () => {
     const actions = (await listAuditLogs(db, org.id)).map((l) => l.action);
     expect(actions).not.toContain("INVOICE_SEND_UNKNOWN");
 
+    // The late answer's own delivery row is UNKNOWN (there was no row to
+    // confirm), yet a first send under the lock still sees it as delivered.
+    const deliveries = await db.$client
+      .query("select status from invoice_deliveries where invoice_id = $1", [
+        invoice.id,
+      ])
+      .then((r) => r.rows.map((row) => row.status));
+    expect(deliveries).toEqual(["UNKNOWN"]);
+    const claim = await claimSendCommand(db, org.id, invoice.id, "FIRST_SEND");
+    expect(claim.outcome).toBe("ALREADY_SENT");
+
     await cleanupOrg(org.id);
   });
 

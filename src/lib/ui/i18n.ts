@@ -1724,8 +1724,8 @@ const lv: Record<string, string> = {
     "Atzīmēt šo rēķinu kā piegādātu? Dariet to tikai tad, kad esat pārliecinājies, ka iedzīvotājs e-pastu saņēma. E-pasts netiek sūtīts.",
   "Only the latest delivery with an unconfirmed outcome can be marked as delivered":
     "Kā piegādātu var atzīmēt tikai pēdējo piegādi ar neapstiprinātu iznākumu",
-  "Only a prepared or sent invoice can be marked as delivered":
-    "Kā piegādātu var atzīmēt tikai sagatavotu vai nosūtītu rēķinu",
+  "Only an invoice that has been prepared can be marked as delivered":
+    "Kā piegādātu var atzīmēt tikai rēķinu, kas ir sagatavots",
   "1 change saving": "Tiek saglabāta 1 izmaiņa",
   "{n} changes saving": "Tiek saglabātas {n} izmaiņas",
   "1 change needs attention": "1 izmaiņai jāpievērš uzmanība",
@@ -4266,8 +4266,8 @@ const ru: Record<string, string> = {
     "Отметить этот счёт как доставленный? Делайте это только после того, как убедились, что житель получил письмо. Письмо не отправляется.",
   "Only the latest delivery with an unconfirmed outcome can be marked as delivered":
     "Отметить как доставленную можно только последнюю доставку с неподтверждённым результатом",
-  "Only a prepared or sent invoice can be marked as delivered":
-    "Отметить как доставленный можно только подготовленный или отправленный счёт",
+  "Only an invoice that has been prepared can be marked as delivered":
+    "Отметить как доставленный можно только подготовленный счёт",
   "1 change saving": "Сохраняется 1 изменение",
   "{n} changes saving": "Сохраняется изменений: {n}",
   "1 change needs attention": "1 изменение требует внимания",

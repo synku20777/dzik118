@@ -312,9 +312,9 @@ async function markAttemptTerminalWithAudit(
     if (targetStatus === "SENT") {
       await markSent(tx, attemptId);
     } else {
-      // Only while the attempt is still live: a late provider answer must
-      // not overwrite an outcome already settled elsewhere, such as an
-      // admin's markInvoiceDelivered confirmation.
+      // Never over a SENT attempt: a late provider answer must not undo a
+      // confirmed delivery, such as an admin's markInvoiceDelivered. A late
+      // definitive FAILED may still replace a stale UNKNOWN.
       const [settled] = await tx
         .update(invoiceSendAttempts)
         .set({
@@ -330,7 +330,7 @@ async function markAttemptTerminalWithAudit(
         .where(
           and(
             eq(invoiceSendAttempts.id, attemptId),
-            inArray(invoiceSendAttempts.status, ["CLAIMED", "DISPATCHING"])
+            ne(invoiceSendAttempts.status, "SENT")
           )
         )
         .returning({ id: invoiceSendAttempts.id });
@@ -1387,12 +1387,14 @@ export async function markInvoiceDelivered(
   return db.transaction(async (tx) => {
     // Attempt, then invoice, then case: the order a sender's own
     // finalization writes them in, so a late sender cannot deadlock with
-    // this. claimSendCommand never locks an existing attempt row.
+    // this. claimSendCommand never locks an existing attempt row. NO KEY
+    // UPDATE, so a late sender's delivery-row insert (whose foreign keys
+    // take KEY SHARE on both rows) is not blocked and cannot deadlock.
     await tx
       .select({ id: invoiceSendAttempts.id })
       .from(invoiceSendAttempts)
       .where(eq(invoiceSendAttempts.id, attemptId))
-      .for("update");
+      .for("no key update");
     const [invoice] = await tx
       .select()
       .from(invoices)
@@ -1402,7 +1404,7 @@ export async function markInvoiceDelivered(
           eq(invoices.organizationId, organizationId)
         )
       )
-      .for("update")
+      .for("no key update")
       .limit(1);
     if (!invoice) throw new NotFoundError("Invoice not found");
     const [billingCase] = await tx
@@ -1418,7 +1420,7 @@ export async function markInvoiceDelivered(
       )
     ) {
       throw new ConflictError(
-        "Only a prepared or sent invoice can be marked as delivered"
+        "Only an invoice that has been prepared can be marked as delivered"
       );
     }
 
