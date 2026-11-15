@@ -1174,6 +1174,15 @@ describe("invoice sending", () => {
       )
     ).rejects.toBeInstanceOf(ConflictError);
 
+    // A case pulled back to Draft cannot be marked as delivered.
+    const caseSql =
+      "update billing_cases set status = $2 where id = (select billing_case_id from invoices where id = $1)";
+    await db.$client.query(caseSql, [invoice.id, "DRAFT"]);
+    await expect(
+      markInvoiceDelivered(db, org.id, invoice.id, attempt.id, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+    await db.$client.query(caseSql, [invoice.id, "PREPARED"]);
+
     const result = await markInvoiceDelivered(
       db,
       org.id,
@@ -1195,6 +1204,26 @@ describe("invoice sending", () => {
       )
       .then((r) => r.rows);
     expect(row).toEqual({ attempt: "SENT", case_status: "SENT" });
+    const [delivery] = await db.$client
+      .query("select status from invoice_deliveries where attempt_id = $1", [
+        attempt.id,
+      ])
+      .then((r) => r.rows);
+    expect(delivery.status).toBe("SENT");
+
+    // A first send is now a no-op, and Resend works as after any delivery.
+    await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
+    expect(emailCallCount).toBe(1);
+    await expect(
+      resendInvoice(
+        db,
+        org.id,
+        invoice.id,
+        stubDeps(),
+        seedAdminId,
+        "resend-after-confirm"
+      )
+    ).resolves.toBeDefined();
 
     const actions = (await listAuditLogs(db, org.id)).map((l) => l.action);
     expect(actions).toContain("INVOICE_DELIVERY_CONFIRMED");
@@ -1204,6 +1233,52 @@ describe("invoice sending", () => {
     await expect(
       markInvoiceDelivered(db, org.id, invoice.id, attempt.id, seedAdminId)
     ).rejects.toBeInstanceOf(ConflictError);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("a late ambiguous provider answer does not undo an admin's delivery confirmation", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org Late Answer",
+      11
+    );
+    let attemptId = "";
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          // While the provider call hangs: the attempt goes stale to UNKNOWN
+          // and an admin confirms delivery.
+          const { rows } = await db.$client.query(
+            "update invoice_send_attempts set status = 'UNKNOWN' where invoice_id = $1 and status = 'DISPATCHING' returning id",
+            [invoice.id]
+          );
+          attemptId = rows[0].id;
+          await markInvoiceDelivered(
+            db,
+            org.id,
+            invoice.id,
+            attemptId,
+            seedAdminId
+          );
+          return {
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "FAKE_AMBIGUOUS",
+            failureClassification: "AMBIGUOUS" as const,
+          };
+        },
+      },
+    });
+    await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
+
+    const [attempt] = await db.$client
+      .query("select status from invoice_send_attempts where id = $1", [
+        attemptId,
+      ])
+      .then((r) => r.rows);
+    expect(attempt.status).toBe("SENT");
+    const actions = (await listAuditLogs(db, org.id)).map((l) => l.action);
+    expect(actions).not.toContain("INVOICE_SEND_UNKNOWN");
 
     await cleanupOrg(org.id);
   });

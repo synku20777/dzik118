@@ -248,7 +248,11 @@ describe("middleware", () => {
     expect(state.cookieSets).toEqual([
       {
         name: "action_result",
-        value: JSON.stringify({ name: "meters.create", result: data }),
+        value: JSON.stringify({
+          name: "meters.create",
+          path: "/admin/o/org-1/dwellings",
+          result: data,
+        }),
         options: expect.objectContaining({
           path: "/admin/o/org-1/dwellings",
           httpOnly: true,
@@ -264,6 +268,28 @@ describe("middleware", () => {
     expect(state.cookieDeletes).toEqual([
       { name: "action_result", options: { path: "/admin/o/org-1/dwellings" } },
     ]);
+  });
+
+  it("restores a stored result only on its own page and only a success", async () => {
+    await signedIn(admin);
+    const data = { type: "data", body: "{}" };
+    const path = "/admin/o/org-1/dwellings";
+    state.cookie = JSON.stringify({
+      name: "meters.create",
+      path,
+      result: data,
+    });
+    await visit(`${path}/dw-1`);
+    expect(state.results).toEqual([]);
+    expect(state.cookieDeletes).toEqual([]);
+
+    state.cookie = JSON.stringify({
+      name: "meters.create",
+      path,
+      result: { type: "error", body: "planted" },
+    });
+    await visit(path);
+    expect(state.results).toEqual([]);
   });
 
   it("renders a failed form action in place", async () => {
@@ -284,7 +310,7 @@ describe("middleware", () => {
     expect(state.results).toEqual([["meters.create", error]]);
   });
 
-  it("renders an oversized result in place instead of redirecting", async () => {
+  it("still redirects after an oversized success, without the result", async () => {
     await signedIn(admin);
     const big = { type: "data", body: "x".repeat(4000) };
     state.action = {
@@ -297,8 +323,9 @@ describe("middleware", () => {
       undefined,
       "POST"
     );
-    expect(await post.text()).toBe("page");
-    expect(state.results).toEqual([["meters.create", big]]);
+    expect(post.status).toBe(303);
+    expect(state.cookieSets).toEqual([]);
+    expect(state.results).toEqual([]);
   });
 
   it("moves the workers.dev address to the real one", async () => {

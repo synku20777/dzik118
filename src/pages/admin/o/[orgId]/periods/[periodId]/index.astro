@@ -59,25 +59,16 @@ const actionError =
   bulkGenerateResult?.error ??
   bulkPrepareResult?.error ??
   bulkSendResult?.error;
-const bulkOutcome = bulkGenerateResult?.data
-  ? {
-      done: bulkGenerateResult.data.generated.length,
-      label: "invoices generated",
-      skipped: bulkGenerateResult.data.skipped,
-    }
-  : bulkPrepareResult?.data
-    ? {
-        done: bulkPrepareResult.data.prepared.length,
-        label: "invoices prepared",
-        skipped: bulkPrepareResult.data.skipped,
-      }
-    : bulkSendResult?.data
-      ? {
-          done: bulkSendResult.data.sent.length,
-          label: "invoices sent",
-          skipped: bulkSendResult.data.skipped,
-        }
-      : null;
+const bulkResult =
+  bulkGenerateResult?.data ?? bulkPrepareResult?.data ?? bulkSendResult?.data;
+const bulkOutcome = bulkResult && {
+  ...bulkResult,
+  label: bulkGenerateResult?.data
+    ? "invoices generated"
+    : bulkPrepareResult?.data
+      ? "invoices prepared"
+      : "invoices sent",
+};
 
 const search = Astro.url.searchParams.get("search")?.trim() || undefined;
 const rawStatus = Astro.url.searchParams.get("status");
@@ -389,12 +380,15 @@ const MAX_MISSING = 2;
     )}
     {bulkOutcome && (
       <p class="notice" role="status">
-        {bulkOutcome.done} {t(bulkOutcome.label)}.
-        {bulkOutcome.skipped.length > 0 && (
+        {bulkOutcome.count} {t(bulkOutcome.label)}.
+        {bulkOutcome.skippedCount > 0 && (
           <>
             {" "}
-            {bulkOutcome.skipped.length} {t("skipped")}:{" "}
-            {skipReasonsText(bulkOutcome.skipped, locale)}
+            {bulkOutcome.skippedCount} {t("skipped")}:{" "}
+            {skipReasonsText(
+              bulkOutcome.skipReasons.map((reason) => ({ reason })),
+              locale
+            )}
           </>
         )}
       </p>

@@ -311,10 +311,30 @@ async function markAttemptTerminalWithAudit(
   await db.transaction(async (tx) => {
     if (targetStatus === "SENT") {
       await markSent(tx, attemptId);
-    } else if (targetStatus === "FAILED") {
-      await markFailed(tx, attemptId, errorCode ?? "DELIVERY_FAILED");
     } else {
-      await markUnknown(tx, attemptId, errorCode ?? "DELIVERY_OUTCOME_UNKNOWN");
+      // Only while the attempt is still live: a late provider answer must
+      // not overwrite an outcome already settled elsewhere, such as an
+      // admin's markInvoiceDelivered confirmation.
+      const [settled] = await tx
+        .update(invoiceSendAttempts)
+        .set({
+          status: targetStatus,
+          errorCode:
+            errorCode ??
+            (targetStatus === "FAILED"
+              ? "DELIVERY_FAILED"
+              : "DELIVERY_OUTCOME_UNKNOWN"),
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(invoiceSendAttempts.id, attemptId),
+            inArray(invoiceSendAttempts.status, ["CLAIMED", "DISPATCHING"])
+          )
+        )
+        .returning({ id: invoiceSendAttempts.id });
+      if (!settled) return;
     }
     await recordAuditEvent(tx, {
       organizationId: audit.organizationId,
@@ -1351,6 +1371,97 @@ export async function resendInvoice(
 }
 
 /**
+ * An admin confirms, by other means (asking the resident, provider logs),
+ * that an email whose outcome is UNKNOWN did arrive. The attempt becomes
+ * SENT and the invoice is finalized exactly as a confirmed send would be;
+ * no email is sent. Until then the invoice stays unsent (ADR-style policy:
+ * UNKNOWN is never treated as delivered on its own).
+ */
+export async function markInvoiceDelivered(
+  db: Db,
+  organizationId: string,
+  invoiceId: string,
+  attemptId: string,
+  actorUserId: string
+): Promise<{ sentAt: Date | null }> {
+  return db.transaction(async (tx) => {
+    // Attempt, then invoice, then case: the order a sender's own
+    // finalization writes them in, so a late sender cannot deadlock with
+    // this. claimSendCommand never locks an existing attempt row.
+    await tx
+      .select({ id: invoiceSendAttempts.id })
+      .from(invoiceSendAttempts)
+      .where(eq(invoiceSendAttempts.id, attemptId))
+      .for("update");
+    const [invoice] = await tx
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.id, invoiceId),
+          eq(invoices.organizationId, organizationId)
+        )
+      )
+      .for("update")
+      .limit(1);
+    if (!invoice) throw new NotFoundError("Invoice not found");
+    const [billingCase] = await tx
+      .select({ status: billingCases.status })
+      .from(billingCases)
+      .where(eq(billingCases.id, invoice.billingCaseId))
+      .for("update");
+    // Same rule as a send: a case pulled back to Draft cannot become sent.
+    if (
+      !billingCase ||
+      !(FIRST_DELIVERY_ELIGIBLE_CASE_STATUSES as readonly string[]).includes(
+        billingCase.status
+      )
+    ) {
+      throw new ConflictError(
+        "Only a prepared or sent invoice can be marked as delivered"
+      );
+    }
+
+    const latest = await getLatestSendAttempt(tx, organizationId, invoiceId);
+    if (latest?.id !== attemptId || latest.status !== "UNKNOWN") {
+      throw new ConflictError(
+        "Only the latest delivery with an unconfirmed outcome can be marked as delivered"
+      );
+    }
+
+    const result = await finalizeInvoiceSentInTx(tx, {
+      organizationId,
+      invoiceId,
+      billingCaseId: invoice.billingCaseId,
+      actorUserId,
+      attemptId,
+      attemptTargetStatus: "SENT",
+      expectedAttemptStatus: "UNKNOWN",
+    });
+    // The email history then shows a confirmed delivery, which is what
+    // makes Resend available and stops a first send from going out again.
+    await tx
+      .update(invoiceDeliveries)
+      .set({ status: "SENT", errorCode: null, sentAt: new Date() })
+      .where(
+        and(
+          eq(invoiceDeliveries.attemptId, attemptId),
+          eq(invoiceDeliveries.status, "UNKNOWN")
+        )
+      );
+    await recordAuditEvent(tx, {
+      organizationId,
+      scopeDwellingId: invoice.dwellingId,
+      actorUserId,
+      action: "INVOICE_DELIVERY_CONFIRMED",
+      entityType: "invoice",
+      entityId: invoiceId,
+    });
+    return { sentAt: result.invoice.sentAt };
+  });
+}
+
+/**
  * Explicit, idempotent, concurrency-safe manual paper dispatch confirmation.
  *
  * Recording physical dispatch is one atomic local DB business event -- no
@@ -1369,68 +1480,6 @@ export async function resendInvoice(
  * Never touches invoice_send_attempts (electronic attempts only). Never
  * rewrites an existing EMAIL attempt/delivery outcome.
  */
-/**
- * An admin confirms, by other means (asking the resident, provider logs),
- * that an email whose outcome is UNKNOWN did arrive. The attempt becomes
- * SENT and the invoice is finalized exactly as a confirmed send would be;
- * no email is sent. Until then the invoice stays unsent (ADR-style policy:
- * UNKNOWN is never treated as delivered on its own).
- */
-export async function markInvoiceDelivered(
-  db: Db,
-  organizationId: string,
-  invoiceId: string,
-  attemptId: string,
-  actorUserId: string
-): Promise<{ sentAt: Date | null }> {
-  return db.transaction(async (tx) => {
-    // Same lock order as claimSendCommand: invoice, then case, then attempt.
-    const [invoice] = await tx
-      .select()
-      .from(invoices)
-      .where(
-        and(
-          eq(invoices.id, invoiceId),
-          eq(invoices.organizationId, organizationId)
-        )
-      )
-      .for("update")
-      .limit(1);
-    if (!invoice) throw new NotFoundError("Invoice not found");
-    await tx
-      .select({ id: billingCases.id })
-      .from(billingCases)
-      .where(eq(billingCases.id, invoice.billingCaseId))
-      .for("update");
-
-    const latest = await getLatestSendAttempt(tx, organizationId, invoiceId);
-    if (latest?.id !== attemptId || latest.status !== "UNKNOWN") {
-      throw new ConflictError(
-        "Only the latest delivery with an unconfirmed outcome can be marked as delivered"
-      );
-    }
-
-    const result = await finalizeInvoiceSentInTx(tx, {
-      organizationId,
-      invoiceId,
-      billingCaseId: invoice.billingCaseId,
-      actorUserId,
-      attemptId,
-      attemptTargetStatus: "SENT",
-      expectedAttemptStatus: "UNKNOWN",
-    });
-    await recordAuditEvent(tx, {
-      organizationId,
-      scopeDwellingId: invoice.dwellingId,
-      actorUserId,
-      action: "INVOICE_DELIVERY_CONFIRMED",
-      entityType: "invoice",
-      entityId: invoiceId,
-    });
-    return { sentAt: result.invoice.sentAt };
-  });
-}
-
 export async function recordPaperDispatch(
   db: Db,
   organizationId: string,

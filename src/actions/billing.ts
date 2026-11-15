@@ -174,7 +174,9 @@ export const billing = {
       dwellingId: z.uuid(),
     }),
     handler: async ({ organizationId, periodId, dwellingId }, { locals }) => {
-      return withDb((db) =>
+      // Results stay small enough for the redirect-after-post cookie
+      // (src/middleware.ts); the pages only read these fields.
+      const { id } = await withDb((db) =>
         generateInvoice(
           db,
           organizationId,
@@ -183,6 +185,7 @@ export const billing = {
           locals.auth!.userId
         )
       );
+      return { id };
     },
   }),
 
@@ -194,9 +197,14 @@ export const billing = {
       periodId: z.uuid(),
     }),
     handler: async ({ organizationId, periodId }, { locals }) => {
-      return withDb((db) =>
+      const result = await withDb((db) =>
         bulkGenerateInvoices(db, organizationId, periodId, locals.auth!.userId)
       );
+      return {
+        count: result.generated.length,
+        skippedCount: result.skipped.length,
+        skipReasons: [...new Set(result.skipped.map((s) => s.reason))],
+      };
     },
   }),
 
@@ -208,9 +216,10 @@ export const billing = {
       invoiceId: z.uuid(),
     }),
     handler: async ({ organizationId, invoiceId }, { locals }) => {
-      return withDb((db) =>
+      const { id } = await withDb((db) =>
         prepareInvoice(db, organizationId, invoiceId, locals.auth!.userId)
       );
+      return { id };
     },
   }),
 
@@ -222,9 +231,14 @@ export const billing = {
       invoiceIds: z.array(z.uuid()).min(1).max(200),
     }),
     handler: async ({ organizationId, invoiceIds }, { locals }) => {
-      return withDb((db) =>
+      const result = await withDb((db) =>
         bulkPrepareInvoices(db, organizationId, invoiceIds, locals.auth!.userId)
       );
+      return {
+        count: result.prepared.length,
+        skippedCount: result.skipped.length,
+        skipReasons: [...new Set(result.skipped.map((s) => s.reason))],
+      };
     },
   }),
 

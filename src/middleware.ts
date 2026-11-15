@@ -187,27 +187,43 @@ const handle = defineMiddleware(async (context, next) => {
   const { action, setActionResult, serializeActionResult } =
     getActionContext(context);
   const stored = cookies.get(ACTION_RESULT_COOKIE);
-  if (stored && request.method === "GET") {
+  let restored: { name?: unknown; path?: unknown; result?: unknown } = {};
+  try {
+    restored = stored?.json() ?? {};
+  } catch {
+    // A malformed cookie only loses the success message.
+  }
+  // The cookie path also matches child pages, so only the page that set it
+  // takes it, and only a success: nothing else may plant an error message.
+  if (request.method === "GET" && restored.path === url.pathname) {
     cookies.delete(ACTION_RESULT_COOKIE, { path: url.pathname });
-    try {
-      const { name, result } = stored.json();
-      if (typeof name === "string") setActionResult(name, result);
-    } catch {
-      // A malformed cookie only loses the success message.
+    const result = restored.result as { type?: unknown } | undefined;
+    if (
+      typeof restored.name === "string" &&
+      (result?.type === "data" || result?.type === "empty")
+    ) {
+      setActionResult(restored.name, result as never);
     }
   } else if (action?.calledFrom === "form") {
     const result = serializeActionResult(await action.handler());
-    const value = JSON.stringify({ name: action.name, result });
-    // shortcut: a result over ~3 KB cannot fit a cookie, so it renders in
-    // place without the redirect; move to Astro sessions if that happens.
-    if (result.type !== "error" && encodeURIComponent(value).length <= 3000) {
-      cookies.set(ACTION_RESULT_COOKIE, value, {
-        path: url.pathname,
-        httpOnly: true,
-        secure: isHttps,
-        sameSite: "lax",
-        maxAge: 60,
-      });
+    const value = JSON.stringify({
+      name: action.name,
+      path: url.pathname,
+      result,
+    });
+    if (result.type !== "error") {
+      // shortcut: a result over ~3 KB cannot fit a cookie, so the page
+      // reloads without its success message; move to Astro sessions or
+      // return less from that action if a message goes missing.
+      if (encodeURIComponent(value).length <= 3000) {
+        cookies.set(ACTION_RESULT_COOKIE, value, {
+          path: url.pathname,
+          httpOnly: true,
+          secure: isHttps,
+          sameSite: "lax",
+          maxAge: 60,
+        });
+      }
       const target = new URL(url);
       target.searchParams.delete("_action");
       return respond(redirect(target.pathname + target.search, 303));

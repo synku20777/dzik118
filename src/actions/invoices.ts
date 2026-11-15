@@ -35,7 +35,9 @@ export const invoices = {
       invoiceId: z.uuid(),
     }),
     handler: async ({ organizationId, invoiceId }, { locals }) => {
-      return withDb((db) =>
+      // Only what the pages read: a whole invoice is too large for the
+      // redirect-after-post cookie (src/middleware.ts).
+      const { sentAt } = await withDb((db) =>
         sendInvoice(
           db,
           organizationId,
@@ -44,6 +46,7 @@ export const invoices = {
           locals.auth!.userId
         )
       );
+      return { sentAt };
     },
   }),
 
@@ -58,7 +61,7 @@ export const invoices = {
       commandId: z.string().min(1).max(100),
     }),
     handler: async ({ organizationId, invoiceId, commandId }, { locals }) => {
-      return withDb((db) =>
+      const { sentAt } = await withDb((db) =>
         resendInvoice(
           db,
           organizationId,
@@ -68,6 +71,7 @@ export const invoices = {
           commandId
         )
       );
+      return { sentAt };
     },
   }),
 
@@ -78,9 +82,10 @@ export const invoices = {
       invoiceId: z.uuid(),
     }),
     handler: async ({ organizationId, invoiceId }, { locals }) => {
-      return withDb((db) =>
+      const { sentAt } = await withDb((db) =>
         recordPaperDispatch(db, organizationId, invoiceId, locals.auth!.userId)
       );
+      return { sentAt };
     },
   }),
 
@@ -112,7 +117,7 @@ export const invoices = {
       invoiceIds: z.array(z.uuid()).min(1).max(200),
     }),
     handler: async ({ organizationId, invoiceIds }, { locals }) => {
-      return withDb((db) =>
+      const result = await withDb((db) =>
         bulkSendInvoices(
           db,
           organizationId,
@@ -121,6 +126,11 @@ export const invoices = {
           locals.auth!.userId
         )
       );
+      return {
+        count: result.sent.length,
+        skippedCount: result.skipped.length,
+        skipReasons: [...new Set(result.skipped.map((s) => s.reason))],
+      };
     },
   }),
 

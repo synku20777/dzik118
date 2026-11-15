@@ -129,6 +129,8 @@ test("an admin marks an invoice with an unconfirmed email as delivered", async (
   expect(new URL(page.url()).pathname).toBe(invoicePath);
   expect(new URL(page.url()).searchParams.has("_action")).toBe(false);
   await expect(warning).toHaveCount(0);
+  // Delivered by email now, so Resend (not a no-op Send) is offered.
+  await expect(page.getByRole("button", { name: "Resend" })).toBeVisible();
 
   // A refresh is a plain GET: no resubmission, and the message is gone.
   let resubmitPrompt = false;
