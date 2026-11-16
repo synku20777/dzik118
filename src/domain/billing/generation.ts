@@ -41,6 +41,7 @@ import {
   buildPenaltySnapshot,
   resolveStatementFinancials,
 } from "../accounts/statements";
+import { syncDwellingSettlement } from "../accounts/settlement";
 import {
   ConflictError,
   NotFoundError,
@@ -604,15 +605,14 @@ export async function getInvoiceForResident(
     invoice.organizationId,
     invoice.id
   );
-  // Older paid invoices have no allocation rows: trust paidAt, as
-  // getInvoiceForDwellingPeriod does.
-  const legacyPaid = !!invoice.paidAt && paidAmount === "0.00";
-  const remainingAmount = legacyPaid
+  // Paid means its own amount is covered (ADR 0016), also by money paid on
+  // a later invoice or with no allocation row at all, as getInvoiceForDwellingPeriod does.
+  const remainingAmount = invoice.paidAt
     ? "0.00"
     : maxExact("0.00", subtractExact(invoice.amountDue, paidAmount));
   return {
     ...result,
-    paidAmount: legacyPaid ? invoice.amountDue : paidAmount,
+    paidAmount: invoice.paidAt ? invoice.amountDue : paidAmount,
     remainingAmount,
   };
 }
@@ -700,10 +700,9 @@ export async function getInvoiceForDwellingPeriod(
   );
   return {
     ...invoice,
-    outstandingAmount:
-      invoice.paidAt && allocated === "0.00"
-        ? "0.00"
-        : maxExact(subtractExact(invoice.amountDue, allocated), "0.00"),
+    outstandingAmount: invoice.paidAt
+      ? "0.00"
+      : maxExact(subtractExact(invoice.amountDue, allocated), "0.00"),
   };
 }
 
@@ -858,7 +857,19 @@ export async function prepareInvoice(
       entityId: invoiceId,
       afterData: prepared,
     });
-    return prepared;
+    // A credit already on the account can cover it in full (ADR 0016). Only
+    // this invoice can change: a newer charge never uncovers an older one.
+    await syncDwellingSettlement(
+      tx,
+      organizationId,
+      invoice.dwellingId,
+      invoice.currency
+    );
+    const [settled] = await tx
+      .select()
+      .from(invoices)
+      .where(eq(invoices.id, invoiceId));
+    return settled;
   });
 }
 

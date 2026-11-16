@@ -24,6 +24,7 @@ import {
   getInvoiceAllocatedAmount,
   postAccountEntry,
 } from "../accounts/ledger";
+import { syncDwellingSettlement } from "../accounts/settlement";
 
 export { ConflictError, NotFoundError };
 
@@ -328,16 +329,14 @@ export async function confirmMatch(
       .where(eq(paymentMatches.id, matchId))
       .returning();
     const fullySettled = compareExact(allocatedAmount, remaining) === 0;
-    if (fullySettled) {
-      await tx
-        .update(invoices)
-        .set({ paidAt: new Date(), updatedAt: new Date() })
-        .where(eq(invoices.id, invoice.id));
-      await tx
-        .update(billingCases)
-        .set({ status: "PAID", statusUpdatedAt: new Date() })
-        .where(eq(billingCases.id, invoice.billingCaseId));
-    }
+    // The money covers the oldest unpaid invoices first, whichever invoice
+    // the payment names (ADR 0016).
+    await syncDwellingSettlement(
+      tx,
+      organizationId,
+      invoice.dwellingId,
+      invoice.currency
+    );
     await recordAuditEvent(tx, {
       organizationId,
       scopeDwellingId: invoice.dwellingId,

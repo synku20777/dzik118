@@ -24,7 +24,7 @@ Candidate payment matching matches an incoming bank transaction to a single cand
 
 ### Simple daily late-fee model (no compounding or statutory penalty schedules)
 
-The late-fee calculation engine (`src/domain/accounts/late-fees.ts`) applies a configurable daily percentage rate (`daily_rate_percent`), grace period (`grace_days`), and maximum cap (`max_fee_percent`) calculated as simple interest against the overdue balance. It does not implement compounding interest, variable national reference rate tables, or tiered statutory interest schedules (such as Polish statutory delay interest, *odsetki ustawowe za opóźnienie*).
+The late-fee calculation engine (`src/domain/accounts/late-fees.ts`) applies a configurable daily percentage rate (`daily_rate_percent`), grace period (`grace_days`), and maximum cap (`max_fee_percent`) as simple interest on the own amount of each late invoice, each day once (ADR 0016). It does not implement compounding interest, variable national reference rate tables, or tiered statutory interest schedules (such as Polish statutory delay interest, *odsetki ustawowe za opóźnienie*).
 
 ### Append-only auditability requiring compensating adjustments (no direct financial mutations)
 

@@ -69,59 +69,6 @@ export async function getDwellingAccountBalance(
   return balance;
 }
 
-// The part of the balance that is migrated opening debt not yet paid. It is
-// debt whose due date and penalty basis are unknown, so it is not late-fee
-// principal (ADR 0013). Payments settle it first: protected = migrated debt
-// minus net payments, never below zero. A migrated credit protects nothing.
-// Manual credits and write-offs do not reduce it, so the result can only lower
-// a late fee, never raise it.
-export async function getProtectedOpeningDebt(
-  db: DbOrTx,
-  organizationId: string,
-  dwellingId: string,
-  currency: string,
-  asOf?: string
-): Promise<string> {
-  const rows = await db
-    .select({
-      type: accountEntries.type,
-      debit: accountEntries.debit,
-      credit: accountEntries.credit,
-      migrated: sql<boolean>`${isMigratedOpening}`,
-    })
-    .from(accountEntries)
-    .where(
-      and(
-        eq(accountEntries.organizationId, organizationId),
-        eq(accountEntries.dwellingId, dwellingId),
-        eq(accountEntries.currency, currency),
-        inArray(accountEntries.type, [
-          "OPENING_BALANCE",
-          "PAYMENT",
-          "PAYMENT_REVERSAL",
-        ]),
-        notMigratedAfter(asOf)
-      )
-    );
-  const migratedDebt = maxExact(
-    sumExact(
-      rows
-        .filter((r) => r.migrated)
-        .map((r) => subtractExact(r.debit, r.credit))
-    ),
-    "0.00"
-  );
-  const netPayments = maxExact(
-    sumExact(
-      rows
-        .filter((r) => r.type === "PAYMENT" || r.type === "PAYMENT_REVERSAL")
-        .map((r) => subtractExact(r.credit, r.debit))
-    ),
-    "0.00"
-  );
-  return maxExact(subtractExact(migratedDebt, netPayments), "0.00");
-}
-
 export async function listDwellingAccountActivity(
   db: DbOrTx,
   organizationId: string,

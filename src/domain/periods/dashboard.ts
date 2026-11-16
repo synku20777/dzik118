@@ -244,9 +244,7 @@ export async function getDashboardSummary(
   const totalPaid = sumExact(
     periodInvoices.map((invoice) => {
       const allocated = allocatedByInvoice.get(invoice.id) ?? "0.00";
-      return invoice.paidAt && allocated === "0.00"
-        ? invoice.amountDue
-        : allocated;
+      return invoice.paidAt ? invoice.amountDue : allocated;
     })
   );
   const outstandingByInvoice = new Map(
@@ -255,7 +253,7 @@ export async function getDashboardSummary(
       maxExact(
         subtractExact(
           invoice.amountDue,
-          invoice.paidAt && !allocatedByInvoice.has(invoice.id)
+          invoice.paidAt
             ? invoice.amountDue
             : (allocatedByInvoice.get(invoice.id) ?? "0.00")
         ),

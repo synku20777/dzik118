@@ -668,55 +668,41 @@ describe("migrated opening debt and late fees", () => {
     });
 
   it("opening debt is not late-fee principal; the invoice charge still is", async () => {
-    const { org, d } = await setup("IT-Bal Fee 1", "100,00");
+    const { org, d, invoice } = await setup("IT-Bal Fee 1", "100,00");
     const fin = await at(org.id, d.id);
-    // Balance 200 (100 opening + 100 January). Principal 100, not 200.
+    // Balance 200 (100 opening + 100 January). Only the invoice is late.
     expect(fin.accountBalance).toBe("200.00");
-    expect(fin.excludedOpeningDebt).toBe("100.00");
-    expect(fin.lateFee.eligiblePrincipal).toBe("100.00");
+    expect(fin.lateFee.sources.map((s) => s.invoiceId)).toEqual([invoice.id]);
     // 100 x 0.5% x 40 days = 20, capped at 10% of 100 = 10.
     expect(fin.lateFee.appliedAmount).toBe("10.00");
     expect(fin.balance.previousOutstanding).toBe("200.00");
     await cleanupOrganization(db, org.id);
   });
 
-  it("a normal customer's late fee is unchanged", async () => {
-    const { org, d } = await setup("IT-Bal Fee 0", "");
-    const fin = await at(org.id, d.id);
-    expect(fin.excludedOpeningDebt).toBe("0.00");
-    expect(fin.lateFee.eligiblePrincipal).toBe("100.00");
-    await cleanupOrganization(db, org.id);
-  });
-
   it("payments settle the migrated debt first", async () => {
+    // Issued 2026-03-01: January is late from 2026-02-20, 10 days by then.
     const { org, d } = await setup("IT-Bal Fee 2", "100,00");
-    await entry(org.id, d.id, "PAYMENT", "credit", "30.00", "pay1");
-    let fin = await at(org.id, d.id);
-    expect(fin.accountBalance).toBe("170.00");
-    expect(fin.excludedOpeningDebt).toBe("70.00");
-    expect(fin.lateFee.eligiblePrincipal).toBe("100.00");
-
-    await entry(org.id, d.id, "PAYMENT", "credit", "70.00", "pay2");
-    fin = await at(org.id, d.id);
-    expect(fin.excludedOpeningDebt).toBe("0.00");
-    expect(fin.lateFee.eligiblePrincipal).toBe("100.00");
-
-    // A reversal gives the protection back, never more than the opening debt.
-    await entry(org.id, d.id, "PAYMENT_REVERSAL", "debit", "70.00", "rev1");
-    fin = await at(org.id, d.id);
-    expect(fin.excludedOpeningDebt).toBe("70.00");
-    await entry(org.id, d.id, "PAYMENT_REVERSAL", "debit", "500.00", "rev2");
-    fin = await at(org.id, d.id);
-    expect(fin.excludedOpeningDebt).toBe("100.00");
+    const onMarch1 = () => at(org.id, d.id, "2026-03-01");
+    // 100 x 0.5% x 10 = 5.00 while January is unpaid.
+    expect((await onMarch1()).lateFee.appliedAmount).toBe("5.00");
+    // Paid on 2026-03-01, but the money settles the opening debt first.
+    await entry(org.id, d.id, "PAYMENT", "credit", "100.00", "pay1");
+    expect((await onMarch1()).lateFee.appliedAmount).toBe("5.00");
+    // Now January is paid on 2026-03-01: 9 late days, not 10.
+    await entry(org.id, d.id, "PAYMENT", "credit", "100.00", "pay2");
+    expect((await onMarch1()).lateFee.appliedAmount).toBe("4.50");
+    // A reversal makes January unpaid again.
+    await entry(org.id, d.id, "PAYMENT_REVERSAL", "debit", "100.00", "rev1");
+    expect((await onMarch1()).lateFee.appliedAmount).toBe("5.00");
     await cleanupOrganization(db, org.id);
   });
 
-  it("a migrated credit protects nothing, and an older-style opening balance stays principal", async () => {
+  it("a migrated credit pays part of the invoice; debt with no invoice gets no fee", async () => {
     const credit = await setup("IT-Bal Fee 3", "-50,00");
-    const fin = await at(credit.org.id, credit.d.id);
-    expect(fin.excludedOpeningDebt).toBe("0.00");
-    // Existing behavior: the credit lowers the balance, so principal is 50.
-    expect(fin.lateFee.eligiblePrincipal).toBe("50.00");
+    // 50 unpaid x 0.5% x 10 days.
+    expect(
+      (await at(credit.org.id, credit.d.id, "2026-03-01")).lateFee.appliedAmount
+    ).toBe("2.50");
     await cleanupOrganization(db, credit.org.id);
 
     const legacy = await setup("IT-Bal Fee 4", "");
@@ -729,8 +715,10 @@ describe("migrated opening debt and late fees", () => {
       "legacy"
     );
     const lf = await at(legacy.org.id, legacy.d.id);
-    expect(lf.excludedOpeningDebt).toBe("0.00");
-    expect(lf.lateFee.eligiblePrincipal).toBe("200.00");
+    expect(lf.lateFee.sources.map((s) => s.invoiceId)).toEqual([
+      legacy.invoice.id,
+    ]);
+    expect(lf.lateFee.appliedAmount).toBe("10.00");
     await cleanupOrganization(db, legacy.org.id);
   });
 
@@ -751,7 +739,6 @@ describe("migrated opening debt and late fees", () => {
     ).toBe("100.00");
     const later = await at(org.id, d.id, "2026-03-31");
     expect(later.accountBalance).toBe("200.00");
-    expect(later.excludedOpeningDebt).toBe("100.00");
     await cleanupOrganization(db, org.id);
   });
 });

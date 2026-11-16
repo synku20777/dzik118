@@ -279,7 +279,7 @@ state, and the dead CSS.
 Three reviewers (Claude Opus, GPT Sol, and Gemini) read the code. A person
 confirmed each bug in the code. These bugs are not fixed yet.
 
-- [ ] **Late fees charge too much.** `resolveStatementFinancials` in
+- [x] **Late fees charge too much.** Fixed on 2026-11-16 (ADR 0016). `resolveStatementFinancials` in
   `src/domain/accounts/statements.ts` calculates the late fee for each new
   invoice. It uses the full late balance, and this balance includes the late
   fees of earlier invoices. It counts the days from the due date of the oldest
@@ -290,7 +290,8 @@ confirmed each bug in the code. These bugs are not fixed yet.
   from its due date (plus the grace days) to the payment date. The app charges
   it one time, as a separate line on the next invoice. Latvian law can limit
   contractual late fees.
-- [ ] **A paid debt stays open on the older invoice.** Each invoice carries
+- [x] **A paid debt stays open on the older invoice.** Fixed on 2026-11-16
+  (ADR 0016). Each invoice carries
   the unpaid amount of the earlier invoices. When a resident pays a later
   invoice in full, the app marks only that invoice as paid. The older invoice
   stays unpaid, because only `confirmMatch` sets `paidAt`, and only on the
