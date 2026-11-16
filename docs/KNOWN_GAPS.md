@@ -285,8 +285,11 @@ confirmed each bug in the code. These bugs are not fixed yet.
   fees of earlier invoices. It counts the days from the due date of the oldest
   unpaid invoice. Each new invoice counts these days again, so the resident
   pays for the same days more than one time. ADR 0003 says that late fees do
-  not compound. Before the fix, confirm the rule: which debt gets a fee, and
-  from which date. Latvian law can limit contractual late fees.
+  not compound. Owner rule (2026-11-16): each invoice gets a late fee on its
+  own amount only, not on earlier fees or carried debt. The fee counts the days
+  from its due date (plus the grace days) to the payment date. The app charges
+  it one time, as a separate line on the next invoice. Latvian law can limit
+  contractual late fees.
 - [ ] **A paid debt stays open on the older invoice.** Each invoice carries
   the unpaid amount of the earlier invoices. When a resident pays a later
   invoice in full, the app marks only that invoice as paid. The older invoice
@@ -294,7 +297,15 @@ confirmed each bug in the code. These bugs are not fixed yet.
   matched invoice. The older invoice then becomes Overdue, and the portal shows
   it as owed. It also blocks direct payments to the dwelling, and the late fee
   continues to count from its due date. Fix this bug together with the late-fee
-  bug. The fix must also handle a payment reversal.
+  bug. The fix must also handle a payment reversal. Owner rules (2026-11-16):
+  1. A payment goes into the dwelling account first.
+  2. Each time a payment comes in, the app covers the open invoices oldest
+     first, by the own amount of each invoice. It does this also when the bank
+     reference names a newer invoice.
+  3. An invoice with its own amount covered shows Paid, also when it was paid
+     late. Its late fee goes to the next invoice as a one-time line.
+  4. Money that is left after all open invoices are covered stays as a credit.
+     The credit reduces the next invoice.
 - [?] **A new resident sees the data of the previous resident.**
   `dwelling_access` has no start date. A new resident of a dwelling sees the
   earlier invoices (with the previous name and address), payments, and
@@ -318,7 +329,24 @@ confirmed each bug in the code. These bugs are not fixed yet.
   prepares the invoice, the resident cannot change a reading. Thus a resident
   who enters a wrong value cannot correct it, although the deadline is still
   in the future. Also, when an admin moves a prepared invoice back to Draft to
-  correct it, the scheduler prepares it again the next night.
+  correct it, the scheduler prepares it again the next night. Owner rule
+  (2026-11-16): keep the timing. A corrected invoice (see below) fixes a wrong
+  reading. The scheduler must not prepare again an invoice that an admin moved
+  back to Draft.
+- [ ] **No corrected invoice for a wrong charge.** Today an admin cannot
+  replace a sent invoice that has a wrong charge. Owner rules (2026-11-16):
+  1. Only an admin can make a corrected invoice. A resident reports the error
+     by message.
+  2. The app sends the corrected invoice immediately. Its number is the old
+     number with a suffix (format to confirm with the accountant, for example
+     `-K1`).
+  3. The old invoice stays in the history as "Cancelled, replaced by" the new
+     number. The admin and the resident both see this mark. The app does not
+     count the old invoice for the balance, late fees, reminders, or the
+     "already sent" checks.
+  4. Payments on the old invoice move to the corrected invoice automatically.
+     The resident pays only the difference, or gets a credit when the new
+     amount is lower.
 - [ ] **Meter units are not checked.** The app adds the consumption of the
   meters in a rule without a unit check. For example, 2 m³ and 1,000 liters
   give 1,002 units. Owner decision: the app must check the units. Units are
