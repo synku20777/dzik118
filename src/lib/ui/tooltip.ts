@@ -34,12 +34,28 @@ let keyNav = false;
 let lastHidden = 0;
 let installed = false;
 
+// Whether a text part is cut. scrollWidth and clientWidth are whole pixels and
+// can tie while an ellipsis already shows, so compare the text's fractional
+// width with the box when they do.
+function partCut(part: Element): boolean {
+  if (part.scrollWidth > part.clientWidth) return true;
+  const range = document.createRange();
+  range.selectNodeContents(part);
+  return (
+    range.getBoundingClientRect().width >
+    part.getBoundingClientRect().width + 0.01
+  );
+}
+
 function textFor(el: Element): string | null {
   const own = el.getAttribute("data-tip");
   const clipped = el.hasAttribute("data-tip-clipped");
   if (own !== null || clipped) {
+    // A middle-truncated name clips inside its .mid-start part, not itself.
+    const part = el.querySelector(".mid-start");
     if (
       clipped &&
+      (!part || !partCut(part)) &&
       el.scrollWidth <= el.clientWidth + 1 &&
       el.scrollHeight <= el.clientHeight + 1
     ) {

@@ -61,6 +61,7 @@ export const ICONS = {
   dots: '<path d="M4 12a1 1 0 1 0 2 0a1 1 0 1 0-2 0m7 0a1 1 0 1 0 2 0a1 1 0 1 0-2 0m7 0a1 1 0 1 0 2 0a1 1 0 1 0-2 0" />',
   send: '<path d="M10 14L21 3m0 0l-6.5 18a.55.55 0 0 1-1 0L10 14l-7-3.5a.55.55 0 0 1 0-1z" />',
   plus: '<path d="M12 5v14m-7-7h14" />',
+  minus: '<path d="M5 12h14" />',
   "arrow-left": '<path d="M5 12h14M5 12l6 6m-6-6l6-6" />',
   "arrow-right": '<path d="M5 12h14m-6 6l6-6m-6-6l6 6" />',
   "chevron-right": '<path d="m9 6l6 6l-6 6" />',

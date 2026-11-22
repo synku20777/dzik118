@@ -2019,6 +2019,17 @@ html:has(.context-drawer:modal) {
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
   }
+  .admin-mobile .brand {
+    min-width: 0;
+  }
+  .admin-mobile .brand-mark {
+    flex-shrink: 0;
+  }
+  .admin-mobile-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   /* The nav itself lives in #mobile-nav-drawer (a <dialog>, styled via the
      shared .context-drawer rules) so it slides in from the right instead
      of expanding inline below this bar. Two classes (not one) so this

@@ -221,7 +221,9 @@ state, and the dead CSS.
   the old page. Reword it for the next-step band, the money block and the
   attention list.
 - [x] **Overdue rows link to plain Payments.** Fixed: the row links to
-  `/payments?q=<dwelling number>`.
+  `/payments?q=<dwelling number>`. That search also matched amounts and
+  references, so since 2026-11-19 the row opens the dwelling's account
+  statement (`/payments/ledger?dwelling=<id>`).
 - [x] **Phone: primary button below the fold (2026-11-11).** Fixed: where the
   money card is one column, the breakdown starts closed behind "Invoice
   breakdown", and the button sits at 722-766 px at 390 x 812. The breakdown is
@@ -273,6 +275,114 @@ state, and the dead CSS.
 - [ ] **Not built.** Supplier-cost comparison, water-difference alert,
   status badge (14 px) and eyebrow (12 px) sizes, and `getCurrentOpenPeriod`
   can still return the starting-readings period (the dashboard skips it itself).
+
+## Dashboard review (2026-11-19)
+
+GPT Sol reviewed the dashboard against the dashboard-design skill. Fixed on
+2026-11-19: the overdue part of "Still unpaid" is its own line; the send queue
+counts every invoice with no send date and is called "not sent yet"; "Sent
+invoices" counts send dates, so a paid invoice that was never sent stays in the
+queue; delivery problems come from the latest send attempt, with "not
+confirmed" apart from "could not be delivered"; an older locked month says
+"This month is closed." and a month with no cases says so; missing data is
+listed before overdue rows, the footer names the hidden groups and the count
+leaves out next steps; the full list shows blocker reasons in full; the
+Readings card is gone (the month progress counts readings); the compact header
+names the building.
+
+- [ ] **Credit larger than the invoice.** A manual credit larger than an
+  invoice makes its amount due 0 and carries the rest as credit. The breakdown
+  shows the whole adjustment, so its lines do not add up to "Total to pay".
+  Fix: a "Credit carried forward" line. Left as is by the owner on 2026-11-19.
+- [ ] **Unpaid after an older payment.** "Still unpaid" uses payments matched
+  to each invoice, so a newer invoice can show debt that an older payment
+  already covered. This is the consequence ADR 0016 accepts.
+- [ ] **Readings counts billing inputs.** "Readings 13 of 16" counts cases with
+  every billing input. A missing manual amount or tariff also counts as a
+  missing reading and leads to "Enter readings". Not changed on 2026-11-19.
+- [ ] **Money card scope on phones.** "Includes invoices that are not sent
+  yet." is inside the closed breakdown on phones, and the total leaves out
+  dwellings with no invoice yet. Not changed on 2026-11-19.
+- [ ] **Unused strings.** "{n} invoices are ready to send.", "Draft and
+  prepared invoices", "{count} still to enter" and "All readings are in" are no
+  longer used by the dashboard.
+- [ ] **Demo data.** The demo organisation holds an end-to-end test leftover,
+  dwelling "00-E2E-1790005821669" with five test meters, so it counts 16
+  dwellings instead of 15.
+
+## Month workbench review (2026-11-19)
+
+GPT Sol reviewed the month workbench against the dashboard-design and
+uncodixfy skills. Fixed on 2026-11-19: a paper-only prepared invoice offers
+"Record paper dispatch" instead of an email send; a suppressed address or an
+unconfirmed send attempt offers "Check delivery" and leaves bulk send; an
+email added to the dwelling after the invoice was made says the invoice keeps
+its old details; a missing tariff or meter links to the tariffs or the
+dwelling instead of "Enter readings", and a case with an invoice keeps its
+invoice action; search wins over the Missing data empty text; "Generate and
+refresh drafts" confirms its whole-month scope and is hidden with nothing to
+do; the readings drawer includes a meter archived during the month and
+focuses the clicked meter; "Applying" counts only tariffs that can bill a
+dwelling this month; routine stages are plain text and only Missing data and
+Overdue keep a badge; row actions are secondary; overdue rows show the due
+date and what is unpaid and open the account statement; the selection toolbar
+is opaque and pinned to the bottom on phones; select-all is hidden on phones
+and row checkboxes have a 44 px tap area on touch screens.
+
+Status cell (2026-11-19, owner annotations): a case's problems are one line
+under a caption-size status tag instead of a stack. The last named problem is
+cut at its end, a name ending in digits keeps its last digits (up to six) and
+is cut in the middle, and "+N" is never cut and opens a menu that links every
+hidden problem. "Paper delivery" sits under the dwelling name. GPT Sol
+reviewed it over four rounds; the last fix (the tooltip's fractional-width
+check for a middle-cut name) was verified in the browser, not re-reviewed.
+
+- [ ] **Locked or archived: read-only.** A locked month or an archived
+  organization still offers bulk selection and editable drawers; the server
+  refuses the writes. Not changed on 2026-11-19.
+- [ ] **Invoice currency.** Row amounts use the organization's current
+  currency, and the money strip leaves out invoices in an earlier currency
+  without saying so. Matters only after a currency change.
+- [ ] **Select all.** "Select all eligible invoices" also selects blocked
+  rows, and more than 200 selected invoices fail the whole request.
+- [ ] **Bulk results.** A bulk outcome names the skip reasons, not the
+  dwellings that were skipped.
+- [ ] **Demo data.** Besides "00-E2E-…", the demo organisation holds test
+  leftovers "zz-open-…" (two) and "zz-locked-…".
+
+## Building view (2026-11-19)
+
+The Dwellings page has a Table | Building switch (remembered in a cookie). The
+building shows entrances side by side, floors as rows of tiles with this
+month's stage (missing data dashed with "?", overdue warm), a door with each
+entrance's name, a strip below for commercial units, parking and storage, and a
+"Not placed" row. Arrange mode (not on phones) moves tiles by drag and drop or
+by select-then-place with keyboard or touch, adds and renames entrances, and
+adds or removes floors and places per floor. The layout is saved whole for the
+organization (migration 0026: `building_entrances`, `dwelling_placements`) and
+audited; before any save the building is filled in number order, four per
+floor.
+
+Redesign (2026-11-20): the view is a React island
+(`src/components/building/BuildingEditor.tsx`, the first in the project;
+`@astrojs/react`, React 19, about 66 KB gzipped, loaded only where the island
+is). The layout is plain state edited by `src/lib/ui/building-layout.ts`.
+Every change saves on its own (one save at a time, the latest layout wins) with
+a quiet status and Retry; Undo and Ctrl+Z step back. Moves glide (180 ms, off
+under reduced motion), moved tiles get a brief tint, the place under a drag is
+tinted, and arrow keys move a selected tile. The roof is gone.
+
+- [ ] **One audit row per save.** Autosave writes an audit row for every save,
+  each with the whole layout before and after. Moves made while a save is on
+  its way merge into the next save, so they share one row.
+- [ ] **Error detail in English.** A refused save shows a translated sentence
+  plus the server's English detail.
+- [ ] **Arranging on phones.** Phones show the building but cannot arrange it.
+- [ ] **Back and Forward with an unsaved change.** Only a save in progress,
+  waiting or failed asks before leaving; Back and Forward then hand the
+  navigation to the browser, whose own prompt can ask a second time.
+- [ ] **No end-to-end test.** The editor is covered by unit tests of its layout
+  edits and by read-only browser checks, not by a Playwright spec.
 
 ## Bugs from the council audit (2026-11-15)
 

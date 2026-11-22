@@ -29,6 +29,7 @@ import {
   lockPeriod,
 } from "../../src/domain/periods/periods";
 import {
+  listActiveMeterTypesForPeriod,
   listCasesForPeriod,
   listReadingGridForPeriod,
 } from "../../src/domain/periods/cases";
@@ -966,5 +967,41 @@ describe("reading grid", () => {
     expect(filled.consumption).toBe("0.000");
 
     await cleanupOrg(org.id);
+  });
+});
+
+describe("active meter types for a period", () => {
+  it("counts a meter archived during the month, not one archived before it", async () => {
+    const { org, dwelling, meter } = await setupOrgWithDwellingAndMeter(
+      "IT-E Org meter types"
+    );
+    try {
+      const period = await createPeriod(
+        db,
+        org.id,
+        {
+          year: 2026,
+          month: 3,
+          startsOn: "2026-03-01",
+          endsOn: "2026-03-31",
+          invoiceIssueDate: "2026-04-01",
+          invoiceDueDate: "2026-04-15",
+        },
+        seedAdminId
+      );
+      const archiveOn = (date: string) =>
+        db.$client.query("update meters set archived_at = $1 where id = $2", [
+          date,
+          meter.id,
+        ]);
+      await archiveOn("2026-03-15T00:00:00Z");
+      let types = await listActiveMeterTypesForPeriod(db, org.id, period);
+      expect([...types.get(dwelling.id)!]).toEqual(["COLD_WATER"]);
+      await archiveOn("2026-02-15T00:00:00Z");
+      types = await listActiveMeterTypesForPeriod(db, org.id, period);
+      expect([...types.get(dwelling.id)!]).toEqual([]);
+    } finally {
+      await cleanupOrg(org.id);
+    }
   });
 });

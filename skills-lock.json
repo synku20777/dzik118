@@ -1,6 +1,13 @@
 {
   "version": 2,
   "skills": {
+    "dashboard-design": {
+      "source": "abdiraimov-otabek/dashboard-design-skill",
+      "commit": "463b8fdf62c640180ec1ba731f3616c2319bf68c",
+      "sourceType": "github",
+      "skillPath": "skills/dashboard-design/SKILL.md",
+      "computedHash": "785d12f28f9c16b48a4167676d6485830a647b01e0934a4ce53f0ea14cd7a4b1"
+    },
     "frontend-design": {
       "source": "vercel-labs/open-agents",
       "sourceType": "github",

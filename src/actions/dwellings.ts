@@ -19,12 +19,54 @@ import {
   trimmedEmailOrNull,
 } from "./_clearable-fields";
 import { withRequestDb as withDb } from "../lib/db-request";
+import {
+  BUILDING_LIMITS,
+  resetBuildingLayout,
+  saveBuildingLayout,
+} from "../domain/organizations/building";
 import { getSupabaseAdmin } from "./_supabase_admin";
 import { orgAction } from "./_org-action";
 
 const dwellingType = z.enum(dwellingTypeEnum.enumValues);
 
+const placement = z.object({
+  dwellingId: z.uuid(),
+  floor: z.number().int().min(0),
+  slot: z.number().int().min(0),
+});
+
 export const dwellings = {
+  // The building view's arrangement, saved whole (domain/organizations/building).
+  saveLayout: orgAction({
+    accept: "json",
+    input: z.object({
+      organizationId: z.uuid(),
+      entrances: z
+        .array(
+          z.object({
+            name: z.string().max(BUILDING_LIMITS.nameLength),
+            floors: z.number().int(),
+            columns: z.number().int(),
+            placements: z.array(placement).max(5000),
+          })
+        )
+        .max(BUILDING_LIMITS.entrances),
+    }),
+    handler: async ({ organizationId, entrances }, { locals }) =>
+      withDb((db) =>
+        saveBuildingLayout(db, organizationId, entrances, locals.auth!.userId)
+      ),
+  }),
+
+  resetLayout: orgAction({
+    accept: "form",
+    input: z.object({ organizationId: z.uuid() }),
+    handler: async ({ organizationId }, { locals }) =>
+      withDb((db) =>
+        resetBuildingLayout(db, organizationId, locals.auth!.userId)
+      ),
+  }),
+
   // DWL-001
   create: orgAction({
     accept: "form",

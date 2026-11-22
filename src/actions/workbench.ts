@@ -12,6 +12,7 @@ import {
   listMetersWithReadingForPeriod,
 } from "../domain/periods/cases";
 import { getPeriod } from "../domain/periods/periods";
+import { wasMeterActiveDuringPeriod } from "../domain/periods/case-readiness";
 import { withRequestDb as withDb } from "../lib/db-request";
 import { orgAction } from "./_org-action";
 
@@ -67,8 +68,9 @@ export const workbench = {
                 invoiceNumber: billingCase.invoiceNumber,
               }
             : null,
+          // A meter archived during the period still needs its reading.
           meters: meters
-            .filter((m) => !m.archivedAt)
+            .filter((m) => wasMeterActiveDuringPeriod(m, period))
             .map((m) => ({
               meterId: m.meterId,
               type: m.type,

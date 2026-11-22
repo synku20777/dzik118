@@ -17,6 +17,7 @@ import {
 } from "../../../../../domain/onboarding/progress";
 import { withRequestDb } from "../../../../../lib/db-request";
 import { orgLocalDateString } from "../../../../../lib/org-time";
+import { sumExact } from "../../../../../lib/decimal2";
 import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
 import EmptyState from "../../../../../components/ui/EmptyState.astro";
 import AdminContextDrawer from "../../../../../components/ui/AdminContextDrawer.astro";
@@ -176,8 +177,8 @@ function nextActionSentence(value: DashboardSummary): string {
     return plural(
       locale,
       count,
-      "{n} invoice is ready to send.",
-      "{n} invoices are ready to send."
+      "{n} invoice is not sent yet.",
+      "{n} invoices are not sent yet."
     );
   if (key === "REVIEW_PAYMENTS")
     return plural(
@@ -187,9 +188,13 @@ function nextActionSentence(value: DashboardSummary): string {
       "{n} invoices are waiting for payment."
     );
   return t(
-    key === "CREATE_NEXT_PERIOD"
-      ? "This month is closed. Create the next month to continue."
-      : "Everything for this month is done."
+    {
+      CREATE_NEXT_PERIOD:
+        "This month is closed. Create the next month to continue.",
+      LOCKED: "This month is closed.",
+      NO_CASES: "No billing cases yet.",
+      ALL_DONE: "Everything for this month is done.",
+    }[key]
   );
 }
 
@@ -197,9 +202,11 @@ const actionLabel = summary
   ? {
       ENTER_READINGS: "Enter readings",
       GENERATE_INVOICES: "Generate invoices",
-      SEND_INVOICES: "Send invoices",
+      SEND_INVOICES: "Review unsent invoices",
       REVIEW_PAYMENTS: "Review payments",
       CREATE_NEXT_PERIOD: "Create next month",
+      LOCKED: "Open workbench",
+      NO_CASES: "Open workbench",
       ALL_DONE: "Open workbench",
     }[summary.nextAction.key]
   : null;
@@ -212,6 +219,8 @@ const actionHref = summary
       SEND_INVOICES: `${workbenchPath}?status=UNSENT`,
       REVIEW_PAYMENTS: `${base}/payments`,
       CREATE_NEXT_PERIOD: `${base}/periods#create-period`,
+      LOCKED: workbenchPath,
+      NO_CASES: workbenchPath,
       ALL_DONE: workbenchPath,
     }[summary.nextAction.key]
   : null;
@@ -225,6 +234,8 @@ const currentProgressIndex = summary
       SEND_INVOICES: 2,
       REVIEW_PAYMENTS: 3,
       CREATE_NEXT_PERIOD: -1,
+      LOCKED: -1,
+      NO_CASES: -1,
       ALL_DONE: -1,
     }[summary.nextAction.key]
   : -1;
@@ -308,6 +319,15 @@ function formatMoney(value: string, currency: string): string {
 const collectionRatio = summary
   ? collectionShare(summary.totalPaid, summary.amountDue)
   : null;
+// Only invoices in today's currency have an amount (see the summary), so the
+// count and the sum cover the same invoices.
+const overdueItems =
+  summary?.needsAttention.filter(
+    (item) => item.status === "OVERDUE" && item.overdueAmount !== null
+  ) ?? [];
+const overdueTotal = sumExact(
+  overdueItems.map((item) => item.overdueAmount ?? "0.00")
+);
 
 type MissingItem =
   | { label: string | null; meterType: string; reason?: "NO_READING" }
@@ -398,19 +418,40 @@ if (summary?.proposedPaymentCount) {
     icon: "clock",
   });
 }
-if (summary?.deliveryFailureCount) {
+// One invoice opens itself; several open the send queue they sit in.
+const deliveryHref = (ids: string[]) =>
+  ids.length === 1
+    ? `${workbenchPath}/invoices/${ids[0]}`
+    : `${workbenchPath}?status=UNSENT`;
+if (summary?.deliveryFailedIds.length) {
   attentionRows.push({
     kind: "summary",
     key: "delivery",
     label: plural(
       locale,
-      summary.deliveryFailureCount,
+      summary.deliveryFailedIds.length,
       "{n} invoice could not be delivered.",
       "{n} invoices could not be delivered."
     ),
-    href: `${workbenchPath}?status=PREPARED`,
+    href: deliveryHref(summary.deliveryFailedIds),
     actionLabel: "Review failed deliveries",
     tone: "danger",
+    icon: "alert-triangle",
+  });
+}
+if (summary?.deliveryUnknownIds.length) {
+  attentionRows.push({
+    kind: "summary",
+    key: "unconfirmed",
+    label: plural(
+      locale,
+      summary.deliveryUnknownIds.length,
+      "{n} invoice delivery is not confirmed.",
+      "{n} invoice deliveries are not confirmed."
+    ),
+    href: deliveryHref(summary.deliveryUnknownIds),
+    actionLabel: "Check delivery",
+    tone: "warning",
     icon: "alert-triangle",
   });
 }
@@ -449,35 +490,36 @@ if (
     icon: "receipt-euro",
   });
 }
-const readyToSendCount = summary
-  ? summary.caseStatusCounts.DRAFT + summary.caseStatusCounts.PREPARED
-  : 0;
-if (readyToSendCount && summary?.nextAction.key !== "SEND_INVOICES") {
+// Every invoice with no send date. Not "ready to send": a draft that cannot be
+// prepared is in it too.
+const unsentCount = summary?.unsentInvoiceIds.length ?? 0;
+if (unsentCount && summary?.nextAction.key !== "SEND_INVOICES") {
   attentionRows.push({
     kind: "summary",
     key: "send",
     label: plural(
       locale,
-      readyToSendCount,
-      "{n} invoice is ready to send.",
-      "{n} invoices are ready to send."
+      unsentCount,
+      "{n} invoice is not sent yet.",
+      "{n} invoices are not sent yet."
     ),
     href: `${workbenchPath}?status=UNSENT`,
-    actionLabel: "Send invoices",
+    actionLabel: "Review unsent invoices",
     tone: "info",
     icon: "send",
   });
 }
-if (
-  summary?.caseStatusCounts.SENT &&
-  summary.nextAction.key !== "REVIEW_PAYMENTS"
-) {
+// Same count as the payment step (sent, not paid); overdue ones have own rows.
+const waitingCount = summary
+  ? Math.max(0, summary.awaitingPaymentCount - summary.caseStatusCounts.OVERDUE)
+  : 0;
+if (waitingCount && summary?.nextAction.key !== "REVIEW_PAYMENTS") {
   attentionRows.push({
     kind: "summary",
     key: "waiting",
     label: plural(
       locale,
-      summary.caseStatusCounts.SENT,
+      waitingCount,
       "{n} invoice is waiting for payment.",
       "{n} invoices are waiting for payment."
     ),
@@ -489,8 +531,9 @@ if (
 }
 
 function attentionPriority(row: AttentionRow): number {
-  if (row.kind === "case") return row.item.status === "OVERDUE" ? 2 : 3;
-  if (row.key === "delivery") return 0;
+  // Missing data first: it blocks the month's next step (the main button).
+  if (row.kind === "case") return row.item.status === "MISSING_DATA" ? 2 : 3;
+  if (row.key === "delivery" || row.key === "unconfirmed") return 0;
   if (["unmatched", "proposed", "blocked"].includes(row.key)) return 1;
   return 4;
 }
@@ -537,6 +580,26 @@ const groupHeading: Record<
 };
 const groupTotal = (key: GroupKey) =>
   attentionRows.filter((row) => groupKey(row) === key).length;
+// Routine next steps are listed but are not problems, so they are not counted.
+const problemCount = attentionRows.length - groupTotal("next");
+// The footer names what the cap hides, so a whole group is never invisible.
+const hiddenGroups = (["missing", "overdue", "next"] as const)
+  .map((key) => ({
+    key,
+    count:
+      groupTotal(key) -
+      visibleAttentionRows.filter((row) => groupKey(row) === key).length,
+  }))
+  .filter((group) => group.count > 0);
+// Reasons are cut to two in the short list; the full list shows them all.
+const reasonLimit = showAllAttention ? undefined : 2;
+const anyReasonClipped = visibleAttentionRows.some(
+  (row) =>
+    row.kind === "case" &&
+    row.item.status === "MISSING_DATA" &&
+    missingReasons(row.item.missingData) !==
+      missingReasons(row.item.missingData, 2)
+);
 const hiddenInGroup = (key: GroupKey, visible: number) =>
   Math.max(0, groupTotal(key) - visible);
 const attentionGroups: {
@@ -801,29 +864,39 @@ function readingsHref(
                       <a
                         class="collection-row"
                         data-metric="unpaid"
-                        data-tone={
-                          summary.caseStatusCounts.OVERDUE
-                            ? "danger"
-                            : undefined
-                        }
                         href={workbenchPath}
                       >
-                        <span>
-                          {summary.caseStatusCounts.OVERDUE > 0 && (
-                            <Icon name="alert-triangle" size="xs" />
-                          )}
-                          <span class="collection-row-label">
-                            {t("Still unpaid")}
-                          </span>
-                          {summary.caseStatusCounts.OVERDUE > 0 && (
-                            <span class="sr-only"> ({t("Overdue")})</span>
-                          )}
+                        <span class="collection-row-label">
+                          {t("Still unpaid")}
                         </span>
                         <strong>
                           {formatMoney(
                             summary.totalOutstanding,
                             organization.currency
                           )}
+                        </strong>
+                      </a>
+                    )}
+                    {/* Only the part past its due date is a problem; the rest
+                        of "Still unpaid" may not even be sent yet. */}
+                    {overdueItems.length > 0 && (
+                      <a
+                        class="collection-row"
+                        data-metric="overdue"
+                        data-tone="danger"
+                        href={`${workbenchPath}?status=OVERDUE`}
+                      >
+                        <span>
+                          <Icon name="alert-triangle" size="xs" />
+                          <span class="collection-row-label">
+                            {t("Overdue payments")}
+                          </span>
+                          <span class="collection-share">
+                            {formatNumber(String(overdueItems.length), locale)}
+                          </span>
+                        </span>
+                        <strong>
+                          {formatMoney(overdueTotal, organization.currency)}
                         </strong>
                       </a>
                     )}
@@ -891,7 +964,7 @@ function readingsHref(
                       </dd>
                     </div>
                   </dl>
-                  {readyToSendCount > 0 && (
+                  {unsentCount > 0 && (
                     <p class="collection-note">
                       {t("Includes invoices that are not sent yet.")}
                     </p>
@@ -899,59 +972,6 @@ function readingsHref(
                 </details>
               </div>
             </div>
-            <a
-              class="dashboard-metric panel"
-              data-metric="readings"
-              href={`${workbenchPath}?status=MISSING_DATA`}
-            >
-              <span class="metric-label">{t("Readings")}</span>
-              <div class="metric-hero">
-                <strong class="metric-figure">
-                  {formatNumber(String(summary.progress.readingsDone), locale)}
-                  <span class="metric-denominator">
-                    {" "}
-                    /{" "}
-                    {formatNumber(
-                      String(summary.progress.dwellingsTotal),
-                      locale
-                    )}
-                  </span>
-                </strong>
-                <span class="collection-share">
-                  {formatCollectionShare(
-                    summary.progress.dwellingsTotal
-                      ? summary.progress.readingsDone /
-                          summary.progress.dwellingsTotal
-                      : null,
-                    locale
-                  )}
-                </span>
-              </div>
-              <div class="metric-bar" aria-hidden="true">
-                <span
-                  style={`width:${
-                    summary.progress.dwellingsTotal
-                      ? (summary.progress.readingsDone /
-                          summary.progress.dwellingsTotal) *
-                        100
-                      : 0
-                  }%`}
-                />
-              </div>
-              <span class="metric-foot">
-                {summary.progress.dwellingsTotal -
-                  summary.progress.readingsDone >
-                0
-                  ? fill(t("{count} still to enter"), {
-                      count: String(
-                        summary.progress.dwellingsTotal -
-                          summary.progress.readingsDone
-                      ),
-                    })
-                  : t("All readings are in")}
-                <Icon name="arrow-right" size="xs" />
-              </span>
-            </a>
           </section>
 
           <section
@@ -963,7 +983,9 @@ function readingsHref(
             </h2>
             <div class="month-status-lead">
               <p class="month-status-sentence">{nextActionSentence(summary)}</p>
-              {summary.nextAction.key === "ALL_DONE" ? (
+              {["ALL_DONE", "LOCKED", "NO_CASES"].includes(
+                summary.nextAction.key
+              ) ? (
                 <a class="month-status-link" href={actionHref!}>
                   {t(actionLabel!)}
                   <Icon name="arrow-right" size="sm" />
@@ -1060,7 +1082,7 @@ function readingsHref(
               <div class="dashboard-section-heading">
                 <div>
                   <h2 id="dashboard-attention-title">{t("Needs attention")}</h2>
-                  <p>{attentionItemCount}</p>
+                  {problemCount > 0 && <p>{problemCount}</p>}
                 </div>
               </div>
 
@@ -1163,14 +1185,17 @@ function readingsHref(
                                       }
                                       data-tip-clipped={
                                         missingReasons(row.item.missingData) ===
-                                        missingReasons(row.item.missingData, 2)
+                                        missingReasons(
+                                          row.item.missingData,
+                                          reasonLimit
+                                        )
                                           ? ""
                                           : undefined
                                       }
                                     >
                                       {missingReasons(
                                         row.item.missingData,
-                                        2
+                                        reasonLimit
                                       ) ||
                                         t(
                                           "Readings are required before generating an invoice."
@@ -1178,7 +1203,7 @@ function readingsHref(
                                       {missingReasons(row.item.missingData) !==
                                         missingReasons(
                                           row.item.missingData,
-                                          2
+                                          reasonLimit
                                         ) && (
                                         <span class="sr-only">
                                           {" "}
@@ -1204,9 +1229,9 @@ function readingsHref(
                                 ) : row.item.status === "OVERDUE" ? (
                                   <a
                                     class="attention-action"
-                                    href={`${base}/payments?q=${encodeURIComponent(row.item.dwellingNumber)}`}
+                                    href={`${base}/payments/ledger?dwelling=${row.item.dwellingId}`}
                                   >
-                                    {t("Review payments")}
+                                    {t("Account statement")}
                                     <Icon name="arrow-right" size="xs" />
                                   </a>
                                 ) : (
@@ -1240,12 +1265,24 @@ function readingsHref(
                             )
                           )}
                           {groupIndex === attentionGroups.length - 1 &&
-                            hiddenAttentionCount > 0 && (
+                            (hiddenAttentionCount > 0 ||
+                              (!showAllAttention && anyReasonClipped)) && (
                               <div class="attention-more-row" role="listitem">
                                 <span>
-                                  {fill(t("+{n} more"), {
-                                    n: hiddenAttentionCount,
-                                  })}
+                                  {hiddenAttentionCount > 0 &&
+                                    fill(t("+{n} more"), {
+                                      n: hiddenAttentionCount,
+                                    })}
+                                  {hiddenGroups.map((hidden) => (
+                                    <span class="attention-more-group">
+                                      {" · "}
+                                      {groupHeading[hidden.key].label}{" "}
+                                      {formatNumber(
+                                        String(hidden.count),
+                                        locale
+                                      )}
+                                    </span>
+                                  ))}
                                 </span>
                                 <a href={attentionAllHref}>
                                   {fill(t("Show all ({n})"), {
@@ -1499,18 +1536,14 @@ function readingsHref(
   .dashboard-period-nav a:hover {
     background: var(--color-hover);
   }
-  /* Side by side while the money card has room for its two columns (35rem);
-     below that each card takes a full row, so neither is stretched empty. */
+  /* One money card. Readings are counted once, in the month progress below. */
   .dashboard-metrics {
     display: flex;
     flex-wrap: wrap;
     gap: 1rem;
   }
   .dashboard-metric[data-metric="collection"] {
-    flex: 2 1 35rem;
-  }
-  .dashboard-metric[data-metric="readings"] {
-    flex: 1 1 14rem;
+    flex: 1 1 100%;
   }
   .dashboard-metric {
     display: flex;
@@ -1519,9 +1552,6 @@ function readingsHref(
     padding: 1rem 1.5rem;
     min-width: 0;
     text-decoration: none;
-  }
-  a.dashboard-metric:hover {
-    background: var(--color-hover);
   }
   .metric-label {
     font-size: var(--text-sm);
@@ -1536,19 +1566,6 @@ function readingsHref(
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-  .metric-hero {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-  .metric-denominator {
-    color: var(--color-muted);
-    font-size: 0.7em;
-    font-weight: 500;
-  }
-  /* One bar for both cards: primary for progress, success for money. */
   .metric-bar {
     height: 0.5rem;
     overflow: hidden;
@@ -1562,14 +1579,6 @@ function readingsHref(
   }
   .metric-bar[data-tone="success"] > span {
     background: var(--color-success);
-  }
-  .metric-foot {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
   }
   /* Money: the total and what has come in on the left, the sum that makes the
      total on the right. One column when the card is too narrow for both. */
@@ -1655,9 +1664,6 @@ function readingsHref(
   }
   .collection-row .collection-share {
     margin-inline-start: 0.375rem;
-  }
-  .metric-hero .collection-share {
-    font-size: var(--text-xl);
   }
   .collection-share[data-complete] {
     color: var(--color-success);
@@ -1904,12 +1910,6 @@ function readingsHref(
   }
   .attention-details strong {
     color: var(--color-destructive);
-  }
-  .attention-reason {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden;
   }
   .attention-summary-row {
     grid-template-columns: auto minmax(0, 1fr) auto;

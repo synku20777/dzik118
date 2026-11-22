@@ -183,6 +183,13 @@
       "when": 1793191403885,
       "tag": "0025_direct_payments_and_cash",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795117029947,
+      "tag": "0026_building_layout",
+      "breakpoints": true
     }
   ]
 }

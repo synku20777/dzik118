@@ -95,6 +95,8 @@ export async function cleanupOrganization(
     "delete from billing_periods where organization_id = $1",
     "delete from billing_rule_assignments where organization_id = $1",
     "delete from billing_rules where organization_id = $1",
+    "delete from dwelling_placements where organization_id = $1",
+    "delete from building_entrances where organization_id = $1",
     "delete from meters where organization_id = $1",
     "delete from dwelling_access where dwelling_id in (select id from dwellings where organization_id = $1)",
     "delete from dwellings where organization_id = $1",
