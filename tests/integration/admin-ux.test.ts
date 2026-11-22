@@ -534,6 +534,13 @@ describe("dashboard summary", () => {
       "update invoices set paid_at = now() where id = $1",
       [paidInvoice.id]
     );
+    const setSent = (invoiceId: string, sent: boolean) =>
+      db.$client.query(
+        "update invoices set sent_at = case when $2 then now() end where id = $1",
+        [invoiceId, sent]
+      );
+    await setSent(overdueInvoice.id, true);
+    await setSent(paidInvoice.id, true);
 
     let s = await getDashboardSummary(db, org.id, period.id);
     // Money: the headline total reconciles with its parts.
@@ -575,6 +582,7 @@ describe("dashboard summary", () => {
 
     // Exceptions: one unsent invoice with a failed delivery, one unmatched payment.
     await setCase(d1.id, "DRAFT");
+    await setSent(overdueInvoice.id, false);
     await db.$client.query(
       "insert into invoice_deliveries (organization_id, invoice_id, provider, status) values ($1, $2, 'smtp', 'FAILED')",
       [org.id, overdueInvoice.id]
@@ -588,8 +596,36 @@ describe("dashboard summary", () => {
       [org.id, bankImport.rows[0].id]
     );
     s = await getDashboardSummary(db, org.id, period.id);
-    expect(s.deliveryFailureCount).toBe(1);
+    expect(s.deliveryFailedIds).toEqual([overdueInvoice.id]);
+    expect(s.deliveryUnknownIds).toEqual([]);
     expect(s.unmatchedPaymentCount).toBe(1);
+    // With no send attempts, the latest delivery row decides: a later success
+    // clears an older failure.
+    await db.$client.query(
+      "insert into invoice_deliveries (organization_id, invoice_id, provider, status, created_at) values ($1, $2, 'smtp', 'SENT', now() + interval '1 minute')",
+      [org.id, overdueInvoice.id]
+    );
+    s = await getDashboardSummary(db, org.id, period.id);
+    expect(s.deliveryFailedIds).toEqual([]);
+
+    // The latest send attempt decides, not an older delivery row: a retry in
+    // progress is no failure, and an unconfirmed attempt is not a failure.
+    const attempt = (status: string, at: string) =>
+      db.$client.query(
+        "insert into invoice_send_attempts (organization_id, invoice_id, status, created_at) values ($1, $2, $3, $4)",
+        [org.id, overdueInvoice.id, status, at]
+      );
+    await attempt("FAILED", "2026-07-01T10:00:00Z");
+    await attempt("CLAIMED", "2026-07-01T11:00:00Z");
+    s = await getDashboardSummary(db, org.id, period.id);
+    expect(s.deliveryFailedIds).toEqual([]);
+    await db.$client.query(
+      "update invoice_send_attempts set status = 'UNKNOWN' where invoice_id = $1 and status = 'CLAIMED'",
+      [overdueInvoice.id]
+    );
+    s = await getDashboardSummary(db, org.id, period.id);
+    expect(s.deliveryFailedIds).toEqual([]);
+    expect(s.deliveryUnknownIds).toEqual([overdueInvoice.id]);
 
     // Next action follows the workflow: readings, generate, send, payments.
     await setCase(d3.id, "READY");
@@ -601,11 +637,41 @@ describe("dashboard summary", () => {
     expect(s.nextAction).toEqual({ key: "SEND_INVOICES", count: 1 });
     expect(s.readiness.readyToSend).toBe(true);
     await setCase(d1.id, "SENT");
+    await setSent(overdueInvoice.id, true);
     s = await getDashboardSummary(db, org.id, period.id);
     expect(s.nextAction).toEqual({ key: "REVIEW_PAYMENTS", count: 1 });
+    const setPaid = (invoiceId: string, paid: boolean) =>
+      db.$client.query(
+        "update invoices set paid_at = case when $2 then now() end where id = $1",
+        [invoiceId, paid]
+      );
     await setCase(d1.id, "PAID");
+    await setPaid(overdueInvoice.id, true);
     s = await getDashboardSummary(db, org.id, period.id);
     expect(s.nextAction).toEqual({ key: "ALL_DONE", count: 0 });
+
+    // A paid invoice that was never sent is not counted as sent and stays in
+    // the send queue (a credit can pay an invoice before it goes out).
+    await setSent(paidInvoice.id, false);
+    s = await getDashboardSummary(db, org.id, period.id);
+    expect(s.progress.invoicesSent).toBe(1);
+    expect(s.unsentInvoiceIds).toEqual([paidInvoice.id]);
+    expect(s.nextAction).toEqual({ key: "SEND_INVOICES", count: 1 });
+    // The workbench queue the dashboard links to holds the same invoice, and
+    // a sent invoice set back to Prepared is not in it.
+    await setCase(d1.id, "PREPARED");
+    const queue = await listCasesForPeriod(db, org.id, period.id, {
+      statusFilter: "UNSENT",
+    });
+    expect(queue.map((row) => row.invoiceId)).toEqual([paidInvoice.id]);
+    await setSent(paidInvoice.id, true);
+    // That sent invoice, if still unpaid, keeps the month on the payment step
+    // instead of "done".
+    await setPaid(overdueInvoice.id, false);
+    s = await getDashboardSummary(db, org.id, period.id);
+    expect(s.nextAction).toEqual({ key: "REVIEW_PAYMENTS", count: 1 });
+    await setPaid(overdueInvoice.id, true);
+    await setCase(d1.id, "PAID");
 
     // A locked month offers "create next" only while it is the newest.
     await db.$client.query(
@@ -629,7 +695,8 @@ describe("dashboard summary", () => {
     );
     s = await getDashboardSummary(db, org.id, period.id);
     expect(s.isNewestPeriod).toBe(false);
-    expect(s.nextAction.key).toBe("ALL_DONE");
+    // Locking has no completion check, so an older locked month is "closed".
+    expect(s.nextAction.key).toBe("LOCKED");
 
     await cleanupOrg(org.id);
   });

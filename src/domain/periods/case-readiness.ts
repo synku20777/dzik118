@@ -460,7 +460,13 @@ export async function recalculateCaseReadiness(
 
   await tx
     .update(billingCases)
-    .set({ missingData, status: nextStatus, statusUpdatedAt: new Date() })
+    .set({
+      missingData,
+      // Decided by the row as it is now, not as it was read above: an invoice
+      // generated or prepared in between keeps its status.
+      status: sql`case when ${billingCases.status} in ('MISSING_DATA', 'READY') then ${deriveReadinessStatus(missingData)}::billing_case_status else ${billingCases.status} end`,
+      statusUpdatedAt: new Date(),
+    })
     .where(eq(billingCases.id, existingCase.id));
 }
 
@@ -545,7 +551,8 @@ export async function recalculateCaseReadinessForDwellings(
         changed.push({
           id: existing.id,
           missing_data: missingData,
-          status,
+          // Used only if the row is still in the readiness stage at UPDATE.
+          status: deriveReadinessStatus(missingData),
         });
       }
     }
@@ -555,7 +562,11 @@ export async function recalculateCaseReadinessForDwellings(
       await tx.execute(sql`
         update billing_cases set
           missing_data = v.missing_data,
-          status = v.status::billing_case_status,
+          status = case
+            when billing_cases.status in ('MISSING_DATA', 'READY')
+            then v.status::billing_case_status
+            else billing_cases.status
+          end,
           status_updated_at = now()
         from jsonb_to_recordset(${JSON.stringify(part)}::jsonb)
           as v(id uuid, missing_data jsonb, status text)

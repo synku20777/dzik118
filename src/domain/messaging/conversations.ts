@@ -318,7 +318,15 @@ export async function listConversationsForOrganization(
   const unreadRows = await db
     .selectDistinct({ conversationId: messages.conversationId })
     .from(messages)
-    .where(and(inArray(messages.conversationId, ids), isNull(messages.readAt)));
+    .where(
+      and(
+        inArray(messages.conversationId, ids),
+        // Same rule as the navigation badge: an admin's own reply is not
+        // unread mail for the admin.
+        eq(messages.senderRole, "RESIDENT"),
+        isNull(messages.readAt)
+      )
+    );
 
   const lastMessageByConversation = new Map<
     string,

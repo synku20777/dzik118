@@ -285,7 +285,7 @@ test("admin routes, keyboard navigation, filters and locked actions", async ({
     // A locked month offers no bulk generation at all.
     if (await page.locator("#locked-notice").count()) {
       await expect(
-        page.getByRole("button", { name: "Generate all eligible" })
+        page.getByRole("button", { name: "Generate and refresh drafts" })
       ).toHaveCount(0);
     }
     const invoice = await page

@@ -2,10 +2,6 @@
 import { actions } from "astro:actions";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import EmptyState from "../../../../../components/ui/EmptyState.astro";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../domain/authorization/guards";
 import { listSuppressedEmails } from "../../../../../domain/email/suppression";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { withRequestDb } from "../../../../../lib/db-request";
@@ -20,12 +16,6 @@ const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 
 const organizationId = Astro.params.orgId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const removeResult = Astro.getActionResult(actions.emailSuppression.remove);
 const { organization, suppressed } = await withRequestDb(async (db) => ({

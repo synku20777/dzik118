@@ -1,7 +1,6 @@
 import { and, eq, gt, gte, ne } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import { paymentReversals } from "../../db/schema/accounts";
-import { billingCases } from "../../db/schema/billing";
 import { dwellings } from "../../db/schema/dwellings";
 import { invoices } from "../../db/schema/invoices";
 import { organizations } from "../../db/schema/organizations";
@@ -10,6 +9,7 @@ import { compareExact, maxExact, subtractExact } from "../../lib/decimal2";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { orgLocalDateString } from "../../lib/org-time";
 import { postAccountEntry } from "../accounts/ledger";
+import { syncDwellingSettlement } from "../accounts/settlement";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
 
 export { ConflictError, NotFoundError, ValidationError };
@@ -156,29 +156,14 @@ export async function reversePayment(
       .where(eq(paymentMatches.id, matchId))
       .returning();
 
-    if (invoice.paidAt) {
-      await tx
-        .update(invoices)
-        .set({ paidAt: null, updatedAt: new Date() })
-        .where(eq(invoices.id, invoice.id));
-
-      const orgToday = orgLocalDateString(new Date(), org.timezone);
-      // An invoice paid before it was ever sent goes back to Prepared, so it
-      // is still sent to the resident.
-      const caseStatus = !invoice.sentAt
-        ? "PREPARED"
-        : invoice.dueDate < orgToday
-          ? "OVERDUE"
-          : "SENT";
-
-      await tx
-        .update(billingCases)
-        .set({
-          status: caseStatus,
-          statusUpdatedAt: new Date(),
-        })
-        .where(eq(billingCases.id, invoice.billingCaseId));
-    }
+    // Every invoice the money no longer covers goes back to unpaid, oldest
+    // last (ADR 0016).
+    await syncDwellingSettlement(
+      tx,
+      organizationId,
+      invoice.dwellingId,
+      invoice.currency
+    );
 
     await recordAuditEvent(tx, {
       organizationId,

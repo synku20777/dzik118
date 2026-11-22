@@ -10,10 +10,6 @@ import {
 } from "../../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../../domain/organizations/organizations";
 import {
   getBankImport,
@@ -24,12 +20,6 @@ import { rethrowUnexpected } from "../../../../../../domain/errors";
 
 const organizationId = Astro.params.orgId!;
 const importId = Astro.params.importId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 let organization: Awaited<ReturnType<typeof getOrganization>>;
 let bankImport: Awaited<ReturnType<typeof getBankImport>>;

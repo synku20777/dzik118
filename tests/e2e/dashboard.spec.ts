@@ -16,7 +16,8 @@ test("dashboard is readable across languages, themes and viewport sizes", async 
   await expect(page.locator(".dashboard-page")).toBeVisible();
   // One money card: the total to pay leads, and the sum that makes it is
   // visible without a click.
-  await expect(page.locator(".dashboard-metric")).toHaveCount(2);
+  // Readings are counted once, in the month progress, not in a second card.
+  await expect(page.locator(".dashboard-metric")).toHaveCount(1);
   await expect(page.locator('[data-metric="collection"]')).toHaveCount(1);
   await expect(page.locator(".collection-total")).toBeVisible();
   await expect(page.locator(".money-ledger .money-total")).toBeVisible();
@@ -51,33 +52,30 @@ test("dashboard is readable across languages, themes and viewport sizes", async 
       }
     }
   }
-  await page.goto(`${dashboard}?lang=en`);
-  const expectedUnsent = await page
+  // The queue holds exactly the invoices the dashboard calls "not sent yet":
+  // the next-steps row, or the month sentence when sending is the next step.
+  await page.goto(`${dashboard}?lang=en&all=1`);
+  const unsentText = await page
     .locator(
-      '.dashboard-status-list a[href$="status=DRAFT"], .dashboard-status-list a[href$="status=PREPARED"]'
+      '.attention-summary-row:has(a[href$="status=UNSENT"]) p, .month-status-sentence'
     )
-    .evaluateAll((links) =>
-      links.reduce(
-        (sum, link) =>
-          sum +
-          Number(
-            link.querySelector(":scope > span:last-child")?.textContent?.trim()
-          ),
-        0
-      )
-    );
+    .filter({ hasText: "not sent yet" })
+    .first()
+    .textContent();
+  const expectedUnsent = Number(unsentText!.match(/\d+/)![0]);
   const workbench = await page
     .locator('[data-metric="unpaid"]')
     .getAttribute("href");
   await page.goto(`${workbench}?status=UNSENT`);
-  await expect(page.locator(".queue-result")).toContainText(
-    "Draft and prepared invoices"
-  );
+  await expect(page.locator(".queue-result")).toContainText("Unsent invoices");
   const queueStatuses = await page
     .locator("tr[data-status]")
     .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-status")));
+  // Only cases with an invoice can be unsent.
   expect(
-    queueStatuses.every((status) => status === "DRAFT" || status === "PREPARED")
+    queueStatuses.every(
+      (status) => status !== "MISSING_DATA" && status !== "READY"
+    )
   ).toBe(true);
   expect(expectedUnsent).toBeGreaterThan(0);
   expect(queueStatuses).toHaveLength(expectedUnsent);

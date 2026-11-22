@@ -4,7 +4,6 @@ import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { getInvoice } from "../../../../../../../../domain/billing/generation";
 import { ensureCanonicalPdf } from "../../../../../../../../domain/billing/sending";
-import { requireOrganizationAccess } from "../../../../../../../../domain/authorization/guards";
 import { parseInvoiceLocale } from "../../../../../../../../domain/billing/invoice-i18n";
 import { renderInvoiceHtml } from "../../../../../../../../domain/billing/invoice-html";
 import { renderPdf } from "../../../../../../../../lib/pdf/render";
@@ -31,8 +30,7 @@ export const GET: APIRoute = async ({ params, locals, url }) => {
   }
 
   try {
-    requireOrganizationAccess(locals.auth, organizationId);
-    await limitOrThrow("pdf", locals.auth.userId);
+    await limitOrThrow("pdf", locals.auth!.userId);
   } catch (err) {
     return toApiErrorResponse(err);
   }

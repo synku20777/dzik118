@@ -3,21 +3,11 @@ import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
 import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { withRequestDb } from "../../../../../lib/db-request";
 import { translate, uiLocale } from "../../../../../lib/ui/i18n";
 
 const organizationId = Astro.params.orgId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const organization = await withRequestDb((db) =>
   getOrganization(db, organizationId)

@@ -24,7 +24,7 @@ Candidate payment matching matches an incoming bank transaction to a single cand
 
 ### Simple daily late-fee model (no compounding or statutory penalty schedules)
 
-The late-fee calculation engine (`src/domain/accounts/late-fees.ts`) applies a configurable daily percentage rate (`daily_rate_percent`), grace period (`grace_days`), and maximum cap (`max_fee_percent`) calculated as simple interest against the overdue balance. It does not implement compounding interest, variable national reference rate tables, or tiered statutory interest schedules (such as Polish statutory delay interest, *odsetki ustawowe za opóźnienie*).
+The late-fee calculation engine (`src/domain/accounts/late-fees.ts`) applies a configurable daily percentage rate (`daily_rate_percent`), grace period (`grace_days`), and maximum cap (`max_fee_percent`) as simple interest on the own amount of each late invoice, each day once (ADR 0016). It does not implement compounding interest, variable national reference rate tables, or tiered statutory interest schedules (such as Polish statutory delay interest, *odsetki ustawowe za opóźnienie*).
 
 ### Append-only auditability requiring compensating adjustments (no direct financial mutations)
 
@@ -101,9 +101,9 @@ When PAPER is dispatched first (setting `invoices.sent_at`) and an administrator
 
 The Resend action's `commandId` (a fresh value rendered into the form on each page load) deduplicates two submissions of the *same* rendered form -- a double-click or a browser's automatic retry of one POST. It deliberately does not survive a hard page reload: if the provider actually succeeded but the admin's browser never saw the response (a lost connection, a closed tab), reloading the page and clicking Resend again generates a new `commandId` and will send a genuine second email. This is accepted, not a bug: explicit resend is an intentionally repeatable admin action, and the alternative (a durable, reload-surviving idempotency key) is unwarranted complexity for a rare, admin-supervised, low-volume operation. An admin who suspects a lost response should check the invoice's delivery history or the mailbox/provider logs before resending, exactly as the UNKNOWN-outcome guidance already advises.
 
-### Deferred authorization middleware and action wrapper refactors
+### Resolved: authorization middleware and action wrapper
 
-Two opportunities to reduce duplication were identified but deliberately deferred because of regression risks. Centralizing repeated `requireOrganizationAccess` and `requireDwellingAccess` guards into Astro middleware based on route parameters is technically feasible, but it touches every page's authorization boundary simultaneously. Similarly, creating an `orgAction(schema, handler)` wrapper would collapse roughly 25 near-identical `defineAction` blocks across `src/actions/*.ts` that repeat access checks and database wiring. Both refactors were deferred because modifying every admin mutation and route gate carries meaningful risk for what is fundamentally a style improvement rather than a bug fix.
+The middleware refuses each page and API whose path names an organization or a dwelling that the user cannot access. Two resident invoice routes have no dwelling ID in the path, so they keep their own check. Each organization action uses the `orgAction` wrapper in `src/actions/_org-action.ts`. The wrapper adds the access check and the error handling.
 
 ## Design trade-offs
 

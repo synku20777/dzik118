@@ -23,10 +23,6 @@ const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { listDwellings } from "../../../../../domain/organizations/dwellings";
 import {
@@ -39,12 +35,6 @@ import { withRequestDb } from "../../../../../lib/db-request";
 import { rethrowUnexpected } from "../../../../../domain/errors";
 
 const organizationId = Astro.params.orgId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const replyResult = Astro.getActionResult(actions.messages.reply);
 const resolveResult = Astro.getActionResult(actions.messages.resolve);

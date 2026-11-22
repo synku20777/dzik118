@@ -438,6 +438,11 @@ describe("conversations", () => {
       new Date(list[1].updatedAt).getTime()
     );
 
+    // An admin's own reply is not unread mail for the admin.
+    await reply(db, convo1.id, "Message 1.4", adminAuth(seedAdminId, org.id));
+    const afterReply = await listConversationsForOrganization(db, org.id);
+    expect(afterReply.find((c) => c.id === convo1.id)?.hasUnread).toBe(false);
+
     await cleanupOrg(org.id);
     await deleteAppUser(residentId);
   });

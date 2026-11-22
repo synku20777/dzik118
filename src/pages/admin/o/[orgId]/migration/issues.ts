@@ -2,10 +2,6 @@
 // fixes in the spreadsheet. The file text and the mapping come from the page's
 // hidden fields, so everything is parsed and validated again here.
 import type { APIRoute } from "astro";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../domain/authorization/guards";
 import { ValidationError } from "../../../../../domain/errors";
 import { parseTable } from "../../../../../domain/migration/files";
 import {
@@ -22,25 +18,11 @@ import { withRequestDb } from "../../../../../lib/db-request";
 import { isSameOriginRequest } from "../../../../../lib/http/same-origin";
 import { translate, uiLocale } from "../../../../../lib/ui/i18n";
 
-export const POST: APIRoute = async ({
-  params,
-  locals,
-  request,
-  url,
-  cookies,
-}) => {
+export const POST: APIRoute = async ({ params, request, url, cookies }) => {
   const organizationId = params.orgId;
   if (!organizationId) return new Response("Not found", { status: 404 });
   if (!isSameOriginRequest(request, url)) {
     return new Response("Cross-site submission forbidden", { status: 403 });
-  }
-  try {
-    requireOrganizationAccess(locals.auth, organizationId);
-  } catch (err) {
-    if (err instanceof ForbiddenError) {
-      return new Response("Forbidden", { status: 403 });
-    }
-    throw err;
   }
 
   const form = await request.formData();

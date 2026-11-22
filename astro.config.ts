@@ -1,10 +1,13 @@
 import { defineConfig, envField } from "astro/config";
 import cloudflare from "@astrojs/cloudflare";
+import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   output: "server",
   adapter: cloudflare(),
+  // One island so far: the Dwellings page building editor.
+  integrations: [react()],
   security: {
     checkOrigin: true,
   },

@@ -52,7 +52,7 @@ test("Current Month keeps billing actions usable through filtering and queue ref
     "border-left-width",
     "0px"
   );
-  // At most two missing items per case, then "+N more".
+  // At most two problems per case on one line, then "+N" (never cut off).
   for (const row of await page.locator("tr[data-status]").all()) {
     // Only reading-type items (the ones that open the drawer) are capped.
     const shown = await row
@@ -64,7 +64,7 @@ test("Current Month keeps billing actions usable through filtering and queue ref
     }
     const more = row.locator(".readiness-more");
     if ((await more.count()) > 0) {
-      await expect(more).toHaveText(/^\+\d+ more$/);
+      await expect(more).toHaveText(/^\+\d+$/);
       expect(shown).toBeLessThanOrEqual(2);
     }
   }
@@ -117,9 +117,7 @@ test("Current Month keeps billing actions usable through filtering and queue ref
   // The dashboard's "not sent yet" link has no tab of its own; the result
   // line names it and offers the way back.
   await page.goto(`${workbench}?lang=en&status=UNSENT`);
-  await expect(page.locator(".queue-result")).toContainText(
-    "Draft and prepared invoices"
-  );
+  await expect(page.locator(".queue-result")).toContainText("Unsent invoices");
   await expect(
     page.locator('.workflow-filter[aria-current="page"]')
   ).toHaveCount(0);

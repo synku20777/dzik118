@@ -124,9 +124,12 @@ const { unreadMessages, switcherOrganizations } = organizationId
       </div>
     </aside>
     <header class="admin-mobile">
+      {/* The sidebar's building switcher is hidden here, so name the building. */}
       <span class="brand">
         <BrandMark />
-        {t("Namkopa")}
+        <span class="admin-mobile-title">
+          {organizationName ?? t("Namkopa")}
+        </span>
       </span>
       <button type="button" class="btn-secondary btn-sm" data-open-mobile-nav>
         {t("Menu")} ☰

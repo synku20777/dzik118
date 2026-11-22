@@ -6,10 +6,6 @@ import AdminContextDrawer from "../../../../../../components/ui/AdminContextDraw
 import StatusBadge from "../../../../../../components/ui/StatusBadge.astro";
 import Icon from "../../../../../../components/ui/Icon.astro";
 import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../../domain/organizations/organizations";
 import {
   listRuleAssignmentsWithDwellingNumbers,
@@ -22,10 +18,16 @@ import {
   listPeriods,
 } from "../../../../../../domain/periods/periods";
 import { invoiceDelivery } from "../../../../../../domain/billing/invoice-snapshots";
-import { listCasesForPeriod } from "../../../../../../domain/periods/cases";
+import {
+  listActiveMeterTypesForPeriod,
+  listCasesForPeriod,
+} from "../../../../../../domain/periods/cases";
+import { listSuppressedEmails } from "../../../../../../domain/email/suppression";
+import { invoiceStatusBadge } from "../../../../../../lib/ui/invoice-status";
 import { getDashboardSummary } from "../../../../../../domain/periods/dashboard";
 import { billingCaseStatusEnum } from "../../../../../../db/schema/billing";
 import { withRequestDb } from "../../../../../../lib/db-request";
+import { orgLocalDateString } from "../../../../../../lib/org-time";
 import { rethrowUnexpected } from "../../../../../../domain/errors";
 import {
   entityLabel,
@@ -33,6 +35,7 @@ import {
   formatMoney,
   formatPeriod,
   friendlyActionErrorMessage,
+  plural,
   translate,
   uiLocale,
 } from "../../../../../../lib/ui/i18n";
@@ -43,12 +46,6 @@ type Snapshot = Record<string, string | null>;
 
 const organizationId = Astro.params.orgId!;
 const periodId = Astro.params.periodId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
@@ -69,25 +66,16 @@ const actionError =
   bulkGenerateResult?.error ??
   bulkPrepareResult?.error ??
   bulkSendResult?.error;
-const bulkOutcome = bulkGenerateResult?.data
-  ? {
-      done: bulkGenerateResult.data.generated.length,
-      label: "invoices generated",
-      skipped: bulkGenerateResult.data.skipped,
-    }
-  : bulkPrepareResult?.data
-    ? {
-        done: bulkPrepareResult.data.prepared.length,
-        label: "invoices prepared",
-        skipped: bulkPrepareResult.data.skipped,
-      }
-    : bulkSendResult?.data
-      ? {
-          done: bulkSendResult.data.sent.length,
-          label: "invoices sent",
-          skipped: bulkSendResult.data.skipped,
-        }
-      : null;
+const bulkResult =
+  bulkGenerateResult?.data ?? bulkPrepareResult?.data ?? bulkSendResult?.data;
+const bulkOutcome = bulkResult && {
+  ...bulkResult,
+  label: bulkGenerateResult?.data
+    ? "invoices generated"
+    : bulkPrepareResult?.data
+      ? "invoices prepared"
+      : "invoices sent",
+};
 
 const search = Astro.url.searchParams.get("search")?.trim() || undefined;
 const rawStatus = Astro.url.searchParams.get("status");
@@ -101,7 +89,7 @@ const statusFilter =
       : undefined;
 
 let organization, period, cases, allPeriods, summary, rules, assignmentsByRule;
-let dwellingsWithoutCase;
+let dwellingsWithoutCase, suppressed, meterTypesByDwelling;
 try {
   ({
     dwellingsWithoutCase,
@@ -112,7 +100,19 @@ try {
     summary,
     rules,
     assignmentsByRule,
+    suppressed,
+    meterTypesByDwelling,
   } = await withRequestDb(async (db) => ({
+    suppressed: new Set(
+      (await listSuppressedEmails(db, organizationId)).map((row) =>
+        row.email.toLowerCase()
+      )
+    ),
+    meterTypesByDwelling: await listActiveMeterTypesForPeriod(
+      db,
+      organizationId,
+      await getPeriod(db, organizationId, periodId)
+    ),
     dwellingsWithoutCase: await listDwellingsWithoutCase(
       db,
       organizationId,
@@ -149,6 +149,16 @@ const tariffRows = rules.map((rule) => {
   const status = ruleStatusForPeriod(rule, period);
   const assigned = assignmentsByRule.get(rule.id) ?? [];
   const scoped = rule.applicationScope !== "ONE_TO_ALL";
+  // The dwellings this month the tariff could bill: all with a case, or the
+  // assigned ones; a meter tariff only where a meter of its type was active.
+  const covered = [...meterTypesByDwelling.keys()].filter(
+    (id) => !scoped || assigned.some((a) => a.dwellingId === id)
+  );
+  const billsSomeone =
+    rule.calculationType !== "METER_CONSUMPTION" ||
+    covered.some((id) =>
+      meterTypesByDwelling.get(id)!.has(rule.meterType ?? "")
+    );
   let reason: string;
   if (status === "ARCHIVED") {
     reason = t("Does not apply: the tariff is archived.");
@@ -158,19 +168,50 @@ const tariffRows = rules.map((rule) => {
     reason = t("Does not apply: it starts after this period ends.");
   } else if (status === "ENDED_BEFORE_PERIOD") {
     reason = t("Does not apply: it ended before this period starts.");
+  } else if (scoped && assigned.length === 0) {
+    reason = t("Applies to no dwelling: none is assigned.");
+  } else if (!billsSomeone || covered.length === 0) {
+    reason = t("Does not apply: no dwelling this month can be billed by it.");
   } else if (!scoped) {
     reason = t("Applies to all dwellings.");
-  } else if (assigned.length === 0) {
-    reason = t("Applies to no dwelling: none is assigned.");
   } else {
     reason = `${t("Applies only to the assigned dwellings:")} ${assigned
       .map((a) => a.number)
       .join(", ")}`;
   }
-  const applies = status === "APPLIES" && (!scoped || assigned.length > 0);
+  const applies = status === "APPLIES" && covered.length > 0 && billsSomeone;
   return { rule, applies, reason };
 });
 const applyingTariffs = tariffRows.filter((row) => row.applies).length;
+
+// Bulk generation works on the whole month, whatever filter is open: it
+// creates invoices, refreshes every draft and, when the organization allows
+// it, first fills readings still missing after the deadline. Say so first.
+const counts = summary.caseStatusCounts;
+const carriesForward = Boolean(
+  organization.carryForwardReadingsEnabled &&
+  period.readingDeadline &&
+  orgLocalDateString(new Date(), organization.timezone) > period.readingDeadline
+);
+const showBulkGenerate =
+  counts.READY + counts.DRAFT > 0 ||
+  (carriesForward && counts.MISSING_DATA > 0);
+const bulkGenerateConfirm =
+  fill(
+    t(
+      "For the whole month: create up to {ready} new invoices and refresh {drafts} drafts?"
+    ),
+    {
+      ready: String(counts.READY + counts.MISSING_DATA),
+      drafts: String(counts.DRAFT),
+    }
+  ) +
+  (carriesForward
+    ? " " +
+      t(
+        "Readings still missing after the deadline are filled with the previous reading first."
+      )
+    : "");
 
 // Previous/next skip the starting-readings month.
 const navPeriods = allPeriods.filter((item) => !item.openingReadings);
@@ -205,9 +246,43 @@ function filterHref(status?: CaseStatus) {
   const query = params.toString();
   return query ? `${workbenchPath}?${query}` : workbenchPath;
 }
-// Missing-data tags: show this many, then +N more (opens the readings
-// drawer, which lists every one). A dwelling can lack many meters at once.
-const MAX_MISSING = 2;
+// A case's problems share one line under its status: this many are named,
+// then "+N" (never cut off) opens the drawer that lists them all.
+const MAX_PROBLEMS = 2;
+type Problem = {
+  text: string;
+  tone: "danger" | "warning";
+  href?: string;
+  drawer?: "readings" | "billing-details";
+  focus?: string;
+  // A name told apart by its end (a meter serial): cut in the middle,
+  // keeping this many trailing digits.
+  keepEnd?: number;
+  // Fixed only outside the drawer (tariffs, meters): listed first.
+  config?: boolean;
+  // Guidance too long for the line: tooltip and screen readers.
+  detail?: string;
+};
+// Apple's rule for names that differ at the end: keep the tail visible.
+const KEEP_END = 6;
+// A name ending in a number (a meter serial) is told apart by its end: keep
+// up to KEEP_END of its trailing digits. Digits are 1ch wide in any font, so
+// the room they need is exact (0 when the name is not serial-like).
+const serialLike = (text: string) => {
+  const digits = /[0-9]+$/.exec(text)?.[0].length ?? 0;
+  return digits >= 3 && text.length > digits + 2
+    ? Math.min(KEEP_END, digits)
+    : 0;
+};
+// Narrowest an item may get: 4ch, or a serial's kept digits plus an ellipsis.
+const itemMinCh = (problem: Problem) =>
+  problem.keepEnd ? problem.keepEnd + 2 : 4;
+const dayMonth = (value: string) =>
+  new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(value));
 ---
 
 <AdminLayout
@@ -226,7 +301,11 @@ const MAX_MISSING = 2;
       periodStatus={period.status}
       periodName={periodName}
       workbenchPath={workbenchPath}
-      refreshSelectors={[".financial-summary", ".case-queue"]}
+      refreshSelectors={[
+        ".period-actions",
+        ".financial-summary",
+        ".case-queue",
+      ]}
     />
     <header class="workbench-header">
       <div class="period-title">
@@ -269,17 +348,23 @@ const MAX_MISSING = 2;
             >
               <Icon name="pencil" size="sm" /> {t("Enter readings")}
             </a>
-            <form method="POST" action={actions.billing.bulkGenerate}>
-              <input
-                type="hidden"
-                name="organizationId"
-                value={organizationId}
-              />
-              <input type="hidden" name="periodId" value={periodId} />
-              <button type="submit" class="btn-primary">
-                {t("Generate all eligible")}
-              </button>
-            </form>
+            {showBulkGenerate && (
+              <form method="POST" action={actions.billing.bulkGenerate}>
+                <input
+                  type="hidden"
+                  name="organizationId"
+                  value={organizationId}
+                />
+                <input type="hidden" name="periodId" value={periodId} />
+                <button
+                  type="submit"
+                  class="btn-primary"
+                  data-confirm={bulkGenerateConfirm}
+                >
+                  {t("Generate and refresh drafts")}
+                </button>
+              </form>
+            )}
             <details class="more-menu">
               <summary aria-label={t("More actions")}>
                 <Icon name="dots" size="sm" />
@@ -399,12 +484,15 @@ const MAX_MISSING = 2;
     )}
     {bulkOutcome && (
       <p class="notice" role="status">
-        {bulkOutcome.done} {t(bulkOutcome.label)}.
-        {bulkOutcome.skipped.length > 0 && (
+        {bulkOutcome.count} {t(bulkOutcome.label)}.
+        {bulkOutcome.skippedCount > 0 && (
           <>
             {" "}
-            {bulkOutcome.skipped.length} {t("skipped")}:{" "}
-            {skipReasonsText(bulkOutcome.skipped, locale)}
+            {bulkOutcome.skippedCount} {t("skipped")}:{" "}
+            {skipReasonsText(
+              bulkOutcome.skipReasons.map((reason) => ({ reason })),
+              locale
+            )}
           </>
         )}
       </p>
@@ -462,9 +550,7 @@ const MAX_MISSING = 2;
               shown: String(cases.length),
               total: String(totalCases),
             })}
-            {statusFilter === "UNSENT" && (
-              <> · {t("Draft and prepared invoices")}</>
-            )}
+            {statusFilter === "UNSENT" && <> · {t("Unsent invoices")}</>}
           </span>
           <a href={workbenchPath} class="clear-filters">
             {t("Clear filters")}
@@ -550,6 +636,7 @@ const MAX_MISSING = 2;
                 | {
                     label: string | null;
                     meterType: string;
+                    meterId?: string;
                     reason?: "NO_READING";
                   }
                 | {
@@ -570,18 +657,6 @@ const MAX_MISSING = 2;
                 typeof item === "object" &&
                 (item.reason === "NO_APPLICABLE_RULES" ||
                   item.reason === "NO_ACTIVE_METER_FOR_RULE");
-              // A configuration blocker (no rule, no meter for a rule) links to
-              // tariffs or the dwelling and is not in the readings drawer, so it
-              // is never hidden behind "+N more". Reading-type items are capped.
-              const readingItems = missing.filter((item) => !isRuleLevel(item));
-              const shownMissing = [
-                ...missing.filter(isRuleLevel),
-                ...readingItems.slice(0, MAX_MISSING),
-              ];
-              const hiddenMissing = Math.max(
-                0,
-                readingItems.length - MAX_MISSING
-              );
               const issuer = (billingCase.invoiceIssuerSnapshot ??
                 {}) as Snapshot;
               const recipient = (billingCase.invoiceRecipientSnapshot ??
@@ -611,22 +686,184 @@ const MAX_MISSING = 2;
                 billingCase.status === "DRAFT" &&
                 !recipientIncomplete &&
                 !organizationIncomplete;
+              // Send here is email only; paper goes through the invoice page.
+              const paperOnly = Boolean(invoiceByPaper && !invoiceByEmail);
+              // Facts that make an email send fail or repeat: a suppressed
+              // address, or an earlier attempt whose outcome is unknown.
+              const emailSuppressed = Boolean(
+                billingEmail && suppressed.has(billingEmail.toLowerCase())
+              );
+              const deliveryUnknown = Boolean(
+                billingCase.invoiceId &&
+                summary.deliveryUnknownIds.includes(billingCase.invoiceId)
+              );
               const sendEligible =
                 billingCase.status === "PREPARED" &&
-                ((invoiceByEmail && Boolean(billingEmail)) || invoiceByPaper);
+                Boolean(invoiceByEmail && billingEmail) &&
+                !emailSuppressed &&
+                !deliveryUnknown;
+              // The invoice froze the dwelling's details when it was made: an
+              // email added to the dwelling since then is not on it.
+              // Only an invoice that can still be regenerated: an open month,
+              // never sent or paid (a status set back by hand does not count,
+              // generation.ts refuses those), and a draft or prepared case.
+              const emailAddedSince = Boolean(
+                period.status === "OPEN" &&
+                missing.length === 0 &&
+                billingCase.invoiceSentAt === null &&
+                billingCase.invoicePaidAt === null &&
+                (billingCase.status === "DRAFT" ||
+                  billingCase.status === "PREPARED") &&
+                billingCase.invoiceId &&
+                invoiceByEmail &&
+                !billingEmail &&
+                billingCase.billingEmail
+              );
+              const unsentPaid =
+                billingCase.status === "PAID" &&
+                Boolean(billingCase.invoiceId) &&
+                billingCase.invoiceSentAt === null;
+              const overdue =
+                billingCase.status === "OVERDUE"
+                  ? summary.needsAttention.find(
+                      (item) => item.caseId === billingCase.id
+                    )
+                  : undefined;
+              // A blocker readings cannot fix: no tariff, or no meter for one.
+              const configOnly =
+                missing.length > 0 && missing.every(isRuleLevel);
+              const noRule = missing.some(
+                (item) =>
+                  typeof item === "object" &&
+                  item.reason === "NO_APPLICABLE_RULES"
+              );
+              // Before an invoice exists the blockers decide the action; after,
+              // the invoice's own stage does.
+              const blockedBeforeInvoice =
+                missing.length > 0 &&
+                (!billingCase.invoiceId ||
+                  billingCase.status === "MISSING_DATA" ||
+                  billingCase.status === "READY");
               // Problems and delivery notes sit under the status. A case with
               // none shows the status alone.
-              const hasIssues =
-                missing.length > 0 ||
-                (invoiceByEmail && !billingEmail) ||
-                invoiceByPaper ||
-                recipientIncomplete ||
-                organizationIncomplete;
               const invoiceHref = billingCase.invoiceId
                 ? `${workbenchPath}/invoices/${billingCase.invoiceId}`
                 : null;
               const readingsHref = `${workbenchPath}/dwellings/${billingCase.dwellingId}`;
               const dwellingHref = `/admin/o/${organizationId}/dwellings/${billingCase.dwellingId}`;
+              // Everything that needs work on this case, most urgent first,
+              // shown as one line under the status (see the status cell).
+              const problems: Problem[] = [];
+              if (overdue?.dueDate && overdue.overdueAmount)
+                problems.push({
+                  text: `${t("Still unpaid")} ${formatMoney(overdue.overdueAmount, organization.currency, locale)} · ${fill(t("Due {date}"), { date: dayMonth(overdue.dueDate) })}`,
+                  tone: "danger",
+                });
+              if (unsentPaid)
+                problems.push({ text: t("Not sent yet"), tone: "warning" });
+              if (emailSuppressed && invoiceHref)
+                problems.push({
+                  text: t("Billing email is on the suppressed list"),
+                  tone: "danger",
+                  href: invoiceHref,
+                });
+              if (deliveryUnknown && invoiceHref)
+                problems.push({
+                  text: t("Outcome not confirmed"),
+                  tone: "warning",
+                  href: invoiceHref,
+                });
+              for (const item of missing) {
+                if (typeof item === "string") {
+                  problems.push({
+                    text: item.replace(
+                      /^Missing current-period meter reading for dwelling (.+?)\.?$/,
+                      (_match, number) =>
+                        fill(
+                          t(
+                            "Missing current-period meter reading for dwelling {number}"
+                          ),
+                          { number }
+                        )
+                    ),
+                    tone: "danger",
+                  });
+                } else if (item.reason === "NO_APPLICABLE_RULES") {
+                  problems.push({
+                    text: t("No billing rule applies"),
+                    tone: "danger",
+                    href: "#period-tariffs",
+                    config: true,
+                  });
+                } else if (item.reason === "NO_ACTIVE_METER_FOR_RULE") {
+                  problems.push({
+                    text: `${item.ruleName} — ${t("no active meter")}`,
+                    tone: "danger",
+                    href: dwellingHref,
+                    config: true,
+                  });
+                } else if ("meterType" in item) {
+                  // The status already says "Missing data": the name is enough.
+                  problems.push({
+                    text: item.label ?? entityLabel(item.meterType, locale),
+                    tone: "danger",
+                    drawer: "readings",
+                    focus: item.meterId
+                      ? `meter-${item.meterId}`
+                      : item.meterType.toLowerCase().replace(/_/g, "-"),
+                    keepEnd: serialLike(
+                      item.label ?? entityLabel(item.meterType, locale)
+                    ),
+                  });
+                } else {
+                  problems.push({
+                    text: item.ruleName,
+                    tone: "danger",
+                    drawer: "readings",
+                    focus: `rule-${item.billingRuleId}`,
+                    keepEnd: serialLike(item.ruleName),
+                  });
+                }
+              }
+              if (emailAddedSince && invoiceHref)
+                problems.push({
+                  text: t("New email not on this invoice"),
+                  tone: "warning",
+                  href: invoiceHref,
+                  detail: t(
+                    billingCase.status === "DRAFT"
+                      ? "Saved to the dwelling. Regenerate this draft to use the new details."
+                      : "Saved to the dwelling. This invoice keeps its old details: return it to Draft and regenerate it."
+                  ),
+                });
+              else if (invoiceByEmail && !billingEmail)
+                problems.push({
+                  text: t("Billing email missing"),
+                  tone: "warning",
+                  drawer: "billing-details",
+                  focus: "billing-email",
+                });
+              if (recipientIncomplete)
+                problems.push({
+                  text: t("Recipient details incomplete"),
+                  tone: "danger",
+                  drawer: "billing-details",
+                  focus: "recipient",
+                });
+              if (organizationIncomplete)
+                problems.push({
+                  text: t("Issuer or payment details incomplete"),
+                  tone: "danger",
+                  href: `/admin/o/${organizationId}/settings/organization`,
+                });
+              // Configuration blockers first: the readings drawer cannot fix
+              // them. The rest are behind "+N", whose menu links each one.
+              const ordered = [
+                ...problems.filter((p) => p.config),
+                ...problems.filter((p) => !p.config),
+              ];
+              const shownProblems = ordered.slice(0, MAX_PROBLEMS);
+              const hiddenProblems = ordered.slice(MAX_PROBLEMS);
 
               return (
                 <tr
@@ -638,170 +875,193 @@ const MAX_MISSING = 2;
                     {billingCase.invoiceId &&
                       (billingCase.status === "DRAFT" ||
                         billingCase.status === "PREPARED") && (
-                        <input
-                          type="checkbox"
-                          name="invoiceIds"
-                          data-prepare-eligible={
-                            prepareEligible ? "true" : "false"
-                          }
-                          data-send-eligible={sendEligible ? "true" : "false"}
-                          aria-label={`${t("Select invoice")} ${billingCase.invoiceNumber}`}
-                          value={billingCase.invoiceId}
-                          form="bulk-select-form"
-                        />
+                        // The label widens the tap area; the input keeps its
+                        // own accessible name.
+                        <label class="select-hit">
+                          <input
+                            type="checkbox"
+                            name="invoiceIds"
+                            data-prepare-eligible={
+                              prepareEligible ? "true" : "false"
+                            }
+                            data-send-eligible={sendEligible ? "true" : "false"}
+                            aria-label={`${t("Select invoice")} ${billingCase.invoiceNumber}`}
+                            value={billingCase.invoiceId}
+                            form="bulk-select-form"
+                          />
+                        </label>
                       )}
                   </td>
                   <td class="dwelling-cell">
                     <a href={readingsHref}>{billingCase.dwellingNumber}</a>
-                    {billingCase.occupantName && (
-                      <span>{billingCase.occupantName}</span>
+                    {/* Paper delivery is a setting of the dwelling, not a
+                        problem: it sits with the name. */}
+                    {(billingCase.occupantName || invoiceByPaper) && (
+                      <span>
+                        {[
+                          billingCase.occupantName,
+                          invoiceByPaper && t("Paper delivery"),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
                     )}
                   </td>
                   <td class="status-cell">
-                    <StatusBadge status={billingCase.status} />
-                    {hasIssues && (
-                      <div class="readiness-list">
-                        {shownMissing.map((item) =>
-                          // missingData is a JSONB column with no schema
-                          // enforcement: cases whose readiness was last
-                          // computed by an older app version can still
-                          // carry the legacy plain-string shape instead of
-                          // today's {meterType, label, reason} object, so
-                          // render those as a non-actionable badge instead
-                          // of crashing on a missing meterType.
-                          item &&
-                          typeof item === "object" &&
-                          item.reason === "NO_APPLICABLE_RULES" ? (
-                            <a
-                              class="readiness-item"
-                              data-tone="danger"
-                              href="#period-tariffs"
-                            >
-                              <Icon name="alert-triangle" size="xs" />{" "}
-                              {t("No billing rule applies")}
-                            </a>
-                          ) : item &&
-                            typeof item === "object" &&
-                            item.reason === "NO_ACTIVE_METER_FOR_RULE" ? (
-                            <a
-                              class="readiness-item"
-                              data-tone="danger"
-                              href={dwellingHref}
-                              data-tip={`${item.ruleName} — ${t("no active meter")}`}
-                              data-tip-clipped
-                            >
-                              <Icon name="alert-triangle" size="xs" />{" "}
-                              {item.ruleName} — {t("no active meter")}
-                            </a>
-                          ) : item &&
-                            typeof item === "object" &&
-                            "meterType" in item ? (
+                    {/* A tinted tag only where something needs work; a
+                        routine stage is plain text, so exceptions stand out. */}
+                    {billingCase.status === "MISSING_DATA" ||
+                    billingCase.status === "OVERDUE" ? (
+                      <StatusBadge status={billingCase.status} />
+                    ) : (
+                      <span class="status-text">
+                        <Icon
+                          name={invoiceStatusBadge(billingCase.status).icon}
+                          size="xs"
+                        />
+                        {t(invoiceStatusBadge(billingCase.status).label)}
+                      </span>
+                    )}
+                    {/* One line, never a stack: the last named problem is cut
+                        at its end, a serial-like name in its middle. "+N" sits
+                        outside the clipped part, so it is never cut, and opens
+                        a menu with every hidden problem and its own link. Full
+                        text is always in the DOM for screen readers. */}
+                    {problems.length > 0 && (
+                      <div class="readiness-line" data-tone={problems[0].tone}>
+                        <span class="readiness-icon" aria-hidden="true">
+                          <Icon name="alert-triangle" size="xs" />
+                        </span>
+                        <span
+                          class="readiness-items"
+                          style={`--items-min:${shownProblems.reduce(
+                            (sum, problem) => sum + itemMinCh(problem),
+                            // A separator and its two gaps.
+                            (shownProblems.length - 1) * 3
+                          )}ch`}
+                        >
+                          {shownProblems.map((problem, index) => {
+                            const Tag = problem.href
+                              ? "a"
+                              : problem.drawer
+                                ? "button"
+                                : "span";
+                            const cut = Boolean(problem.keepEnd);
+                            return (
+                              <>
+                                {index > 0 && (
+                                  <span
+                                    class="readiness-separator"
+                                    aria-hidden="true"
+                                  >
+                                    ·
+                                  </span>
+                                )}
+                                <Tag
+                                  class="readiness-item"
+                                  data-tone={problem.tone}
+                                  data-last={
+                                    index === shownProblems.length - 1
+                                      ? ""
+                                      : undefined
+                                  }
+                                  href={problem.href}
+                                  type={problem.drawer ? "button" : undefined}
+                                  data-open-drawer={problem.drawer}
+                                  data-dwelling-id={
+                                    problem.drawer
+                                      ? billingCase.dwellingId
+                                      : undefined
+                                  }
+                                  data-focus={problem.focus}
+                                  style={
+                                    cut
+                                      ? `min-width:${itemMinCh(problem)}ch`
+                                      : undefined
+                                  }
+                                  data-tip={problem.detail ?? problem.text}
+                                  data-tip-clipped={
+                                    problem.detail ? undefined : ""
+                                  }
+                                >
+                                  {cut ? (
+                                    <span class="mid-truncate">
+                                      <span class="mid-start">
+                                        {problem.text.slice(
+                                          0,
+                                          -problem.keepEnd!
+                                        )}
+                                      </span>
+                                      <span class="mid-end">
+                                        {problem.text.slice(-problem.keepEnd!)}
+                                      </span>
+                                    </span>
+                                  ) : (
+                                    problem.text
+                                  )}
+                                  {problem.detail && (
+                                    <span class="sr-only">
+                                      {" "}
+                                      {problem.detail}
+                                    </span>
+                                  )}
+                                </Tag>
+                              </>
+                            );
+                          })}
+                        </span>
+                        {hiddenProblems.length > 0 && (
+                          <>
                             <button
                               type="button"
-                              class="readiness-item"
-                              data-tone="danger"
-                              data-open-drawer="readings"
-                              data-dwelling-id={billingCase.dwellingId}
-                              data-focus={item.meterType
-                                .toLowerCase()
-                                .replace(/_/g, "-")}
-                              data-tip={`${item.label ?? entityLabel(item.meterType, locale)} — ${t("missing")}`}
-                              data-tip-clipped
+                              class="readiness-more"
+                              popovertarget={`problems-${billingCase.id}`}
+                              aria-label={plural(
+                                locale,
+                                hiddenProblems.length,
+                                "{n} more problem",
+                                "{n} more problems"
+                              )}
                             >
-                              <Icon name="alert-triangle" size="xs" />
-                              {item.label ??
-                                entityLabel(item.meterType, locale)}{" "}
-                              — {t("missing")}
+                              +{hiddenProblems.length}
                             </button>
-                          ) : item &&
-                            typeof item === "object" &&
-                            "billingRuleId" in item ? (
-                            <button
-                              type="button"
-                              class="readiness-item"
-                              data-tone="danger"
-                              data-open-drawer="readings"
-                              data-dwelling-id={billingCase.dwellingId}
-                              data-focus={`rule-${item.billingRuleId}`}
-                              data-tip={`${item.ruleName} — ${t("missing")}`}
-                              data-tip-clipped
+                            <div
+                              class="case-menu"
+                              id={`problems-${billingCase.id}`}
+                              popover="auto"
                             >
-                              <Icon name="alert-triangle" size="xs" />
-                              {item.ruleName} — {t("missing")}
-                            </button>
-                          ) : (
-                            <span class="readiness-item" data-tone="danger">
-                              <Icon name="alert-triangle" size="xs" />{" "}
-                              {typeof item === "string"
-                                ? item.replace(
-                                    /^Missing current-period meter reading for dwelling (.+?)\.?$/,
-                                    (_match, number) =>
-                                      fill(
-                                        t(
-                                          "Missing current-period meter reading for dwelling {number}"
-                                        ),
-                                        { number }
-                                      )
-                                  )
-                                : t("Missing data")}
-                            </span>
-                          )
-                        )}
-                        {hiddenMissing > 0 && (
-                          <button
-                            type="button"
-                            class="readiness-more"
-                            data-open-drawer="readings"
-                            data-dwelling-id={billingCase.dwellingId}
-                            data-tip={t(
-                              "Open readings to see every missing item"
-                            )}
-                            aria-label={fill(t("{count} more missing items"), {
-                              count: String(hiddenMissing),
-                            })}
-                          >
-                            {fill(t("+{count} more"), {
-                              count: String(hiddenMissing),
-                            })}
-                          </button>
-                        )}
-                        {invoiceByEmail && !billingEmail && (
-                          <button
-                            type="button"
-                            class="readiness-item"
-                            data-tone="warning"
-                            data-open-drawer="billing-details"
-                            data-dwelling-id={billingCase.dwellingId}
-                            data-focus="billing-email"
-                          >
-                            <Icon name="alert-triangle" size="xs" />{" "}
-                            {t("Billing email missing")}
-                          </button>
-                        )}
-                        {invoiceByPaper && (
-                          <span class="readiness-item" data-tone="neutral">
-                            <Icon name="file-description" size="xs" />{" "}
-                            {t("Paper delivery")}
-                          </span>
-                        )}
-                        {recipientIncomplete && (
-                          <button
-                            type="button"
-                            class="readiness-item"
-                            data-tone="danger"
-                            data-open-drawer="billing-details"
-                            data-dwelling-id={billingCase.dwellingId}
-                            data-focus="recipient"
-                          >
-                            <Icon name="alert-triangle" size="xs" />{" "}
-                            {t("Recipient details incomplete")}
-                          </button>
-                        )}
-                        {organizationIncomplete && (
-                          <span class="readiness-item" data-tone="danger">
-                            <Icon name="alert-triangle" size="xs" />{" "}
-                            {t("Issuer or payment details incomplete")}
-                          </span>
+                              {hiddenProblems.map((problem) => {
+                                const Tag = problem.href
+                                  ? "a"
+                                  : problem.drawer
+                                    ? "button"
+                                    : "span";
+                                return (
+                                  <Tag
+                                    class="problem-menu-item"
+                                    data-tone={problem.tone}
+                                    href={problem.href}
+                                    type={problem.drawer ? "button" : undefined}
+                                    data-open-drawer={problem.drawer}
+                                    data-dwelling-id={
+                                      problem.drawer
+                                        ? billingCase.dwellingId
+                                        : undefined
+                                    }
+                                    data-focus={problem.focus}
+                                  >
+                                    {problem.text}
+                                    {problem.detail && (
+                                      <span class="sr-only">
+                                        {" "}
+                                        {problem.detail}
+                                      </span>
+                                    )}
+                                  </Tag>
+                                );
+                              })}
+                            </div>
+                          </>
                         )}
                       </div>
                     )}
@@ -861,14 +1121,29 @@ const MAX_MISSING = 2;
                     )}
                   </td>
                   <td class="next-action">
-                    {period.status === "LOCKED" ? (
+                    {billingCase.status === "OVERDUE" ? (
+                      <a
+                        class="btn-secondary btn-sm"
+                        href={`/admin/o/${organizationId}/payments/ledger?dwelling=${billingCase.dwellingId}`}
+                      >
+                        {t("Account statement")}
+                      </a>
+                    ) : billingCase.status === "PAID" &&
+                      !unsentPaid ? null : period.status === "LOCKED" ? (
                       <a
                         class="btn-secondary btn-sm"
                         href={invoiceHref ?? readingsHref}
                       >
                         {t(invoiceHref ? "View invoice" : "View readings")}
                       </a>
-                    ) : missing.length > 0 ? (
+                    ) : blockedBeforeInvoice && configOnly ? (
+                      <a
+                        class="btn-secondary btn-sm"
+                        href={noRule ? "#period-tariffs" : dwellingHref}
+                      >
+                        {t(noRule ? "Check tariffs" : "View dwelling")}
+                      </a>
+                    ) : blockedBeforeInvoice ? (
                       <button
                         type="button"
                         class="btn-secondary btn-sm"
@@ -892,7 +1167,7 @@ const MAX_MISSING = 2;
                           name="dwellingId"
                           value={billingCase.dwellingId}
                         />
-                        <button type="submit" class="btn-primary btn-sm">
+                        <button type="submit" class="btn-secondary btn-sm">
                           {t("Generate invoice")}
                         </button>
                       </form>
@@ -915,6 +1190,19 @@ const MAX_MISSING = 2;
                         {t("Fix organization details")}
                       </a>
                     ) : billingCase.status === "DRAFT" ? (
+                      <a class="btn-secondary btn-sm" href={invoiceHref!}>
+                        {t("Review invoice")}
+                      </a>
+                    ) : billingCase.status === "PREPARED" && paperOnly ? (
+                      <a class="btn-secondary btn-sm" href={invoiceHref!}>
+                        {t("Record paper dispatch")}
+                      </a>
+                    ) : billingCase.status === "PREPARED" &&
+                      (emailSuppressed || deliveryUnknown) ? (
+                      <a class="btn-secondary btn-sm" href={invoiceHref!}>
+                        {t("Check delivery")}
+                      </a>
+                    ) : billingCase.status === "PREPARED" && emailAddedSince ? (
                       <a class="btn-secondary btn-sm" href={invoiceHref!}>
                         {t("Review invoice")}
                       </a>
@@ -942,7 +1230,7 @@ const MAX_MISSING = 2;
                         />
                         <button
                           type="submit"
-                          class="btn-primary btn-sm"
+                          class="btn-secondary btn-sm"
                           data-confirm={t(
                             "Send this invoice to the resident by email now? Sent invoices cannot be edited."
                           )}
@@ -950,13 +1238,13 @@ const MAX_MISSING = 2;
                           {t("Send invoice")}
                         </button>
                       </form>
+                    ) : unsentPaid ? (
+                      <a class="btn-secondary btn-sm" href={invoiceHref!}>
+                        {t("Review invoice")}
+                      </a>
                     ) : (
                       <a class="btn-secondary btn-sm" href={invoiceHref!}>
-                        {t(
-                          billingCase.status === "OVERDUE"
-                            ? "Review invoice"
-                            : "View invoice"
-                        )}
+                        {t("View invoice")}
                       </a>
                     )}
                   </td>
@@ -1013,11 +1301,13 @@ const MAX_MISSING = 2;
                 <td colspan="6" class="empty-queue">
                   <strong>
                     {t(
-                      statusFilter === "MISSING_DATA"
-                        ? "No dwellings are missing required billing data."
-                        : search || statusFilter
-                          ? "No billing cases match these filters."
-                          : "No billing cases for this period."
+                      search
+                        ? "No billing cases match these filters."
+                        : statusFilter === "MISSING_DATA"
+                          ? "No dwellings are missing required billing data."
+                          : statusFilter
+                            ? "No billing cases match these filters."
+                            : "No billing cases for this period."
                     )}
                   </strong>
                   <span>{periodName}</span>
@@ -1135,6 +1425,41 @@ const MAX_MISSING = 2;
         'input[name="invoiceIds"]'
       ),
     ];
+    const setToolbarSpace = (space: string) => {
+      document.documentElement.style.scrollPaddingBottom = space;
+      document
+        .querySelector<HTMLElement>(".workbench")
+        ?.style.setProperty("padding-bottom", space);
+    };
+    controller.signal.addEventListener("abort", () => setToolbarSpace(""));
+    // A bulk action submits only the selected invoices it can act on, so a
+    // blocked one in the selection is not sent to the server to be skipped.
+    // Capture listeners: the queue is re-rendered after saves, and formdata
+    // does not bubble.
+    let bulkStatus = "";
+    document.addEventListener(
+      "submit",
+      (event) => {
+        if ((event.target as Element).id !== "bulk-select-form") return;
+        bulkStatus =
+          (event.submitter as HTMLElement | null)?.dataset.bulkStatus ?? "";
+      },
+      { ...options, capture: true }
+    );
+    document.addEventListener(
+      "formdata",
+      (event) => {
+        if ((event.target as Element).id !== "bulk-select-form" || !bulkStatus)
+          return;
+        const eligible =
+          bulkStatus === "DRAFT" ? "prepareEligible" : "sendEligible";
+        event.formData.delete("invoiceIds");
+        for (const box of boxes())
+          if (box.checked && box.dataset[eligible] === "true")
+            event.formData.append("invoiceIds", box.value);
+      },
+      { ...options, capture: true }
+    );
     const updateSelection = () => {
       const all = boxes();
       const selected = all.filter((box) => box.checked);
@@ -1172,7 +1497,26 @@ const MAX_MISSING = 2;
           selected.length > 0 && selected.length < all.length;
         selectAll.disabled = all.length === 0;
       }
+      // Measured last, once the counts are in.
+      measureToolbar();
     };
+    // On phones the toolbar is pinned to the bottom (fixed). Keep its real
+    // height clear, measured because it wraps by language and width, so a
+    // focused row control and the last row are never hidden under it.
+    const measureToolbar = () => {
+      const toolbar = document.querySelector<HTMLElement>("#bulk-toolbar");
+      const pinned =
+        toolbar &&
+        !toolbar.hidden &&
+        getComputedStyle(toolbar).position === "fixed";
+      setToolbarSpace(
+        pinned
+          ? `${Math.ceil(innerHeight - toolbar.getBoundingClientRect().top) + 12}px`
+          : ""
+      );
+    };
+    // Rotation or a resize can wrap the toolbar or unpin it.
+    addEventListener("resize", measureToolbar, options);
     document.addEventListener(
       "change",
       (event) => {
@@ -1192,6 +1536,12 @@ const MAX_MISSING = 2;
       (event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
+        // A link to the tariffs opens their disclosure, not just scrolls to it.
+        if (target.closest('a[href="#period-tariffs"]')) {
+          const tariffs =
+            document.querySelector<HTMLDetailsElement>("#period-tariffs");
+          if (tariffs) tariffs.open = true;
+        }
         if (target.closest("#clear-selection")) {
           boxes().forEach((box) => {
             box.checked = false;
@@ -1683,7 +2033,8 @@ const MAX_MISSING = 2;
     padding: 0.75rem 1rem;
     border: 1px solid var(--color-input-border);
     border-radius: var(--radius-control);
-    background: var(--color-nav-active-bg);
+    /* Opaque: rows scroll under it. */
+    background: var(--color-surface-raised);
     box-shadow: var(--elevation-raised);
   }
   .bulk-toolbar[hidden] {
@@ -1746,6 +2097,28 @@ const MAX_MISSING = 2;
     width: 2.75rem;
     text-align: center;
   }
+  .select-hit {
+    display: inline-grid;
+    place-items: center;
+    cursor: pointer;
+  }
+  @media (pointer: coarse) {
+    .select-hit {
+      min-width: 2.75rem;
+      min-height: 2.75rem;
+    }
+  }
+  /* Routine stages: plain text, so the tinted badges mark only exceptions. */
+  .status-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    letter-spacing: var(--tracking-small);
+    line-height: 1rem;
+  }
   .dwelling-cell {
     overflow-wrap: break-word;
   }
@@ -1763,22 +2136,47 @@ const MAX_MISSING = 2;
     color: var(--color-muted);
     font-size: var(--text-xs);
   }
-  .readiness-list {
+  /* A case's problems: one line under its status. Plain caption text coloured
+     by meaning, separated by dots. A definite max-width: with nowrap, the line
+     would otherwise set the column's minimum width and widen the table. */
+  .readiness-line {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.125rem;
-    margin-top: 0.375rem;
+    align-items: center;
+    gap: 0 0.375rem;
+    min-width: 0;
+    max-width: 18rem;
+    margin-top: 0.25rem;
+    font-size: var(--text-xs);
+    letter-spacing: var(--tracking-small);
+    line-height: 1.5rem;
+    white-space: nowrap;
   }
-  /* Plain text with an icon, coloured by meaning. One line each: a long meter
-     or rule name truncates (its tooltip carries the full text) instead of
-     growing the row. */
-  .readiness-item {
-    display: block;
-    /* A definite cap: with nowrap, a percentage would let the longest item set
-       the minimum width of the table and push the page sideways. */
-    max-width: 16rem;
+  .readiness-icon {
+    display: flex;
+    flex-shrink: 0;
+    color: var(--color-warning);
+  }
+  .readiness-line[data-tone="danger"] .readiness-icon {
+    color: var(--color-destructive);
+  }
+  .readiness-separator {
+    flex-shrink: 0;
+    color: var(--color-muted);
+  }
+  /* The named problems are the only part that clips; the icon and "+N" sit
+     outside it, so the count can never be pushed out. Its minimum is what its
+     names need (4ch each, a serial's kept digits plus an ellipsis, set per
+     row), so no name
+     is ever clipped away: the column grows that little instead. */
+  .readiness-items {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: 0 0.375rem;
+    min-width: var(--items-min, 0);
     overflow: hidden;
+  }
+  .readiness-item {
     padding: 0;
     border: none;
     background: none;
@@ -1787,23 +2185,63 @@ const MAX_MISSING = 2;
     font-size: var(--text-xs);
     line-height: 1.5;
     text-align: left;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .readiness-item :global(svg) {
     display: inline-block;
     margin-right: 0.25rem;
     vertical-align: -3px;
   }
-  /* Only items that carry their full text in a tooltip truncate; the short
-     fixed ones wrap rather than lose words. */
-  .readiness-item:not([data-tip]) {
-    overflow: visible;
+  /* Named problems keep their width; the last one gives way first and is
+     cut at its end (Apple's tail truncation). */
+  .readiness-line .readiness-item {
+    display: flex;
+    align-items: center;
+    flex: 0 1 auto;
+    min-width: 4ch;
+    overflow: hidden;
+    line-height: 1.5rem;
+  }
+  .readiness-line .readiness-item:not(:has(.mid-truncate)) {
+    display: block;
+    text-overflow: ellipsis;
+  }
+  /* Everything shrinks, so the "+N" is never pushed out; the last name
+     shrinks four times faster, so it gives way first. */
+  .readiness-line .readiness-item[data-last] {
+    flex-shrink: 4;
+  }
+  /* A name told apart by its end (a meter serial) is cut in the middle, so
+     the distinguishing tail stays visible (Apple's middle truncation). */
+  .mid-truncate {
+    display: flex;
+    min-width: 0;
+  }
+  .mid-start {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mid-end {
+    flex-shrink: 0;
+  }
+  /* The menu sits inside the one-line row: undo its nowrap so a long tariff
+     or meter name wraps instead of scrolling sideways on a phone. */
+  .readiness-line .case-menu {
+    max-width: min(20rem, calc(100vw - 1rem));
+    letter-spacing: normal;
     white-space: normal;
   }
-  /* Stacked links: 24px each, so neighbours keep the WCAG 2.5.8 spacing. */
-  :is(button, a).readiness-item {
-    line-height: 1.5rem;
+  .problem-menu-item {
+    display: block;
+    padding: 0.625rem 0.75rem;
+    font-size: var(--text-sm);
+    overflow-wrap: anywhere;
+  }
+  .case-menu .problem-menu-item[data-tone="danger"] {
+    color: var(--color-destructive);
+  }
+  .case-menu .problem-menu-item[data-tone="warning"] {
+    color: var(--color-warning);
   }
   :is(button, a).readiness-item {
     cursor: pointer;
@@ -1815,7 +2253,9 @@ const MAX_MISSING = 2;
   :is(button, a).readiness-item:focus-visible {
     text-decoration-style: solid;
   }
+  /* The count is never cut. */
   .readiness-more {
+    flex-shrink: 0;
     padding: 0;
     border: none;
     background: none;
@@ -1837,6 +2277,14 @@ const MAX_MISSING = 2;
   }
   .readiness-item[data-tone="warning"] {
     color: var(--color-warning);
+  }
+  /* Tags inside the table are caption text, not bold body text. */
+  .case-table :global(.status-badge) {
+    padding: 0.125rem 0.375rem;
+    font-size: var(--text-xs);
+    font-weight: 500;
+    letter-spacing: var(--tracking-small);
+    line-height: 1rem;
   }
   .numeric-column {
     text-align: right;
@@ -1910,9 +2358,13 @@ const MAX_MISSING = 2;
     .workflow-rail {
       padding-inline: 0.5rem;
     }
+    /* Phones: pinned to the bottom, so the actions stay in reach while the
+       admin ticks rows further down. */
     .bulk-toolbar {
-      position: static;
-      margin-inline: 0.75rem;
+      position: fixed;
+      inset: auto 0.75rem 0.75rem;
+      z-index: 20;
+      margin: 0;
       padding: 0.75rem;
     }
     .bulk-actions {
@@ -1972,6 +2424,10 @@ const MAX_MISSING = 2;
     .select-column:not(:has(input)) {
       display: none;
     }
+    /* The header row is hidden here; its checkbox must not take focus. */
+    #select-all {
+      display: none;
+    }
     .dwelling-cell {
       grid-area: dwelling;
     }
@@ -1993,7 +2449,7 @@ const MAX_MISSING = 2;
       width: auto;
       justify-self: end;
     }
-    .readiness-item {
+    .readiness-line {
       max-width: 100%;
     }
     .case-table tbody tr:has(.empty-queue) {
@@ -2001,6 +2457,13 @@ const MAX_MISSING = 2;
     }
   }
   @media (pointer: coarse) {
+    .readiness-line {
+      line-height: 2.75rem;
+    }
+    .readiness-line .readiness-item,
+    .readiness-line .readiness-more {
+      line-height: 2.75rem;
+    }
     .readiness-item:is(button, a),
     .readiness-more,
     .clear-filters,

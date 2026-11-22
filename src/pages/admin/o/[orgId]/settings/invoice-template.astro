@@ -13,10 +13,6 @@ import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { getResolvedInvoiceTemplate } from "../../../../../domain/billing/invoice-templates";
 import { getEffectiveRules } from "../../../../../domain/billing/rules";
@@ -34,12 +30,6 @@ import type { InvoiceHtmlInvoice } from "../../../../../domain/billing/invoice-h
 import { withRequestDb } from "../../../../../lib/db-request";
 
 const organizationId = Astro.params.orgId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const updateResult = Astro.getActionResult(actions.invoiceTemplates.update);
 const requestedPeriodId = Astro.url.searchParams.get("previewPeriodId");

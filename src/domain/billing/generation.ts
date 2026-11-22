@@ -41,6 +41,7 @@ import {
   buildPenaltySnapshot,
   resolveStatementFinancials,
 } from "../accounts/statements";
+import { syncDwellingSettlement } from "../accounts/settlement";
 import {
   ConflictError,
   NotFoundError,
@@ -604,15 +605,14 @@ export async function getInvoiceForResident(
     invoice.organizationId,
     invoice.id
   );
-  // Older paid invoices have no allocation rows: trust paidAt, as
-  // getInvoiceForDwellingPeriod does.
-  const legacyPaid = !!invoice.paidAt && paidAmount === "0.00";
-  const remainingAmount = legacyPaid
+  // Paid means its own amount is covered (ADR 0016), also by money paid on
+  // a later invoice or with no allocation row at all, as getInvoiceForDwellingPeriod does.
+  const remainingAmount = invoice.paidAt
     ? "0.00"
     : maxExact("0.00", subtractExact(invoice.amountDue, paidAmount));
   return {
     ...result,
-    paidAmount: legacyPaid ? invoice.amountDue : paidAmount,
+    paidAmount: invoice.paidAt ? invoice.amountDue : paidAmount,
     remainingAmount,
   };
 }
@@ -700,10 +700,9 @@ export async function getInvoiceForDwellingPeriod(
   );
   return {
     ...invoice,
-    outstandingAmount:
-      invoice.paidAt && allocated === "0.00"
-        ? "0.00"
-        : maxExact(subtractExact(invoice.amountDue, allocated), "0.00"),
+    outstandingAmount: invoice.paidAt
+      ? "0.00"
+      : maxExact(subtractExact(invoice.amountDue, allocated), "0.00"),
   };
 }
 
@@ -748,9 +747,6 @@ export async function prepareInvoice(
       throw new ConflictError("Only a DRAFT invoice can be prepared");
     }
 
-    const problem = missingBillingDetails(parseInvoiceSnapshots(invoice));
-    if (problem) throw new ValidationError(problem);
-
     // Only after an override back to Draft. The payment was matched against
     // the amount due the invoice had then; a new amount due under it would
     // let the invoice count as paid while money is still owed.
@@ -764,6 +760,18 @@ export async function prepareInvoice(
         "This invoice already has a payment. Reverse the payment before preparing the invoice again"
       );
     }
+    // Same rule as generateInvoice: a status override back to Draft does not
+    // make a sent or paid invoice changeable. Preparing would give it a new
+    // amount due under the PDF the resident already has. After the payment
+    // check, so an invoice paid before it was sent gets that message.
+    if (invoice.sentAt || invoice.paidAt) {
+      throw new ConflictError(
+        "This invoice has already been sent and can no longer be prepared again; issue a correction document instead"
+      );
+    }
+
+    const problem = missingBillingDetails(parseInvoiceSnapshots(invoice));
+    if (problem) throw new ValidationError(problem);
 
     const financials = await resolveStatementFinancials(tx, {
       organizationId,
@@ -849,7 +857,19 @@ export async function prepareInvoice(
       entityId: invoiceId,
       afterData: prepared,
     });
-    return prepared;
+    // A credit already on the account can cover it in full (ADR 0016). Only
+    // this invoice can change: a newer charge never uncovers an older one.
+    await syncDwellingSettlement(
+      tx,
+      organizationId,
+      invoice.dwellingId,
+      invoice.currency
+    );
+    const [settled] = await tx
+      .select()
+      .from(invoices)
+      .where(eq(invoices.id, invoiceId));
+    return settled;
   });
 }
 

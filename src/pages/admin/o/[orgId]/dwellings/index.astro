@@ -18,24 +18,22 @@ const t = (text: string) => translate(locale, text);
 import FieldError from "../../../../../components/ui/FieldError.astro";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { listDwellings } from "../../../../../domain/organizations/dwellings";
 import { withRequestDb } from "../../../../../lib/db-request";
+import BuildingView from "../../../../../components/ui/BuildingView.astro";
+import {
+  autoLayout,
+  getBuildingLayout,
+} from "../../../../../domain/organizations/building";
+import { listPeriods } from "../../../../../domain/periods/periods";
+import { listCasesForPeriod } from "../../../../../domain/periods/cases";
 
 const organizationId = Astro.params.orgId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const createResult = Astro.getActionResult(actions.dwellings.create);
 const archiveResult = Astro.getActionResult(actions.dwellings.archive);
+const resetResult = Astro.getActionResult(actions.dwellings.resetLayout);
 
 const search = Astro.url.searchParams.get("search") ?? "";
 const includeArchived = Astro.url.searchParams.get("includeArchived") === "1";
@@ -45,15 +43,66 @@ const requestedPage = Math.max(
 );
 const pageSize = 25;
 
-const { organization, allDwellings } = await withRequestDb(async (db) => ({
-  organization: await getOrganization(db, organizationId),
-  allDwellings: await listDwellings(db, organizationId, {
-    search: search || undefined,
-    includeArchived,
-    // ponytail: organization-sized directory (~1,000 users); move sorting/filtering into the query if scale grows.
+// Table or building, remembered per browser in a cookie; a link sets it.
+const requestedView = Astro.url.searchParams.get("view");
+if (requestedView === "table" || requestedView === "building") {
+  Astro.cookies.set("dwellings-view", requestedView, {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+    sameSite: "lax",
+  });
+}
+const view =
+  (requestedView ?? Astro.cookies.get("dwellings-view")?.value) === "building"
+    ? "building"
+    : "table";
+
+const { organization, allDwellings, building } = await withRequestDb(
+  async (db) => ({
+    organization: await getOrganization(db, organizationId),
+    allDwellings: await listDwellings(db, organizationId, {
+      search: search || undefined,
+      includeArchived,
+      // ponytail: organization-sized directory (~1,000 users); move sorting/filtering into the query if scale grows.
+      limit: 2147483647,
+    }),
+    building: view === "building" ? await loadBuilding(db) : null,
+  })
+);
+
+// The building shows every active dwelling (the table's filters do not apply)
+// with this month's stage.
+async function loadBuilding(db: Parameters<typeof listDwellings>[0]) {
+  const active = await listDwellings(db, organizationId, {
     limit: 2147483647,
-  }),
-}));
+  });
+  const layout = await getBuildingLayout(db, organizationId);
+  const periods = await listPeriods(db, organizationId);
+  // The dashboard's month: the newest billing month, open or locked (an older
+  // month reopened for a correction does not take over).
+  const month = periods.find((period) => !period.openingReadings);
+  const cases = month
+    ? await listCasesForPeriod(db, organizationId, month.id)
+    : [];
+  const stage = new Map(cases.map((c) => [c.dwellingId, c.status as string]));
+  return {
+    saved: layout.saved,
+    entrances: layout.saved
+      ? layout.entrances
+      : [
+          autoLayout(
+            active.filter((d) => d.type === "APARTMENT"),
+            translate(locale, "Entrance") + " A"
+          ),
+        ],
+    units: active.map((d) => ({
+      id: d.id,
+      number: d.number,
+      type: d.type,
+      stage: stage.get(d.id) ?? null,
+    })),
+  };
+}
 const typeFilter = Astro.url.searchParams.get("type") ?? "";
 const statusFilter = Astro.url.searchParams.get("status") ?? "";
 const types = ["APARTMENT", "COMMERCIAL_UNIT", "PARKING", "STORAGE", "OTHER"];
@@ -113,211 +162,253 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
         {t("Create dwelling")}
       </a>
     </PageHeader>
-    <form method="GET" class="filter-bar" data-instant-filter>
-      <div>
-        <label class="field-label" for="search">
-          {t("Search")}
-        </label>
-        <input
-          id="search"
-          name="search"
-          value={search}
-          placeholder={t("Number, occupant, address...")}
-          autocomplete="off"
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-body-sm"
-        />
-      </div>
-      <div>
-        <label class="field-label" for="type-filter">
-          {t("Type")}
-        </label>
-        <select
-          id="type-filter"
-          name="type"
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-        >
-          <option value="">{t("All types")}</option>
-          {types.map((type) => (
-            <option value={type} selected={type === typeFilter}>
-              {entityLabel(type, locale)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label class="field-label" for="status-filter">
-          {t("Status")}
-        </label>
-        <select
-          id="status-filter"
-          name="status"
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-        >
-          <option value="">{t("All statuses")}</option>
-          <option value="ACTIVE" selected={statusFilter === "ACTIVE"}>
-            {t("Active")}
-          </option>
-          <option value="ARCHIVED" selected={statusFilter === "ARCHIVED"}>
-            {t("Archived")}
-          </option>
-        </select>
-      </div>
-      <label class="flex items-center gap-2 pb-2 text-body-sm text-foreground">
-        <input
-          type="checkbox"
-          name="includeArchived"
-          value="1"
-          checked={includeArchived}
-        />
-        {t("Show archived")}
-      </label>
-      {(search || typeFilter || statusFilter || includeArchived) && (
-        <a href={listPath} class="clear-filters">
-          {t("Clear filters")}
-        </a>
-      )}
-    </form>
-
-    {(createResult?.error || archiveResult?.error) && (
-      <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
-        {createResult?.error?.message ?? archiveResult?.error?.message}
+    <nav class="lang-switch view-switch" aria-label={t("Dwellings view")}>
+      <a
+        href="?view=table"
+        aria-current={view === "table" ? "page" : undefined}
+      >
+        {t("Table")}
+      </a>
+      <a
+        href="?view=building"
+        aria-current={view === "building" ? "page" : undefined}
+      >
+        {t("Building")}
+      </a>
+    </nav>
+    {resetResult?.error && (
+      <p class="notice notice-danger" role="alert">
+        {resetResult.error.message}
       </p>
     )}
-
-    <div class="table-wrap stack-table">
-      <table class="w-full text-left text-body-sm">
-        <caption class="sr-only">{t("Dwellings")}</caption>
-        <thead class="border-b border-border bg-surface-hover text-muted">
-          <tr>
-            <th scope="col" class="px-4 py-2">
-              {t("Number")}
-              <span aria-hidden="true">↑</span>
-            </th>
-            <th scope="col" class="px-4 py-2">
+    {view === "building" && building ? (
+      <BuildingView
+        organizationId={organizationId}
+        entrances={building.entrances}
+        units={building.units}
+        saved={building.saved}
+      />
+    ) : (
+      <>
+        <form method="GET" class="filter-bar" data-instant-filter>
+          <div>
+            <label class="field-label" for="search">
+              {t("Search")}
+            </label>
+            <input
+              id="search"
+              name="search"
+              value={search}
+              placeholder={t("Number, occupant, address...")}
+              autocomplete="off"
+              class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-body-sm"
+            />
+          </div>
+          <div>
+            <label class="field-label" for="type-filter">
               {t("Type")}
-            </th>
-            <th scope="col" class="px-4 py-2">
-              {t("Occupant")}
-            </th>
-            <th scope="col" class="px-4 py-2">
-              {t("Address")}
-            </th>
-            <th scope="col" class="px-4 py-2 text-right">
-              {t("Area (m²)")}
-            </th>
-            <th scope="col" class="px-4 py-2 text-right">
-              {t("Residents")}
-            </th>
-            <th scope="col" class="px-4 py-2">
+            </label>
+            <select
+              id="type-filter"
+              name="type"
+              class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+            >
+              <option value="">{t("All types")}</option>
+              {types.map((type) => (
+                <option value={type} selected={type === typeFilter}>
+                  {entityLabel(type, locale)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label class="field-label" for="status-filter">
               {t("Status")}
-            </th>
-            <th scope="col" class="px-4 py-2 text-right">
-              {t("Actions")}
-            </th>
-          </tr>
-        </thead>
-        <tbody
-          class="divide-y divide-border"
-          id="dwellings-list"
-          data-address={organization.addressLine1}
-          data-active-label={t("Active")}
-          data-saving-label={t("Saving…")}
-        >
-          {dwellings.map((d) => (
-            <tr class="row-link">
-              <td class="px-4 py-2 font-medium">
-                <a
-                  class="row-link-target hover:underline"
-                  href={"/admin/o/" + organizationId + "/dwellings/" + d.id}
-                >
-                  {d.number}
-                </a>
-              </td>
-              <td class="px-4 py-2">
-                <span class="dwelling-type">
-                  <Icon
-                    name={DWELLING_TYPE_ICONS[d.type] ?? "building"}
-                    class="dwelling-type-icon"
-                  />
-                  {entityLabel(d.type, locale)}
-                </span>
-              </td>
-              <td class="px-4 py-2">{d.occupantName ?? "—"}</td>
-              <td class="px-4 py-2">
-                {d.type === "APARTMENT" || d.type === "COMMERCIAL_UNIT"
-                  ? `${organization.addressLine1} – ${d.number}`
-                  : organization.addressLine1}
-              </td>
-              <td class="px-4 py-2 text-right">
-                {formatNumber(d.areaM2, locale, 2)}
-              </td>
-              <td class="px-4 py-2 text-right">{d.residentCount}</td>
-              <td class="px-4 py-2">
-                <StatusBadge status={d.archivedAt ? "ARCHIVED" : "ACTIVE"} />
-              </td>
-              <td class="row-link-above px-4 py-2 text-right">
-                {!d.archivedAt && (
-                  <details class="row-menu">
-                    <summary aria-label={`${t("More actions")}: ${d.number}`}>
-                      •••
-                    </summary>
-                    <div>
-                      <form method="POST" action={actions.dwellings.archive}>
-                        <input
-                          type="hidden"
-                          name="organizationId"
-                          value={organizationId}
-                        />
-                        <input type="hidden" name="dwellingId" value={d.id} />
-                        <button
-                          type="submit"
-                          data-confirm={`${t("Archive dwelling")} ${d.number}?`}
-                        >
-                          {t("Archive")}
-                        </button>
-                      </form>
-                    </div>
-                  </details>
-                )}
-              </td>
-            </tr>
-          ))}
-          {dwellings.length === 0 && (
-            <tr data-empty-row>
-              <td colspan="8" class="px-4 py-8 text-center text-muted">
-                {t("No dwellings match this filter.")}
-              </td>
-            </tr>
+            </label>
+            <select
+              id="status-filter"
+              name="status"
+              class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+            >
+              <option value="">{t("All statuses")}</option>
+              <option value="ACTIVE" selected={statusFilter === "ACTIVE"}>
+                {t("Active")}
+              </option>
+              <option value="ARCHIVED" selected={statusFilter === "ARCHIVED"}>
+                {t("Archived")}
+              </option>
+            </select>
+          </div>
+          <label class="flex items-center gap-2 pb-2 text-body-sm text-foreground">
+            <input
+              type="checkbox"
+              name="includeArchived"
+              value="1"
+              checked={includeArchived}
+            />
+            {t("Show archived")}
+          </label>
+          {(search || typeFilter || statusFilter || includeArchived) && (
+            <a href={listPath} class="clear-filters">
+              {t("Clear filters")}
+            </a>
           )}
-        </tbody>
-      </table>
-    </div>
+        </form>
 
-    <div class="pagination-bar">
-      <a
-        href={`?search=${encodeURIComponent(search)}&includeArchived=${includeArchived ? "1" : "0"}&type=${encodeURIComponent(typeFilter)}&status=${encodeURIComponent(statusFilter)}&page=${Math.max(1, page - 1)}`}
-        class="btn-secondary btn-sm"
-        aria-disabled={page <= 1}
-        class:list={{ "pointer-events-none opacity-40": page <= 1 }}
-      >
-        <Icon name="arrow-left" size="sm" />
-        {t("Previous")}
-      </a>
-      <span class="pagination-page">
-        {t("Page")} {page}
-      </span>
-      <a
-        href={`?search=${encodeURIComponent(search)}&includeArchived=${includeArchived ? "1" : "0"}&type=${encodeURIComponent(typeFilter)}&status=${encodeURIComponent(statusFilter)}&page=${page + 1}`}
-        class="btn-secondary btn-sm"
-        aria-disabled={page * pageSize >= filtered.length}
-        class:list={{
-          "pointer-events-none opacity-40": page * pageSize >= filtered.length,
-        }}
-      >
-        {t("Next")}
-        <Icon name="arrow-right" size="sm" />
-      </a>
-    </div>
+        {(createResult?.error || archiveResult?.error) && (
+          <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
+            {createResult?.error?.message ?? archiveResult?.error?.message}
+          </p>
+        )}
+
+        <div class="table-wrap stack-table">
+          <table class="w-full text-left text-body-sm">
+            <caption class="sr-only">{t("Dwellings")}</caption>
+            <thead class="border-b border-border bg-surface-hover text-muted">
+              <tr>
+                <th scope="col" class="px-4 py-2">
+                  {t("Number")}
+                  <span aria-hidden="true">↑</span>
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Type")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Occupant")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Address")}
+                </th>
+                <th scope="col" class="px-4 py-2 text-right">
+                  {t("Area (m²)")}
+                </th>
+                <th scope="col" class="px-4 py-2 text-right">
+                  {t("Residents")}
+                </th>
+                <th scope="col" class="px-4 py-2">
+                  {t("Status")}
+                </th>
+                <th scope="col" class="px-4 py-2 text-right">
+                  {t("Actions")}
+                </th>
+              </tr>
+            </thead>
+            <tbody
+              class="divide-y divide-border"
+              id="dwellings-list"
+              data-address={organization.addressLine1}
+              data-active-label={t("Active")}
+              data-saving-label={t("Saving…")}
+            >
+              {dwellings.map((d) => (
+                <tr class="row-link">
+                  <td class="px-4 py-2 font-medium">
+                    <a
+                      class="row-link-target hover:underline"
+                      href={"/admin/o/" + organizationId + "/dwellings/" + d.id}
+                    >
+                      {d.number}
+                    </a>
+                  </td>
+                  <td class="px-4 py-2">
+                    <span class="dwelling-type">
+                      <Icon
+                        name={DWELLING_TYPE_ICONS[d.type] ?? "building"}
+                        class="dwelling-type-icon"
+                      />
+                      {entityLabel(d.type, locale)}
+                    </span>
+                  </td>
+                  <td class="px-4 py-2">{d.occupantName ?? "—"}</td>
+                  <td class="px-4 py-2">
+                    {d.type === "APARTMENT" || d.type === "COMMERCIAL_UNIT"
+                      ? `${organization.addressLine1} – ${d.number}`
+                      : organization.addressLine1}
+                  </td>
+                  <td class="px-4 py-2 text-right">
+                    {formatNumber(d.areaM2, locale, 2)}
+                  </td>
+                  <td class="px-4 py-2 text-right">{d.residentCount}</td>
+                  <td class="px-4 py-2">
+                    <StatusBadge
+                      status={d.archivedAt ? "ARCHIVED" : "ACTIVE"}
+                    />
+                  </td>
+                  <td class="row-link-above px-4 py-2 text-right">
+                    {!d.archivedAt && (
+                      <details class="row-menu">
+                        <summary
+                          aria-label={`${t("More actions")}: ${d.number}`}
+                        >
+                          •••
+                        </summary>
+                        <div>
+                          <form
+                            method="POST"
+                            action={actions.dwellings.archive}
+                          >
+                            <input
+                              type="hidden"
+                              name="organizationId"
+                              value={organizationId}
+                            />
+                            <input
+                              type="hidden"
+                              name="dwellingId"
+                              value={d.id}
+                            />
+                            <button
+                              type="submit"
+                              data-confirm={`${t("Archive dwelling")} ${d.number}?`}
+                            >
+                              {t("Archive")}
+                            </button>
+                          </form>
+                        </div>
+                      </details>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {dwellings.length === 0 && (
+                <tr data-empty-row>
+                  <td colspan="8" class="px-4 py-8 text-center text-muted">
+                    {t("No dwellings match this filter.")}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination-bar">
+          <a
+            href={`?search=${encodeURIComponent(search)}&includeArchived=${includeArchived ? "1" : "0"}&type=${encodeURIComponent(typeFilter)}&status=${encodeURIComponent(statusFilter)}&page=${Math.max(1, page - 1)}`}
+            class="btn-secondary btn-sm"
+            aria-disabled={page <= 1}
+            class:list={{ "pointer-events-none opacity-40": page <= 1 }}
+          >
+            <Icon name="arrow-left" size="sm" />
+            {t("Previous")}
+          </a>
+          <span class="pagination-page">
+            {t("Page")} {page}
+          </span>
+          <a
+            href={`?search=${encodeURIComponent(search)}&includeArchived=${includeArchived ? "1" : "0"}&type=${encodeURIComponent(typeFilter)}&status=${encodeURIComponent(statusFilter)}&page=${page + 1}`}
+            class="btn-secondary btn-sm"
+            aria-disabled={page * pageSize >= filtered.length}
+            class:list={{
+              "pointer-events-none opacity-40":
+                page * pageSize >= filtered.length,
+            }}
+          >
+            {t("Next")}
+            <Icon name="arrow-right" size="sm" />
+          </a>
+        </div>
+      </>
+    )}
 
     <details
       id="create-dwelling"
@@ -611,6 +702,13 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
 </script>
 
 <style>
+  .view-switch {
+    width: fit-content;
+    font-size: var(--text-sm);
+  }
+  .view-switch > a {
+    padding-inline: 1rem;
+  }
   .dwelling-type {
     display: inline-flex;
     align-items: center;

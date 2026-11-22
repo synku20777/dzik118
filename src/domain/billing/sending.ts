@@ -7,7 +7,7 @@
 // the first successful send -- a resend reuses the same pdf_object_key/
 // pdf_sha256, never regenerates it (Section 21: "canonical PDF
 // immutable").
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import type { Db, Tx } from "../../db/client";
 import { billingCases, billingPeriods } from "../../db/schema/billing";
 import { dwellings } from "../../db/schema/dwellings";
@@ -311,10 +311,30 @@ async function markAttemptTerminalWithAudit(
   await db.transaction(async (tx) => {
     if (targetStatus === "SENT") {
       await markSent(tx, attemptId);
-    } else if (targetStatus === "FAILED") {
-      await markFailed(tx, attemptId, errorCode ?? "DELIVERY_FAILED");
     } else {
-      await markUnknown(tx, attemptId, errorCode ?? "DELIVERY_OUTCOME_UNKNOWN");
+      // Never over a SENT attempt: a late provider answer must not undo a
+      // confirmed delivery, such as an admin's markInvoiceDelivered. A late
+      // definitive FAILED may still replace a stale UNKNOWN.
+      const [settled] = await tx
+        .update(invoiceSendAttempts)
+        .set({
+          status: targetStatus,
+          errorCode:
+            errorCode ??
+            (targetStatus === "FAILED"
+              ? "DELIVERY_FAILED"
+              : "DELIVERY_OUTCOME_UNKNOWN"),
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(invoiceSendAttempts.id, attemptId),
+            ne(invoiceSendAttempts.status, "SENT")
+          )
+        )
+        .returning({ id: invoiceSendAttempts.id });
+      if (!settled) return;
     }
     await recordAuditEvent(tx, {
       organizationId: audit.organizationId,
@@ -568,7 +588,13 @@ async function finalizeInvoiceSentInTx(
     await tx
       .update(billingCases)
       .set({ status: "SENT", statusUpdatedAt: new Date() })
-      .where(eq(billingCases.id, params.billingCaseId));
+      // An invoice paid before its first delivery stays PAID.
+      .where(
+        and(
+          eq(billingCases.id, params.billingCaseId),
+          ne(billingCases.status, "PAID")
+        )
+      );
 
     await recordAuditEvent(tx, {
       organizationId: params.organizationId,
@@ -1342,6 +1368,115 @@ export async function resendInvoice(
     }
   );
   return (await getInvoice(db, organizationId, invoiceId)).invoice;
+}
+
+/**
+ * An admin confirms, by other means (asking the resident, provider logs),
+ * that an email whose outcome is UNKNOWN did arrive. The attempt becomes
+ * SENT and the invoice is finalized exactly as a confirmed send would be;
+ * no email is sent. Until then the invoice stays unsent (ADR-style policy:
+ * UNKNOWN is never treated as delivered on its own).
+ */
+export async function markInvoiceDelivered(
+  db: Db,
+  organizationId: string,
+  invoiceId: string,
+  attemptId: string,
+  actorUserId: string
+): Promise<{ sentAt: Date | null }> {
+  return db.transaction(async (tx) => {
+    // Attempt, then invoice, then case: the order a sender's own
+    // finalization writes them in, so a late sender cannot deadlock with
+    // this. claimSendCommand never locks an existing attempt row. NO KEY
+    // UPDATE, so a late sender's delivery-row insert (whose foreign keys
+    // take KEY SHARE on both rows) is not blocked and cannot deadlock.
+    await tx
+      .select({ id: invoiceSendAttempts.id })
+      .from(invoiceSendAttempts)
+      .where(eq(invoiceSendAttempts.id, attemptId))
+      .for("no key update");
+    const [invoice] = await tx
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.id, invoiceId),
+          eq(invoices.organizationId, organizationId)
+        )
+      )
+      .for("no key update")
+      .limit(1);
+    if (!invoice) throw new NotFoundError("Invoice not found");
+    const [billingCase] = await tx
+      .select({ status: billingCases.status })
+      .from(billingCases)
+      .where(eq(billingCases.id, invoice.billingCaseId))
+      .for("update");
+    // Same rule as a send: a case pulled back to Draft cannot become sent.
+    if (
+      !billingCase ||
+      !(FIRST_DELIVERY_ELIGIBLE_CASE_STATUSES as readonly string[]).includes(
+        billingCase.status
+      )
+    ) {
+      throw new ConflictError(
+        "Only an invoice that has been prepared can be marked as delivered"
+      );
+    }
+
+    const latest = await getLatestSendAttempt(tx, organizationId, invoiceId);
+    if (latest?.id !== attemptId || latest.status !== "UNKNOWN") {
+      throw new ConflictError(
+        "Only the latest delivery with an unconfirmed outcome can be marked as delivered"
+      );
+    }
+
+    const result = await finalizeInvoiceSentInTx(tx, {
+      organizationId,
+      invoiceId,
+      billingCaseId: invoice.billingCaseId,
+      actorUserId,
+      attemptId,
+      attemptTargetStatus: "SENT",
+      expectedAttemptStatus: "UNKNOWN",
+    });
+    // The email history must then hold a SENT row: every "already
+    // delivered" check (Resend on the page, claimSendCommand's first-send
+    // guard) looks for one. A worker that died before writing its row
+    // leaves none to update, so write one.
+    const confirmed = await tx
+      .update(invoiceDeliveries)
+      .set({ status: "SENT", errorCode: null, sentAt: new Date() })
+      .where(
+        and(
+          eq(invoiceDeliveries.attemptId, attemptId),
+          eq(invoiceDeliveries.status, "UNKNOWN")
+        )
+      )
+      .returning({ id: invoiceDeliveries.id });
+    if (confirmed.length === 0) {
+      await tx.insert(invoiceDeliveries).values({
+        organizationId,
+        invoiceId,
+        attemptId,
+        method: "EMAIL",
+        destinationEmail: invoiceDelivery(invoice.recipientSnapshot)
+          .billingEmail,
+        provider: "manual",
+        status: "SENT",
+        sentAt: new Date(),
+      });
+    }
+    await recordAuditEvent(tx, {
+      organizationId,
+      scopeDwellingId: invoice.dwellingId,
+      actorUserId,
+      action: "INVOICE_DELIVERY_CONFIRMED",
+      entityType: "invoice",
+      entityId: invoiceId,
+    });
+    return { sentAt: result.invoice.sentAt };
+  });
 }
 
 /**

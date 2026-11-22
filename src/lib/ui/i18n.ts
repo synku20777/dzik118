@@ -550,6 +550,16 @@ const lv: Record<string, string> = {
   "{n} invoices can be created.|other": "Var izrakstīt {n} rēķinus.",
   "{n} invoices are ready to send.|one": "Nosūtīšanai gatavs {n} rēķins.",
   "{n} invoices are ready to send.|other": "Nosūtīšanai gatavi {n} rēķini.",
+  "{n} invoices are not sent yet.|one": "{n} rēķins vēl nav nosūtīts.",
+  "{n} invoices are not sent yet.|other": "{n} rēķini vēl nav nosūtīti.",
+  "Review unsent invoices": "Pārskatīt nenosūtītos rēķinus",
+  "Unsent invoices": "Nenosūtītie rēķini",
+  "No billing cases yet.": "Norēķinu ierakstu vēl nav.",
+  "{n} invoice deliveries are not confirmed.|one":
+    "{n} rēķina piegāde nav apstiprināta.",
+  "{n} invoice deliveries are not confirmed.|other":
+    "{n} rēķinu piegāde nav apstiprināta.",
+  "Check delivery": "Pārbaudīt piegādi",
   "{n} invoices are waiting for payment.|one": "Apmaksu gaida {n} rēķins.",
   "{n} invoices are waiting for payment.|other": "Apmaksu gaida {n} rēķini.",
   "This month is closed. Create the next month to continue.":
@@ -905,6 +915,73 @@ const lv: Record<string, string> = {
   "Does not apply: it ended before this period starts.":
     "Netiek piemērots: tas beidzās pirms šī perioda sākuma.",
   "Applies to all dwellings.": "Attiecas uz visiem īpašumiem.",
+  "Does not apply: no dwelling this month can be billed by it.":
+    "Neattiecas: šajā mēnesī pēc tā nevar izrakstīt rēķinu nevienam īpašumam.",
+  "Generate and refresh drafts": "Izrakstīt un pārrēķināt melnrakstus",
+  "For the whole month: create up to {ready} new invoices and refresh {drafts} drafts?":
+    "Visam mēnesim: izrakstīt līdz {ready} jauniem rēķiniem un pārrēķināt {drafts} melnrakstus?",
+  "Readings still missing after the deadline are filled with the previous reading first.":
+    "Vispirms rādījumi, kas pēc termiņa joprojām trūkst, tiek aizpildīti ar iepriekšējo rādījumu.",
+  "Billing email is on the suppressed list":
+    "Norēķinu e-pasts ir bloķēto adrešu sarakstā",
+  "Saved to the dwelling. This invoice keeps its old details: return it to Draft and regenerate it.":
+    "Saglabāts īpašumā. Šim rēķinam paliek vecie dati: atgrieziet to melnrakstā un pārrēķiniet.",
+  "Check tariffs": "Pārbaudīt tarifus",
+  "Dwellings view": "Īpašumu skats",
+  Table: "Tabula",
+  Arrange: "Kārtot",
+  "Add entrance": "Pievienot ieeju",
+  "Reset to number order": "Sakārtot pēc numuriem",
+  "Reset the building to number order? Your arrangement is removed.":
+    "Sakārtot ēku pēc numuriem? Jūsu izkārtojums tiks dzēsts.",
+  "Save layout": "Saglabāt izkārtojumu",
+  "Drag a dwelling to a place, or select it and choose a place or use the arrow keys. A taken place swaps the two. Changes save on their own; Ctrl+Z undoes.":
+    "Velciet īpašumu uz vietu vai atlasiet to un izvēlieties vietu ar klikšķi vai bultiņu taustiņiem. Aizņemtā vietā abi samainās vietām. Izmaiņas saglabājas pašas; Ctrl+Z atceļ.",
+  "Arranged by number. Use Arrange to match the real building.":
+    "Sakārtots pēc numuriem. Ar “Kārtot” pielāgojiet to īstajai ēkai.",
+  "Dwelling {number} selected. Choose a place.":
+    "Atlasīts īpašums {number}. Izvēlieties vietu.",
+  "Dwelling {number} moved.": "Īpašums {number} pārvietots.",
+  "Floor {floor}": "{floor}. stāvs",
+  "Empty place: {entrance}, floor {floor}, place {place}":
+    "Brīva vieta: {entrance}, {floor}. stāvs, {place}. vieta",
+  "Move the dwellings off the top floor first.":
+    "Vispirms pārvietojiet īpašumus no augšējā stāva.",
+  "Move the dwellings out of the last column first.":
+    "Vispirms pārvietojiet īpašumus no pēdējās kolonnas.",
+  "Move the dwellings out of this entrance first.":
+    "Vispirms pārvietojiet īpašumus no šīs ieejas.",
+  "Discard the changes to the building layout?":
+    "Atmest ēkas izkārtojuma izmaiņas?",
+  "The layout could not be saved.": "Izkārtojumu neizdevās saglabāt.",
+  Entrance: "Ieeja",
+  "Entrance name": "Ieejas nosaukums",
+  Floors: "Stāvi",
+  "Per floor": "Stāvā",
+  "Remove the top floor": "Noņemt augšējo stāvu",
+  "Add a floor": "Pievienot stāvu",
+  "Remove a place per floor": "Noņemt vienu vietu stāvā",
+  "Add a place per floor": "Pievienot vietu stāvā",
+  "Remove entrance": "Noņemt ieeju",
+  "Not placed": "Nav izvietots",
+  "No billing case this month": "Šomēnes nav norēķinu ieraksta",
+  Legend: "Apzīmējumi",
+  "A building has 1 to 20 entrances.": "Ēkai ir no 1 līdz 20 ieejām.",
+  "An entrance name has 1 to 60 characters.":
+    "Ieejas nosaukumā ir no 1 līdz 60 rakstzīmēm.",
+  "An entrance has 1 to 60 floors and 1 to 24 places per floor.":
+    "Ieejai ir no 1 līdz 60 stāviem un no 1 līdz 24 vietām stāvā.",
+  "A dwelling is placed outside its entrance.":
+    "Īpašums ir novietots ārpus savas ieejas.",
+  "Two dwellings share one place.": "Divi īpašumi aizņem vienu vietu.",
+  "A dwelling is placed twice.": "Īpašums ir novietots divreiz.",
+  "A dwelling in the layout is archived or not in this organization.":
+    "Kāds izkārtojuma īpašums ir arhivēts vai nepieder šai organizācijai.",
+  "New email not on this invoice": "Jaunais e-pasts nav šajā rēķinā",
+  "{n} more problems|one": "Vēl {n} problēma",
+  "{n} more problems|other": "Vēl {n} problēmas",
+  "Saved to the dwelling. Regenerate this draft to use the new details.":
+    "Saglabāts īpašumā. Pārrēķiniet šo melnrakstu, lai izmantotu jaunos datus.",
   "Applies to no dwelling: none is assigned.":
     "Neattiecas ne uz vienu īpašumu: neviens nav piešķirts.",
   "Applies only to the assigned dwellings:":
@@ -1467,6 +1544,8 @@ const lv: Record<string, string> = {
     "Šis rēķins jau ir nosūtīts, un to vairs nevar pārrēķināt; tā vietā izrakstiet korekcijas dokumentu",
   "This invoice has already moved past DRAFT and can no longer be regenerated":
     "Šis rēķins vairs nav statusā “Melnraksts”, un to vairs nevar pārrēķināt",
+  "This invoice has already been sent and can no longer be prepared again; issue a correction document instead":
+    "Šis rēķins jau ir nosūtīts, un to vairs nevar sagatavot atkārtoti; tā vietā izrakstiet korekcijas dokumentu",
   "Only a DRAFT invoice can be prepared":
     "Sagatavot var tikai rēķinu statusā “Melnraksts”",
   "Issuer details are incomplete; update organization settings before preparing":
@@ -1716,6 +1795,14 @@ const lv: Record<string, string> = {
     "Atkārtota nosūtīšana uzsākta. Pārbaudiet piegādes statusu.",
   "Access link revoked.": "Piekļuves saite atsaukta.",
   "Paper dispatch recorded.": "Nosūtīšana pa pastu atzīmēta.",
+  "Invoice marked as delivered.": "Rēķins atzīmēts kā piegādāts.",
+  "Mark as delivered": "Atzīmēt kā piegādātu",
+  "Mark this invoice as delivered? Do this only after you have confirmed that the resident received the email. No email is sent.":
+    "Atzīmēt šo rēķinu kā piegādātu? Dariet to tikai tad, kad esat pārliecinājies, ka iedzīvotājs e-pastu saņēma. E-pasts netiek sūtīts.",
+  "Only the latest delivery with an unconfirmed outcome can be marked as delivered":
+    "Kā piegādātu var atzīmēt tikai pēdējo piegādi ar neapstiprinātu iznākumu",
+  "Only an invoice that has been prepared can be marked as delivered":
+    "Kā piegādātu var atzīmēt tikai rēķinu, kas ir sagatavots",
   "1 change saving": "Tiek saglabāta 1 izmaiņa",
   "{n} changes saving": "Tiek saglabātas {n} izmaiņas",
   "1 change needs attention": "1 izmaiņai jāpievērš uzmanība",
@@ -3054,6 +3141,22 @@ const ru: Record<string, string> = {
   "{n} invoices are ready to send.|few": "Готовы к отправке {n} счёта.",
   "{n} invoices are ready to send.|many": "Готовы к отправке {n} счетов.",
   "{n} invoices are ready to send.|other": "Готовы к отправке {n} счетов.",
+  "{n} invoices are not sent yet.|one": "Ещё не отправлен {n} счёт.",
+  "{n} invoices are not sent yet.|few": "Ещё не отправлены {n} счёта.",
+  "{n} invoices are not sent yet.|many": "Ещё не отправлены {n} счетов.",
+  "{n} invoices are not sent yet.|other": "Ещё не отправлены {n} счетов.",
+  "Review unsent invoices": "Проверить неотправленные счета",
+  "Unsent invoices": "Неотправленные счета",
+  "No billing cases yet.": "Расчётных записей пока нет.",
+  "{n} invoice deliveries are not confirmed.|one":
+    "Не подтверждена доставка {n} счёта.",
+  "{n} invoice deliveries are not confirmed.|few":
+    "Не подтверждена доставка {n} счетов.",
+  "{n} invoice deliveries are not confirmed.|many":
+    "Не подтверждена доставка {n} счетов.",
+  "{n} invoice deliveries are not confirmed.|other":
+    "Не подтверждена доставка {n} счетов.",
+  "Check delivery": "Проверить доставку",
   "{n} invoices are waiting for payment.|one": "Оплаты ждёт {n} счёт.",
   "{n} invoices are waiting for payment.|few": "Оплаты ждут {n} счёта.",
   "{n} invoices are waiting for payment.|many": "Оплаты ждут {n} счетов.",
@@ -3427,6 +3530,75 @@ const ru: Record<string, string> = {
   "Does not apply: it ended before this period starts.":
     "Не применяется: он закончился до начала этого периода.",
   "Applies to all dwellings.": "Применяется ко всем помещениям.",
+  "Does not apply: no dwelling this month can be billed by it.":
+    "Не применяется: в этом месяце по нему нельзя выставить счёт ни одному помещению.",
+  "Generate and refresh drafts": "Создать счета и пересчитать черновики",
+  "For the whole month: create up to {ready} new invoices and refresh {drafts} drafts?":
+    "Для всего месяца: создать до {ready} новых счетов и пересчитать черновики ({drafts})?",
+  "Readings still missing after the deadline are filled with the previous reading first.":
+    "Сначала показания, которых нет после срока, заполняются предыдущими.",
+  "Billing email is on the suppressed list":
+    "Платёжный адрес эл. почты в списке заблокированных",
+  "Saved to the dwelling. This invoice keeps its old details: return it to Draft and regenerate it.":
+    "Сохранено в помещении. В этом счёте остались старые данные: верните его в черновик и пересчитайте.",
+  "Check tariffs": "Проверить тарифы",
+  "Dwellings view": "Вид помещений",
+  Table: "Таблица",
+  Arrange: "Расставить",
+  "Add entrance": "Добавить подъезд",
+  "Reset to number order": "Расставить по номерам",
+  "Reset the building to number order? Your arrangement is removed.":
+    "Расставить здание по номерам? Ваша расстановка будет удалена.",
+  "Save layout": "Сохранить расстановку",
+  "Drag a dwelling to a place, or select it and choose a place or use the arrow keys. A taken place swaps the two. Changes save on their own; Ctrl+Z undoes.":
+    "Перетащите помещение на место или выберите его, а затем место или клавиши со стрелками. На занятом месте помещения поменяются местами. Изменения сохраняются сами; Ctrl+Z отменяет.",
+  "Arranged by number. Use Arrange to match the real building.":
+    "Расставлено по номерам. Нажмите «Расставить», чтобы повторить настоящее здание.",
+  "Dwelling {number} selected. Choose a place.":
+    "Выбрано помещение {number}. Выберите место.",
+  "Dwelling {number} moved.": "Помещение {number} перемещено.",
+  "Floor {floor}": "Этаж {floor}",
+  "Empty place: {entrance}, floor {floor}, place {place}":
+    "Свободное место: {entrance}, этаж {floor}, место {place}",
+  "Move the dwellings off the top floor first.":
+    "Сначала уберите помещения с верхнего этажа.",
+  "Move the dwellings out of the last column first.":
+    "Сначала уберите помещения из последнего столбца.",
+  "Move the dwellings out of this entrance first.":
+    "Сначала уберите помещения из этого подъезда.",
+  "Discard the changes to the building layout?":
+    "Отменить изменения расстановки здания?",
+  "The layout could not be saved.": "Не удалось сохранить расстановку.",
+  Entrance: "Подъезд",
+  "Entrance name": "Название подъезда",
+  Floors: "Этажи",
+  "Per floor": "На этаже",
+  "Remove the top floor": "Убрать верхний этаж",
+  "Add a floor": "Добавить этаж",
+  "Remove a place per floor": "Убрать одно место на этаже",
+  "Add a place per floor": "Добавить место на этаже",
+  "Remove entrance": "Убрать подъезд",
+  "Not placed": "Не размещено",
+  "No billing case this month": "В этом месяце нет расчётной записи",
+  Legend: "Обозначения",
+  "A building has 1 to 20 entrances.": "В здании от 1 до 20 подъездов.",
+  "An entrance name has 1 to 60 characters.":
+    "В названии подъезда от 1 до 60 символов.",
+  "An entrance has 1 to 60 floors and 1 to 24 places per floor.":
+    "В подъезде от 1 до 60 этажей и от 1 до 24 мест на этаже.",
+  "A dwelling is placed outside its entrance.":
+    "Помещение размещено за пределами своего подъезда.",
+  "Two dwellings share one place.": "Два помещения занимают одно место.",
+  "A dwelling is placed twice.": "Помещение размещено дважды.",
+  "A dwelling in the layout is archived or not in this organization.":
+    "Одно из помещений в расстановке архивировано или не относится к этой организации.",
+  "New email not on this invoice": "Нового адреса нет в этом счёте",
+  "{n} more problems|one": "Ещё {n} проблема",
+  "{n} more problems|few": "Ещё {n} проблемы",
+  "{n} more problems|many": "Ещё {n} проблем",
+  "{n} more problems|other": "Ещё {n} проблем",
+  "Saved to the dwelling. Regenerate this draft to use the new details.":
+    "Сохранено в помещении. Пересчитайте этот черновик, чтобы применить новые данные.",
   "Applies to no dwelling: none is assigned.":
     "Не применяется ни к одному помещению: ни одно не назначено.",
   "Applies only to the assigned dwellings:":
@@ -3998,6 +4170,8 @@ const ru: Record<string, string> = {
     "Этот счёт уже отправлен, и его больше нельзя пересчитать; оформите вместо этого корректирующий документ",
   "This invoice has already moved past DRAFT and can no longer be regenerated":
     "Этот счёт уже вышел из статуса «Черновик», и его больше нельзя пересчитать",
+  "This invoice has already been sent and can no longer be prepared again; issue a correction document instead":
+    "Этот счёт уже отправлен, и его больше нельзя подготовить повторно; оформите вместо этого корректирующий документ",
   "Only a DRAFT invoice can be prepared":
     "Подготовить можно только счёт в статусе «Черновик»",
   "Issuer details are incomplete; update organization settings before preparing":
@@ -4248,6 +4422,14 @@ const ru: Record<string, string> = {
     "Повторная отправка запущена. Проверьте статус доставки.",
   "Access link revoked.": "Ссылка доступа отозвана.",
   "Paper dispatch recorded.": "Отправка по почте отмечена.",
+  "Invoice marked as delivered.": "Счёт отмечен как доставленный.",
+  "Mark as delivered": "Отметить как доставленный",
+  "Mark this invoice as delivered? Do this only after you have confirmed that the resident received the email. No email is sent.":
+    "Отметить этот счёт как доставленный? Делайте это только после того, как убедились, что житель получил письмо. Письмо не отправляется.",
+  "Only the latest delivery with an unconfirmed outcome can be marked as delivered":
+    "Отметить как доставленную можно только последнюю доставку с неподтверждённым результатом",
+  "Only an invoice that has been prepared can be marked as delivered":
+    "Отметить как доставленный можно только подготовленный счёт",
   "1 change saving": "Сохраняется 1 изменение",
   "{n} changes saving": "Сохраняется изменений: {n}",
   "1 change needs attention": "1 изменение требует внимания",

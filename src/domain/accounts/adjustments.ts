@@ -6,6 +6,7 @@ import { compareExact, subtractExact } from "../../lib/decimal2";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import { assertDwellingInOrganization, postAccountEntry } from "./ledger";
+import { syncDwellingSettlement } from "./settlement";
 import { buildPenaltySnapshot, resolveStatementFinancials } from "./statements";
 
 const OTHER = "OTHER" as const;
@@ -231,6 +232,13 @@ export async function createDwellingAccountAdjustment(
       metadata: { note: input.note?.trim() || null },
       idempotencyKey: `manual-adjustment:${input.organizationId}:${input.dwellingId}:${crypto.randomUUID()}`,
     });
+    // A credit covers the oldest unpaid invoices; a charge can uncover one.
+    await syncDwellingSettlement(
+      tx,
+      input.organizationId,
+      input.dwellingId,
+      input.currency
+    );
     await recordAuditEvent(tx, {
       organizationId: input.organizationId,
       scopeDwellingId: input.dwellingId,

@@ -1,27 +1,20 @@
-import {
-  and,
-  asc,
-  eq,
-  gt,
-  gte,
-  inArray,
-  isNull,
-  lt,
-  ne,
-  sql,
-} from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import type { DbOrTx } from "../../db/client";
-import { billingCases } from "../../db/schema/billing";
 import { invoices } from "../../db/schema/invoices";
-import { addExact, maxExact, subtractExact } from "../../lib/decimal2";
+import { addExact, compareExact, maxExact } from "../../lib/decimal2";
 import { calculateStatementBalance } from "./balance";
 import { calculateLateFee } from "./late-fees";
 import {
   PAYABLE_CASE_STATUSES,
   getDwellingAccountBalance,
   getEffectiveLateFeePolicy,
-  getProtectedOpeningDebt,
 } from "./ledger";
+import { loadSettlement } from "./settlement";
+
+// Invoices that are a real debt, prepared and not pulled back to Draft.
+const ISSUED_CASE_STATUSES = [...PAYABLE_CASE_STATUSES, "PAID"];
+
+type PenaltySources = { invoiceId: string; accrued: string }[];
 
 export async function resolveStatementFinancials(
   db: DbOrTx,
@@ -45,100 +38,85 @@ export async function resolveStatementFinancials(
     input.issueDate,
     input.invoiceId
   );
-  // Migrated opening debt has no known due date, so it is not late-fee
-  // principal until paid (ADR 0013).
-  const excludedOpeningDebt = await getProtectedOpeningDebt(
+  const policy = await getEffectiveLateFeePolicy(
+    db,
+    input.organizationId,
+    input.issueDate
+  );
+
+  // Payments up to the issue date only: a later one does not shorten the
+  // days this statement charges.
+  const { invoices: rows, settlement } = await loadSettlement(
     db,
     input.organizationId,
     input.dwellingId,
     input.currency,
     input.issueDate
   );
-  const policy = await getEffectiveLateFeePolicy(
-    db,
-    input.organizationId,
-    input.issueDate
+  const issued = rows.filter(
+    (row) =>
+      row.id !== input.invoiceId &&
+      ISSUED_CASE_STATUSES.includes(row.caseStatus)
   );
-  const [oldestUnpaid] = await db
-    .select({
-      dueDate: invoices.dueDate,
-      invoiceNumber: invoices.invoiceNumber,
-    })
-    .from(invoices)
-    .innerJoin(billingCases, eq(billingCases.id, invoices.billingCaseId))
-    .where(
-      and(
-        eq(invoices.organizationId, input.organizationId),
-        eq(invoices.dwellingId, input.dwellingId),
-        eq(invoices.currency, input.currency),
-        isNull(invoices.paidAt),
-        // An invoice a credit covered in full asks for nothing: it is not
-        // late, so its due date is not where a late fee starts.
-        gt(invoices.amountDue, "0"),
-        lt(invoices.dueDate, input.issueDate),
-        inArray(billingCases.status, PAYABLE_CASE_STATUSES)
-      )
-    )
-    .orderBy(asc(invoices.dueDate))
-    .limit(1);
-  // Debt that is not late yet: what each invoice not due at the issue date
-  // added itself (its amount due without the earlier debt it carries). It is
-  // in the balance, but a late fee is for late debt only. Payments count
-  // against the oldest debt first, as each invoice carries the earlier
-  // balance; a payment matched to a not-yet-due invoice can so only lower the
-  // principal, never raise it.
-  const [{ notYetDue }] = await db
-    .select({
-      notYetDue: sql<string>`coalesce(sum(greatest(${invoices.amountDue} - ${invoices.previousOutstanding}, 0)), 0)::numeric(14, 2)::text`,
-    })
-    .from(invoices)
-    .innerJoin(billingCases, eq(billingCases.id, invoices.billingCaseId))
-    .where(
-      and(
-        eq(invoices.organizationId, input.organizationId),
-        eq(invoices.dwellingId, input.dwellingId),
-        eq(invoices.currency, input.currency),
-        isNull(invoices.paidAt),
-        gte(invoices.dueDate, input.issueDate),
-        inArray(billingCases.status, PAYABLE_CASE_STATUSES),
-        // Its own entries are already left out of the balance.
-        input.invoiceId ? ne(invoices.id, input.invoiceId) : undefined
-      )
-    );
-
-  const lateFee =
-    policy && oldestUnpaid
-      ? calculateLateFee({
-          enabled: policy.enabled,
-          principal: maxExact(
-            subtractExact(
-              subtractExact(accountBalance, excludedOpeningDebt),
-              notYetDue
-            ),
-            "0.00"
-          ),
-          dailyRate: policy.dailyRate,
-          dueDate: oldestUnpaid.dueDate,
-          asOfDate: input.issueDate,
-          graceDays: policy.graceDays,
-          maxPenaltyPercent: policy.maxPenaltyPercent,
-          stopsAtCap: policy.stopsAtCap,
+  // What other invoices already charged for each late invoice, from the
+  // penalty snapshot each one stored when it was prepared.
+  const snapshots = issued.length
+    ? await db
+        .select({
+          issueDate: invoices.issueDate,
+          lateFeeCalculated: invoices.lateFeeCalculated,
+          penaltySnapshot: invoices.penaltySnapshot,
         })
-      : calculateLateFee({
-          enabled: false,
-          principal: "0.00",
-          dailyRate: "0.00",
-          dueDate: input.issueDate,
-          asOfDate: input.issueDate,
-          graceDays: 0,
-          maxPenaltyPercent: "0.00",
-          stopsAtCap: true,
-        });
-  const lateFeeApplied =
-    lateFee.rawAmount === "0.00" ? "0.00" : lateFee.appliedAmount;
+        .from(invoices)
+        .where(
+          inArray(
+            invoices.id,
+            issued.map((row) => row.id)
+          )
+        )
+    : [];
+  const charged = new Map<string, string>();
+  let chargedThrough: string | undefined;
+  for (const row of snapshots) {
+    const sources = (row.penaltySnapshot as { sources?: PenaltySources })
+      .sources;
+    if (Array.isArray(sources)) {
+      for (const source of sources) {
+        charged.set(
+          source.invoiceId,
+          maxExact(charged.get(source.invoiceId) ?? "0.00", source.accrued)
+        );
+      }
+    } else if (
+      compareExact(row.lateFeeCalculated, "0.00") > 0 &&
+      (!chargedThrough || row.issueDate > chargedThrough)
+    ) {
+      // shortcut: a fee from before ADR 0016 has no record per invoice, so
+      // every day up to its issue date counts as charged; drop this once no
+      // such invoice is still unpaid.
+      chargedThrough = row.issueDate;
+    }
+  }
+  const byId = new Map(issued.map((row) => [row.id, row]));
+  const lateFee = calculateLateFee({
+    policy,
+    settlement,
+    sources: settlement.order
+      .map((id) => byId.get(id))
+      .filter((row) => row !== undefined && row.dueDate < input.issueDate)
+      .map((row) => ({
+        invoiceId: row!.id,
+        invoiceNumber: row!.invoiceNumber,
+        dueDate: row!.dueDate,
+      })),
+    asOf: input.issueDate,
+    charged,
+    chargedThrough,
+  });
+
   const adjustment = input.lateFeeAdjustment ?? "0.00";
   const appliedWithAdjustment = maxExact(
-    addExact(lateFeeApplied, adjustment),
+    addExact(lateFee.appliedAmount, adjustment),
     "0.00"
   );
   const balance = calculateStatementBalance({
@@ -147,14 +125,7 @@ export async function resolveStatementFinancials(
     lateFee: appliedWithAdjustment,
     manualAdjustment: input.manualAdjustment,
   });
-  return {
-    accountBalance,
-    excludedOpeningDebt,
-    policy,
-    lateFee,
-    balance,
-    oldestUnpaid,
-  };
+  return { accountBalance, policy, lateFee, balance };
 }
 
 export type StatementFinancials = Awaited<
@@ -172,7 +143,7 @@ export function buildBalanceSnapshot(financials: StatementFinancials) {
     previousOutstanding: financials.balance.previousOutstanding,
     previousCreditApplied: financials.balance.previousCreditApplied,
     remainingCredit: financials.balance.remainingCredit,
-    sourceInvoice: financials.oldestUnpaid?.invoiceNumber ?? null,
+    sourceInvoice: financials.lateFee.sources[0]?.invoiceNumber ?? null,
   };
 }
 
@@ -184,11 +155,9 @@ export function buildPenaltySnapshot(financials: StatementFinancials) {
     graceDays: financials.policy?.graceDays ?? 0,
     maxPenaltyPercent: financials.lateFee.maxPenaltyPercent,
     stopsAtCap: financials.lateFee.stopsAtCap,
-    eligiblePrincipal: financials.lateFee.eligiblePrincipal,
-    excludedOpeningDebt: financials.excludedOpeningDebt,
-    firstPenaltyDate: financials.lateFee.firstPenaltyDate,
-    overdueDays: financials.lateFee.overdueDays,
     rawAmount: financials.lateFee.rawAmount,
-    capAmount: financials.lateFee.capAmount,
+    // One row per late invoice; later statements read `accrued` so a day
+    // is charged only once.
+    sources: financials.lateFee.sources,
   };
 }

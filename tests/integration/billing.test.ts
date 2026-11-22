@@ -885,6 +885,18 @@ describe("invoice generation", () => {
     await expect(
       generateInvoice(db, org.id, period.id, dwelling.id, seedAdminId)
     ).rejects.toBeInstanceOf(ConflictError);
+    // Preparing again would give the sent invoice a new amount due.
+    await expect(
+      prepareInvoice(db, org.id, invoice.id, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+    // The same for an invoice that is paid and was never sent.
+    await db.$client.query(
+      "update invoices set sent_at = null, paid_at = now() where id = $1",
+      [invoice.id]
+    );
+    await expect(
+      prepareInvoice(db, org.id, invoice.id, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
 
     await cleanupOrg(org.id);
   });

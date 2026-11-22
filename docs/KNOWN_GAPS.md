@@ -221,7 +221,9 @@ state, and the dead CSS.
   the old page. Reword it for the next-step band, the money block and the
   attention list.
 - [x] **Overdue rows link to plain Payments.** Fixed: the row links to
-  `/payments?q=<dwelling number>`.
+  `/payments?q=<dwelling number>`. That search also matched amounts and
+  references, so since 2026-11-19 the row opens the dwelling's account
+  statement (`/payments/ledger?dwelling=<id>`).
 - [x] **Phone: primary button below the fold (2026-11-11).** Fixed: where the
   money card is one column, the breakdown starts closed behind "Invoice
   breakdown", and the button sits at 722-766 px at 390 x 812. The breakdown is
@@ -273,6 +275,194 @@ state, and the dead CSS.
 - [ ] **Not built.** Supplier-cost comparison, water-difference alert,
   status badge (14 px) and eyebrow (12 px) sizes, and `getCurrentOpenPeriod`
   can still return the starting-readings period (the dashboard skips it itself).
+
+## Dashboard review (2026-11-19)
+
+GPT Sol reviewed the dashboard against the dashboard-design skill. Fixed on
+2026-11-19: the overdue part of "Still unpaid" is its own line; the send queue
+counts every invoice with no send date and is called "not sent yet"; "Sent
+invoices" counts send dates, so a paid invoice that was never sent stays in the
+queue; delivery problems come from the latest send attempt, with "not
+confirmed" apart from "could not be delivered"; an older locked month says
+"This month is closed." and a month with no cases says so; missing data is
+listed before overdue rows, the footer names the hidden groups and the count
+leaves out next steps; the full list shows blocker reasons in full; the
+Readings card is gone (the month progress counts readings); the compact header
+names the building.
+
+- [ ] **Credit larger than the invoice.** A manual credit larger than an
+  invoice makes its amount due 0 and carries the rest as credit. The breakdown
+  shows the whole adjustment, so its lines do not add up to "Total to pay".
+  Fix: a "Credit carried forward" line. Left as is by the owner on 2026-11-19.
+- [ ] **Unpaid after an older payment.** "Still unpaid" uses payments matched
+  to each invoice, so a newer invoice can show debt that an older payment
+  already covered. This is the consequence ADR 0016 accepts.
+- [ ] **Readings counts billing inputs.** "Readings 13 of 16" counts cases with
+  every billing input. A missing manual amount or tariff also counts as a
+  missing reading and leads to "Enter readings". Not changed on 2026-11-19.
+- [ ] **Money card scope on phones.** "Includes invoices that are not sent
+  yet." is inside the closed breakdown on phones, and the total leaves out
+  dwellings with no invoice yet. Not changed on 2026-11-19.
+- [ ] **Unused strings.** "{n} invoices are ready to send.", "Draft and
+  prepared invoices", "{count} still to enter" and "All readings are in" are no
+  longer used by the dashboard.
+- [ ] **Demo data.** The demo organisation holds an end-to-end test leftover,
+  dwelling "00-E2E-1790005821669" with five test meters, so it counts 16
+  dwellings instead of 15.
+
+## Month workbench review (2026-11-19)
+
+GPT Sol reviewed the month workbench against the dashboard-design and
+uncodixfy skills. Fixed on 2026-11-19: a paper-only prepared invoice offers
+"Record paper dispatch" instead of an email send; a suppressed address or an
+unconfirmed send attempt offers "Check delivery" and leaves bulk send; an
+email added to the dwelling after the invoice was made says the invoice keeps
+its old details; a missing tariff or meter links to the tariffs or the
+dwelling instead of "Enter readings", and a case with an invoice keeps its
+invoice action; search wins over the Missing data empty text; "Generate and
+refresh drafts" confirms its whole-month scope and is hidden with nothing to
+do; the readings drawer includes a meter archived during the month and
+focuses the clicked meter; "Applying" counts only tariffs that can bill a
+dwelling this month; routine stages are plain text and only Missing data and
+Overdue keep a badge; row actions are secondary; overdue rows show the due
+date and what is unpaid and open the account statement; the selection toolbar
+is opaque and pinned to the bottom on phones; select-all is hidden on phones
+and row checkboxes have a 44 px tap area on touch screens.
+
+Status cell (2026-11-19, owner annotations): a case's problems are one line
+under a caption-size status tag instead of a stack. The last named problem is
+cut at its end, a name ending in digits keeps its last digits (up to six) and
+is cut in the middle, and "+N" is never cut and opens a menu that links every
+hidden problem. "Paper delivery" sits under the dwelling name. GPT Sol
+reviewed it over four rounds; the last fix (the tooltip's fractional-width
+check for a middle-cut name) was verified in the browser, not re-reviewed.
+
+- [ ] **Locked or archived: read-only.** A locked month or an archived
+  organization still offers bulk selection and editable drawers; the server
+  refuses the writes. Not changed on 2026-11-19.
+- [ ] **Invoice currency.** Row amounts use the organization's current
+  currency, and the money strip leaves out invoices in an earlier currency
+  without saying so. Matters only after a currency change.
+- [ ] **Select all.** "Select all eligible invoices" also selects blocked
+  rows, and more than 200 selected invoices fail the whole request.
+- [ ] **Bulk results.** A bulk outcome names the skip reasons, not the
+  dwellings that were skipped.
+- [ ] **Demo data.** Besides "00-E2E-…", the demo organisation holds test
+  leftovers "zz-open-…" (two) and "zz-locked-…".
+
+## Building view (2026-11-19)
+
+The Dwellings page has a Table | Building switch (remembered in a cookie). The
+building shows entrances side by side, floors as rows of tiles with this
+month's stage (missing data dashed with "?", overdue warm), a door with each
+entrance's name, a strip below for commercial units, parking and storage, and a
+"Not placed" row. Arrange mode (not on phones) moves tiles by drag and drop or
+by select-then-place with keyboard or touch, adds and renames entrances, and
+adds or removes floors and places per floor. The layout is saved whole for the
+organization (migration 0026: `building_entrances`, `dwelling_placements`) and
+audited; before any save the building is filled in number order, four per
+floor.
+
+Redesign (2026-11-20): the view is a React island
+(`src/components/building/BuildingEditor.tsx`, the first in the project;
+`@astrojs/react`, React 19, about 66 KB gzipped, loaded only where the island
+is). The layout is plain state edited by `src/lib/ui/building-layout.ts`.
+Every change saves on its own (one save at a time, the latest layout wins) with
+a quiet status and Retry; Undo and Ctrl+Z step back. Moves glide (180 ms, off
+under reduced motion), moved tiles get a brief tint, the place under a drag is
+tinted, and arrow keys move a selected tile. The roof is gone.
+
+- [ ] **One audit row per save.** Autosave writes an audit row for every save,
+  each with the whole layout before and after. Moves made while a save is on
+  its way merge into the next save, so they share one row.
+- [ ] **Error detail in English.** A refused save shows a translated sentence
+  plus the server's English detail.
+- [ ] **Arranging on phones.** Phones show the building but cannot arrange it.
+- [ ] **Back and Forward with an unsaved change.** Only a save in progress,
+  waiting or failed asks before leaving; Back and Forward then hand the
+  navigation to the browser, whose own prompt can ask a second time.
+- [ ] **No end-to-end test.** The editor is covered by unit tests of its layout
+  edits and by read-only browser checks, not by a Playwright spec.
+
+## Bugs from the council audit (2026-11-15)
+
+Three reviewers (Claude Opus, GPT Sol, and Gemini) read the code. A person
+confirmed each bug in the code. These bugs are not fixed yet.
+
+- [x] **Late fees charge too much.** Fixed on 2026-11-16 (ADR 0016). `resolveStatementFinancials` in
+  `src/domain/accounts/statements.ts` calculates the late fee for each new
+  invoice. It uses the full late balance, and this balance includes the late
+  fees of earlier invoices. It counts the days from the due date of the oldest
+  unpaid invoice. Each new invoice counts these days again, so the resident
+  pays for the same days more than one time. ADR 0003 says that late fees do
+  not compound. Owner rule (2026-11-16): each invoice gets a late fee on its
+  own amount only, not on earlier fees or carried debt. The fee counts the days
+  from its due date (plus the grace days) to the payment date. The app charges
+  it one time, as a separate line on the next invoice. Latvian law can limit
+  contractual late fees.
+- [x] **A paid debt stays open on the older invoice.** Fixed on 2026-11-16
+  (ADR 0016). Each invoice carries
+  the unpaid amount of the earlier invoices. When a resident pays a later
+  invoice in full, the app marks only that invoice as paid. The older invoice
+  stays unpaid, because only `confirmMatch` sets `paidAt`, and only on the
+  matched invoice. The older invoice then becomes Overdue, and the portal shows
+  it as owed. It also blocks direct payments to the dwelling, and the late fee
+  continues to count from its due date. Fix this bug together with the late-fee
+  bug. The fix must also handle a payment reversal. Owner rules (2026-11-16):
+  1. A payment goes into the dwelling account first.
+  2. Each time a payment comes in, the app covers the open invoices oldest
+     first, by the own amount of each invoice. It does this also when the bank
+     reference names a newer invoice.
+  3. An invoice with its own amount covered shows Paid, also when it was paid
+     late. Its late fee goes to the next invoice as a one-time line.
+  4. Money that is left after all open invoices are covered stays as a credit.
+     The credit reduces the next invoice.
+- [?] **A new resident sees the data of the previous resident.**
+  `dwelling_access` has no start date. A new resident of a dwelling sees the
+  earlier invoices (with the previous name and address), payments, and
+  conversations. Owner rule: when an admin removes the access of a resident,
+  the next resident must not see the data of the removed resident. Discuss the
+  details before the fix.
+- [ ] **The same bank payment can be imported two times.** The bank CSV import
+  finds a duplicate only by the file hash or by `external_transaction_id`. When
+  two files overlap and the rows have no transaction ID, the import adds the
+  same payment again. Owner rule: check each payment for a duplicate, not each
+  file. Decide which fields identify the same payment, for example the date,
+  the amount, the payer account, and the reference.
+- [ ] **Payments match only by the invoice number.** Today a payment matches an
+  invoice only when its reference contains the invoice number. Owner rule: a
+  payment must also match when the payer name is the same as the resident
+  name.
+- [ ] **Automatic invoices do not wait for the reading deadline.** This bug
+  applies only when automatic invoices are on. Each night, the scheduler
+  generates and prepares an invoice for each dwelling that has all its
+  readings. It does not wait for the reading deadline. After the scheduler
+  prepares the invoice, the resident cannot change a reading. Thus a resident
+  who enters a wrong value cannot correct it, although the deadline is still
+  in the future. Also, when an admin moves a prepared invoice back to Draft to
+  correct it, the scheduler prepares it again the next night. Owner rule
+  (2026-11-16): keep the timing. A corrected invoice (see below) fixes a wrong
+  reading. The scheduler must not prepare again an invoice that an admin moved
+  back to Draft.
+- [ ] **No corrected invoice for a wrong charge.** Today an admin cannot
+  replace a sent invoice that has a wrong charge. Owner rules (2026-11-16):
+  1. Only an admin can make a corrected invoice. A resident reports the error
+     by message.
+  2. The app sends the corrected invoice immediately. Its number is the old
+     number with a suffix (format to confirm with the accountant, for example
+     `-K1`).
+  3. The old invoice stays in the history as "Cancelled, replaced by" the new
+     number. The admin and the resident both see this mark. The app does not
+     count the old invoice for the balance, late fees, reminders, or the
+     "already sent" checks.
+  4. Payments on the old invoice move to the corrected invoice automatically.
+     The resident pays only the difference, or gets a credit when the new
+     amount is lower.
+- [ ] **Meter units are not checked.** The app adds the consumption of the
+  meters in a rule without a unit check. For example, 2 m³ and 1,000 liters
+  give 1,002 units. Owner decision: the app must check the units. Units are
+  free text with aliases (`src/lib/ui/units.ts`). Thus the fix first needs a
+  rule that changes each alias to one standard unit.
 
 ## Checked and not gaps
 

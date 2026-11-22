@@ -185,12 +185,18 @@ onPageLoad(() => {
       const sameDwelling = triggers.filter(
         (el) => el.dataset.dwellingId === closedParams.dwellingId
       );
+      // A "+N" menu's invoker is re-rendered too: find it again by its menu.
+      const menuId = returnFocusTo?.getAttribute?.("popovertarget");
       const replacement =
-        sameDwelling.find(
-          (el) =>
-            el.dataset.openDrawer === closedParams.kind &&
-            el.dataset.focus === returnFocusTo?.dataset.focus
-        ) ??
+        ((menuId &&
+          document.querySelector<HTMLElement>(
+            `[popovertarget="${CSS.escape(menuId)}"]`
+          )) ||
+          sameDwelling.find(
+            (el) =>
+              el.dataset.openDrawer === closedParams.kind &&
+              el.dataset.focus === returnFocusTo?.dataset.focus
+          )) ??
         sameDwelling[0] ??
         document.querySelector<HTMLElement>(
           `tr[data-dwelling-id="${CSS.escape(closedParams.dwellingId)}"] .next-action :is(a,button):not(:disabled)`
@@ -365,6 +371,7 @@ onPageLoad(() => {
     hidden("periodId", config.periodId);
 
     let firstInput: HTMLInputElement | null = null;
+    let focusMatched = false;
     for (const meter of data.meters) {
       const meterTypeKey = meter.type.toLowerCase().replace(/_/g, "-");
       const section = document.createElement("section");
@@ -452,7 +459,14 @@ onPageLoad(() => {
       form.appendChild(section);
 
       if (!firstInput) firstInput = input;
-      if (focus === meterTypeKey) firstInput = input;
+      // The clicked meter wins; a bare type focuses its first meter only.
+      if (focus === `meter-${meter.meterId}`) {
+        firstInput = input;
+        focusMatched = true;
+      } else if (focus === meterTypeKey && !focusMatched) {
+        firstInput = input;
+        focusMatched = true;
+      }
     }
 
     for (const rule of data.manualRuleInputs) {
@@ -914,7 +928,16 @@ onPageLoad(() => {
       const dwellingId = trigger.dataset.dwellingId!;
       const focus = trigger.dataset.focus;
       history.pushState(null, "", drawerUrl(kind, dwellingId, focus));
-      void openDrawer(kind, dwellingId, focus, trigger);
+      // A trigger inside a popover menu is hidden once the drawer opens:
+      // return focus to the control that opened the menu instead.
+      const menu = trigger.closest?.<HTMLElement>("[popover]");
+      const returnTo =
+        (menu?.id &&
+          document.querySelector<HTMLElement>(
+            `[popovertarget="${CSS.escape(menu.id)}"]`
+          )) ||
+        trigger;
+      void openDrawer(kind, dwellingId, focus, returnTo);
     },
     // Intercept before ClientRouter's document bubble listener starts a
     // navigation to the fallback URL and later reopens a dismissed drawer.

@@ -6,21 +6,11 @@ const t = (text: string) => translate(locale, text);
 import Icon from "../../../../../components/ui/Icon.astro";
 import SetupLayout from "../../../../../components/ui/SetupLayout.astro";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { getSetupProgress } from "../../../../../domain/onboarding/progress";
 import { withRequestDb } from "../../../../../lib/db-request";
 
 const organizationId = Astro.params.orgId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const { organization, progress } = await withRequestDb(async (db) => {
   const org = await getOrganization(db, organizationId);

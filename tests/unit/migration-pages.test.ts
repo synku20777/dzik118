@@ -30,20 +30,10 @@ describe("migration page guards", () => {
     expect(page).toContain("isSameOriginRequest(");
   });
 
-  it("the history page, the report and the downloads need organization access", () => {
-    expect(read("index.astro")).toContain("requireOrganizationAccess(");
-    expect(read(join("report", "[importId].astro"))).toContain(
-      "requireOrganizationAccess("
-    );
-    expect(read(join("report", "[importId]", "csv.ts"))).toContain(
-      "requireOrganizationAccess("
-    );
-    expect(read(join("templates", "[name].ts"))).toContain(
-      "requireOrganizationAccess("
-    );
-    const issues = read("issues.ts");
-    expect(issues).toContain("requireOrganizationAccess(");
-    expect(issues).toContain("isSameOriginRequest(");
+  // Organization access for every page here is the middleware's path check
+  // (tests/unit/middleware.test.ts).
+  it("the issues download needs a same-origin POST", () => {
+    expect(read("issues.ts")).toContain("isSameOriginRequest(");
   });
 });
 

@@ -10,10 +10,6 @@ const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 import ResidentLayout from "../../../../../layouts/ResidentLayout.astro";
 import { actions } from "astro:actions";
-import {
-  ForbiddenError,
-  requireDwellingAccess,
-} from "../../../../../domain/authorization/guards";
 import { getDwellingForResident } from "../../../../../domain/organizations/dwellings";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import {
@@ -24,19 +20,8 @@ import { withRequestDb } from "../../../../../lib/db-request";
 import { rethrowUnexpected } from "../../../../../domain/errors";
 
 const dwellingId = Astro.params.dwellingId!;
-try {
-  requireDwellingAccess(Astro.locals.auth, dwellingId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const sendResult = Astro.getActionResult(actions.messages.residentSend);
-// Post-redirect-get after a successful send: without this a browser refresh
-// of the POST response would send the message a second time.
-if (sendResult && !sendResult.error) {
-  return Astro.redirect(Astro.url.pathname);
-}
 let unsent = "";
 if (sendResult?.error) {
   try {
