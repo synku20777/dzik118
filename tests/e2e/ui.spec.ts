@@ -81,13 +81,20 @@ async function setupPreparedE2EInvoice(
     adminUserId
   );
 
-  await db.insert(billingCases).values({
-    organizationId: orgId,
-    periodId,
-    dwellingId: dwelling.id,
-    missingData: [],
-    status: "READY",
-  });
+  await db
+    .insert(billingCases)
+    .values({
+      organizationId: orgId,
+      periodId,
+      dwellingId: dwelling.id,
+      missingData: [],
+      status: "READY",
+    })
+    // The app may already have synced a case for the new dwelling.
+    .onConflictDoUpdate({
+      target: [billingCases.periodId, billingCases.dwellingId],
+      set: { missingData: [], status: "READY" },
+    });
 
   const generated = await generateInvoice(
     db,
@@ -305,13 +312,13 @@ test("admin routes, keyboard navigation, filters and locked actions", async ({
   await page.goto(`${base}/dashboard?lang=lv`);
   await expect(page.locator("html")).toHaveAttribute("lang", "lv");
   await expect(
-    page.locator(`.admin-sidebar a[href="${base}/dashboard"]`)
+    page.locator(`.admin-sidebar .app-nav a[href="${base}/dashboard"]`)
   ).toContainText("Pārskats");
   await page.goto(`${base}/guide?lang=en`);
   await expect(
-    page.locator(`.admin-sidebar a[href="${base}/guide"]`)
+    page.locator(`.admin-sidebar .app-nav a[href="${base}/guide"]`)
   ).toHaveAttribute("aria-current", "page");
-  await expect(page.locator("main ol > li")).toHaveCount(10);
+  await expect(page.locator("main .guide-steps > li")).toHaveCount(10);
 });
 
 test("first meter is reconciled immediately and its dynamic archive control works", async ({
@@ -796,7 +803,9 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await expect(page.locator("[data-mutation-summary]")).toHaveText(
     "1 change saving"
   );
-  await page.locator(`.admin-sidebar a[href="${base}/dwellings"]`).click();
+  await page
+    .locator(`.admin-sidebar .app-nav a[href="${base}/dwellings"]`)
+    .click();
   await page.locator(`a[href="${dwellingBHref}"]`).first().click();
   await expect(page).toHaveURL(dwellingBHref!);
   await expect(page.locator("[data-dwelling-detail]")).toBeVisible();
@@ -850,7 +859,9 @@ test("first meter is reconciled immediately and its dynamic archive control work
     page.locator('#basic-info-form input[name="areaM2"]')
   ).toHaveValue(bFormAreaM2);
 
-  await page.locator(`.admin-sidebar a[href="${base}/dwellings"]`).click();
+  await page
+    .locator(`.admin-sidebar .app-nav a[href="${base}/dwellings"]`)
+    .click();
   await page.getByRole("link", { name: dwellingNumber, exact: true }).click();
   await expect(page.locator('[data-kpi="area"] p')).toHaveText(`${navArea} m²`);
   await expect(page.locator('dd[data-field="billingName"]')).toHaveText(
@@ -1066,7 +1077,9 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await expect(
     page.locator("#meters .meter-row", { hasText: awayLabel })
   ).toHaveAttribute("data-pending", "true");
-  await page.locator(`.admin-sidebar a[href="${base}/dashboard"]`).click();
+  await page
+    .locator(`.admin-sidebar .app-nav a[href="${base}/dashboard"]`)
+    .click();
   await expect(page.locator("[data-mutation-summary]")).toHaveText(
     "1 change saving"
   );
@@ -1076,7 +1089,9 @@ test("first meter is reconciled immediately and its dynamic archive control work
   );
   await page.unroute("**/*", holdAwayMeterRequest);
   expect(createRequests).toBe(3);
-  await page.locator(`.admin-sidebar a[href="${base}/dwellings"]`).click();
+  await page
+    .locator(`.admin-sidebar .app-nav a[href="${base}/dwellings"]`)
+    .click();
   await page.getByRole("link", { name: dwellingNumber, exact: true }).click();
   await page.getByRole("tab", { name: "Meters" }).click();
   await expect(
@@ -1111,7 +1126,9 @@ test("first meter is reconciled immediately and its dynamic archive control work
   ).toContainText("Adding");
   await expect.poll(() => residentRequests).toBe(1);
   await expect.poll(() => mutationStatuses(page)).toContain("pending");
-  await page.locator(`.admin-sidebar a[href="${base}/dashboard"]`).click();
+  await page
+    .locator(`.admin-sidebar .app-nav a[href="${base}/dashboard"]`)
+    .click();
   await expect(page).toHaveURL(`${base}/dashboard`);
   await expect.poll(() => mutationStatuses(page)).toContain("pending");
   await expect(page.locator("[data-mutation-summary]")).toHaveText(
@@ -1126,7 +1143,9 @@ test("first meter is reconciled immediately and its dynamic archive control work
     "All changes saved"
   );
   expect(residentRequests).toBe(1);
-  await page.locator(`.admin-sidebar a[href="${base}/dwellings"]`).click();
+  await page
+    .locator(`.admin-sidebar .app-nav a[href="${base}/dwellings"]`)
+    .click();
   await page.getByRole("link", { name: dwellingNumber, exact: true }).click();
   await page.getByRole("tab", { name: "Meters" }).click();
   await expect(row).toBeVisible();
@@ -1265,7 +1284,9 @@ test("first meter is reconciled immediately and its dynamic archive control work
   );
 
   for (const path of ["dashboard", "dwellings", "dashboard", "settings"]) {
-    await page.locator(`.admin-sidebar a[href="${base}/${path}"]`).click();
+    await page
+      .locator(`.admin-sidebar .app-nav a[href="${base}/${path}"]`)
+      .click();
     await expect(page).toHaveURL(`${base}/${path}`);
   }
 });

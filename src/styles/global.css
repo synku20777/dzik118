@@ -1988,11 +1988,15 @@ textarea:disabled {
   }
   /* Language switch: toggle tabs (markup carries both classes), sized to sit
      beside the 44px theme button. */
+  /* No trough padding: each segment keeps the full 44px touch height. */
   .lang-switch.toggle-tabs {
     display: flex;
+    padding: 0;
   }
   .lang-switch.toggle-tabs > * {
     flex: 1 1 0;
+    min-height: 2.75rem;
+    border-radius: inherit;
     padding-inline: var(--space-2);
     font-size: var(--text-xs);
     font-weight: 600;
@@ -3306,7 +3310,7 @@ html:has(.context-drawer:modal) {
   .filter-bar > div {
     flex: 1 1 9rem;
   }
-  .filter-bar input,
+  .filter-bar input:not([type="checkbox"], [type="radio"]),
   .filter-bar select {
     width: 100%;
   }
