@@ -15,11 +15,15 @@ test.setTimeout(120_000);
 const dbUrl = process.env.DATABASE_URL;
 
 async function loginAdmin(page: Page): Promise<string> {
-  await page.goto("/login");
+  await page.goto("/login?lang=en");
   await page.locator("#admin-email").fill("admin.a@example.com");
   await page.locator("#admin-password").fill("ChangeMe123!");
   await page.locator("#admin-login-form button").click();
-  await page.waitForURL(/\/admin\/o\/.+\/dashboard/);
+  await page.waitForURL(/\/admin\/(organizations|o\/.+\/dashboard)/);
+  if (new URL(page.url()).pathname === "/admin/organizations") {
+    await page.locator('main a[href$="/dashboard"]').first().click();
+    await page.waitForURL(/\/admin\/o\/.+\/dashboard/);
+  }
   return new URL(page.url()).pathname.replace(/\/dashboard$/, "");
 }
 
@@ -156,7 +160,7 @@ test("recurring tariffs: dwelling page is read-only, unassigned selective tariff
 
     // ---- SCENARIO 1: dwelling A shows all three applicable tariffs,
     // read-only (no Manage tariffs button, no assignment checkboxes). ----
-    await page.goto(`${base}/dwellings/${dwellingA.id}`);
+    await page.goto(`${base}/dwellings/${dwellingA.id}?tab=tariffs`);
     const tariffsPanel = page.locator("#tariffs");
     await expect(tariffsPanel.getByText(allRule.name)).toBeVisible();
     await expect(tariffsPanel.getByText(manyRule.name)).toBeVisible();
@@ -187,16 +191,35 @@ test("recurring tariffs: dwelling page is read-only, unassigned selective tariff
     const drawer = page.locator("#tariff-drawer");
     await expect(drawer).toBeVisible();
     await expect(drawer.locator("#tariff-name")).toHaveValue(manyRule.name);
-    await expect(drawer.locator("#tariff-code")).toHaveValue(manyRule.code);
+    await expect(
+      drawer.locator('input:not([type="hidden"])').first()
+    ).toHaveAttribute("id", "tariff-enabled");
+    await expect(drawer.locator("#tariff-code-readonly")).toHaveText(
+      manyRule.code
+    );
 
     // ---- SCENARIO 4: closing the drawer strips ?edit= from the URL. ----
-    await drawer.getByRole("button", { name: /cancel/i }).click();
+    await drawer
+      .getByRole("button", { name: /^close$/i })
+      .last()
+      .click();
     await expect(drawer).toBeHidden();
     await expect(page).toHaveURL(/\/settings\/rules$/);
+    await page
+      .locator('.page-actions button[data-open-tariff-drawer="create"]')
+      .click();
+    await expect(drawer.locator("#tariff-vatRate")).toHaveValue("21");
+    await expect(drawer.locator("#tariff-drawer-save")).toHaveText(
+      "Create tariff"
+    );
+    await drawer
+      .getByRole("button", { name: /^close$/i })
+      .last()
+      .click();
 
     // ---- SCENARIO 5: deep link again, then browser Back returns to the
     // dwelling page with no broken modal state. ----
-    await page.goto(`${base}/dwellings/${dwellingA.id}`);
+    await page.goto(`${base}/dwellings/${dwellingA.id}?tab=tariffs`);
     await page
       .locator("#tariffs")
       .locator("li", { hasText: manyRule.name })
@@ -205,7 +228,9 @@ test("recurring tariffs: dwelling page is read-only, unassigned selective tariff
     await page.waitForURL(new RegExp(`/settings/rules\\?edit=${manyRule.id}$`));
     await expect(page.locator("#tariff-drawer")).toBeVisible();
     await page.goBack();
-    await expect(page).toHaveURL(new RegExp(`/dwellings/${dwellingA.id}$`));
+    await expect(page).toHaveURL(
+      new RegExp(`/dwellings/${dwellingA.id}\\?tab=tariffs$`)
+    );
     // The dialog element belongs to the rules page, which Back navigated
     // away from entirely -- it must not still be present/open.
     await expect(page.locator("#tariff-drawer")).toHaveCount(0);

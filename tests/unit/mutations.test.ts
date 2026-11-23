@@ -3,6 +3,8 @@ import {
   completeMutation,
   confirmMutation,
   failMutation,
+  failReconciliation,
+  hydrateMutations,
   markReconciling,
   markVerifying,
   mutationCounts,
@@ -12,6 +14,7 @@ import {
   startMutation,
   subscribeMutations,
   type MutationStatus,
+  type UiMutation,
 } from "../../src/lib/ui/mutations";
 
 describe("UI mutation lifecycle", () => {
@@ -140,19 +143,79 @@ describe("UI mutation lifecycle", () => {
     vi.unstubAllGlobals();
   });
 
+  it("keeps working when storage throws", () => {
+    const blocked = () => {
+      throw new DOMException("blocked", "SecurityError");
+    };
+    vi.stubGlobal("sessionStorage", {
+      getItem: blocked,
+      setItem: blocked,
+      removeItem: blocked,
+    });
+    let active = 0;
+    const unsubscribe = subscribeMutations((items) => {
+      active = mutationCounts(items).active;
+    });
+
+    expect(hydrateMutations((key) => key)).toEqual([]);
+    startMutation({
+      id: "mutation:meter:create:blocked",
+      entity: "meter",
+      operation: "create",
+      label: "Adding meter…",
+    });
+
+    expect(active).toBe(1);
+    unsubscribe();
+    vi.unstubAllGlobals();
+  });
+
   it("runs only one recovery worker for a mutation ID", async () => {
     const lookup = vi.fn().mockResolvedValue({
       state: "committed",
       entity: { id: "meter-1" },
     });
     const committed = vi.fn();
-    const callbacks = { committed, unknown: vi.fn() };
+    const callbacks = { committed, viewFailed: vi.fn(), unknown: vi.fn() };
 
     runMutationRecovery("mutation:meter:create:one", lookup, callbacks);
     runMutationRecovery("mutation:meter:create:one", lookup, callbacks);
 
     await vi.waitFor(() => expect(committed).toHaveBeenCalledOnce());
     expect(lookup).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a confirmed save confirmed when the screen update fails", async () => {
+    const id = "mutation:meter:create:stale";
+    startMutation({
+      id,
+      entity: "meter",
+      operation: "create",
+      label: "Adding…",
+    });
+    const lookup = vi.fn().mockResolvedValue({ state: "committed" });
+    const unknown = vi.fn();
+    let latest: readonly UiMutation[] = [];
+    const unsubscribe = subscribeMutations((items) => (latest = items));
+
+    runMutationRecovery(id, lookup, {
+      committed: () => {
+        throw new Error("DOM update failed");
+      },
+      viewFailed: () => failReconciliation(id, "Saved, but not shown"),
+      unknown,
+    });
+
+    await vi.waitFor(() => expect(latest[0]?.refresh).toBe(true));
+    // No second lookup, no "outcome unknown", and no retry of the save.
+    expect(lookup).toHaveBeenCalledOnce();
+    expect(unknown).not.toHaveBeenCalled();
+    expect(latest[0]).toMatchObject({
+      status: "error",
+      label: "Saved, but not shown",
+      retry: undefined,
+    });
+    unsubscribe();
   });
 
   it("bounds unknown-outcome checks and only checks again without retrying create", async () => {
@@ -165,6 +228,7 @@ describe("UI mutation lifecycle", () => {
 
     runMutationRecovery("mutation:meter:create:unknown", lookup, {
       committed: vi.fn(),
+      viewFailed: vi.fn(),
       unknown,
     });
     await vi.runAllTimersAsync();

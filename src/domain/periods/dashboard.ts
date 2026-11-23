@@ -9,7 +9,11 @@ import {
   meterReadings,
 } from "../../db/schema/billing";
 import { dwellings, meters } from "../../db/schema/dwellings";
-import { invoiceDeliveries, invoices } from "../../db/schema/invoices";
+import {
+  invoiceDeliveries,
+  invoices,
+  invoiceSendAttempts,
+} from "../../db/schema/invoices";
 import { paymentAllocations, paymentReversals } from "../../db/schema/accounts";
 import { organizations } from "../../db/schema/organizations";
 import { maxExact, subtractExact, sumExact } from "../../lib/decimal2";
@@ -22,6 +26,11 @@ import {
   listPaymentMatches,
   listUnmatchedTransactions,
 } from "../payments/matching";
+import {
+  missingBillingDetails,
+  readInvoiceSnapshots,
+} from "../billing/invoice-snapshots";
+import { NotFoundError } from "../errors";
 import { getPeriod } from "./periods";
 
 export type CaseStatusCounts = Record<
@@ -51,6 +60,10 @@ export type NextActionKey =
   | "SEND_INVOICES"
   | "REVIEW_PAYMENTS"
   | "CREATE_NEXT_PERIOD"
+  // An older locked month: locking has no completion check, so it is not "done".
+  | "LOCKED"
+  // An open month with no billing cases yet.
+  | "NO_CASES"
   | "ALL_DONE";
 
 export interface DashboardSummary {
@@ -65,6 +78,10 @@ export interface DashboardSummary {
   carriedOutstanding: string;
   creditsApplied: string;
   lateFees: string;
+  // The stored adjustments. Not "amount due minus the rest": an invoice whose
+  // credit is larger than its charges has amount due 0, and the rest would not
+  // add up.
+  manualAdjustments: string;
   amountDue: string;
   totalPaid: string;
   totalOutstanding: string;
@@ -80,7 +97,7 @@ export interface DashboardSummary {
     readingsDone: number;
     // Cases with an invoice: DRAFT, PREPARED, SENT, OVERDUE, PAID.
     invoicesGenerated: number;
-    // Cases whose invoice went out: SENT, OVERDUE, PAID.
+    // Invoices with a send date. A PAID invoice may never have been sent.
     invoicesSent: number;
     invoicesPaid: number;
   };
@@ -93,24 +110,38 @@ export interface DashboardSummary {
   // Org-wide: bank transactions with no match yet / matches awaiting review.
   unmatchedPaymentCount: number;
   proposedPaymentCount: number;
-  // This period's invoices not sent whose last delivery FAILED or is UNKNOWN.
-  deliveryFailureCount: number;
+  // This period's invoices with no send date: the send queue.
+  unsentInvoiceIds: string[];
+  // Sent and not paid, whatever the case status says.
+  awaitingPaymentCount: number;
+  // Unsent invoices whose latest send attempt FAILED / is UNKNOWN.
+  deliveryFailedIds: string[];
+  deliveryUnknownIds: string[];
+  // This period's DRAFT invoices that cannot be prepared: the issuer, the
+  // recipient or the payment details are incomplete.
+  blockedDraftCount: number;
   readiness: { billingReady: boolean; readyToSend: boolean };
 }
 
 // First applicable step of the month, in workflow order.
-function pickNextAction(
+// Sending and payment go by the invoice's dates, not the case status: a status
+// can be set by hand (a sent invoice back to Prepared).
+export function pickNextAction(
   counts: CaseStatusCounts,
+  unsent: number,
+  awaitingPayment: number,
   locked: boolean,
   isNewest: boolean
 ): DashboardSummary["nextAction"] {
   if (locked)
-    return { key: isNewest ? "CREATE_NEXT_PERIOD" : "ALL_DONE", count: 0 };
+    return { key: isNewest ? "CREATE_NEXT_PERIOD" : "LOCKED", count: 0 };
+  if (Object.values(counts).every((n) => n === 0))
+    return { key: "NO_CASES", count: 0 };
   const steps: [NextActionKey, number][] = [
     ["ENTER_READINGS", counts.MISSING_DATA],
     ["GENERATE_INVOICES", counts.READY],
-    ["SEND_INVOICES", counts.DRAFT + counts.PREPARED],
-    ["REVIEW_PAYMENTS", counts.SENT + counts.OVERDUE],
+    ["SEND_INVOICES", unsent],
+    ["REVIEW_PAYMENTS", awaitingPayment],
   ];
   const [key, count] = steps.find(([, n]) => n > 0) ?? ["ALL_DONE", 0];
   return { key, count };
@@ -136,6 +167,7 @@ export async function getDashboardSummary(
     .from(organizations)
     .where(eq(organizations.id, organizationId))
     .limit(1);
+  if (!org) throw new NotFoundError("Organization not found");
   const todayLocal = orgLocalDateString(new Date(), org.timezone);
 
   const allPeriodInvoices = await db
@@ -145,12 +177,16 @@ export async function getDashboardSummary(
       previousOutstanding: invoices.previousOutstanding,
       previousCreditApplied: invoices.previousCreditApplied,
       lateFeeApplied: invoices.lateFeeApplied,
+      manualAdjustment: invoices.manualAdjustment,
       amountDue: invoices.amountDue,
       paidAt: invoices.paidAt,
       sentAt: invoices.sentAt,
       dueDate: invoices.dueDate,
       billingCaseId: invoices.billingCaseId,
       currency: invoices.currency,
+      issuerSnapshot: invoices.issuerSnapshot,
+      recipientSnapshot: invoices.recipientSnapshot,
+      paymentSnapshot: invoices.paymentSnapshot,
     })
     .from(invoices)
     .where(
@@ -236,6 +272,9 @@ export async function getDashboardSummary(
     periodInvoices.map((i) => i.previousCreditApplied)
   );
   const lateFees = sumExact(periodInvoices.map((i) => i.lateFeeApplied));
+  const manualAdjustments = sumExact(
+    periodInvoices.map((i) => i.manualAdjustment)
+  );
   const amountDue = sumExact(periodInvoices.map((i) => i.amountDue));
   const totalPaid = sumExact(
     periodInvoices.map((invoice) => invoiceBalances.get(invoice.id)!.paid)
@@ -335,7 +374,12 @@ export async function getDashboardSummary(
       })
   );
   const n = caseStatusCounts;
-  const invoicesSent = n.SENT + n.OVERDUE + n.PAID;
+  // By send date, not status: an invoice a credit covered is PAID unsent.
+  const invoicesSent = allPeriodInvoices.filter((i) => i.sentAt).length;
+  const unsentIds = allPeriodInvoices.filter((i) => !i.sentAt).map((i) => i.id);
+  const awaitingPaymentCount = allPeriodInvoices.filter(
+    (i) => i.sentAt && !i.paidAt
+  ).length;
 
   // Newest real billing month (the starting-readings month is never one).
   const [newest] = await db
@@ -351,20 +395,60 @@ export async function getDashboardSummary(
     .limit(1);
   const isNewestPeriod = newest?.id === periodId;
 
-  // Unsent invoices whose last delivery attempt did not succeed.
-  const unsentIds = periodInvoices.filter((i) => !i.sentAt).map((i) => i.id);
-  const failedDeliveries = unsentIds.length
+  // The same check prepareInvoice makes, so the count is what automatic and
+  // manual preparation would refuse. A damaged snapshot counts too.
+  const blockedDraftCount = cases.filter((c) => {
+    const invoice = c.status === "DRAFT" ? invoiceByCase.get(c.id) : undefined;
+    if (!invoice) return false;
+    const snapshots = readInvoiceSnapshots(invoice);
+    return !snapshots || missingBillingDetails(snapshots) !== null;
+  }).length;
+
+  // Unsent invoices whose latest send attempt did not succeed. An invoice
+  // from before send attempts existed falls back to its delivery rows.
+  const attempts = unsentIds.length
     ? await db
-        .selectDistinct({ invoiceId: invoiceDeliveries.invoiceId })
+        .select({
+          invoiceId: invoiceSendAttempts.invoiceId,
+          status: invoiceSendAttempts.status,
+        })
+        .from(invoiceSendAttempts)
+        .where(
+          and(
+            eq(invoiceSendAttempts.organizationId, organizationId),
+            inArray(invoiceSendAttempts.invoiceId, unsentIds)
+          )
+        )
+        .orderBy(desc(invoiceSendAttempts.createdAt))
+    : [];
+  const legacy = unsentIds.length
+    ? await db
+        .select({
+          invoiceId: invoiceDeliveries.invoiceId,
+          status: invoiceDeliveries.status,
+        })
         .from(invoiceDeliveries)
         .where(
           and(
             eq(invoiceDeliveries.organizationId, organizationId),
-            inArray(invoiceDeliveries.invoiceId, unsentIds),
-            inArray(invoiceDeliveries.status, ["FAILED", "UNKNOWN"])
+            inArray(invoiceDeliveries.invoiceId, unsentIds)
           )
         )
+        .orderBy(desc(invoiceDeliveries.createdAt))
     : [];
+  // Newest first, so the first row per invoice is its latest state.
+  const latest = (rows: { invoiceId: string; status: string }[]) => {
+    const state = new Map<string, string>();
+    for (const row of rows)
+      if (!state.has(row.invoiceId)) state.set(row.invoiceId, row.status);
+    return state;
+  };
+  const latestAttempt = latest(attempts);
+  const latestDelivery = latest(legacy);
+  const deliveryIds = (status: string) =>
+    unsentIds.filter(
+      (id) => (latestAttempt.get(id) ?? latestDelivery.get(id)) === status
+    );
 
   return {
     period,
@@ -374,6 +458,7 @@ export async function getDashboardSummary(
     carriedOutstanding,
     creditsApplied,
     lateFees,
+    manualAdjustments,
     amountDue,
     totalPaid,
     totalOutstanding,
@@ -385,11 +470,17 @@ export async function getDashboardSummary(
     progress: {
       dwellingsTotal: cases.length,
       readingsDone: cases.length - n.MISSING_DATA,
-      invoicesGenerated: n.DRAFT + n.PREPARED + invoicesSent,
+      invoicesGenerated: n.DRAFT + n.PREPARED + n.SENT + n.OVERDUE + n.PAID,
       invoicesSent,
       invoicesPaid: n.PAID,
     },
-    nextAction: pickNextAction(n, period.status === "LOCKED", isNewestPeriod),
+    nextAction: pickNextAction(
+      n,
+      unsentIds.length,
+      awaitingPaymentCount,
+      period.status === "LOCKED",
+      isNewestPeriod
+    ),
     deadlines: {
       readingDeadline: period.readingDeadline,
       invoiceIssueDate: period.invoiceIssueDate,
@@ -402,10 +493,14 @@ export async function getDashboardSummary(
     proposedPaymentCount: (
       await listPaymentMatches(db, organizationId, "PROPOSED")
     ).length,
-    deliveryFailureCount: failedDeliveries.length,
+    unsentInvoiceIds: unsentIds,
+    awaitingPaymentCount,
+    deliveryFailedIds: deliveryIds("FAILED"),
+    deliveryUnknownIds: deliveryIds("UNKNOWN"),
+    blockedDraftCount,
     readiness: {
       billingReady: cases.length > 0 && n.MISSING_DATA === 0,
-      readyToSend: n.DRAFT + n.PREPARED > 0,
+      readyToSend: unsentIds.length > 0,
     },
   };
 }

@@ -56,9 +56,11 @@ function guessSingleByte(bytes: Uint8Array): MigrationEncoding {
 
 export function decodeBytes(
   bytes: Uint8Array,
-  encoding: MigrationEncoding | "auto" = "auto"
+  encoding: MigrationEncoding | "auto" = "auto",
+  // The other CSV imports use this too, with their own (checked) size limit.
+  maxBytes = MIGRATION_MAX_BYTES
 ): { text: string; encoding: MigrationEncoding } {
-  if (bytes.length > MIGRATION_MAX_BYTES) {
+  if (bytes.length > maxBytes) {
     throw new ValidationError("The file is too large (up to 1 MB)");
   }
   let chosen: MigrationEncoding;

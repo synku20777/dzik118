@@ -50,6 +50,12 @@ describe("decodeBytes", () => {
     expect(decodeBytes(bom).text).toBe("Dzīvokļa Nr.;Platība");
   });
 
+  it("takes the caller's size limit (the other CSV imports allow 2 MB)", () => {
+    const bytes = new Uint8Array(1_500_000).fill(0x61);
+    expect(() => decodeBytes(bytes)).toThrow(/too large/);
+    expect(decodeBytes(bytes, "auto", 2_000_000).text).toHaveLength(1_500_000);
+  });
+
   it("detects Latvian Windows-1257", () => {
     const bytes = to1257(
       "Dzīvokļa Nr.;Īpašnieks;Platība, m²\n1;Jānis Bērziņš;45,5"

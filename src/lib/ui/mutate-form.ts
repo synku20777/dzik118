@@ -19,6 +19,7 @@ import {
   confirmMutation,
   createMutationId,
   failMutation,
+  failReconciliation,
   markOutcomeUnknown,
   markReconciling,
   markVerifying,
@@ -38,6 +39,10 @@ export interface MutationDescriptor {
   messageKey?: string;
   successMessageKey?: string;
   committedMissingLabel?: string;
+  // false for a change the server cannot recognise as a repeat (an additive
+  // money entry): after an unknown outcome a Retry could post it twice, so
+  // none is offered.
+  retryable?: boolean;
 }
 
 export interface MutateFormConfig<T, Optimistic = undefined> {
@@ -61,6 +66,9 @@ export interface MutateFormConfig<T, Optimistic = undefined> {
     optimistic: Optimistic | undefined
   ) => void;
   onSettled?: () => void;
+  // Words a server message in the page's language; the message is shown as is
+  // when this is absent or returns it unchanged.
+  translateError?: (message: string) => string;
   recover?: (clientMutationId: string) => Promise<RecoveryResult>;
   onVerifying?: (optimistic: Optimistic | undefined, unknown: boolean) => void;
   onCommittedMissing?: (
@@ -272,10 +280,30 @@ export function bindMutationForm<T, Optimistic = undefined>(
     return { anyMatchedField, unmapped, firstMessage };
   }
 
+  // The server saved the change but the page could not show it. The save stays
+  // confirmed, so the next submit is a new change, and the status offers a
+  // refresh instead of a retry.
+  function savedButStale(
+    mutationId: string,
+    descriptor: MutationDescriptor | undefined
+  ) {
+    const message =
+      descriptor?.reconciliationErrorLabel ??
+      "Saved, but the view could not be updated";
+    showError(message);
+    failReconciliation(mutationId, message);
+    clientMutationId = undefined;
+    logicalMutationId = undefined;
+  }
+
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     if (pending) return;
     pending = true;
+    // forms.ts reads data-confirm from the submitter, so a retry must submit
+    // with the same one or it would skip the confirmation.
+    const submitter = (event as SubmitEvent)
+      .submitter as HTMLButtonElement | null;
     clearError();
     if (submitButton) {
       submitButton.disabled = true;
@@ -307,7 +335,13 @@ export function bindMutationForm<T, Optimistic = undefined>(
         entity: descriptor.entity,
         operation: descriptor.operation,
         label: descriptor.pendingLabel,
-        retry: () => form.requestSubmit(),
+        retry:
+          descriptor.retryable === false
+            ? undefined
+            : () =>
+                submitter?.isConnected && submitter.form === form
+                  ? form.requestSubmit(submitter)
+                  : form.requestSubmit(),
         messageKey: descriptor.messageKey,
         successMessageKey: descriptor.successMessageKey,
         recovery:
@@ -343,16 +377,26 @@ export function bindMutationForm<T, Optimistic = undefined>(
           // an input error). Only a genuine non-input ActionError (thrown
           // by the domain layer, already a safe human sentence -- see
           // src/actions/_errors.ts) uses `.message` directly.
+          const translate = (message: string) =>
+            config.translateError?.(message) ?? message;
           let safeMessage: string;
           if (isInputError(error)) {
+            const fields = Object.fromEntries(
+              Object.entries(error.fields).map(([name, messages]) => [
+                name,
+                messages?.map(translate),
+              ])
+            );
             const { anyMatchedField, unmapped, firstMessage } =
-              applyInputFieldErrors(error.fields, submittedValues);
+              applyInputFieldErrors(fields, submittedValues);
             safeMessage = firstMessage || fallbackErrorMessage;
             if (unmapped.length > 0 || !anyMatchedField) {
               showError(unmapped.join(" ") || safeMessage);
             }
           } else {
-            safeMessage = error.message || fallbackErrorMessage;
+            safeMessage = error.message
+              ? translate(error.message)
+              : fallbackErrorMessage;
             showError(safeMessage);
           }
           config.onError?.(error, form, optimistic);
@@ -426,6 +470,11 @@ export function bindMutationForm<T, Optimistic = undefined>(
               releaseForm();
               config.onSettled?.();
             },
+            viewFailed: () => {
+              savedButStale(mutationId, descriptor);
+              releaseForm();
+              config.onSettled?.();
+            },
             unknown: (checkAgain) => {
               config.onVerifying?.(optimistic, true);
               markOutcomeUnknown(mutationId, () => {
@@ -437,19 +486,18 @@ export function bindMutationForm<T, Optimistic = undefined>(
           });
           return;
         }
-        const message = serverConfirmed
-          ? (descriptor?.reconciliationErrorLabel ??
-            "Saved, but the view could not be updated")
-          : fallbackErrorMessage;
-        showError(message);
-        const error = { message } as ActionError;
-        if (!serverConfirmed) config.onError?.(error, form, optimistic);
+        if (mutationId && serverConfirmed) {
+          savedButStale(mutationId, descriptor);
+          return;
+        }
+        showError(fallbackErrorMessage);
+        config.onError?.(
+          { message: fallbackErrorMessage } as ActionError,
+          form,
+          optimistic
+        );
         if (mutationId && descriptor) {
-          failMutation(
-            mutationId,
-            message,
-            serverConfirmed ? message : descriptor.errorLabel
-          );
+          failMutation(mutationId, fallbackErrorMessage, descriptor.errorLabel);
         }
       })
       .finally(() => {

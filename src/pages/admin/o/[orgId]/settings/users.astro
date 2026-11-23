@@ -11,22 +11,12 @@ import Icon from "../../../../../components/ui/Icon.astro";
 import { initials } from "../../../../../lib/ui/initials";
 import { actions } from "astro:actions";
 import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../domain/authorization/guards";
-import {
   getOrganization,
   listAdminMembers,
 } from "../../../../../domain/organizations/organizations";
 import { withRequestDb } from "../../../../../lib/db-request";
 
 const organizationId = Astro.params.orgId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const addResult = Astro.getActionResult(actions.organizations.addAdminMember);
 const removeResult = Astro.getActionResult(

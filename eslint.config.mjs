@@ -13,6 +13,12 @@ export default [
       "drizzle/migrations/",
       "docs/",
       "worker-configuration.d.ts",
+      // Agent tool folders hold vendored skill scripts, not project code.
+      ".agent/",
+      ".agents/",
+      ".claude/",
+      ".codex/",
+      ".gemini/",
     ],
   },
   js.configs.recommended,

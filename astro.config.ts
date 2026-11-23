@@ -1,5 +1,6 @@
 import { defineConfig, envField } from "astro/config";
 import cloudflare from "@astrojs/cloudflare";
+import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
@@ -13,6 +14,8 @@ export default defineConfig({
   // then waits for it and loads the page a second time. Prefetch off.
   prefetch: false,
   integrations: [
+    // One island so far: the Dwellings page building editor.
+    react(),
     {
       name: "namkopa-dev-server-flag",
       hooks: {

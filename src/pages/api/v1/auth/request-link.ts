@@ -70,7 +70,7 @@ async function sendMagicLink(email: string) {
       (!existing || !(await hasAdminCapability(db, existing.id)))
     ) {
       const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-      await supabase.auth.signInWithOtp({
+      const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
           // Does not auto-create a resident (spec Section 15.1); the
@@ -82,6 +82,9 @@ async function sendMagicLink(email: string) {
           emailRedirectTo: `${APP_BASE_URL}/auth/confirm`,
         },
       });
+      // An unknown address is refused with `otp_disabled` (shouldCreateUser
+      // is false). That is an expected outcome, not a failure to log.
+      if (error && error.code !== "otp_disabled") throw error;
     }
   });
 }

@@ -32,7 +32,6 @@ import {
   NotFoundError,
   ValidationError,
 } from "../../src/domain/errors";
-import { orgLocalDateString } from "../../src/lib/org-time";
 import { accountEntries, paymentReversals } from "../../src/db/schema/accounts";
 import { billingCases } from "../../src/db/schema/billing";
 import { invoices } from "../../src/db/schema/invoices";
@@ -160,14 +159,13 @@ describe("payment reversal (Scope P)", () => {
       .where(eq(invoices.id, invoice.id));
     expect(inv.paidAt).toBeNull();
 
-    // 2. case status is SENT (or OVERDUE when the due date is past)
-    const orgToday = orgLocalDateString(new Date(), org.timezone);
-    const expectedStatus = invoice.dueDate < orgToday ? "OVERDUE" : "SENT";
+    // 2. the invoice was paid before it was ever sent, so the case goes back
+    // to PREPARED: it must still be sent to the resident.
     const [caseRow] = await db
       .select({ status: billingCases.status })
       .from(billingCases)
       .where(eq(billingCases.id, invoice.billingCaseId));
-    expect(caseRow.status).toBe(expectedStatus);
+    expect(caseRow.status).toBe("PREPARED");
 
     // 3. getInvoiceAllocatedAmount is "0.00"
     const allocated = await getInvoiceAllocatedAmount(db, org.id, invoice.id);

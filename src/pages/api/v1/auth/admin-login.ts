@@ -4,6 +4,7 @@
 // with HttpOnly, Secure, and SameSite=Lax flags directly by the server.
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
+import { describeError } from "../../../../domain/errors";
 import { createSupabaseServerClient } from "../../../../lib/supabase/server";
 
 export const POST: APIRoute = async ({ request, cookies, redirect, url }) => {
@@ -50,15 +51,19 @@ export const POST: APIRoute = async ({ request, cookies, redirect, url }) => {
       password,
     });
 
+    // Supabase returns an outage (no status, or 5xx) as a value, not a throw.
+    // It is not a credential problem, so it takes the catch below.
+    if (error && (!error.status || error.status >= 500)) throw error;
     if (error || !data.user) {
       return applyPendingHeaders(redirect("/login?error=1", 303));
     }
 
     return applyPendingHeaders(redirect("/admin", 303));
-  } catch {
+  } catch (err) {
     // A network/Supabase-availability hiccup, not a credential problem --
     // telling the admin "incorrect email or password" here would send them
     // chasing the wrong fix.
+    console.error("admin-login failed", describeError(err));
     return redirect("/login?error=5", 303);
   }
 };

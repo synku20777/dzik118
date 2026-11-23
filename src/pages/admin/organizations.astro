@@ -47,12 +47,12 @@ const archived = organizations.filter((o) => o.archivedAt);
           {t("You don't belong to any organization yet. Create one below.")}
         </p>
       ) : (
-        <ul class="mt-4 divide-y divide-border rounded-control border border-border bg-surface">
+        <ul class="mt-4 divide-y divide-border rounded-control contained bg-surface">
           {[...active, ...archived].map((org) => (
             <li>
               <a
                 href={`/admin/o/${org.id}/dashboard`}
-                class="flex items-center justify-between px-4 py-3 hover:bg-surface-hover"
+                class="flex items-center justify-between px-4 py-3 hover:bg-hover"
               >
                 <span class="font-medium text-foreground">
                   {org.name}

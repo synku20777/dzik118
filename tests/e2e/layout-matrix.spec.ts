@@ -472,8 +472,8 @@ test("the shell and panes switch exactly at their breakpoints", async ({
   await page.setViewportSize({ width: 640, height: 900 });
   await expect(stacked).not.toHaveCSS("display", "block");
 
-  // The dwelling two-pane layout follows its own area, not the screen: it
-  // needs 60rem. At 1120 the sidebar leaves less than that.
+  // The dwelling overview's two columns follow the page's own area, not the
+  // screen: they need 60rem. At 1120 the sidebar leaves less than that.
   const href = await page
     .locator(
       `main a[href^="${base}/dwellings/"]:not([href*="import"]):not([href*="export"]):not([href$="/new"])`
@@ -484,7 +484,7 @@ test("the shell and panes switch exactly at their breakpoints", async ({
   await page.goto(withLang(href!));
   const columns = () =>
     page
-      .locator(".dwelling-grid")
+      .locator(".overview-grid")
       .evaluate(
         (el) => getComputedStyle(el).gridTemplateColumns.split(" ").length
       );
@@ -494,7 +494,7 @@ test("the shell and panes switch exactly at their breakpoints", async ({
     [959, 1],
     [960, 2],
   ] as const) {
-    await page.locator(".dwelling-grid-host").evaluate((el, w) => {
+    await page.locator("[data-dwelling-detail]").evaluate((el, w) => {
       el.style.width = w + "px";
     }, hostWidth);
     await settle();
@@ -502,7 +502,7 @@ test("the shell and panes switch exactly at their breakpoints", async ({
       expected
     );
   }
-  await page.locator(".dwelling-grid-host").evaluate((el) => {
+  await page.locator("[data-dwelling-detail]").evaluate((el) => {
     el.style.width = "";
   });
   for (const [width, expected] of [
@@ -601,6 +601,34 @@ test("semantic token pairs meet WCAG AA in both themes", async ({ page }) => {
         ratio: ratio(opaque("--color-on-primary"), opaque("--color-primary")),
         min: 4.5,
       });
+      // Interactive hover: text stays readable on it, a field edge stays 3:1,
+      // and it must be a visible step from both the surface and the canvas.
+      for (const fg of [
+        "--color-foreground",
+        "--color-muted",
+        "--color-primary",
+        "--color-destructive",
+        "--color-success",
+        "--color-warning",
+      ]) {
+        rows.push({
+          pair: `${fg} on --color-hover`,
+          ratio: ratio(opaque(fg), opaque("--color-hover")),
+          min: 4.5,
+        });
+      }
+      rows.push({
+        pair: "--color-input-border on --color-hover",
+        ratio: ratio(opaque("--color-input-border"), opaque("--color-hover")),
+        min: 3,
+      });
+      for (const bg of ["--color-surface", "--color-canvas"]) {
+        rows.push({
+          pair: `--color-hover against ${bg} (must be distinguishable)`,
+          ratio: ratio(opaque("--color-hover"), opaque(bg)),
+          min: 1.08,
+        });
+      }
       for (const token of ["--color-input-border", "--color-focus-ring"]) {
         for (const bg of ["--color-surface", "--color-canvas"]) {
           rows.push({

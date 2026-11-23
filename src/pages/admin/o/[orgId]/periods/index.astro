@@ -17,10 +17,6 @@ const t = (text: string) => translate(locale, text);
 import FieldError from "../../../../../components/ui/FieldError.astro";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { listPeriods } from "../../../../../domain/periods/periods";
 import { withRequestDb } from "../../../../../lib/db-request";
@@ -28,12 +24,6 @@ import { resolvePaginationLinks } from "../../../../../lib/ui/pagination";
 import { fieldErrorAttrs } from "../../../../../lib/ui/field-error-attrs";
 
 const organizationId = Astro.params.orgId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const createResult = Astro.getActionResult(actions.periods.create);
 

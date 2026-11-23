@@ -27,7 +27,6 @@ import {
 } from "../../src/db/schema/payments";
 import {
   getDwellingAccountBalance,
-  getProtectedOpeningDebt,
   postAccountEntry,
 } from "../../src/domain/accounts/ledger";
 import {
@@ -245,9 +244,6 @@ describe("Payment posted to a dwelling account (ADR 0014)", () => {
         metadata: { migrationImportId: "00000000-0000-0000-0000-0000000000aa" },
         idempotencyKey: `it-direct-opening:${d.id}`,
       });
-      expect(await getProtectedOpeningDebt(db, org.id, d.id, "EUR")).toBe(
-        "100.00"
-      );
       const tx = await recordDwellingPayment(
         db,
         org.id,
@@ -255,9 +251,6 @@ describe("Payment posted to a dwelling account (ADR 0014)", () => {
         adminId
       );
       expect(await getDwellingAccountBalance(db, org.id, d.id, "EUR")).toBe(
-        "60.00"
-      );
-      expect(await getProtectedOpeningDebt(db, org.id, d.id, "EUR")).toBe(
         "60.00"
       );
 
@@ -269,9 +262,6 @@ describe("Payment posted to a dwelling account (ADR 0014)", () => {
         adminId
       );
       expect(await getDwellingAccountBalance(db, org.id, d.id, "EUR")).toBe(
-        "100.00"
-      );
-      expect(await getProtectedOpeningDebt(db, org.id, d.id, "EUR")).toBe(
         "100.00"
       );
       // A second reversal posts nothing.

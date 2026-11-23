@@ -34,9 +34,12 @@ import {
   overrideCaseStatus,
 } from "../../src/domain/billing/generation";
 import { prepareInvoice } from "../../src/domain/billing/generation";
+import { getDwellingAccountBalance } from "../../src/domain/accounts/ledger";
+import { recordManualPayment } from "../../src/domain/payments/manual";
 import {
   ConflictError,
   ensureCanonicalPdf,
+  markInvoiceDelivered,
   recordPaperDispatch,
   resendInvoice,
   sendInvoice,
@@ -203,6 +206,40 @@ describe("invoice sending", () => {
     await cleanupOrg(org.id);
   });
 
+  it("an invoice paid before its first delivery stays PAID when it is sent", async () => {
+    const { org, invoice } = await setupPreparedInvoice("IT-G Org Paid", 1);
+    await recordManualPayment(
+      db,
+      org.id,
+      {
+        invoiceId: invoice.id,
+        amount: invoice.amountDue,
+        bookingDate: "2026-01-29",
+        reference: "PAID-BEFORE-SEND",
+        reason: "Paid at the office",
+      },
+      seedAdminId
+    );
+    const sent = await sendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps(),
+      seedAdminId
+    );
+    expect(sent.sentAt).not.toBeNull();
+    expect(sent.paidAt).not.toBeNull();
+
+    const [caseRow] = await db.$client
+      .query("select status from billing_cases where id = $1", [
+        invoice.billingCaseId,
+      ])
+      .then((r) => r.rows);
+    expect(caseRow.status).toBe("PAID");
+
+    await cleanupOrg(org.id);
+  });
+
   it("sendInvoice is idempotent: calling it again after success is a no-op, not a second delivery", async () => {
     const { org, invoice } = await setupPreparedInvoice("IT-G Org 2", 2);
     const first = await sendInvoice(
@@ -333,6 +370,173 @@ describe("invoice sending", () => {
     );
     expect(resent.pdfObjectKey).not.toBe(staleObjectKey);
     expect(resent.pdfSha256).not.toBe(staleHash);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("preparing again after an override back to Draft charges the dwelling once, at the new total", async () => {
+    const { org, dwelling, period, invoice } = await setupPreparedInvoice(
+      "IT-G Org Reprepare",
+      6
+    );
+    expect(invoice.amountDue).toBe("12.10");
+    const balance = () =>
+      getDwellingAccountBalance(db, org.id, dwelling.id, invoice.currency);
+
+    await overrideCaseStatus(
+      db,
+      org.id,
+      invoice.billingCaseId,
+      "DRAFT",
+      "test: correct the invoice",
+      seedAdminId
+    );
+    // Nothing changed on the invoice, so the override may also be undone.
+    await overrideCaseStatus(
+      db,
+      org.id,
+      invoice.billingCaseId,
+      "PREPARED",
+      "test: undo",
+      seedAdminId
+    );
+    await overrideCaseStatus(
+      db,
+      org.id,
+      invoice.billingCaseId,
+      "DRAFT",
+      "test: correct the invoice",
+      seedAdminId
+    );
+
+    await createRule(
+      db,
+      org.id,
+      {
+        name: "Extra",
+        code: "extra",
+        calculationType: "FIXED",
+        unit: "month",
+        unitPrice: "5.00",
+        effectiveFrom: "2025-01-01",
+      },
+      seedAdminId
+    );
+    const regenerated = await generateInvoice(
+      db,
+      org.id,
+      period.id,
+      dwelling.id,
+      seedAdminId
+    );
+    // The invoice's own first charge is not previous debt.
+    expect(regenerated.previousOutstanding).toBe("0.00");
+    expect(regenerated.amountDue).toBe("17.10");
+    // Its content changed: the status override cannot stand in for Prepare.
+    await expect(
+      overrideCaseStatus(
+        db,
+        org.id,
+        invoice.billingCaseId,
+        "PREPARED",
+        "test: skip preparation",
+        seedAdminId
+      )
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    const prepared = await prepareInvoice(
+      db,
+      org.id,
+      regenerated.id,
+      seedAdminId
+    );
+    expect(prepared.previousOutstanding).toBe("0.00");
+    expect(prepared.amountDue).toBe("17.10");
+    expect(await balance()).toBe("17.10");
+
+    // An invoice from before the ledger has its charge as an opening entry
+    // (migration 0002). Preparing it again must not charge it a second time.
+    await db.$client.query("set session_replication_role = replica");
+    await db.$client.query(
+      "update account_entries set type = 'OPENING_BALANCE' where invoice_id = $1 and idempotency_key = $2",
+      [invoice.id, `invoice:${invoice.id}:current-charges`]
+    );
+    await db.$client.query("set session_replication_role = origin");
+    await overrideCaseStatus(
+      db,
+      org.id,
+      invoice.billingCaseId,
+      "DRAFT",
+      "test: correct the invoice",
+      seedAdminId
+    );
+    const again = await prepareInvoice(db, org.id, invoice.id, seedAdminId);
+    expect(again.amountDue).toBe("17.10");
+    expect(await balance()).toBe("17.10");
+
+    await cleanupOrg(org.id);
+  });
+
+  it("does not email an invoice to an address the dwelling no longer uses", async () => {
+    const { org, dwelling, invoice } = await setupPreparedInvoice(
+      "IT-G Org Changed Email",
+      6
+    );
+    await updateDwelling(
+      db,
+      org.id,
+      dwelling.id,
+      { billingEmail: "new-occupant@example.com" },
+      seedAdminId
+    );
+    let emailCalls = 0;
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCalls++;
+          return { success: true, provider: "smtp" };
+        },
+      },
+    });
+    await expect(
+      sendInvoice(db, org.id, invoice.id, deps, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+    expect(emailCalls).toBe(0);
+
+    // Nor when the send first gives up on an abandoned attempt and claims a
+    // new one.
+    const claim = await claimSendAttempt(db, org.id, invoice.id);
+    await db.$client.query(
+      "update invoice_send_attempts set claimed_at = now() - interval '2 minutes' where id = $1",
+      [claim.attempt.id]
+    );
+    await expect(
+      sendInvoice(db, org.id, invoice.id, deps, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+    expect(emailCalls).toBe(0);
+    // The claim it took is closed again, so it does not block the next send.
+    const attempts = await db.$client
+      .query(
+        "select status, error_code from invoice_send_attempts where invoice_id = $1 order by created_at",
+        [invoice.id]
+      )
+      .then((r) => r.rows);
+    expect(attempts).toEqual([
+      { status: "FAILED", error_code: "ABANDONED_BEFORE_DISPATCH" },
+      { status: "FAILED", error_code: "BILLING_EMAIL_CHANGED" },
+    ]);
+
+    // Back to the address on the invoice: it goes out.
+    await updateDwelling(
+      db,
+      org.id,
+      dwelling.id,
+      { billingEmail: " Resident@Example.com " },
+      seedAdminId
+    );
+    const sent = await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
+    expect(sent.sentAt).not.toBeNull();
+    expect(emailCalls).toBe(1);
 
     await cleanupOrg(org.id);
   });
@@ -929,6 +1133,220 @@ describe("invoice sending", () => {
       status: "UNKNOWN",
       error_code: "FAKE_AMBIGUOUS",
     });
+
+    await cleanupOrg(org.id);
+  });
+
+  it("an admin can mark an UNKNOWN delivery as delivered: the invoice becomes sent and no email goes out", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org Mark Delivered",
+      10
+    );
+    let emailCallCount = 0;
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          emailCallCount++;
+          return {
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "FAKE_AMBIGUOUS",
+            failureClassification: "AMBIGUOUS" as const,
+          };
+        },
+      },
+    });
+    await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
+    const [attempt] = await db.$client
+      .query("select id from invoice_send_attempts where invoice_id = $1", [
+        invoice.id,
+      ])
+      .then((r) => r.rows);
+
+    // A wrong attempt id (not the latest UNKNOWN one) is refused.
+    await expect(
+      markInvoiceDelivered(
+        db,
+        org.id,
+        invoice.id,
+        "00000000-0000-4000-8000-000000000000",
+        seedAdminId
+      )
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    // A case pulled back to Draft cannot be marked as delivered.
+    const caseSql =
+      "update billing_cases set status = $2 where id = (select billing_case_id from invoices where id = $1)";
+    await db.$client.query(caseSql, [invoice.id, "DRAFT"]);
+    await expect(
+      markInvoiceDelivered(db, org.id, invoice.id, attempt.id, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+    await db.$client.query(caseSql, [invoice.id, "PREPARED"]);
+
+    const result = await markInvoiceDelivered(
+      db,
+      org.id,
+      invoice.id,
+      attempt.id,
+      seedAdminId
+    );
+    expect(result.sentAt).toBeInstanceOf(Date);
+    expect(emailCallCount).toBe(1);
+
+    const [row] = await db.$client
+      .query(
+        `select a.status as attempt, c.status as case_status
+           from invoice_send_attempts a
+           join invoices i on i.id = a.invoice_id
+           join billing_cases c on c.id = i.billing_case_id
+          where a.id = $1`,
+        [attempt.id]
+      )
+      .then((r) => r.rows);
+    expect(row).toEqual({ attempt: "SENT", case_status: "SENT" });
+    const [delivery] = await db.$client
+      .query("select status from invoice_deliveries where attempt_id = $1", [
+        attempt.id,
+      ])
+      .then((r) => r.rows);
+    expect(delivery.status).toBe("SENT");
+
+    // A first send is now a no-op, and Resend works as after any delivery.
+    await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
+    expect(emailCallCount).toBe(1);
+    await expect(
+      resendInvoice(
+        db,
+        org.id,
+        invoice.id,
+        stubDeps(),
+        seedAdminId,
+        "resend-after-confirm"
+      )
+    ).resolves.toBeDefined();
+
+    const actions = (await listAuditLogs(db, org.id)).map((l) => l.action);
+    expect(actions).toContain("INVOICE_DELIVERY_CONFIRMED");
+    expect(actions.filter((a) => a === "INVOICE_SENT")).toHaveLength(1);
+
+    // Once confirmed it is no longer UNKNOWN, so a second press is refused.
+    await expect(
+      markInvoiceDelivered(db, org.id, invoice.id, attempt.id, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("a late ambiguous provider answer does not undo an admin's delivery confirmation", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org Late Answer",
+      11
+    );
+    let attemptId = "";
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          // While the provider call hangs: the attempt goes stale to UNKNOWN
+          // and an admin confirms delivery.
+          const { rows } = await db.$client.query(
+            "update invoice_send_attempts set status = 'UNKNOWN' where invoice_id = $1 and status = 'DISPATCHING' returning id",
+            [invoice.id]
+          );
+          attemptId = rows[0].id;
+          await markInvoiceDelivered(
+            db,
+            org.id,
+            invoice.id,
+            attemptId,
+            seedAdminId
+          );
+          return {
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "FAKE_AMBIGUOUS",
+            failureClassification: "AMBIGUOUS" as const,
+          };
+        },
+      },
+    });
+    await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
+
+    const [attempt] = await db.$client
+      .query("select status from invoice_send_attempts where id = $1", [
+        attemptId,
+      ])
+      .then((r) => r.rows);
+    expect(attempt.status).toBe("SENT");
+    const actions = (await listAuditLogs(db, org.id)).map((l) => l.action);
+    expect(actions).not.toContain("INVOICE_SEND_UNKNOWN");
+
+    // There was no delivery row to confirm, so confirmation wrote a SENT one;
+    // the late answer then added its own UNKNOWN row.
+    const deliveries = await db.$client
+      .query(
+        "select status from invoice_deliveries where invoice_id = $1 order by status",
+        [invoice.id]
+      )
+      .then((r) => r.rows.map((row) => row.status));
+    expect(deliveries).toEqual(["SENT", "UNKNOWN"]);
+
+    // Even after a later resend fails, the confirmation still counts: a
+    // first send under the claim lock sees the invoice as already sent.
+    await resendInvoice(
+      db,
+      org.id,
+      invoice.id,
+      stubDeps({
+        emailService: {
+          sendInvoice: async () => ({
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "FAKE_REJECTED",
+            failureClassification: "DEFINITIVE" as const,
+          }),
+        },
+      }),
+      seedAdminId,
+      "resend-fails"
+    );
+    const claim = await claimSendCommand(db, org.id, invoice.id, "FIRST_SEND");
+    expect(claim.outcome).toBe("ALREADY_SENT");
+
+    await cleanupOrg(org.id);
+  });
+
+  it("a late definitive failure replaces a stale UNKNOWN, so a first send may retry", async () => {
+    const { org, invoice } = await setupPreparedInvoice(
+      "IT-G Org Late Failure",
+      9
+    );
+    const deps = stubDeps({
+      emailService: {
+        sendInvoice: async () => {
+          // The attempt goes stale to UNKNOWN while the provider call hangs.
+          await db.$client.query(
+            "update invoice_send_attempts set status = 'UNKNOWN', error_code = 'STALE_DISPATCH_NO_CONFIRMATION' where invoice_id = $1 and status = 'DISPATCHING'",
+            [invoice.id]
+          );
+          return {
+            success: false,
+            provider: "smtp" as const,
+            errorCode: "FAKE_REJECTED",
+            failureClassification: "DEFINITIVE" as const,
+          };
+        },
+      },
+    });
+    await sendInvoice(db, org.id, invoice.id, deps, seedAdminId);
+
+    const [attempt] = await db.$client
+      .query("select status from invoice_send_attempts where invoice_id = $1", [
+        invoice.id,
+      ])
+      .then((r) => r.rows);
+    expect(attempt.status).toBe("FAILED");
+    const claim = await claimSendCommand(db, org.id, invoice.id, "FIRST_SEND");
+    expect(claim.outcome).toBe("CLAIMED");
 
     await cleanupOrg(org.id);
   });

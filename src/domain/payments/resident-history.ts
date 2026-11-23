@@ -5,11 +5,13 @@
 // cannot return a row of another dwelling. Only invoices that the resident can
 // see (SENT, PAID, OVERDUE) appear, like the invoice list.
 import { and, eq, gt, inArray } from "drizzle-orm";
-import type { Db } from "../../db/client";
+import { inOrder, type Db } from "../../db/client";
 import { paymentAllocations, paymentReversals } from "../../db/schema/accounts";
 import { billingCases } from "../../db/schema/billing";
 import { invoices } from "../../db/schema/invoices";
+import { organizations } from "../../db/schema/organizations";
 import { bankTransactions } from "../../db/schema/payments";
+import { orgLocalDateString } from "../../lib/org-time";
 
 export interface ResidentPaymentRow {
   status: "PAID" | "REVERSED";
@@ -26,7 +28,7 @@ export async function listPaymentsForResident(
   db: Db,
   dwellingId: string
 ): Promise<ResidentPaymentRow[]> {
-  const [paid, reversed] = await Promise.all([
+  const [paid, reversed] = await inOrder([
     db
       .select({
         date: bankTransactions.bookingDate,
@@ -52,6 +54,7 @@ export async function listPaymentsForResident(
     db
       .select({
         at: paymentReversals.createdAt,
+        timezone: organizations.timezone,
         amount: paymentReversals.reversedAllocationAmount,
         currency: invoices.currency,
         invoiceId: invoices.id,
@@ -60,6 +63,7 @@ export async function listPaymentsForResident(
       .from(paymentReversals)
       .innerJoin(invoices, eq(invoices.id, paymentReversals.invoiceId))
       .innerJoin(billingCases, eq(billingCases.id, invoices.billingCaseId))
+      .innerJoin(organizations, eq(organizations.id, invoices.organizationId))
       .where(
         and(
           eq(paymentReversals.dwellingId, dwellingId),
@@ -75,9 +79,10 @@ export async function listPaymentsForResident(
       date,
       ...rest,
     })),
-    ...reversed.map(({ at, ...rest }) => ({
+    ...reversed.map(({ at, timezone, ...rest }) => ({
       status: "REVERSED" as const,
-      date: at.toISOString().slice(0, 10),
+      // The day in the organization's timezone, like the payment's own date.
+      date: orgLocalDateString(at, timezone),
       ...rest,
     })),
   ];

@@ -26,6 +26,8 @@ export interface UiMutation {
   error?: string;
   retry?: () => void;
   checkAgain?: () => void;
+  // The save is confirmed and only the screen is stale: offer a page refresh.
+  refresh?: boolean;
   recovery?: MutationRecovery;
 }
 
@@ -72,8 +74,18 @@ function snapshot(): UiMutation[] {
   return [...mutations.values()].sort((a, b) => b.startedAt - a.startedAt);
 }
 
+// Storage can throw (blocked site data, full quota). Recovery after a reload
+// is then lost, but the in-memory list must keep working.
+function hasStorage(): boolean {
+  try {
+    return typeof sessionStorage !== "undefined";
+  } catch {
+    return false;
+  }
+}
+
 function persist(): void {
-  if (typeof sessionStorage === "undefined") return;
+  if (!hasStorage()) return;
   const stored: StoredMutation[] = snapshot()
     .filter(
       (
@@ -108,10 +120,14 @@ function persist(): void {
         recovery,
       })
     );
-  if (stored.length) {
-    sessionStorage.setItem(RECOVERY_STORAGE_KEY, JSON.stringify(stored));
-  } else {
-    sessionStorage.removeItem(RECOVERY_STORAGE_KEY);
+  try {
+    if (stored.length) {
+      sessionStorage.setItem(RECOVERY_STORAGE_KEY, JSON.stringify(stored));
+    } else {
+      sessionStorage.removeItem(RECOVERY_STORAGE_KEY);
+    }
+  } catch {
+    // See hasStorage: the list in memory is still correct.
   }
 }
 
@@ -125,7 +141,10 @@ function update(
   id: string,
   status: MutationStatus,
   values: Partial<
-    Pick<UiMutation, "label" | "error" | "completedAt" | "retry" | "checkAgain">
+    Pick<
+      UiMutation,
+      "label" | "error" | "completedAt" | "retry" | "checkAgain" | "refresh"
+    >
   > = {}
 ): void {
   const current = mutations.get(id);
@@ -155,10 +174,7 @@ export function startMutation(input: MutationInput): void {
 export function hydrateMutations(
   translate: (messageKey: string) => string
 ): UiMutation[] {
-  if (
-    mutationGlobals.__dzik118MutationsHydrated ||
-    typeof sessionStorage === "undefined"
-  ) {
+  if (mutationGlobals.__dzik118MutationsHydrated || !hasStorage()) {
     return snapshot();
   }
   mutationGlobals.__dzik118MutationsHydrated = true;
@@ -183,7 +199,7 @@ export function hydrateMutations(
       }
     }
   } catch {
-    sessionStorage.removeItem(RECOVERY_STORAGE_KEY);
+    // Unreadable stored state is dropped: emit() below rewrites the key.
   }
   emit();
   return snapshot();
@@ -251,6 +267,20 @@ export function failMutation(id: string, error: string, label?: string): void {
   });
 }
 
+// The server saved the change but the screen could not show it. Never a retry
+// of the save: the only action is a refresh.
+export function failReconciliation(id: string, message: string): void {
+  cancelRecovery(id);
+  update(id, "error", {
+    label: message,
+    error: message,
+    completedAt: Date.now(),
+    retry: undefined,
+    checkAgain: undefined,
+    refresh: true,
+  });
+}
+
 export function dismissMutation(id: string): void {
   cancelRecovery(id);
   if (mutations.delete(id)) emit();
@@ -266,6 +296,8 @@ export function runMutationRecovery(
   lookup: () => Promise<RecoveryResult>,
   callbacks: {
     committed: (entity: unknown | null) => void | Promise<void>;
+    // `committed` threw: the save is confirmed, the screen is not updated.
+    viewFailed: () => void;
     unknown: (checkAgain: () => void) => void;
   }
 ): void {
@@ -290,14 +322,19 @@ export function runMutationRecovery(
           });
         }
         if (controller.signal.aborted) return;
+        let result: RecoveryResult | undefined;
         try {
-          const result = await lookup();
-          if (result.state === "committed") {
-            await callbacks.committed(result.entity ?? null);
-            return;
-          }
+          result = await lookup();
         } catch {
           // Lookup failure says nothing about the original write.
+        }
+        if (result?.state === "committed") {
+          try {
+            await callbacks.committed(result.entity ?? null);
+          } catch {
+            callbacks.viewFailed();
+          }
+          return;
         }
       }
       if (!controller.signal.aborted) {

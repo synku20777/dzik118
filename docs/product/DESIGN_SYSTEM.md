@@ -31,13 +31,15 @@ and bone (dark structure and text), daugava (action and navigation), verdigris
 
 | Token | Role |
 | --- | --- |
-| `--color-canvas` | Page background. |
+| `--color-canvas` | Page background. One visible step (about 1.2:1) darker than surface in light mode, so panels read without an outline. |
 | `--color-surface` | Panels, tables, fields, menus. |
-| `--color-surface-hover` | Hover and disabled-field fill. |
+| `--color-surface-hover` | Static tints: the table header and disabled fields. Equal to the canvas in light mode. Do not use it for hover (use `--color-hover`). |
 | `--color-surface-raised` | Background of elevated surfaces: toasts, menus, popovers, dialogs, drawers (tooltips and the bulk-action toolbar keep their own fill). Equal to surface in light mode, one step lighter in dark mode, where shadows cannot show depth. |
+| `--color-hover` | Hover fill of interactive things: table rows, secondary and ghost buttons, menu items, tabs, nav links. Inside a raised surface (menus, dialogs, the drawer) dark mode uses one step lighter (`--palette-night-725`), because the shared dark hover equals the raised fill. Darker than both canvas and surface in light mode (about 1.1 against the canvas, 1.3 against the surface) so a hovered button on the page background does not disappear. `--color-surface-hover` stays for static tints (table header, disabled fields). |
 | `--color-foreground` / `--color-muted` | Text, and secondary text. Muted keeps 4.5:1 on canvas and surface. |
-| `--color-border` | Panel, table and divider hairlines. |
-| `--color-input-border` | Field boundary. Deeper than `--color-border` so a field edge meets 3:1 (WCAG 1.4.11) on canvas and surface. Place fields on those two; on `--color-surface-hover` or table headers the edge falls to about 2.9:1. Never `border-border` on a field. |
+| `--color-border` | Dividers: table rows, list rows, tab underline, metric dividers, progress tracks. Not used for container outlines. |
+| `--panel-border` | The `border` shorthand of every container (panel, table wrap, metric strip, card, shell edge). It is `0 solid transparent`: containers have no outline and are told apart by the canvas/surface step. In Windows high-contrast mode it becomes `1px solid CanvasText`. Set it to `1px solid var(--color-border)` to bring outlines back. Use `.contained` on a utility-styled container. |
+| `--color-input-border` | Field boundary. Deeper than `--color-border` so a field edge meets 3:1 (WCAG 1.4.11) on canvas, surface, table headers and `--color-hover` (about 3.1 on hover, 3.3 on canvas). Never `border-border` on a field. |
 | `--color-primary` (+ `-hover`, `-active`, `--color-on-primary`) | Actions, links, navigation. In dark mode primary is a pale tint, so `--color-on-primary` is dark. |
 | `--color-secondary`, `--color-success`, `--color-warning`, `--color-destructive` | Meaning colors for text and fills. Only destructive has `-hover` and `-active` variants. |
 | `--color-positive-secondary` | Quiet positive state (pine), for example gas meters and credits. |
@@ -157,7 +159,8 @@ instead. Local exceptions are relative: `z-index: -1` puts a decoration behind
 its own content, and `calc(var(--z-…) + 1)` lifts one element just above a
 named layer (an open row menu's row, the `/design-system` top bar).
 
-In dark mode shadows are replaced by a hairline `--color-border` ring, and the
+In dark mode shadows are replaced by a hairline `--color-border` ring (floating
+surfaces keep an outline; only containers on the page lose theirs), and the
 element uses `--color-surface-raised`. `--shadow-control` is the thumb shadow
 for toggles.
 
@@ -328,8 +331,10 @@ an empty message list.
 `StatusBadge` (`status`: a domain status). The mapping in
 `src/lib/ui/invoice-status.ts` supplies label, tone and icon; the markup is
 `status-badge` with `data-tone` of neutral, info, success, warning or danger.
-Text is regular weight (400). Colors are the `--tone-*` pair. State is carried by icon and text, never color
-alone; forced-colors mode draws a system-color outline.
+Text is regular weight (400). Colors are the `--tone-*` pair. State is carried
+by icon and text, never color alone; forced-colors mode draws a system-color
+outline. List pages use it for their Status column (Dwellings, Periods,
+Tariffs); `DISABLED` (neutral, `player-pause`) is a tariff that is switched off.
 
 ### Notice
 
@@ -344,9 +349,10 @@ alone; forced-colors mode draws a system-color outline.
 
 ### Panel, metrics and KPI
 
-- `panel` is the default container: surface, 1px border, `--radius-panel`,
-  flat. A padded panel is a `box` (below); `panel p-4` stays for a dense one,
-  and `panel` alone for a container whose children pad themselves.
+- `panel` is the default container: surface, no outline (`--panel-border`),
+  `--radius-panel`, flat. A padded panel is a `box` (below); `panel p-4` stays
+  for a dense one, and `panel` alone for a container whose children pad
+  themselves.
 - `table-wrap` is a panel that scrolls horizontally.
 - `metric-strip` with `metric`, `metric-label`, `metric-value`, `metric-note`
   (`--metrics` sets the column count, default 4; 2 columns below `md`);
@@ -360,11 +366,12 @@ alone; forced-colors mode draws a system-color outline.
 - `empty-state` can be used as a class without the component for a one-off
   empty region.
 - Don't add a shadow to a panel; don't nest a panel in a panel.
-- `box` is a padded panel for one subject (`--space-5` by `--space-6`).
-  `box-well` sets it back on `--color-well` (below the surface in both
-  themes); `box-raised` and
-  `box-floating` bring it forward with `--elevation-raised` and
-  `--elevation-overlay`. Depth never changes on hover.
+- `box` is a padded panel for one subject (`--space-5` by `--space-6`), with
+  no outline like `panel`. `box-well` sets it back on `--color-well` (below the
+  surface in both themes; in light mode it is the canvas tone, so use it inside
+  a panel or box); `box-raised` and `box-floating` bring it forward with
+  `--elevation-raised` and `--elevation-overlay`. A link box hovers to
+  `--color-hover`. Depth never changes on hover.
 - `divider` is a hairline between groups, `divider-soft` fades out at both
   ends, `spacer` keeps the same gap with no line. Use them on an `<hr>`.
 
@@ -417,7 +424,7 @@ the next action. Say what is missing and give the action that fixes it. Reserve
 
 ### Disclosure
 
-`disclosure` on a `<details>`: bordered panel whose `<summary>` is at least
+`disclosure` on a `<details>`: panel (no outline) whose `<summary>` is at least
 44px tall with a rotating chevron. Native keyboard operation; no script. Use for
 optional detail, not for navigation. A bare `<details>` text toggle (no panel)
 is allowed for a small inline reveal.
@@ -531,6 +538,7 @@ strings. States: saving, saved, needs attention (retry, dismiss), and
 verifying or outcome-not-confirmed (check again). Retry and dismiss are 24px
 tall, 44px on coarse pointers. Live region semantics belong to the component;
 pages only register mutations.
+The chip is hidden at idle, shows a full saved pill for four seconds after the last pending save, then fades out over 150ms (no fade with reduced motion); an open panel, hover or keyboard focus keeps it visible, and announcements use an always-rendered visually hidden live region.
 
 ### Navigation chrome
 
@@ -660,12 +668,16 @@ page, which shows one form-level alert; the in-app forms follow the pattern).
 Below `md` the line drawing is hidden.
 
 **Admin dashboard.** Width `--width-content`. The setup card comes first when
-setup is unfinished, then the dashboard header with the period navigation. A
-grid holds the collection panel and the readings panel: two thirds and one third
-from `lg`, two equal columns from `md`, one column below. The month status is a
-full-width section under it; its progress steps run four across down to `md` and
-two below, and the setup steps run five across from `lg`, three from `md` to
-`lg` and one column below `md`.
+setup is unfinished, then the dashboard header with the period navigation (a
+period with no neighbour gets no placeholder button). The money card leads with
+the amount paid on invoices and the collection share. The billing total, unpaid
+balance and overdue balance sit below the progress bar. The invoice breakdown sits
+beside these figures and becomes a disclosure that starts closed when the
+card is narrower than 32rem (a container query). The month status includes
+readings and takes the full width under the card. Its progress steps run four
+across while the section is at least 48rem wide (a container query) and two
+below. The setup steps run five across from `lg`, three from `md` to `lg` and
+one column below `md`.
 The attention list is one column at the bottom.
 
 **Dwellings list.** Header with the create and import actions, a `filter-bar`,
@@ -673,11 +685,17 @@ then a `stack-table` of dwellings. Each row links through `row-link`; the row
 menu holds secondary actions. Cards below `sm`.
 
 **Dwelling detail.** A summary strip (`dwelling-summary`, four figures, two
-columns below `md`) with the balance first, a section filter, then a two-pane
-region: overview, account balance, tariffs and messages in the main column;
-invoice delivery, residents and meters in the 26rem side column. It collapses to
-one column when the area is narrower than 60rem. Period history, the audit trail
-and additional information follow as full-width panels.
+columns below `md`) with the balance first, then six tabs: Overview, Account
+balance, Meters, Recurring tariffs, Messages and History. A tab shows only its
+own panel and is kept in `?tab=`. Overview is basic information on the left
+and invoice delivery and portal access in a 26rem column beside it, once the
+page area is at least 60rem (a container query on `[data-dwelling-detail]`);
+below that, one column. Editing is in place: an Edit or Add link
+(`?tab=…&edit=<key>`, so it works without the script) turns its panel or row
+into the form in normal flow, one editor at a time; Cancel and Escape put the
+saved values back and return focus to the link. Saves go through
+`mutate-form`, so typed input survives an error, and an add, remove or money
+change refreshes only its own section.
 
 **Payments.** A metric strip of the totals, a review queue of payments that need
 a decision, then the history table with a date and status filter. Each payment
@@ -685,21 +703,37 @@ links to its own page that explains where the money went. Tables stack into
 cards below `sm`; the ledger is a separate page.
 
 **Current month and periods.** The periods list is a `stack-table`. A period
-page opens with its finance metric strip, then the billing workbench: filters,
-the case table with a select-all checkbox (not offered below `sm`) and a bulk
-toolbar (`--elevation-raised`), and a drawer for editing one case. The header
-stacks below `md`; its action row wraps at every width.
+page opens with a header row: title and status on the left; previous and next
+period as one joined 44px control, then the period actions, on the right (the
+right group wraps to its own row when it does not fit). Then one line of money
+figures, then the billing workbench: a search field, stage tabs that wrap
+instead of scrolling, the case table with a select-all checkbox and a bulk
+toolbar (`--elevation-raised`), and a drawer for editing one case. The table
+has five columns and no minimum width. When the workbench panel is narrower than
+54rem (a container query) each case becomes three short lines instead of a table
+row; this page does not use `stack-table`, and select-all is not offered in
+that layout.
 
 **Setup wizard.** `SetupLayout` at `--width-wizard`: a step trail (a 13.5rem
 column from `lg`, a three-column grid from `sm` to `lg`, a single row of
 numbered icons on phones), then the step content at up to 52rem. One primary
 action per step; errors keep the user's input and focus the first invalid field.
 
-**Resident portal.** Resident shell. The home page leads with the current
-invoice (`current-invoice`) and its amount in `--text-display-lg`, then recent
-invoices as a list (`invoice-list`) and a link to all of them. Everything is one
-column. Header links are 44px tall on a coarse pointer; links elsewhere follow
-the WCAG 2.5.8 rule.
+**Resident portal.** Resident shell with scoped styles in `resident.css`. One
+column: latest published bill and remaining balance, then this month's meter
+readings; history lives in disclosures below. Use 18px body text, at least 16px
+instructions and 48px form controls. The invoice page puts bank-transfer details
+above the document, with copy buttons and an optional QR for the remaining
+balance. The document preview omits its original-amount QR; stored PDFs keep
+their original rendering. See [Resident portal redesign](RESIDENT_PORTAL_REDESIGN.md).
+
+Every resident page starts at the left edge of the tabs; the header uses the
+same column. Sign out is in the header. A back link (`.resident-back`) is used
+only where the tabs do not lead. Disclosures are panels with a chevron
+(`.resident-details`). Link rows use `.resident-list`. Contact administrator is
+one chat (`.resident-chat`): resident on the right, administrator on the left,
+one message box. Motion is color and opacity only, 140-220ms, and off under
+reduced motion.
 
 **Invoice view.** The page is a header and actions around an `<iframe srcdoc>`
 that shows the invoice as standalone HTML (`src/domain/billing/invoice-html.ts`,
@@ -748,8 +782,8 @@ Disclosures are opened first. It fails on:
 - a missing keyboard focus indicator among the first 12 tab stops of the main
   content at each width and theme.
 
-It also checks the exact `sm` and `lg` breakpoint edges, the dwelling two-pane
-switch at 60rem of container width (959 and 960px host widths), and the contrast of the semantic token
+It also checks the exact `sm` and `lg` breakpoint edges, the dwelling overview's two
+columns at 60rem of container width (959 and 960px host widths), and the contrast of the semantic token
 pairs (text 4.5:1, field border and focus ring 3:1) in both themes. It needs the
 local Supabase stack with demo data and the local mailbox; it logs in as admin
 once and requests one resident sign-in link per run (the auth rate limit is 5

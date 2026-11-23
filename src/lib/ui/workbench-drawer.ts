@@ -14,7 +14,7 @@ import {
   clearDrawerFieldError,
   setDrawerFieldError,
 } from "./drawer-field-errors";
-import { ICONS, type IconName } from "./icons";
+import { ICONS, METER_ICONS, type IconName } from "./icons";
 import { onPageLoad } from "./page-lifecycle";
 
 type DrawerKind = "readings" | "billing-details";
@@ -83,18 +83,6 @@ interface DrawerConfig {
 function appendAll(parent: Node, ...children: Node[]): void {
   for (const child of children) parent.appendChild(child);
 }
-
-// Tabler Icons (Outline) per meter type. Hot water is "droplet-hot", a
-// custom droplet+wave variant (see icons.ts) -- never a flame, which reads
-// as gas/heating rather than water.
-const METER_ICON_NAMES: Record<string, IconName> = {
-  COLD_WATER: "droplet",
-  HOT_WATER: "droplet-hot",
-  ELECTRICITY: "bolt",
-  GAS: "flame",
-  HEAT: "thermometer",
-  OTHER: "tool",
-};
 
 // Builds a Tabler-outline <svg> from the shared icon registry (icons.ts).
 // The registry only holds static, developer-authored path data (never
@@ -180,7 +168,7 @@ onPageLoad(() => {
   // A refresh replaces the queue, detaching the trigger that had focus.
   function focusQueueReplacement(
     params: { kind: DrawerKind; dwellingId: string },
-    focusKey: string | undefined
+    trigger: HTMLElement | null | undefined
   ) {
     // A successful save replaces the queue, detaching its original trigger.
     // Prefer its replacement; if the resolved row leaves the current filter,
@@ -193,11 +181,18 @@ onPageLoad(() => {
     const sameDwelling = triggers.filter(
       (el) => el.dataset.dwellingId === params.dwellingId
     );
+    // A "+N" menu's invoker is re-rendered too: find it again by its menu.
+    const menuId = trigger?.getAttribute?.("popovertarget");
     const replacement =
-      sameDwelling.find(
-        (el) =>
-          el.dataset.openDrawer === params.kind && el.dataset.focus === focusKey
-      ) ??
+      ((menuId &&
+        document.querySelector<HTMLElement>(
+          `[popovertarget="${CSS.escape(menuId)}"]`
+        )) ||
+        sameDwelling.find(
+          (el) =>
+            el.dataset.openDrawer === params.kind &&
+            el.dataset.focus === trigger?.dataset.focus
+        )) ??
       sameDwelling[0] ??
       document.querySelector<HTMLElement>(
         `tr[data-dwelling-id="${CSS.escape(params.dwellingId)}"] .next-action :is(a,button):not(:disabled)`
@@ -220,7 +215,7 @@ onPageLoad(() => {
     const active = document.activeElement as HTMLElement | null;
     await refreshWorkbench(message);
     if (!dialog.open && active && !document.contains(active)) {
-      focusQueueReplacement(params, active.dataset.focus);
+      focusQueueReplacement(params, active);
     }
   }
 
@@ -237,7 +232,7 @@ onPageLoad(() => {
     if (returnFocusTo && document.contains(returnFocusTo)) {
       returnFocusTo.focus();
     } else if (closedParams) {
-      focusQueueReplacement(closedParams, returnFocusTo?.dataset.focus);
+      focusQueueReplacement(closedParams, returnFocusTo);
     }
     returnFocusTo = null;
     window.setTimeout(() => {
@@ -412,6 +407,7 @@ onPageLoad(() => {
     formErrorEl.className = "notice notice-danger mt-4";
     formErrorEl.setAttribute("role", "alert");
     formErrorEl.hidden = true;
+    let focusMatched = false;
     for (const meter of data.meters) {
       const meterTypeKey = meter.type.toLowerCase().replace(/_/g, "-");
       const section = document.createElement("section");
@@ -423,7 +419,7 @@ onPageLoad(() => {
       icon.className = "drawer-meter-icon";
       icon.dataset.meterType = meter.type;
       icon.setAttribute("aria-hidden", "true");
-      icon.appendChild(iconSvg(METER_ICON_NAMES[meter.type] ?? "tool"));
+      icon.appendChild(iconSvg(METER_ICONS[meter.type] ?? "tool"));
       const nameWrap = document.createElement("div");
       const heading = document.createElement("h3");
       heading.className = "drawer-meter-name";
@@ -476,7 +472,8 @@ onPageLoad(() => {
         clearDrawerFieldError(input, err);
         formErrorEl.textContent = "";
         formErrorEl.hidden = true;
-        const current = Number.parseFloat(input.value);
+        // A decimal comma is accepted on save, so the preview reads it too.
+        const current = Number.parseFloat(input.value.replace(",", "."));
         const previous = meter.previousValue
           ? Number.parseFloat(meter.previousValue)
           : null;
@@ -500,7 +497,14 @@ onPageLoad(() => {
       form.appendChild(section);
 
       if (!firstInput) firstInput = input;
-      if (focus === meterTypeKey) firstInput = input;
+      // The clicked meter wins; a bare type focuses its first meter only.
+      if (focus === `meter-${meter.meterId}`) {
+        firstInput = input;
+        focusMatched = true;
+      } else if (focus === meterTypeKey && !focusMatched) {
+        firstInput = input;
+        focusMatched = true;
+      }
     }
 
     for (const rule of data.manualRuleInputs) {
@@ -1124,7 +1128,16 @@ onPageLoad(() => {
       const dwellingId = trigger.dataset.dwellingId!;
       const focus = trigger.dataset.focus;
       history.pushState(null, "", drawerUrl(kind, dwellingId, focus));
-      void openDrawer(kind, dwellingId, focus, trigger);
+      // A trigger inside a popover menu is hidden once the drawer opens:
+      // return focus to the control that opened the menu instead.
+      const menu = trigger.closest?.<HTMLElement>("[popover]");
+      const returnTo =
+        (menu?.id &&
+          document.querySelector<HTMLElement>(
+            `[popovertarget="${CSS.escape(menu.id)}"]`
+          )) ||
+        trigger;
+      void openDrawer(kind, dwellingId, focus, returnTo);
     },
     // Intercept before ClientRouter's document bubble listener starts a
     // navigation to the fallback URL and later reopens a dismissed drawer.

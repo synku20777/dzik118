@@ -74,10 +74,11 @@
   --palette-limestone-50: #f7f4ee;
   --palette-limestone-75: #f1ede4;
   --palette-limestone-100: #eee8de;
+  --palette-limestone-200: #e4ded2;
   --palette-limestone-300: #d5cec2;
-  --palette-stone-500: #8f887e;
+  --palette-stone-500: #837c72;
   --palette-ink-900: #17242b;
-  --palette-ink-500: #58666c;
+  --palette-ink-500: #4f5d63;
 
   --palette-daugava-100: #e4ecee;
   --palette-daugava-200: #bfd1d7;
@@ -122,6 +123,8 @@
   --palette-night-900: #151f21;
   --palette-night-850: #1a2528;
   --palette-night-800: #1e2b2e;
+  --palette-night-750: #243134;
+  --palette-night-725: #2f3d40;
   --palette-night-700: #3d4a4d;
   --palette-night-600: #718083;
   --palette-night-300: #b7c0bd;
@@ -160,9 +163,15 @@
   /* Switch thumbs sit on --color-primary when checked, so they track
      --color-on-primary in both light and dark modes (WCAG 1.4.11 >= 3:1). */
   --color-control-thumb: var(--color-on-primary);
+  /* Containers (panels, table wraps, cards, shell edges) have no outline at all:
+     surfaces are told apart by the canvas/surface step. Every container rule
+     uses this shorthand, so one edit brings outlines back, for example
+     `1px solid var(--color-border)`. Windows high-contrast mode draws an edge
+     (see the forced-colors rule). Dividers keep --color-border. */
+  --panel-border: 0 solid transparent;
   --color-table-th-bg: light-dark(
     var(--palette-limestone-75),
-    var(--palette-night-850)
+    var(--palette-night-750)
   );
   --color-org-context-bg: var(--color-table-th-bg);
   --color-nav-active-bg: var(--tone-info-bg);
@@ -275,6 +284,10 @@
   /* Semantic layout spacing for CSS outside utilities. Region and field
      rhythm uses Tailwind utilities (space-y-6, space-y-4, p-6, p-4). */
   --gap-label: var(--space-1); /* label to its control */
+  --gap-field: var(--space-4); /* between form fields */
+  --gap-section: var(--space-6); /* between panels and page sections */
+  --pad-panel: var(--space-6); /* inside an ordinary panel */
+  --pad-panel-compact: var(--space-4); /* inside a dense panel or card */
   --gutter: var(--space-4); /* page edge; grows at sm and lg, see below */
 
   /* Page widths: where a screen stops growing. */
@@ -286,6 +299,7 @@
 
   --control-size-sm: 2.25rem;
   --control-size-md: 2.75rem;
+  --control-size-lg: 3rem; /* resident portal controls */
 
   /* Body copy stays neutral; small labels and headings have their own
      optical spacing so translated UI is not needlessly widened. */
@@ -427,19 +441,26 @@
   --text-display-lg--line-height: 1.1;
 
   --color-canvas: light-dark(
-    var(--palette-limestone-50),
+    var(--palette-limestone-100),
     var(--palette-night-950)
   );
-  --color-surface: light-dark(var(--palette-paper), var(--palette-night-900));
+  --color-surface: light-dark(var(--palette-paper), var(--palette-night-850));
   --color-surface-hover: light-dark(
     var(--palette-limestone-100),
-    var(--palette-night-800)
+    var(--palette-night-750)
   );
   /* Dark surfaces cannot show depth with shadows, so raised surfaces get
      one step lighter. Light mode keeps the paper surface. */
   --color-surface-raised: light-dark(
     var(--palette-paper),
-    var(--palette-night-800)
+    var(--palette-night-750)
+  );
+  /* Interactive hover (rows, secondary and ghost buttons, menu items). Its own
+     step, darker than both the canvas and the surface in light mode, so a
+     hovered button on the page background does not blend into it. */
+  --color-hover: light-dark(
+    var(--palette-limestone-200),
+    var(--palette-night-750)
   );
   --color-foreground: light-dark(
     var(--palette-ink-900),
@@ -863,7 +884,26 @@ textarea:disabled {
   }
 }
 
+/* Hover inside a raised surface (menus, dialogs, the drawer): the shared hover
+   tone equals the raised fill in dark mode, so these use one step lighter. */
+:is(
+  .organization-menu,
+  .row-menu > div,
+  .more-menu > div,
+  .case-menu,
+  .tpl-popover,
+  .context-drawer,
+  dialog
+) {
+  --color-hover: light-dark(
+    var(--palette-limestone-200),
+    var(--palette-night-725)
+  );
+}
 @media (forced-colors: active) {
+  :root {
+    --panel-border: 1px solid CanvasText;
+  }
   .status-badge {
     outline: 1px solid CanvasText;
     outline-offset: -1px;
@@ -936,7 +976,7 @@ textarea:disabled {
     color: var(--color-foreground);
   }
   .btn-secondary:where(:not(:disabled):not([aria-disabled="true"])):hover {
-    background: var(--color-surface-hover);
+    background: var(--color-hover);
   }
   .btn-danger {
     background: var(--color-destructive);
@@ -1034,7 +1074,7 @@ textarea:disabled {
     cursor: pointer;
   }
   .icon-btn:where(:not(:disabled):not([aria-disabled="true"])):hover {
-    background: var(--color-surface-hover);
+    background: var(--color-hover);
     color: var(--color-foreground);
   }
   .icon-btn svg {
@@ -1109,10 +1149,14 @@ textarea:disabled {
     outline: 2px solid var(--color-focus-ring);
     outline-offset: -2px;
   }
+  /* A container styled with utilities: gets the same edge rule as .panel. */
+  .contained {
+    border: var(--panel-border);
+  }
   .panel,
   .table-wrap {
     background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     corner-shape: squircle;
     box-shadow: var(--elevation-flat);
@@ -1126,7 +1170,7 @@ textarea:disabled {
   .metric-strip {
     display: grid;
     grid-template-columns: repeat(var(--metrics, 4), minmax(0, 1fr));
-    border: 1px solid var(--color-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     corner-shape: squircle;
     background: var(--color-surface);
@@ -1403,7 +1447,7 @@ textarea:disabled {
     gap: 0.75rem;
     padding: 1rem;
     background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     corner-shape: squircle;
     box-shadow: var(--elevation-flat);
@@ -1718,7 +1762,7 @@ textarea:disabled {
     gap: 0.75rem;
     padding: 1rem;
     background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     corner-shape: squircle;
   }
@@ -1822,7 +1866,7 @@ textarea:disabled {
     background-size: 100% 9rem;
     background-position: bottom;
     background-repeat: no-repeat;
-    border-right: 1px solid var(--color-border);
+    border-right: var(--panel-border);
     padding: 1.75rem 1rem;
     display: flex;
     flex-direction: column;
@@ -1920,7 +1964,7 @@ textarea:disabled {
   .sidebar-account {
     margin-top: auto;
     padding-top: 1rem;
-    border-top: 1px solid var(--color-border);
+    border-top: var(--panel-border);
     background: var(--color-surface);
   }
   /* Account: who, then the two display preferences, then the way out. */
@@ -1966,7 +2010,7 @@ textarea:disabled {
     cursor: pointer;
   }
   .account-signout:hover {
-    background: var(--color-surface-hover);
+    background: var(--color-hover);
     color: var(--color-foreground);
   }
   @media (prefers-reduced-motion: no-preference) {
@@ -2018,7 +2062,7 @@ textarea:disabled {
   }
   .resident-header {
     background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: var(--panel-border);
   }
   @media (pointer: coarse) {
     .resident-header a:not(.theme-toggle) {
@@ -2064,39 +2108,9 @@ textarea:disabled {
     color: var(--color-primary);
     font-weight: 650;
   }
-  .current-invoice {
-    padding: 1.5rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    corner-shape: squircle;
-    background: var(--color-surface);
-  }
-  .current-invoice .amount {
-    font-size: var(--text-display-lg);
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    overflow-wrap: anywhere;
-    font-variant-numeric: tabular-nums;
-  }
-  .invoice-list {
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    corner-shape: squircle;
-    background: var(--color-surface);
-    overflow: hidden;
-  }
-  .invoice-list > a {
-    border-bottom: 1px solid var(--color-border);
-    border-radius: 0;
-    margin: 0;
-    border-width: 0 0 1px;
-  }
-  .invoice-list > a:last-child {
-    border-bottom: 0;
-  }
   .disclosure {
     background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     corner-shape: squircle;
     padding: 1.25rem;
@@ -2271,12 +2285,12 @@ textarea:disabled {
   }
 
   /* Box: a padded group of content about one subject. The default sits flat
-     with a hairline; well, raised and floating step it back or forward on the
-     elevation scale. */
+     on the surface tone, with no outline (--panel-border); well, raised and
+     floating step it back or forward on the elevation scale. */
   .box {
     display: block;
     padding: var(--space-5) var(--space-6);
-    border: 1px solid var(--color-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     corner-shape: squircle;
     background: var(--color-surface);
@@ -2296,11 +2310,7 @@ textarea:disabled {
   }
   /* A box that is a link, or carries one stretched over it. */
   :is(a.box, .box.has-block-link):hover {
-    border-color: color-mix(
-      in srgb,
-      var(--color-primary) 45%,
-      var(--color-border)
-    );
+    background: var(--color-hover);
   }
 
   /* Dropdown (DESIGN_SYSTEM.md "Dropdown"): <details class="dropdown"
@@ -3078,7 +3088,7 @@ textarea:disabled {
   }
 }
 .app-content tbody tr:hover {
-  background: var(--color-surface-hover);
+  background: var(--color-hover);
 }
 @media (prefers-reduced-motion: no-preference) {
   .app-content tbody tr {
@@ -3263,6 +3273,17 @@ html:has(.context-drawer:modal) {
     padding: 1rem 1.5rem;
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
+  }
+  .admin-mobile .brand {
+    min-width: 0;
+  }
+  .admin-mobile .brand-mark {
+    flex-shrink: 0;
+  }
+  .admin-mobile-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   /* The nav itself lives in #mobile-nav-drawer (a <dialog>, styled via the
      shared .context-drawer rules) so it slides in from the right instead
@@ -3522,10 +3543,13 @@ html:has(.context-drawer:modal) {
   .stack-table tr {
     margin-bottom: 0.75rem;
     padding: 0.375rem 0;
-    border: 1px solid var(--color-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     corner-shape: squircle;
     background: var(--color-surface);
+  }
+  :is(.panel, .contained) .stack-table tr {
+    background: var(--color-canvas);
   }
   .stack-table td {
     display: flex !important;
@@ -3557,6 +3581,9 @@ html:has(.context-drawer:modal) {
 }
 
 @media print {
+  :root {
+    --panel-border: 1px solid #bbb;
+  }
   .admin-sidebar,
   .admin-mobile,
   .resident-header,

@@ -3,7 +3,6 @@
 // Reading stays allowed in an archived organization.
 import type { APIRoute } from "astro";
 import { z } from "astro/zod";
-import { requireOrganizationAccess } from "../../../../../../../../domain/authorization/guards";
 import { NotFoundError } from "../../../../../../../../domain/errors";
 import { exportPersonData } from "../../../../../../../../domain/privacy/person-export";
 import { withRequestDb } from "../../../../../../../../lib/db-request";
@@ -18,13 +17,13 @@ export const GET: APIRoute = async ({ params, locals }) => {
   }
 
   try {
-    requireOrganizationAccess(locals.auth, organizationId);
-    await limitOrThrow("export", locals.auth!.userId);
+    const actorUserId = locals.auth!.userId;
+    await limitOrThrow("export", actorUserId);
     const data = await withRequestDb((db) =>
       exportPersonData(db, {
         userId: userId.data,
         organizationId,
-        actorUserId: locals.auth!.userId,
+        actorUserId,
       })
     );
     return new Response(JSON.stringify(data, null, 2), {

@@ -2,7 +2,7 @@
 // Section 17, MTR-002/003). Callers must call requireOrganizationAccess()
 // (admin) or requireDwellingAccess() (resident) first, same convention as
 // every other domain module (spec Section 14).
-import { and, desc, eq, gt, lt, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
 import {
   billingCases,
@@ -36,25 +36,45 @@ export async function findPreviousValue(
   meterId: string,
   period: { year: number; month: number }
 ): Promise<string | null> {
-  const [prev] = await tx
-    .select({ currentValue: meterReadings.currentValue })
-    .from(meterReadings)
-    .innerJoin(billingPeriods, eq(billingPeriods.id, meterReadings.periodId))
-    .where(
-      and(
-        eq(meterReadings.meterId, meterId),
-        or(
-          lt(billingPeriods.year, period.year),
-          and(
-            eq(billingPeriods.year, period.year),
-            lt(billingPeriods.month, period.month)
+  return (await findPreviousValues(tx, [meterId], period)).get(meterId) ?? null;
+}
+
+// The same rule for many meters in one query per 500 meters. A meter with no
+// earlier reading is not in the map.
+export async function findPreviousValues(
+  tx: DbOrTx,
+  meterIds: string[],
+  period: { year: number; month: number }
+): Promise<Map<string, string>> {
+  const previous = new Map<string, string>();
+  for (let i = 0; i < meterIds.length; i += 500) {
+    const rows = await tx
+      .selectDistinctOn([meterReadings.meterId], {
+        meterId: meterReadings.meterId,
+        currentValue: meterReadings.currentValue,
+      })
+      .from(meterReadings)
+      .innerJoin(billingPeriods, eq(billingPeriods.id, meterReadings.periodId))
+      .where(
+        and(
+          inArray(meterReadings.meterId, meterIds.slice(i, i + 500)),
+          or(
+            lt(billingPeriods.year, period.year),
+            and(
+              eq(billingPeriods.year, period.year),
+              lt(billingPeriods.month, period.month)
+            )
           )
         )
       )
-    )
-    .orderBy(desc(billingPeriods.year), desc(billingPeriods.month))
-    .limit(1);
-  return prev?.currentValue ?? null;
+      .orderBy(
+        meterReadings.meterId,
+        desc(billingPeriods.year),
+        desc(billingPeriods.month)
+      );
+    for (const row of rows) previous.set(row.meterId, row.currentValue);
+  }
+  return previous;
 }
 
 // Editing an already-recorded reading is only safe if no later period has
@@ -62,7 +82,7 @@ export async function findPreviousValue(
 // previousValue/consumption were computed from the value being changed and
 // would otherwise silently go stale (this domain doesn't cascade-recompute
 // forward; blocking the edit is the cheaper, safer alternative).
-export async function hasLaterReading(
+async function hasLaterReading(
   tx: DbOrTx,
   meterId: string,
   period: { year: number; month: number }
@@ -172,7 +192,7 @@ async function recordReading(
     }
 
     const [existingCase] = await tx
-      .select({ id: billingCases.id })
+      .select({ id: billingCases.id, status: billingCases.status })
       .from(billingCases)
       .where(
         and(
@@ -190,6 +210,17 @@ async function recordReading(
       // creates the case first.
       throw new NotFoundError(
         "No billing case exists for this dwelling in this period"
+      );
+    }
+    // The invoice froze this reading when it was prepared. A resident changing
+    // it afterwards would move the next month's starting value without anyone
+    // correcting the invoice. An admin still can, and then corrects it.
+    if (
+      source === "RESIDENT" &&
+      !["MISSING_DATA", "READY", "DRAFT"].includes(existingCase.status)
+    ) {
+      throw new ConflictError(
+        "The invoice for this period is already prepared, so the reading can no longer be changed"
       );
     }
 
@@ -222,10 +253,22 @@ async function recordReading(
         )
       )
       .limit(1);
-    if (existing && (await hasLaterReading(tx, meterId, period))) {
-      throw new ConflictError(
-        "Cannot edit this reading: a later billing period already recorded a reading for this meter"
-      );
+    // The same holds for a reading added to a month that was missed: the later
+    // reading already bills the whole difference since the reading before it.
+    // The one reading that is still safe to add is "nothing was used" (the
+    // previous value again, what carry-forward writes). Without it the missed
+    // month's case could never leave Missing data.
+    if (await hasLaterReading(tx, meterId, period)) {
+      if (existing) {
+        throw new ConflictError(
+          "Cannot edit this reading: a later billing period already recorded a reading for this meter"
+        );
+      }
+      if (compareDecimal3(consumption, "0.000") !== 0) {
+        throw new ConflictError(
+          "A later billing period already has a reading for this meter, and that reading covers this period too. Only a reading with no consumption can be recorded here: the previous value, or 0 when there is no earlier reading"
+        );
+      }
     }
 
     const values = {

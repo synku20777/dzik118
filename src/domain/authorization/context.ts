@@ -8,7 +8,7 @@
 // commit introducing this). app_users.role only ever records which
 // capability was granted first; it is never read for authorization.
 import { eq } from "drizzle-orm";
-import type { Db } from "../../db/client";
+import { inOrder, type Db } from "../../db/client";
 import { appUsers } from "../../db/schema/auth";
 import { dwellingAccess, dwellings } from "../../db/schema/dwellings";
 import {
@@ -62,7 +62,7 @@ export async function loadAuthContext(
       .where(eq(appUsers.id, supabaseUserId));
   }
 
-  const [memberships, access] = await Promise.all([
+  const [memberships, access] = await inOrder([
     db
       .select({
         organizationId: organizationMemberships.organizationId,

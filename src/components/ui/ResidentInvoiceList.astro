@@ -1,0 +1,50 @@
+---
+// Invoice rows of the resident portal: the home page's recent invoices and
+// the full invoice list.
+import Icon from "./Icon.astro";
+import StatusBadge from "./StatusBadge.astro";
+import {
+  formatDate,
+  formatMoney,
+  translate,
+  type Locale,
+} from "../../lib/ui/i18n";
+
+interface Props {
+  invoices: {
+    id: string;
+    invoiceNumber: string;
+    dueDate: string;
+    amountDue: string;
+    currency: string;
+    caseStatus: string;
+  }[];
+  dwellingId: string;
+  locale: Locale;
+}
+const { invoices, dwellingId, locale } = Astro.props;
+const t = (text: string) => translate(locale, text);
+---
+
+<div class="resident-list">
+  {invoices.map((invoice) => (
+    <a href={`/portal/invoices/${invoice.id}?dwellingId=${dwellingId}`}>
+      <span class="resident-list-main">
+        <strong>{invoice.invoiceNumber}</strong>
+        <span>
+          {t("Due date")}: {formatDate(invoice.dueDate, locale)}
+        </span>
+      </span>
+      <span class="resident-list-side">
+        <span>
+          {t("Invoice total due")}:{" "}
+          <strong>
+            {formatMoney(invoice.amountDue, invoice.currency, locale)}
+          </strong>
+        </span>
+        <StatusBadge status={invoice.caseStatus} />
+      </span>
+      <Icon name="chevron-right" />
+    </a>
+  ))}
+</div>

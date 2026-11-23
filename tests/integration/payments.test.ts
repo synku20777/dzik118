@@ -15,6 +15,7 @@ import { createRule } from "../../src/domain/billing/rules";
 import {
   generateInvoice,
   getInvoiceForResident,
+  overrideCaseStatus,
   prepareInvoice,
 } from "../../src/domain/billing/generation";
 import { bankTransactions, paymentMatches } from "../../src/db/schema/payments";
@@ -221,10 +222,97 @@ describe("importBankCsv and proposeExactMatches", () => {
     const preview = await validateBankCsv(db, org.id, csv);
     expect(preview.isDuplicateFile).toBe(true);
 
+    // A statement imported when every upload was read as UTF-8 is known by
+    // the hash of that text, also when the file now decodes differently.
+    const decodedNow = csv.replace("10.00", "10.0");
+    expect(
+      (await validateBankCsv(db, org.id, decodedNow)).isDuplicateFile
+    ).toBe(false);
+    expect(
+      (await validateBankCsv(db, org.id, decodedNow, csv)).isDuplicateFile
+    ).toBe(true);
+
     await expect(
       importBankCsv(db, org.id, "a-again.csv", csv, seedAdminId)
     ).rejects.toBeInstanceOf(ImportHeaderError);
 
+    await cleanupOrg(org.id);
+  });
+
+  it("skips a payment that an earlier, overlapping statement already imported", async () => {
+    const { org } = await setupOrgWithInvoice("IT-J Org Overlap", 3);
+    const header = "booking_date,amount,currency,external_transaction_id";
+    await importBankCsv(
+      db,
+      org.id,
+      "week1.csv",
+      [header, "2026-03-01,10.00,EUR,TX-1"].join("\n"),
+      seedAdminId
+    );
+    const second = await importBankCsv(
+      db,
+      org.id,
+      "week2.csv",
+      [
+        header,
+        "2026-03-01,10.00,EUR,TX-1",
+        "2026-03-02,20.00,EUR,TX-2",
+        "2026-03-02,20.00,EUR,TX-2",
+        "2026-03-03,30.00,EUR,",
+      ].join("\n"),
+      seedAdminId
+    );
+    // TX-1 was imported before and the second TX-2 line repeats the first.
+    expect(second.imported).toBe(2);
+    expect(second.rows.map((row) => row.status)).toEqual([
+      "ERROR",
+      "OK",
+      "ERROR",
+      "OK",
+    ]);
+    await cleanupOrg(org.id);
+  });
+
+  it("after an override back to Draft: no match is confirmed, and a part-paid invoice is not prepared again", async () => {
+    const { org, invoice } = await setupOrgWithInvoice("IT-J Org Redraft", 5);
+    const csv = [
+      "booking_date,amount,currency,reference",
+      `2026-05-20,20.00,${invoice.currency},${invoice.invoiceNumber}`,
+      `2026-05-21,10.00,${invoice.currency},${invoice.invoiceNumber}`,
+    ].join("\n");
+    await importBankCsv(db, org.id, "s.csv", csv, seedAdminId);
+    const [first, second] = await listPaymentMatches(db, org.id, "PROPOSED");
+    await confirmMatch(db, org.id, first.id, seedAdminId);
+
+    await overrideCaseStatus(
+      db,
+      org.id,
+      invoice.billingCaseId,
+      "DRAFT",
+      "test: correct the invoice",
+      seedAdminId
+    );
+    // The second proposal is older than the override.
+    await expect(
+      confirmMatch(db, org.id, second.id, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+    // A new amount due under the first payment would let the invoice count as
+    // paid while money is still owed.
+    await expect(
+      prepareInvoice(db, org.id, invoice.id, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+
+    await cleanupOrg(org.id);
+  });
+
+  it("refuses a statement with more than 5,000 rows", async () => {
+    const { org } = await setupOrgWithInvoice("IT-J Org Rows Cap", 4);
+    const csv = ["booking_date,amount,currency"]
+      .concat(Array(5001).fill("2026-04-01,1.00,EUR"))
+      .join("\n");
+    expect((await validateBankCsv(db, org.id, csv)).headerError).toMatch(
+      /too many rows/
+    );
     await cleanupOrg(org.id);
   });
 

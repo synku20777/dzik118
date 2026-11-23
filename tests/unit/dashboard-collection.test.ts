@@ -79,15 +79,16 @@ describe("invoice paid and outstanding reconciliation", () => {
       )
     ).toEqual({ paid: "100.00", outstanding: "0.00" });
 
-    // Even if paidAt remained set alongside a ledger row reversed to 0.00,
-    // paid and outstanding stay mutually consistent.
+    // A Paid invoice shows nothing still due, whatever its own ledger rows
+    // say: the money may have been matched to another invoice (ADR 0016). A
+    // reversal that uncovers it clears paidAt first.
     expect(
       computeInvoicePaidAndOutstanding(
         { amountDue: "100.00", paidAt: new Date("2026-06-20") },
         allocations,
         "inv-reversed"
       )
-    ).toEqual({ paid: "0.00", outstanding: "100.00" });
+    ).toEqual({ paid: "100.00", outstanding: "0.00" });
 
     // An invoice regenerated for a lower amount after partial allocation still
     // preserves `paid + outstanding === max(amountDue, 0)`.

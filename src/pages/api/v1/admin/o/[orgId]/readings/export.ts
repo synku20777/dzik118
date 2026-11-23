@@ -5,28 +5,28 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { createDb } from "../../../../../../../db/client";
-import { requireOrganizationAccess } from "../../../../../../../domain/authorization/guards";
 import { exportReadingsCsv } from "../../../../../../../domain/periods/readings-export";
 import { toApiErrorResponse } from "../../../../../../../lib/http/api-error";
+import { ValidationError } from "../../../../../../../domain/errors";
 
-export const GET: APIRoute = async ({ params, locals }) => {
+export const GET: APIRoute = async ({ params }) => {
   const organizationId = params.orgId;
   if (!organizationId) {
-    return toApiErrorResponse(new Error("missing orgId"));
+    return toApiErrorResponse(
+      new ValidationError("An organization id is required")
+    );
   }
 
-  try {
-    requireOrganizationAccess(locals.auth, organizationId);
-  } catch (err) {
-    return toApiErrorResponse(err);
-  }
-
-  const db = await createDb(env.HYPERDRIVE.connectionString);
   let csv: string;
   try {
-    csv = await exportReadingsCsv(db, organizationId);
-  } finally {
-    await db.$client.end();
+    const db = await createDb(env.HYPERDRIVE.connectionString);
+    try {
+      csv = await exportReadingsCsv(db, organizationId);
+    } finally {
+      await db.$client.end();
+    }
+  } catch (err) {
+    return toApiErrorResponse(err);
   }
 
   return new Response(csv, {

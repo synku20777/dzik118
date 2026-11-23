@@ -5,6 +5,7 @@
 import Papa from "papaparse";
 import { and, eq, inArray } from "drizzle-orm";
 import type { Db } from "../../db/client";
+import { organizations } from "../../db/schema/organizations";
 import {
   bankImports,
   bankTransactions,
@@ -13,15 +14,13 @@ import {
 import { sha256Hex } from "../../lib/hash";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { isUniqueViolation } from "../../lib/db-errors";
-import { NotFoundError } from "../errors";
+import { ImportHeaderError, NotFoundError } from "../errors";
 import { proposeExactMatches } from "./matching";
 
-export { NotFoundError };
-
-// The only error importBankCsv/validateBankCsv throw with a message safe
-// to show an admin verbatim (no SQL/PII); anything else must be shown as
-// a generic message instead.
-export class ImportHeaderError extends Error {}
+// ImportHeaderError is the only error importBankCsv/validateBankCsv throw
+// with a message safe to show an admin verbatim (no SQL/PII); anything else
+// must be shown as a generic message instead.
+export { ImportHeaderError, NotFoundError };
 
 const REQUIRED_HEADERS = ["booking_date", "amount", "currency"];
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -76,7 +75,13 @@ export interface ValidateBankCsvResult {
 export async function validateBankCsv(
   db: Db,
   organizationId: string,
-  csvText: string
+  csvText: string,
+  // The same upload read as UTF-8, which is how every file was read before
+  // the encoding was detected. A Windows-1257 statement imported back then
+  // has the hash of that text, so the duplicate check looks for it too.
+  // shortcut: preview only; drop it once no statement from before the change
+  // can be uploaded again.
+  textReadAsUtf8?: string
 ): Promise<ValidateBankCsvResult> {
   const csvBytes = new TextEncoder().encode(csvText);
   if (csvBytes.length > MAX_CSV_BYTES) {
@@ -114,16 +119,55 @@ export async function validateBankCsv(
     };
   }
 
+  const hashes = [fileSha256];
+  if (textReadAsUtf8 !== undefined && textReadAsUtf8 !== csvText) {
+    hashes.push(await sha256Hex(new TextEncoder().encode(textReadAsUtf8)));
+  }
   const [existingImport] = await db
     .select({ id: bankImports.id })
     .from(bankImports)
     .where(
       and(
         eq(bankImports.organizationId, organizationId),
-        eq(bankImports.fileSha256, fileSha256)
+        inArray(bankImports.fileSha256, hashes)
       )
     )
     .limit(1);
+
+  if (parsed.data.length > 5_000) {
+    return {
+      rows: [],
+      fileSha256,
+      isDuplicateFile: false,
+      headerError: "The CSV file has too many rows (up to 5,000).",
+    };
+  }
+
+  // Two exports with overlapping dates hold the same payment. The file hash
+  // does not catch that; the bank's own transaction ID does.
+  const fileIds = [
+    ...new Set(
+      parsed.data
+        .map((raw) => cell(raw, "external_transaction_id"))
+        .filter(Boolean)
+    ),
+  ];
+  const importedIds = new Set(
+    fileIds.length === 0
+      ? []
+      : (
+          await db
+            .select({ id: bankTransactions.externalTransactionId })
+            .from(bankTransactions)
+            .where(
+              and(
+                eq(bankTransactions.organizationId, organizationId),
+                inArray(bankTransactions.externalTransactionId, fileIds)
+              )
+            )
+        ).map((row) => row.id)
+  );
+  const seenIds = new Set<string>();
 
   const rows: BankTransactionRow[] = parsed.data.map((raw, index) => {
     const errors: string[] = [];
@@ -159,6 +203,14 @@ export async function validateBankCsv(
     if (externalTransactionId.length > 100) {
       errors.push("external_transaction_id exceeds 100 characters");
     }
+    if (importedIds.has(externalTransactionId)) {
+      errors.push(
+        "this transaction was already imported (same external_transaction_id)"
+      );
+    } else if (seenIds.has(externalTransactionId)) {
+      errors.push("external_transaction_id appears more than once in the file");
+    }
+    if (externalTransactionId) seenIds.add(externalTransactionId);
     if (payerName.length > 200) {
       errors.push("payer_name exceeds 200 characters");
     }
@@ -224,6 +276,33 @@ export async function importBankCsv(
   let proposed: number;
   try {
     ({ bankImport, proposed } = await db.transaction(async (tx) => {
+      // One import at a time per organization, then the transaction IDs once
+      // more: two overlapping statements imported at the same moment would
+      // otherwise both pass the check in validateBankCsv.
+      await tx
+        .select({ id: organizations.id })
+        .from(organizations)
+        .where(eq(organizations.id, organizationId))
+        .for("no key update");
+      const ids = okRows.flatMap((row) => row.externalTransactionId || []);
+      const [importedMeanwhile] = ids.length
+        ? await tx
+            .select({ id: bankTransactions.id })
+            .from(bankTransactions)
+            .where(
+              and(
+                eq(bankTransactions.organizationId, organizationId),
+                inArray(bankTransactions.externalTransactionId, ids)
+              )
+            )
+            .limit(1)
+        : [];
+      if (importedMeanwhile) {
+        throw new ImportHeaderError(
+          "Some of these payments were imported a moment ago. Open the file again to see which."
+        );
+      }
+
       const [inserted] = await tx
         .insert(bankImports)
         .values({
@@ -235,9 +314,11 @@ export async function importBankCsv(
         })
         .returning();
 
-      if (okRows.length > 0) {
+      // In parts: Postgres takes at most 65,535 values in one statement, and a
+      // file under the size limit can hold more rows than that allows.
+      for (let i = 0; i < okRows.length; i += 500) {
         await tx.insert(bankTransactions).values(
-          okRows.map((row) => ({
+          okRows.slice(i, i + 500).map((row) => ({
             organizationId,
             bankImportId: inserted.id,
             externalTransactionId: row.externalTransactionId || null,

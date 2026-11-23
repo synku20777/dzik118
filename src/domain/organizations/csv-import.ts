@@ -12,13 +12,14 @@ import { dwellingTypeEnum, dwellings, meters } from "../../db/schema/dwellings";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { syncCasesForDwelling } from "../periods/periods";
 import { claimMutationReceipt } from "../mutations/receipts";
+import { ImportHeaderError } from "../errors";
 
 const DWELLING_TYPES = new Set<string>(dwellingTypeEnum.enumValues);
 
 // The only error importDwellingsCsv throws with a message safe to show an
 // admin verbatim (no SQL/PII); anything else must be shown as a generic
 // message instead.
-export class ImportHeaderError extends Error {}
+export { ImportHeaderError };
 
 export type DwellingImportMode = "create" | "update";
 export type DwellingImportRowStatus = "CREATE" | "UPDATE" | "ERROR";
@@ -153,9 +154,15 @@ export async function validateDwellingsCsv(
     // notation as a plain count.
     if (areaM2 && !/^\d+(\.\d+)?$/.test(areaM2)) {
       errors.push("area_m2 must be a non-negative number");
+    } else if (Number(areaM2) > 99_999_999.99) {
+      // The column limits (numeric(10,2), integer): a larger value would
+      // pass the preview and then fail the whole import in the database.
+      errors.push("area_m2 is too large");
     }
     if (residentCount && !/^\d+$/.test(residentCount)) {
       errors.push("resident_count must be a non-negative whole number");
+    } else if (Number(residentCount) > 2_147_483_647) {
+      errors.push("resident_count is too large");
     }
     const billingEmail = cell(raw, "billing_email");
     if (billingEmail && !z.email().safeParse(billingEmail).success) {

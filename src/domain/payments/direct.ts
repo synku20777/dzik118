@@ -14,9 +14,11 @@ import { compareExact, subtractExact } from "../../lib/decimal2";
 import { recordAuditEvent } from "../../lib/logging/audit";
 import { orgLocalDateString } from "../../lib/org-time";
 import {
+  PAYABLE_CASE_STATUSES,
   getInvoiceAllocatedAmount,
   postAccountEntry,
 } from "../accounts/ledger";
+import { syncDwellingSettlement } from "../accounts/settlement";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import {
   assertBookingDateNotFuture,
@@ -64,7 +66,7 @@ async function hasOpenInvoice(
         eq(invoices.dwellingId, dwellingId),
         eq(invoices.currency, currency),
         isNull(invoices.paidAt),
-        inArray(billingCases.status, ["PREPARED", "SENT", "OVERDUE"])
+        inArray(billingCases.status, PAYABLE_CASE_STATUSES)
       )
     );
   for (const row of rows) {
@@ -156,6 +158,8 @@ export async function recordDwellingPayment(
       metadata: { method: input.method, direct: true },
       idempotencyKey: `bank-transaction:${transaction.id}:direct-payment`,
     });
+    // The money covers the oldest unpaid invoices first (ADR 0016).
+    await syncDwellingSettlement(tx, organizationId, dwelling.id, org.currency);
 
     await recordAuditEvent(tx, {
       organizationId,
@@ -265,6 +269,12 @@ export async function reverseDwellingPayment(
       metadata: { reversesAccountEntryId: payment.id, direct: true },
       idempotencyKey: `bank-transaction:${transactionId}:direct-reversal`,
     });
+    await syncDwellingSettlement(
+      tx,
+      organizationId,
+      peek.dwellingId,
+      payment.currency
+    );
 
     await recordAuditEvent(tx, {
       organizationId,

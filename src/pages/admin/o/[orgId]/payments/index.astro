@@ -20,10 +20,6 @@ import {
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
 import { actions } from "astro:actions";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { listPeriods } from "../../../../../domain/periods/periods";
 import { effectiveConfirmedAllocation } from "../../../../../domain/periods/invoice-balance";
@@ -52,12 +48,6 @@ import { withRequestDb } from "../../../../../lib/db-request";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 const organizationId = Astro.params.orgId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const confirmResult = Astro.getActionResult(actions.payments.confirmMatch);
 const rejectResult = Astro.getActionResult(actions.payments.rejectMatch);
@@ -356,6 +346,7 @@ const imports = [...rawImports].reverse();
               dwellings={accountTargets}
               today={today}
               error={recordManualResult?.error}
+              currency={organization.currency}
             />
           </div>
         </details>
@@ -870,7 +861,7 @@ const imports = [...rawImports].reverse();
             showLegacyPaidNote
               ? fill(
                   t(
-                    "{amount} marked paid on invoices without a payment record."
+                    "{amount} paid on invoices without a direct payment match."
                   ),
                   { amount: money(legacyPaidTotal) }
                 )
@@ -904,7 +895,7 @@ const imports = [...rawImports].reverse();
                     <>
                       {" "}
                       ·{" "}
-                      {fill(t("{total} applied to {period}"), {
+                      {fill(t("{total} matched to invoices for {period}"), {
                         total: money(paymentSummary.appliedTotal),
                         period: formatPeriod(
                           selectedPeriod.year,
@@ -932,7 +923,7 @@ const imports = [...rawImports].reverse();
           {showLegacyPaidNote && (
             <p class="result-note">
               {fill(
-                t("{amount} marked paid on invoices without a payment record."),
+                t("{amount} paid on invoices without a direct payment match."),
                 { amount: money(legacyPaidTotal) }
               )}{" "}
               <a

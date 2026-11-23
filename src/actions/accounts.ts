@@ -1,4 +1,3 @@
-import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
 import {
   adjustLateFee,
@@ -6,10 +5,9 @@ import {
   setInvoiceManualAdjustment,
 } from "../domain/accounts/adjustments";
 import { createLateFeePolicy } from "../domain/accounts/settings";
-import { requireActiveOrganization } from "../domain/authorization/guards";
 import { decimalInput } from "../lib/decimal-input";
 import { withRequestDb } from "../lib/db-request";
-import { safeHandler } from "./_errors";
+import { orgAction } from "./_org-action";
 
 const AMOUNT_MESSAGE =
   "Enter a valid amount, for example 12.50 or -5.00. Use up to 2 decimal places.";
@@ -18,10 +16,11 @@ const POSITIVE_AMOUNT_MESSAGE =
 const DAILY_RATE_MESSAGE = "Enter a valid daily rate, for example 0.05.";
 const PERCENT_MESSAGE = "Enter a valid percentage, for example 10 or 10.5.";
 
-const money = decimalInput(/^-?\d+(\.\d{1,2})?$/, AMOUNT_MESSAGE);
+// 12 whole digits: what the numeric(14, 2) money columns hold.
+const money = decimalInput(/^-?\d{1,12}(\.\d{1,2})?$/, AMOUNT_MESSAGE);
 
 export const accounts = {
-  saveLateFeePolicy: defineAction({
+  saveLateFeePolicy: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
@@ -37,8 +36,7 @@ export const accounts = {
       maxPenaltyPercent: decimalInput(/^\d+(\.\d{1,4})?$/, PERCENT_MESSAGE),
       stopsAtCap: z.boolean().optional(),
     }),
-    handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, ...input }, { locals }) => {
       return withRequestDb((db) =>
         createLateFeePolicy(db, {
           organizationId,
@@ -48,9 +46,9 @@ export const accounts = {
           actorUserId: locals.auth!.userId,
         })
       );
-    }),
+    },
   }),
-  adjustLateFee: defineAction({
+  adjustLateFee: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
@@ -66,8 +64,7 @@ export const accounts = {
       ]),
       note: z.string().max(1000).optional(),
     }),
-    handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, ...input }, { locals }) => {
       return withRequestDb((db) =>
         adjustLateFee(db, {
           organizationId,
@@ -75,9 +72,9 @@ export const accounts = {
           actorUserId: locals.auth!.userId,
         })
       );
-    }),
+    },
   }),
-  setInvoiceManualAdjustment: defineAction({
+  setInvoiceManualAdjustment: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
@@ -86,8 +83,7 @@ export const accounts = {
       reason: z.string().min(1).max(200),
       note: z.string().max(1000).optional(),
     }),
-    handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, ...input }, { locals }) => {
       return withRequestDb((db) =>
         setInvoiceManualAdjustment(db, {
           organizationId,
@@ -95,22 +91,21 @@ export const accounts = {
           actorUserId: locals.auth!.userId,
         })
       );
-    }),
+    },
   }),
-  createAdjustment: defineAction({
+  createAdjustment: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       dwellingId: z.uuid(),
       currency: z.string().length(3),
-      amount: decimalInput(/^\d+(\.\d{1,2})?$/, POSITIVE_AMOUNT_MESSAGE),
+      amount: decimalInput(/^\d{1,12}(\.\d{1,2})?$/, POSITIVE_AMOUNT_MESSAGE),
       direction: z.enum(["CHARGE", "CREDIT"]),
       effectiveDate: z.iso.date(),
       reason: z.string().min(1).max(200),
       note: z.string().max(1000).optional(),
     }),
-    handler: safeHandler(async ({ organizationId, ...input }, { locals }) => {
-      requireActiveOrganization(locals.auth, organizationId);
+    handler: async ({ organizationId, ...input }, { locals }) => {
       return withRequestDb((db) =>
         createDwellingAccountAdjustment(db, {
           organizationId,
@@ -118,6 +113,6 @@ export const accounts = {
           actorUserId: locals.auth!.userId,
         })
       );
-    }),
+    },
   }),
 };

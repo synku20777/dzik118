@@ -52,7 +52,7 @@ test("Current Month keeps billing actions usable through filtering and queue ref
     "border-left-width",
     "0px"
   );
-  // At most two missing items per case, then "+N more".
+  // At most two problems per case on one line, then "+N" (never cut off).
   for (const row of await page.locator("tr[data-status]").all()) {
     // Only reading-type items (the ones that open the drawer) are capped.
     const shown = await row
@@ -64,7 +64,7 @@ test("Current Month keeps billing actions usable through filtering and queue ref
     }
     const more = row.locator(".readiness-more");
     if ((await more.count()) > 0) {
-      await expect(more).toHaveText(/^\+\d+ more$/);
+      await expect(more).toHaveText(/^\+\d+$/);
       expect(shown).toBeLessThanOrEqual(2);
     }
   }
@@ -78,9 +78,12 @@ test("Current Month keeps billing actions usable through filtering and queue ref
   const readyLink = page.locator('.workflow-filter[href*="status=DRAFT"]');
   const drafts = Number(await readyLink.locator("strong").textContent());
   expect(drafts).toBeGreaterThan(0);
-  await page.locator("#status").selectOption("DRAFT");
-  await expect(page).not.toHaveURL(/status=DRAFT/);
-  await page.locator(".filter-submit").click();
+  // Every stage is on screen: the tabs wrap, they never scroll out of view.
+  for (const tab of await page.locator(".workflow-filter").all())
+    await expect(tab).toBeInViewport();
+  // The tabs are the only status filter.
+  await expect(page.locator("#status")).toHaveCount(0);
+  await readyLink.click();
   await expect(page).toHaveURL(/status=DRAFT/);
   await expect(
     page.locator('.workflow-filter[aria-current="page"]')
@@ -96,17 +99,30 @@ test("Current Month keeps billing actions usable through filtering and queue ref
   await page.locator("#search").fill(firstNumber);
   await page.locator("#search").press("Enter");
   await expect(page).toHaveURL(/search=/);
-  await expect(page.locator("tr[data-status]")).toHaveCount(1);
-  await expect(page.locator("#status")).toHaveValue("DRAFT");
-  for (const number of await page.locator(".dwelling-cell a").allTextContents())
-    expect(number.trim()).toContain(firstNumber);
+  // The search matches part of a number ("7" also finds "zz-...-1790..."), so
+  // the result is every draft whose number contains it, the first among them.
+  const searched = page.locator("tr[data-status]");
+  await expect(searched.first()).toBeVisible();
+  expect(await searched.count()).toBeLessThanOrEqual(drafts);
+  // A search keeps the active stage.
+  await expect(page).toHaveURL(/status=DRAFT/);
+  const numbers = (
+    await page.locator(".dwelling-cell a").allTextContents()
+  ).map((number) => number.trim());
+  expect(numbers).toContain(firstNumber);
+  for (const number of numbers) expect(number).toContain(firstNumber);
   await page.locator(".clear-filters").click();
   await expect(page.locator("#search")).toHaveValue("");
-  await expect(page.locator("#status")).toHaveValue("");
-  await readyLink.click();
-  await expect(page.locator("#status")).toHaveValue("DRAFT");
+  await expect(page).not.toHaveURL(/status=|search=/);
+  // The dashboard's "not sent yet" link has no tab of its own; the result
+  // line names it and offers the way back.
+  await page.goto(`${workbench}?lang=en&status=UNSENT`);
+  await expect(page.locator(".queue-result")).toContainText("Unsent invoices");
+  await expect(
+    page.locator('.workflow-filter[aria-current="page"]')
+  ).toHaveCount(0);
   await page.locator(".clear-filters").click();
-  await expect(page.locator("#status")).toHaveValue("");
+  await expect(page).not.toHaveURL(/status=/);
 
   // Simulate the real drawer's fragment replacement without changing billing data.
   await page.evaluate(() => {
@@ -245,11 +261,19 @@ test("Current Month keeps billing actions usable through filtering and queue ref
             )
           )
           .toBe(true);
-        if (width < 640)
-          await expect(page.locator(".dwelling-cell").first()).toHaveAttribute(
-            "data-label",
-            /.+/
-          );
+        // The action is never pushed off the side, in any language.
+        expect(
+          await page.evaluate(() => {
+            const wrap = document.querySelector(".case-table-wrap")!;
+            const action = document
+              .querySelector(".next-action")!
+              .getBoundingClientRect();
+            return (
+              wrap.scrollWidth <= wrap.clientWidth + 1 &&
+              action.right <= innerWidth
+            );
+          })
+        ).toBe(true);
         if (width === 320 && locale === "en" && theme === "dark") {
           await page.locator(".case-menu-trigger").first().click();
           const menu = page.locator(".case-menu:popover-open");
@@ -302,8 +326,13 @@ test("Current Month keeps billing actions usable through filtering and queue ref
   // The seeded previous month is locked; inspection must remain available.
   await page.locator(".period-navigation a").first().click();
   await expect(page.locator("#locked-notice")).toBeVisible();
-  await expect(page.locator(".period-actions .btn-primary")).toBeDisabled();
-  await expect(page.locator(".next-action").first()).toContainText(
-    "View invoice"
+  // A locked month offers no work, and reopening it asks first.
+  await expect(page.locator(".period-actions .btn-primary")).toHaveCount(0);
+  await expect(page.locator("#locked-notice button[data-confirm]")).toHaveCount(
+    1
   );
+  const paidRow = page.locator('tr[data-status="PAID"]').first();
+  await expect(paidRow.locator(".next-action")).toBeEmpty();
+  await paidRow.locator(".invoice-cell a").click();
+  await expect(page).toHaveURL(/\/periods\/[^/]+\/invoices\/[^/]+/);
 });

@@ -30,6 +30,7 @@ import {
 import {
   deriveReadinessStatus,
   recalculateCaseReadiness,
+  recalculateCaseReadinessForDwellings,
   recalculateCaseReadinessForOpenPeriods,
   recalculateCaseReadinessForOrganizationOpenPeriods,
   wasMeterActiveDuringPeriod,
@@ -53,6 +54,100 @@ function cleanupOrg(organizationId: string) {
 }
 
 describe("case readiness recalculation", () => {
+  it.each([
+    [
+      "recalculateCaseReadiness",
+      (
+        raceDb: Db,
+        organizationId: string,
+        dwellingId: string,
+        periodId: string
+      ) =>
+        recalculateCaseReadiness(raceDb, organizationId, dwellingId, periodId),
+    ],
+    [
+      "recalculateCaseReadinessForDwellings",
+      (raceDb: Db, organizationId: string, dwellingId: string) =>
+        recalculateCaseReadinessForDwellings(raceDb, organizationId, [
+          dwellingId,
+        ]),
+    ],
+  ])(
+    "%s does not revert a case that moved past the readiness stage while it was running",
+    async (name, recalculate) => {
+      const org = await createOrganization(
+        db,
+        { name: `IT-Readiness Race ${name}`, addressLine1: "1 Test St" },
+        seedAdminId
+      );
+      const dwelling = await createDwelling(
+        db,
+        org.id,
+        { number: "1" },
+        seedAdminId
+      );
+      const period = await createPeriod(
+        db,
+        org.id,
+        {
+          year: 2026,
+          month: 1,
+          startsOn: "2026-01-01",
+          endsOn: "2026-01-31",
+          invoiceIssueDate: "2026-01-31",
+          invoiceDueDate: "2026-02-14",
+        },
+        seedAdminId
+      );
+      // Stale on purpose, so the recalculation always has a row to write.
+      await db.$client.query(
+        `update billing_cases set missing_data = '[{"reason":"STALE"}]' where period_id = $1`,
+        [period.id]
+      );
+
+      // Two more connections: one holds the case row as a concurrent
+      // generation would, the other recalculates and must wait for it.
+      const dbA = await createIntegrationDb();
+      const dbB = await createIntegrationDb();
+      try {
+        await dbA.$client.query("begin");
+        await dbA.$client.query(
+          "update billing_cases set status = 'DRAFT' where period_id = $1",
+          [period.id]
+        );
+        const {
+          rows: [{ pid }],
+        } = await dbB.$client.query("select pg_backend_pid() as pid");
+        const recalculation = recalculate(dbB, org.id, dwelling.id, period.id);
+        // The recalculation has read the old status and now waits on the row.
+        // Only its own connection counts: other test files run at the same time.
+        let waiting = false;
+        for (let i = 0; i < 100 && !waiting; i++) {
+          await new Promise((r) => setTimeout(r, 50));
+          const { rows } = await db.$client.query(
+            `select 1 from pg_stat_activity
+             where pid = $1 and wait_event_type = 'Lock'
+               and query ilike '%update%billing_cases%set%'`,
+            [pid]
+          );
+          waiting = rows.length > 0;
+        }
+        expect(waiting).toBe(true);
+        await dbA.$client.query("commit");
+        await recalculation;
+
+        const [after] = await listCasesForPeriod(db, org.id, period.id);
+        expect(after.status).toBe("DRAFT");
+        expect(after.missingData).not.toEqual([{ reason: "STALE" }]);
+      } finally {
+        await dbA.$client.query("rollback").catch(() => {});
+        await dbA.$client.end();
+        await dbB.$client.end();
+        await cleanupOrg(org.id);
+      }
+    }
+  );
+
   it("a dwelling with a METER_CONSUMPTION rule for COLD_WATER and an active COLD_WATER meter and no reading: case status is MISSING_DATA with a NO_READING item; after submitAdminReading it becomes READY", async () => {
     const org = await createOrganization(
       db,

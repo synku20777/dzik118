@@ -6,10 +6,6 @@ import AdminContextDrawer from "../../../../../../components/ui/AdminContextDraw
 import StatusBadge from "../../../../../../components/ui/StatusBadge.astro";
 import Icon from "../../../../../../components/ui/Icon.astro";
 import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../../domain/organizations/organizations";
 import {
   listRuleAssignmentsWithDwellingNumbers,
@@ -21,30 +17,35 @@ import {
   listDwellingsWithoutCase,
   listPeriods,
 } from "../../../../../../domain/periods/periods";
-import { listCasesForPeriod } from "../../../../../../domain/periods/cases";
+import { invoiceDelivery } from "../../../../../../domain/billing/invoice-snapshots";
+import {
+  listActiveMeterTypesForPeriod,
+  listCasesForPeriod,
+} from "../../../../../../domain/periods/cases";
+import { listSuppressedEmails } from "../../../../../../domain/email/suppression";
+import { invoiceStatusBadge } from "../../../../../../lib/ui/invoice-status";
 import { getDashboardSummary } from "../../../../../../domain/periods/dashboard";
 import { billingCaseStatusEnum } from "../../../../../../db/schema/billing";
 import { withRequestDb } from "../../../../../../lib/db-request";
+import { orgLocalDateString } from "../../../../../../lib/org-time";
+import { rethrowUnexpected } from "../../../../../../domain/errors";
 import {
   entityLabel,
   fill,
   formatMoney,
   formatPeriod,
+  friendlyActionErrorMessage,
+  plural,
   translate,
   uiLocale,
 } from "../../../../../../lib/ui/i18n";
+import { skipReasonsText } from "../../../../../../lib/ui/skip-reason";
 
 type CaseStatus = (typeof billingCaseStatusEnum.enumValues)[number];
 type Snapshot = Record<string, string | null>;
 
 const organizationId = Astro.params.orgId!;
 const periodId = Astro.params.periodId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
@@ -57,6 +58,24 @@ const bulkGenerateResult = Astro.getActionResult(actions.billing.bulkGenerate);
 const bulkPrepareResult = Astro.getActionResult(actions.billing.bulkPrepare);
 const bulkSendResult = Astro.getActionResult(actions.invoices.bulkSend);
 const sendResult = Astro.getActionResult(actions.invoices.send);
+// One request carries one action result, so one error and one outcome.
+const actionError =
+  lockResult?.error ??
+  generateResult?.error ??
+  sendResult?.error ??
+  bulkGenerateResult?.error ??
+  bulkPrepareResult?.error ??
+  bulkSendResult?.error;
+const bulkResult =
+  bulkGenerateResult?.data ?? bulkPrepareResult?.data ?? bulkSendResult?.data;
+const bulkOutcome = bulkResult && {
+  ...bulkResult,
+  label: bulkGenerateResult?.data
+    ? "invoices generated"
+    : bulkPrepareResult?.data
+      ? "invoices prepared"
+      : "invoices sent",
+};
 
 const search = Astro.url.searchParams.get("search")?.trim() || undefined;
 const rawStatus = Astro.url.searchParams.get("status");
@@ -70,7 +89,7 @@ const statusFilter =
       : undefined;
 
 let organization, period, cases, allPeriods, summary, rules, assignmentsByRule;
-let dwellingsWithoutCase;
+let dwellingsWithoutCase, suppressed, meterTypesByDwelling;
 try {
   ({
     dwellingsWithoutCase,
@@ -81,7 +100,19 @@ try {
     summary,
     rules,
     assignmentsByRule,
+    suppressed,
+    meterTypesByDwelling,
   } = await withRequestDb(async (db) => ({
+    suppressed: new Set(
+      (await listSuppressedEmails(db, organizationId)).map((row) =>
+        row.email.toLowerCase()
+      )
+    ),
+    meterTypesByDwelling: await listActiveMeterTypesForPeriod(
+      db,
+      organizationId,
+      await getPeriod(db, organizationId, periodId)
+    ),
     dwellingsWithoutCase: await listDwellingsWithoutCase(
       db,
       organizationId,
@@ -101,7 +132,8 @@ try {
     allPeriods: await listPeriods(db, organizationId),
     summary: await getDashboardSummary(db, organizationId, periodId),
   })));
-} catch {
+} catch (err) {
+  rethrowUnexpected(err);
   return Astro.redirect(`/admin/o/${organizationId}/periods`);
 }
 // The starting-readings month is not a billing workbench; its readings are
@@ -117,6 +149,16 @@ const tariffRows = rules.map((rule) => {
   const status = ruleStatusForPeriod(rule, period);
   const assigned = assignmentsByRule.get(rule.id) ?? [];
   const scoped = rule.applicationScope !== "ONE_TO_ALL";
+  // The dwellings this month the tariff could bill: all with a case, or the
+  // assigned ones; a meter tariff only where a meter of its type was active.
+  const covered = [...meterTypesByDwelling.keys()].filter(
+    (id) => !scoped || assigned.some((a) => a.dwellingId === id)
+  );
+  const billsSomeone =
+    rule.calculationType !== "METER_CONSUMPTION" ||
+    covered.some((id) =>
+      meterTypesByDwelling.get(id)!.has(rule.meterType ?? "")
+    );
   let reason: string;
   if (status === "ARCHIVED") {
     reason = t("Does not apply: the tariff is archived.");
@@ -126,19 +168,50 @@ const tariffRows = rules.map((rule) => {
     reason = t("Does not apply: it starts after this period ends.");
   } else if (status === "ENDED_BEFORE_PERIOD") {
     reason = t("Does not apply: it ended before this period starts.");
+  } else if (scoped && assigned.length === 0) {
+    reason = t("Applies to no dwelling: none is assigned.");
+  } else if (!billsSomeone || covered.length === 0) {
+    reason = t("Does not apply: no dwelling this month can be billed by it.");
   } else if (!scoped) {
     reason = t("Applies to all dwellings.");
-  } else if (assigned.length === 0) {
-    reason = t("Applies to no dwelling: none is assigned.");
   } else {
     reason = `${t("Applies only to the assigned dwellings:")} ${assigned
       .map((a) => a.number)
       .join(", ")}`;
   }
-  const applies = status === "APPLIES" && (!scoped || assigned.length > 0);
+  const applies = status === "APPLIES" && covered.length > 0 && billsSomeone;
   return { rule, applies, reason };
 });
 const applyingTariffs = tariffRows.filter((row) => row.applies).length;
+
+// Bulk generation works on the whole month, whatever filter is open: it
+// creates invoices, refreshes every draft and, when the organization allows
+// it, first fills readings still missing after the deadline. Say so first.
+const counts = summary.caseStatusCounts;
+const carriesForward = Boolean(
+  organization.carryForwardReadingsEnabled &&
+  period.readingDeadline &&
+  orgLocalDateString(new Date(), organization.timezone) > period.readingDeadline
+);
+const showBulkGenerate =
+  counts.READY + counts.DRAFT > 0 ||
+  (carriesForward && counts.MISSING_DATA > 0);
+const bulkGenerateConfirm =
+  fill(
+    t(
+      "For the whole month: create up to {ready} new invoices and refresh {drafts} drafts?"
+    ),
+    {
+      ready: String(counts.READY + counts.MISSING_DATA),
+      drafts: String(counts.DRAFT),
+    }
+  ) +
+  (carriesForward
+    ? " " +
+      t(
+        "Readings still missing after the deadline are filled with the previous reading first."
+      )
+    : "");
 
 // Previous/next skip the starting-readings month.
 const navPeriods = allPeriods.filter((item) => !item.openingReadings);
@@ -154,33 +227,16 @@ const totalCases = Object.values(summary.caseStatusCounts).reduce(
   (total, count) => total + count,
   0
 );
+// Stage, label, and what the stage means (for screen readers).
 const workflowFilters = [
-  [undefined, "All", "All billing cases", "neutral", "layout-dashboard"],
-  [
-    "MISSING_DATA",
-    "Missing data",
-    "Resolve inputs",
-    "danger",
-    "alert-triangle",
-  ],
-  [
-    "READY",
-    "Ready to invoice",
-    "Generate the invoice",
-    "warning",
-    "receipt-euro",
-  ],
-  ["DRAFT", "Draft", "Review and prepare", "neutral", "pencil"],
-  ["PREPARED", "Prepared", "Ready to send", "info", "file-description"],
-  [
-    "OVERDUE",
-    "Overdue",
-    "Payment needs review",
-    "warning",
-    "clock-exclamation",
-  ],
-  ["SENT", "Sent", "Delivered", "info", "send"],
-  ["PAID", "Paid", "Complete", "success", "circle-check"],
+  [undefined, "All", "All billing cases"],
+  ["MISSING_DATA", "Missing data", "Resolve inputs"],
+  ["READY", "Ready to invoice", "Generate the invoice"],
+  ["DRAFT", "Draft", "Review and prepare"],
+  ["PREPARED", "Prepared", "Ready to send"],
+  ["OVERDUE", "Overdue", "Payment needs review"],
+  ["SENT", "Sent", "Delivered"],
+  ["PAID", "Paid", "Complete"],
 ] as const;
 
 function filterHref(status?: CaseStatus) {
@@ -190,9 +246,43 @@ function filterHref(status?: CaseStatus) {
   const query = params.toString();
   return query ? `${workbenchPath}?${query}` : workbenchPath;
 }
-// Missing-data tags: show this many, then +N more (opens the readings
-// drawer, which lists every one). A dwelling can lack many meters at once.
-const MAX_MISSING = 2;
+// A case's problems share one line under its status: this many are named,
+// then "+N" (never cut off) opens the drawer that lists them all.
+const MAX_PROBLEMS = 2;
+type Problem = {
+  text: string;
+  tone: "danger" | "warning";
+  href?: string;
+  drawer?: "readings" | "billing-details";
+  focus?: string;
+  // A name told apart by its end (a meter serial): cut in the middle,
+  // keeping this many trailing digits.
+  keepEnd?: number;
+  // Fixed only outside the drawer (tariffs, meters): listed first.
+  config?: boolean;
+  // Guidance too long for the line: tooltip and screen readers.
+  detail?: string;
+};
+// Apple's rule for names that differ at the end: keep the tail visible.
+const KEEP_END = 6;
+// A name ending in a number (a meter serial) is told apart by its end: keep
+// up to KEEP_END of its trailing digits. Digits are 1ch wide in any font, so
+// the room they need is exact (0 when the name is not serial-like).
+const serialLike = (text: string) => {
+  const digits = /[0-9]+$/.exec(text)?.[0].length ?? 0;
+  return digits >= 3 && text.length > digits + 2
+    ? Math.min(KEEP_END, digits)
+    : 0;
+};
+// Narrowest an item may get: 4ch, or a serial's kept digits plus an ellipsis.
+const itemMinCh = (problem: Problem) =>
+  problem.keepEnd ? problem.keepEnd + 2 : 4;
+const dayMonth = (value: string) =>
+  new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(value));
 ---
 
 <AdminLayout
@@ -211,21 +301,46 @@ const MAX_MISSING = 2;
       periodStatus={period.status}
       periodName={periodName}
       workbenchPath={workbenchPath}
-      refreshSelectors={[".financial-summary", ".case-queue"]}
+      refreshSelectors={[
+        ".period-actions",
+        ".financial-summary",
+        ".case-queue",
+      ]}
     />
     <header class="workbench-header">
-      <div>
-        <div class="period-title">
-          <h1 class="font-display">{periodName}</h1>
-          <StatusBadge status={period.status} />
-        </div>
-        <p class="period-description">
-          {t("Collect readings, generate invoices, then prepare and send.")}
-        </p>
+      <div class="period-title">
+        <h1 class="font-display">{periodName}</h1>
+        <StatusBadge status={period.status} />
       </div>
 
       <div class="period-actions">
-        {!period.openingReadings && (
+        {/* A period with no neighbour gets no placeholder button. */}
+        {(previousPeriod || nextPeriod) && (
+          <nav class="period-navigation" aria-label={t("Period navigation")}>
+            {previousPeriod && (
+              <a
+                href={`/admin/o/${organizationId}/periods/${previousPeriod.id}`}
+              >
+                <Icon name="arrow-left" size="xs" />
+                <span class="sr-only">{t("Previous period")}: </span>
+                {formatPeriod(
+                  previousPeriod.year,
+                  previousPeriod.month,
+                  locale
+                )}
+              </a>
+            )}
+            {nextPeriod && (
+              <a href={`/admin/o/${organizationId}/periods/${nextPeriod.id}`}>
+                <span class="sr-only">{t("Next period")}: </span>
+                {formatPeriod(nextPeriod.year, nextPeriod.month, locale)}
+                <Icon name="arrow-right" size="xs" />
+              </a>
+            )}
+          </nav>
+        )}
+        {/* A locked month offers no work: its actions are not shown. */}
+        {period.status === "OPEN" && (
           <>
             <a
               href={`/admin/o/${organizationId}/periods/${periodId}/readings`}
@@ -233,67 +348,37 @@ const MAX_MISSING = 2;
             >
               <Icon name="pencil" size="sm" /> {t("Enter readings")}
             </a>
-            <form method="POST" action={actions.billing.bulkGenerate}>
-              <input
-                type="hidden"
-                name="organizationId"
-                value={organizationId}
-              />
-              <input type="hidden" name="periodId" value={periodId} />
-              <button
-                type="submit"
-                disabled={period.status === "LOCKED"}
-                aria-describedby={
-                  period.status === "LOCKED" ? "locked-notice" : undefined
-                }
-                class="btn-primary"
-              >
-                {t("Generate all eligible")}
-              </button>
-            </form>
+            {showBulkGenerate && (
+              <form method="POST" action={actions.billing.bulkGenerate}>
+                <input
+                  type="hidden"
+                  name="organizationId"
+                  value={organizationId}
+                />
+                <input type="hidden" name="periodId" value={periodId} />
+                <button
+                  type="submit"
+                  class="btn-primary"
+                  data-confirm={bulkGenerateConfirm}
+                >
+                  {t("Generate and refresh drafts")}
+                </button>
+              </form>
+            )}
+            <details class="more-menu">
+              <summary class="icon-btn" aria-label={t("More actions")}>
+                <Icon name="dots" size="sm" />
+              </summary>
+              <div>
+                <button type="button" data-open-lock-dialog>
+                  {t("Lock period")}
+                </button>
+              </div>
+            </details>
           </>
-        )}
-        {period.status === "OPEN" && (
-          <details class="more-menu">
-            <summary aria-label={t("More actions")}>
-              <Icon name="dots" size="sm" />
-            </summary>
-            <div>
-              <button type="button" data-open-lock-dialog>
-                {t("Lock period")}
-              </button>
-            </div>
-          </details>
         )}
       </div>
     </header>
-
-    <nav class="period-navigation" aria-label={t("Period navigation")}>
-      {previousPeriod ? (
-        <a href={`/admin/o/${organizationId}/periods/${previousPeriod.id}`}>
-          <Icon name="arrow-left" size="sm" />
-          <span>
-            {formatPeriod(previousPeriod.year, previousPeriod.month, locale)}
-          </span>
-        </a>
-      ) : (
-        <span aria-disabled="true">
-          <Icon name="arrow-left" size="sm" />
-          {t("Previous period")}
-        </span>
-      )}
-      {nextPeriod ? (
-        <a href={`/admin/o/${organizationId}/periods/${nextPeriod.id}`}>
-          <span>{formatPeriod(nextPeriod.year, nextPeriod.month, locale)}</span>
-          <Icon name="arrow-right" size="sm" />
-        </a>
-      ) : (
-        <span aria-disabled="true">
-          {t("Next period")}
-          <Icon name="arrow-right" size="sm" />
-        </span>
-      )}
-    </nav>
 
     {period.status === "OPEN" && (
       <dialog
@@ -332,7 +417,7 @@ const MAX_MISSING = 2;
       </dialog>
     )}
 
-    {period.status === "LOCKED" && !period.openingReadings && (
+    {period.status === "LOCKED" && (
       <div
         id="locked-notice"
         class="notice flex flex-wrap items-center justify-between gap-3"
@@ -348,61 +433,46 @@ const MAX_MISSING = 2;
         <form method="POST" action={actions.periods.reopen}>
           <input type="hidden" name="organizationId" value={organizationId} />
           <input type="hidden" name="periodId" value={periodId} />
-          <button type="submit" class="btn-secondary btn-sm">
+          <button
+            type="submit"
+            class="btn-secondary btn-sm"
+            data-confirm={t(
+              "Reopen this period? Readings and invoices can be changed again."
+            )}
+          >
             {t("Reopen period")}
           </button>
         </form>
       </div>
     )}
 
-    <h2 id="financial-heading" class="sr-only">
-      {t("Financial summary")}
-    </h2>
-    <section
-      class="metric-strip financial-summary"
-      style="--metrics: 3"
-      aria-labelledby="financial-heading"
-    >
-      <div class="metric financial-stat">
-        <span class="metric-label financial-label">
-          <Icon name="receipt-euro" size="sm" />
-          {t("Total to pay")}
-        </span>
-        <strong class="metric-value">
-          {formatMoney(summary.amountDue, organization.currency, locale)}
-        </strong>
-        <span class="metric-note">
+    <section class="financial-summary" aria-labelledby="financial-heading">
+      <h2 id="financial-heading" class="sr-only">
+        {t("Financial summary")}
+      </h2>
+      {(
+        [
+          ["Total to pay", summary.amountDue],
+          ["Paid on invoices", summary.totalPaid],
+          ["Still unpaid", summary.totalOutstanding],
+        ] as const
+      ).map(([label, value]) => (
+        <div class="financial-stat">
+          <span>{t(label)}</span>
+          <strong>{formatMoney(value, organization.currency, locale)}</strong>
+        </div>
+      ))}
+      {summary.currentCharges !== summary.amountDue && (
+        <p class="financial-note">
           {t("Current charges")}:{" "}
           {formatMoney(summary.currentCharges, organization.currency, locale)}
-        </span>
-      </div>
-      <div class="metric financial-stat">
-        <span class="metric-label financial-label">
-          <Icon name="coin" size="sm" />
-          {t("Received in payments")}
-        </span>
-        <strong class="metric-value">
-          {formatMoney(summary.totalPaid, organization.currency, locale)}
-        </strong>
-        <span class="metric-note">{t("of total to pay")}</span>
-      </div>
-      <div class="metric financial-stat">
-        <span class="metric-label financial-label">
-          <Icon name="clock" size="sm" />
-          {t("Still unpaid")}
-        </span>
-        <strong class="metric-value">
-          {formatMoney(summary.totalOutstanding, organization.currency, locale)}
-        </strong>
-        <span class="metric-note">{t("of total to pay")}</span>
-      </div>
+        </p>
+      )}
     </section>
 
-    {(lockResult?.error || generateResult?.error || sendResult?.error) && (
+    {actionError && (
       <p class="notice notice-danger" role="alert">
-        {lockResult?.error?.message ??
-          generateResult?.error?.message ??
-          sendResult?.error?.message}
+        {friendlyActionErrorMessage(actionError, locale)}
       </p>
     )}
     {sendResult && !sendResult.error && (
@@ -412,73 +482,30 @@ const MAX_MISSING = 2;
           : t("Sending has not finished yet. Check the delivery status.")}
       </p>
     )}
-    {bulkGenerateResult?.data && (
+    {bulkOutcome && (
       <p class="notice" role="status">
-        {bulkGenerateResult.data.generated.length} {t("invoices generated")}.
-        {bulkGenerateResult.data.skipped.length > 0 && (
+        {bulkOutcome.count} {t(bulkOutcome.label)}.
+        {bulkOutcome.skippedCount > 0 && (
           <>
             {" "}
-            {bulkGenerateResult.data.skipped.length} {t("skipped")}:{" "}
-            {bulkGenerateResult.data.skipped
-              .map((item) => item.reason)
-              .join("; ")}
+            {bulkOutcome.skippedCount} {t("skipped")}:{" "}
+            {skipReasonsText(
+              bulkOutcome.skipReasons.map((reason) => ({ reason })),
+              locale
+            )}
           </>
         )}
-      </p>
-    )}
-    {bulkGenerateResult?.error && (
-      <p class="notice notice-danger" role="alert">
-        {bulkGenerateResult.error.message}
-      </p>
-    )}
-    {bulkPrepareResult?.data && (
-      <p class="notice" role="status">
-        {bulkPrepareResult.data.prepared.length} {t("invoices prepared")}.
-        {bulkPrepareResult.data.skipped.length > 0 && (
-          <>
-            {" "}
-            {bulkPrepareResult.data.skipped.length} {t("skipped")}:{" "}
-            {bulkPrepareResult.data.skipped
-              .map((item) => item.reason)
-              .join("; ")}
-          </>
-        )}
-      </p>
-    )}
-    {bulkPrepareResult?.error && (
-      <p class="notice notice-danger" role="alert">
-        {bulkPrepareResult.error.message}
-      </p>
-    )}
-    {bulkSendResult?.data && (
-      <p class="notice" role="status">
-        {bulkSendResult.data.sent.length} {t("invoices sent")}.
-        {bulkSendResult.data.skipped.length > 0 && (
-          <>
-            {" "}
-            {bulkSendResult.data.skipped.length} {t("skipped")}:{" "}
-            {bulkSendResult.data.skipped.map((item) => item.reason).join("; ")}
-          </>
-        )}
-      </p>
-    )}
-    {bulkSendResult?.error && (
-      <p class="notice notice-danger" role="alert">
-        {bulkSendResult.error.message}
       </p>
     )}
 
-    <section class="case-queue panel" aria-labelledby="queue-heading">
+    <section class="case-queue" aria-labelledby="queue-heading">
       <div class="queue-heading">
-        <div>
-          <h2 id="queue-heading">
-            {t("Billing cases")} <span class="queue-count">{totalCases}</span>
-          </h2>
-          <p>
-            {t("Resolve blockers, then move each invoice to its next stage.")}
-          </p>
-        </div>
-        <form method="GET" class="queue-filters">
+        <h2 id="queue-heading">{t("Billing cases")}</h2>
+        {/* One field: Enter submits. The active stage is kept. */}
+        <form method="GET" class="queue-filters" role="search">
+          {statusFilter && (
+            <input type="hidden" name="status" value={statusFilter} />
+          )}
           <div class="queue-search input-icon">
             <Icon name="search" size="sm" />
             <label class="sr-only" for="search">
@@ -493,75 +520,43 @@ const MAX_MISSING = 2;
               autocomplete="off"
             />
           </div>
-          <label class="sr-only" for="status">
-            {t("Status")}
-          </label>
-          <select id="status" name="status">
-            <option value="" selected={!statusFilter}>
-              {t("All statuses")}
-            </option>
-            <option value="UNSENT" selected={statusFilter === "UNSENT"}>
-              {t("Not sent yet")}
-            </option>
-            {workflowFilters.slice(1).map(([status, label]) => (
-              <option value={status} selected={statusFilter === status}>
-                {t(label)}
-              </option>
-            ))}
-          </select>
-          <button type="submit" class="btn-secondary btn-sm filter-submit">
-            {t("Apply filters")}
-          </button>
-          {(search || statusFilter) && (
-            <a href={workbenchPath} class="clear-filters">
-              {t("Clear filters")}
-            </a>
-          )}
         </form>
       </div>
 
-      <section class="workflow-overview" aria-labelledby="workflow-heading">
-        <h3 id="workflow-heading" class="sr-only">
-          {t("Filter by workflow stage")}
-        </h3>
-        <div class="workflow-scroll">
-          <nav class="workflow-rail" aria-label={t("Filter by workflow stage")}>
-            {workflowFilters.map(([status, label, description, tone, icon]) => {
-              const count = status
-                ? summary.caseStatusCounts[status]
-                : totalCases;
-              const active = status ? statusFilter === status : !statusFilter;
-              return (
-                <a
-                  href={filterHref(status)}
-                  class="workflow-filter"
-                  data-tone={tone}
-                  aria-current={active ? "page" : undefined}
-                >
-                  <span class="workflow-label">
-                    <span class="workflow-icon" aria-hidden="true">
-                      <Icon name={icon} size="sm" />
-                    </span>
-                    <span>{t(label)}</span>
-                    <strong>{count}</strong>
-                  </span>
-                  <span class="sr-only">{t(description)}</span>
-                </a>
-              );
-            })}
-          </nav>
-        </div>
-      </section>
+      <nav class="workflow-rail" aria-label={t("Filter by workflow stage")}>
+        {workflowFilters.map(([status, label, description]) => (
+          <a
+            href={filterHref(status)}
+            class="workflow-filter"
+            aria-current={
+              (status ? statusFilter === status : !statusFilter)
+                ? "page"
+                : undefined
+            }
+          >
+            {t(label)}
+            <strong>
+              {status ? summary.caseStatusCounts[status] : totalCases}
+            </strong>
+            <span class="sr-only">{t(description)}</span>
+          </a>
+        ))}
+      </nav>
 
-      <p class="queue-result" role="status">
-        {fill(t("Showing {shown} of {total} billing cases"), {
-          shown: String(cases.length),
-          total: String(totalCases),
-        })}
-        {statusFilter === "UNSENT" && (
-          <> · {t("Draft and prepared invoices")}</>
-        )}
-      </p>
+      {(search || statusFilter) && (
+        <p class="queue-result" role="status">
+          <span>
+            {fill(t("Showing {shown} of {total} billing cases"), {
+              shown: String(cases.length),
+              total: String(totalCases),
+            })}
+            {statusFilter === "UNSENT" && <> · {t("Unsent invoices")}</>}
+          </span>
+          <a href={workbenchPath} class="clear-filters">
+            {t("Clear filters")}
+          </a>
+        </p>
+      )}
 
       <!-- Per-row forms cannot nest inside the bulk form, so checkboxes target
       this empty form by id. The submitted action still receives the same data. -->
@@ -614,7 +609,7 @@ const MAX_MISSING = 2;
         </div>
       </div>
 
-      <div class="table-wrap case-table-wrap stack-table">
+      <div class="table-wrap case-table-wrap">
         <table class="case-table" role="table">
           <caption class="sr-only">{t("Billing cases")}</caption>
           <thead>
@@ -629,7 +624,6 @@ const MAX_MISSING = 2;
                 </label>
               </th>
               <th scope="col">{t("Dwelling")}</th>
-              <th scope="col">{t("Billing inputs")}</th>
               <th scope="col">{t("Status")}</th>
               <th scope="col" class="numeric-column">
                 {t("Invoice")}
@@ -644,6 +638,7 @@ const MAX_MISSING = 2;
                 | {
                     label: string | null;
                     meterType: string;
+                    meterId?: string;
                     reason?: "NO_READING";
                   }
                 | {
@@ -664,18 +659,6 @@ const MAX_MISSING = 2;
                 typeof item === "object" &&
                 (item.reason === "NO_APPLICABLE_RULES" ||
                   item.reason === "NO_ACTIVE_METER_FOR_RULE");
-              // A configuration blocker (no rule, no meter for a rule) links to
-              // tariffs or the dwelling and is not in the readings drawer, so it
-              // is never hidden behind "+N more". Reading-type items are capped.
-              const readingItems = missing.filter((item) => !isRuleLevel(item));
-              const shownMissing = [
-                ...missing.filter(isRuleLevel),
-                ...readingItems.slice(0, MAX_MISSING),
-              ];
-              const hiddenMissing = Math.max(
-                0,
-                readingItems.length - MAX_MISSING
-              );
               const issuer = (billingCase.invoiceIssuerSnapshot ??
                 {}) as Snapshot;
               const recipient = (billingCase.invoiceRecipientSnapshot ??
@@ -698,27 +681,191 @@ const MAX_MISSING = 2;
               const billingEmail = billingCase.invoiceId
                 ? recipient.billingEmail
                 : billingCase.billingEmail;
-              // A snapshot taken before per-dwelling delivery preferences
-              // existed has neither key -- same email-only fallback as
-              // sending.ts's deliver().
-              const invoiceByEmail = billingCase.invoiceId
-                ? (recipient.invoiceByEmail ?? true)
-                : billingCase.invoiceByEmail;
-              const invoiceByPaper = billingCase.invoiceId
-                ? (recipient.invoiceByPaper ?? false)
-                : billingCase.invoiceByPaper;
+              const { invoiceByEmail, invoiceByPaper } = billingCase.invoiceId
+                ? invoiceDelivery(billingCase.invoiceRecipientSnapshot)
+                : billingCase;
               const prepareEligible =
                 billingCase.status === "DRAFT" &&
                 !recipientIncomplete &&
                 !organizationIncomplete;
+              // Send here is email only; paper goes through the invoice page.
+              const paperOnly = Boolean(invoiceByPaper && !invoiceByEmail);
+              // Facts that make an email send fail or repeat: a suppressed
+              // address, or an earlier attempt whose outcome is unknown.
+              const emailSuppressed = Boolean(
+                billingEmail && suppressed.has(billingEmail.toLowerCase())
+              );
+              const deliveryUnknown = Boolean(
+                billingCase.invoiceId &&
+                summary.deliveryUnknownIds.includes(billingCase.invoiceId)
+              );
               const sendEligible =
                 billingCase.status === "PREPARED" &&
-                ((invoiceByEmail && Boolean(billingEmail)) || invoiceByPaper);
+                Boolean(invoiceByEmail && billingEmail) &&
+                !emailSuppressed &&
+                !deliveryUnknown;
+              // The invoice froze the dwelling's details when it was made: an
+              // email added to the dwelling since then is not on it.
+              // Only an invoice that can still be regenerated: an open month,
+              // never sent or paid (a status set back by hand does not count,
+              // generation.ts refuses those), and a draft or prepared case.
+              const emailAddedSince = Boolean(
+                period.status === "OPEN" &&
+                missing.length === 0 &&
+                billingCase.invoiceSentAt === null &&
+                billingCase.invoicePaidAt === null &&
+                (billingCase.status === "DRAFT" ||
+                  billingCase.status === "PREPARED") &&
+                billingCase.invoiceId &&
+                invoiceByEmail &&
+                !billingEmail &&
+                billingCase.billingEmail
+              );
+              const unsentPaid =
+                billingCase.status === "PAID" &&
+                Boolean(billingCase.invoiceId) &&
+                billingCase.invoiceSentAt === null;
+              const overdue =
+                billingCase.status === "OVERDUE"
+                  ? summary.needsAttention.find(
+                      (item) => item.caseId === billingCase.id
+                    )
+                  : undefined;
+              // A blocker readings cannot fix: no tariff, or no meter for one.
+              const configOnly =
+                missing.length > 0 && missing.every(isRuleLevel);
+              const noRule = missing.some(
+                (item) =>
+                  typeof item === "object" &&
+                  item.reason === "NO_APPLICABLE_RULES"
+              );
+              // Before an invoice exists the blockers decide the action; after,
+              // the invoice's own stage does.
+              const blockedBeforeInvoice =
+                missing.length > 0 &&
+                (!billingCase.invoiceId ||
+                  billingCase.status === "MISSING_DATA" ||
+                  billingCase.status === "READY");
+              // Problems and delivery notes sit under the status. A case with
+              // none shows the status alone.
               const invoiceHref = billingCase.invoiceId
                 ? `${workbenchPath}/invoices/${billingCase.invoiceId}`
                 : null;
               const readingsHref = `${workbenchPath}/dwellings/${billingCase.dwellingId}`;
               const dwellingHref = `/admin/o/${organizationId}/dwellings/${billingCase.dwellingId}`;
+              // Everything that needs work on this case, most urgent first,
+              // shown as one line under the status (see the status cell).
+              const problems: Problem[] = [];
+              if (overdue?.dueDate && overdue.overdueAmount)
+                problems.push({
+                  text: `${t("Still unpaid")} ${formatMoney(overdue.overdueAmount, organization.currency, locale)} · ${fill(t("Due {date}"), { date: dayMonth(overdue.dueDate) })}`,
+                  tone: "danger",
+                });
+              if (unsentPaid)
+                problems.push({ text: t("Not sent yet"), tone: "warning" });
+              if (emailSuppressed && invoiceHref)
+                problems.push({
+                  text: t("Billing email is on the suppressed list"),
+                  tone: "danger",
+                  href: invoiceHref,
+                });
+              if (deliveryUnknown && invoiceHref)
+                problems.push({
+                  text: t("Outcome not confirmed"),
+                  tone: "warning",
+                  href: invoiceHref,
+                });
+              for (const item of missing) {
+                if (typeof item === "string") {
+                  problems.push({
+                    text: item.replace(
+                      /^Missing current-period meter reading for dwelling (.+?)\.?$/,
+                      (_match, number) =>
+                        fill(
+                          t(
+                            "Missing current-period meter reading for dwelling {number}"
+                          ),
+                          { number }
+                        )
+                    ),
+                    tone: "danger",
+                  });
+                } else if (item.reason === "NO_APPLICABLE_RULES") {
+                  problems.push({
+                    text: t("No billing rule applies"),
+                    tone: "danger",
+                    href: "#period-tariffs",
+                    config: true,
+                  });
+                } else if (item.reason === "NO_ACTIVE_METER_FOR_RULE") {
+                  problems.push({
+                    text: `${item.ruleName} — ${t("no active meter")}`,
+                    tone: "danger",
+                    href: dwellingHref,
+                    config: true,
+                  });
+                } else if ("meterType" in item) {
+                  // The status already says "Missing data": the name is enough.
+                  problems.push({
+                    text: item.label ?? entityLabel(item.meterType, locale),
+                    tone: "danger",
+                    drawer: "readings",
+                    focus: item.meterId
+                      ? `meter-${item.meterId}`
+                      : item.meterType.toLowerCase().replace(/_/g, "-"),
+                    keepEnd: serialLike(
+                      item.label ?? entityLabel(item.meterType, locale)
+                    ),
+                  });
+                } else {
+                  problems.push({
+                    text: item.ruleName,
+                    tone: "danger",
+                    drawer: "readings",
+                    focus: `rule-${item.billingRuleId}`,
+                    keepEnd: serialLike(item.ruleName),
+                  });
+                }
+              }
+              if (emailAddedSince && invoiceHref)
+                problems.push({
+                  text: t("New email not on this invoice"),
+                  tone: "warning",
+                  href: invoiceHref,
+                  detail: t(
+                    billingCase.status === "DRAFT"
+                      ? "Saved to the dwelling. Regenerate this draft to use the new details."
+                      : "Saved to the dwelling. This invoice keeps its old details: return it to Draft and regenerate it."
+                  ),
+                });
+              else if (invoiceByEmail && !billingEmail)
+                problems.push({
+                  text: t("Billing email missing"),
+                  tone: "warning",
+                  drawer: "billing-details",
+                  focus: "billing-email",
+                });
+              if (recipientIncomplete)
+                problems.push({
+                  text: t("Recipient details incomplete"),
+                  tone: "danger",
+                  drawer: "billing-details",
+                  focus: "recipient",
+                });
+              if (organizationIncomplete)
+                problems.push({
+                  text: t("Issuer or payment details incomplete"),
+                  tone: "danger",
+                  href: `/admin/o/${organizationId}/settings/organization`,
+                });
+              // Configuration blockers first: the readings drawer cannot fix
+              // them. The rest are behind "+N", whose menu links each one.
+              const ordered = [
+                ...problems.filter((p) => p.config),
+                ...problems.filter((p) => !p.config),
+              ];
+              const shownProblems = ordered.slice(0, MAX_PROBLEMS);
+              const hiddenProblems = ordered.slice(MAX_PROBLEMS);
 
               return (
                 <tr
@@ -730,6 +877,8 @@ const MAX_MISSING = 2;
                     {billingCase.invoiceId &&
                       (billingCase.status === "DRAFT" ||
                         billingCase.status === "PREPARED") && (
+                        // The label widens the tap area; the input keeps its
+                        // own accessible name.
                         <label class="check-target">
                           <input
                             type="checkbox"
@@ -747,170 +896,177 @@ const MAX_MISSING = 2;
                   </td>
                   <td class="dwelling-cell">
                     <a href={readingsHref}>{billingCase.dwellingNumber}</a>
-                    {billingCase.occupantName && (
-                      <span>{billingCase.occupantName}</span>
+                    {/* Paper delivery is a setting of the dwelling, not a
+                        problem: it sits with the name. */}
+                    {(billingCase.occupantName || invoiceByPaper) && (
+                      <span>
+                        {[
+                          billingCase.occupantName,
+                          invoiceByPaper && t("Paper delivery"),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
                     )}
                   </td>
-                  <td>
-                    <div class="readiness-list">
-                      {missing.length > 0 ? (
-                        shownMissing.map((item) =>
-                          // missingData is a JSONB column with no schema
-                          // enforcement: cases whose readiness was last
-                          // computed by an older app version can still
-                          // carry the legacy plain-string shape instead of
-                          // today's {meterType, label, reason} object, so
-                          // render those as a non-actionable badge instead
-                          // of crashing on a missing meterType.
-                          item &&
-                          typeof item === "object" &&
-                          item.reason === "NO_APPLICABLE_RULES" ? (
-                            <a
-                              class="readiness-item"
-                              data-tone="danger"
-                              href="#period-tariffs"
-                            >
-                              <Icon name="alert-triangle" size="xs" />{" "}
-                              {t("No billing rule applies")}
-                            </a>
-                          ) : item &&
-                            typeof item === "object" &&
-                            item.reason === "NO_ACTIVE_METER_FOR_RULE" ? (
-                            <a
-                              class="readiness-item"
-                              data-tone="danger"
-                              href={dwellingHref}
-                              data-tip={`${item.ruleName} — ${t("no active meter")}`}
-                              data-tip-clipped
-                            >
-                              <Icon name="alert-triangle" size="xs" />{" "}
-                              {item.ruleName} — {t("no active meter")}
-                            </a>
-                          ) : item &&
-                            typeof item === "object" &&
-                            "meterType" in item ? (
+                  <td class="status-cell">
+                    {/* A tinted tag only where something needs work; a
+                        routine stage is plain text, so exceptions stand out. */}
+                    {billingCase.status === "MISSING_DATA" ||
+                    billingCase.status === "OVERDUE" ? (
+                      <StatusBadge status={billingCase.status} />
+                    ) : (
+                      <span class="status-text">
+                        <Icon
+                          name={invoiceStatusBadge(billingCase.status).icon}
+                          size="xs"
+                        />
+                        {t(invoiceStatusBadge(billingCase.status).label)}
+                      </span>
+                    )}
+                    {/* One line, never a stack: the last named problem is cut
+                        at its end, a serial-like name in its middle. "+N" sits
+                        outside the clipped part, so it is never cut, and opens
+                        a menu with every hidden problem and its own link. Full
+                        text is always in the DOM for screen readers. */}
+                    {problems.length > 0 && (
+                      <div class="readiness-line" data-tone={problems[0].tone}>
+                        <span class="readiness-icon" aria-hidden="true">
+                          <Icon name="alert-triangle" size="xs" />
+                        </span>
+                        <span
+                          class="readiness-items"
+                          style={`--items-min:${shownProblems.reduce(
+                            (sum, problem) => sum + itemMinCh(problem),
+                            // A separator and its two gaps.
+                            (shownProblems.length - 1) * 3
+                          )}ch`}
+                        >
+                          {shownProblems.map((problem, index) => {
+                            const Tag = problem.href
+                              ? "a"
+                              : problem.drawer
+                                ? "button"
+                                : "span";
+                            const cut = Boolean(problem.keepEnd);
+                            return (
+                              <>
+                                {index > 0 && (
+                                  <span
+                                    class="readiness-separator"
+                                    aria-hidden="true"
+                                  >
+                                    ·
+                                  </span>
+                                )}
+                                <Tag
+                                  class="readiness-item"
+                                  data-tone={problem.tone}
+                                  data-last={
+                                    index === shownProblems.length - 1
+                                      ? ""
+                                      : undefined
+                                  }
+                                  href={problem.href}
+                                  type={problem.drawer ? "button" : undefined}
+                                  data-open-drawer={problem.drawer}
+                                  data-dwelling-id={
+                                    problem.drawer
+                                      ? billingCase.dwellingId
+                                      : undefined
+                                  }
+                                  data-focus={problem.focus}
+                                  style={
+                                    cut
+                                      ? `min-width:${itemMinCh(problem)}ch`
+                                      : undefined
+                                  }
+                                  data-tip={problem.detail ?? problem.text}
+                                  data-tip-clipped={
+                                    problem.detail ? undefined : ""
+                                  }
+                                >
+                                  {cut ? (
+                                    <span class="mid-truncate">
+                                      <span class="mid-start">
+                                        {problem.text.slice(
+                                          0,
+                                          -problem.keepEnd!
+                                        )}
+                                      </span>
+                                      <span class="mid-end">
+                                        {problem.text.slice(-problem.keepEnd!)}
+                                      </span>
+                                    </span>
+                                  ) : (
+                                    problem.text
+                                  )}
+                                  {problem.detail && (
+                                    <span class="sr-only">
+                                      {" "}
+                                      {problem.detail}
+                                    </span>
+                                  )}
+                                </Tag>
+                              </>
+                            );
+                          })}
+                        </span>
+                        {hiddenProblems.length > 0 && (
+                          <>
                             <button
                               type="button"
-                              class="readiness-item"
-                              data-tone="danger"
-                              data-open-drawer="readings"
-                              data-dwelling-id={billingCase.dwellingId}
-                              data-focus={item.meterType
-                                .toLowerCase()
-                                .replace(/_/g, "-")}
-                              data-tip={`${item.label ?? entityLabel(item.meterType, locale)} — ${t("missing")}`}
-                              data-tip-clipped
+                              class="readiness-more"
+                              popovertarget={`problems-${billingCase.id}`}
+                              aria-label={plural(
+                                locale,
+                                hiddenProblems.length,
+                                "{n} more problem",
+                                "{n} more problems"
+                              )}
                             >
-                              <Icon name="alert-triangle" size="xs" />
-                              {item.label ??
-                                entityLabel(item.meterType, locale)}{" "}
-                              — {t("missing")}
+                              +{hiddenProblems.length}
                             </button>
-                          ) : item &&
-                            typeof item === "object" &&
-                            "billingRuleId" in item ? (
-                            <button
-                              type="button"
-                              class="readiness-item"
-                              data-tone="danger"
-                              data-open-drawer="readings"
-                              data-dwelling-id={billingCase.dwellingId}
-                              data-focus={`rule-${item.billingRuleId}`}
-                              data-tip={`${item.ruleName} — ${t("missing")}`}
-                              data-tip-clipped
+                            <div
+                              class="case-menu"
+                              id={`problems-${billingCase.id}`}
+                              popover="auto"
                             >
-                              <Icon name="alert-triangle" size="xs" />
-                              {item.ruleName} — {t("missing")}
-                            </button>
-                          ) : (
-                            <span class="readiness-item" data-tone="danger">
-                              <Icon name="alert-triangle" size="xs" />{" "}
-                              {typeof item === "string"
-                                ? item.replace(
-                                    /^Missing current-period meter reading for dwelling (.+?)\.?$/,
-                                    (_match, number) =>
-                                      fill(
-                                        t(
-                                          "Missing current-period meter reading for dwelling {number}"
-                                        ),
-                                        { number }
-                                      )
-                                  )
-                                : t("Missing data")}
-                            </span>
-                          )
-                        )
-                      ) : (
-                        <span class="readiness-ok">
-                          <Icon name="check" size="xs" />
-                          {t("Required readings complete")}
-                        </span>
-                      )}
-                      {hiddenMissing > 0 && (
-                        <button
-                          type="button"
-                          class="readiness-more"
-                          data-open-drawer="readings"
-                          data-dwelling-id={billingCase.dwellingId}
-                          data-tip={t(
-                            "Open readings to see every missing item"
-                          )}
-                          aria-label={fill(t("{count} more missing items"), {
-                            count: String(hiddenMissing),
-                          })}
-                        >
-                          {fill(t("+{count} more"), {
-                            count: String(hiddenMissing),
-                          })}
-                        </button>
-                      )}
-                      {invoiceByEmail &&
-                        (billingEmail ? (
-                          <span class="sr-only">
-                            {t("Billing email ready")}
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            class="readiness-item"
-                            data-tone="warning"
-                            data-open-drawer="billing-details"
-                            data-dwelling-id={billingCase.dwellingId}
-                            data-focus="billing-email"
-                          >
-                            <Icon name="alert-triangle" size="xs" />{" "}
-                            {t("Billing email missing")}
-                          </button>
-                        ))}
-                      {invoiceByPaper && (
-                        <span class="readiness-item" data-tone="neutral">
-                          <Icon name="file-description" size="xs" />{" "}
-                          {t("Paper delivery")}
-                        </span>
-                      )}
-                      {recipientIncomplete && (
-                        <button
-                          type="button"
-                          class="readiness-item"
-                          data-tone="danger"
-                          data-open-drawer="billing-details"
-                          data-dwelling-id={billingCase.dwellingId}
-                          data-focus="recipient"
-                        >
-                          <Icon name="alert-triangle" size="xs" />{" "}
-                          {t("Recipient details incomplete")}
-                        </button>
-                      )}
-                      {organizationIncomplete && (
-                        <span class="readiness-item" data-tone="danger">
-                          <Icon name="alert-triangle" size="xs" />{" "}
-                          {t("Issuer or payment details incomplete")}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td>
-                    <StatusBadge status={billingCase.status} />
+                              {hiddenProblems.map((problem) => {
+                                const Tag = problem.href
+                                  ? "a"
+                                  : problem.drawer
+                                    ? "button"
+                                    : "span";
+                                return (
+                                  <Tag
+                                    class="problem-menu-item"
+                                    data-tone={problem.tone}
+                                    href={problem.href}
+                                    type={problem.drawer ? "button" : undefined}
+                                    data-open-drawer={problem.drawer}
+                                    data-dwelling-id={
+                                      problem.drawer
+                                        ? billingCase.dwellingId
+                                        : undefined
+                                    }
+                                    data-focus={problem.focus}
+                                  >
+                                    {problem.text}
+                                    {problem.detail && (
+                                      <span class="sr-only">
+                                        {" "}
+                                        {problem.detail}
+                                      </span>
+                                    )}
+                                  </Tag>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td class="invoice-cell numeric-column">
                     {invoiceHref ? (
@@ -967,14 +1123,29 @@ const MAX_MISSING = 2;
                     )}
                   </td>
                   <td class="next-action">
-                    {period.status === "LOCKED" ? (
+                    {billingCase.status === "OVERDUE" ? (
+                      <a
+                        class="btn-secondary btn-sm"
+                        href={`/admin/o/${organizationId}/payments/ledger?dwelling=${billingCase.dwellingId}`}
+                      >
+                        {t("Account statement")}
+                      </a>
+                    ) : billingCase.status === "PAID" &&
+                      !unsentPaid ? null : period.status === "LOCKED" ? (
                       <a
                         class="btn-secondary btn-sm"
                         href={invoiceHref ?? readingsHref}
                       >
                         {t(invoiceHref ? "View invoice" : "View readings")}
                       </a>
-                    ) : missing.length > 0 ? (
+                    ) : blockedBeforeInvoice && configOnly ? (
+                      <a
+                        class="btn-secondary btn-sm"
+                        href={noRule ? "#period-tariffs" : dwellingHref}
+                      >
+                        {t(noRule ? "Check tariffs" : "View dwelling")}
+                      </a>
+                    ) : blockedBeforeInvoice ? (
                       <button
                         type="button"
                         class="btn-secondary btn-sm"
@@ -998,7 +1169,7 @@ const MAX_MISSING = 2;
                           name="dwellingId"
                           value={billingCase.dwellingId}
                         />
-                        <button type="submit" class="btn-primary btn-sm">
+                        <button type="submit" class="btn-secondary btn-sm">
                           {t("Generate invoice")}
                         </button>
                       </form>
@@ -1021,6 +1192,19 @@ const MAX_MISSING = 2;
                         {t("Fix organization details")}
                       </a>
                     ) : billingCase.status === "DRAFT" ? (
+                      <a class="btn-secondary btn-sm" href={invoiceHref!}>
+                        {t("Review invoice")}
+                      </a>
+                    ) : billingCase.status === "PREPARED" && paperOnly ? (
+                      <a class="btn-secondary btn-sm" href={invoiceHref!}>
+                        {t("Record paper dispatch")}
+                      </a>
+                    ) : billingCase.status === "PREPARED" &&
+                      (emailSuppressed || deliveryUnknown) ? (
+                      <a class="btn-secondary btn-sm" href={invoiceHref!}>
+                        {t("Check delivery")}
+                      </a>
+                    ) : billingCase.status === "PREPARED" && emailAddedSince ? (
                       <a class="btn-secondary btn-sm" href={invoiceHref!}>
                         {t("Review invoice")}
                       </a>
@@ -1048,7 +1232,7 @@ const MAX_MISSING = 2;
                         />
                         <button
                           type="submit"
-                          class="btn-primary btn-sm"
+                          class="btn-secondary btn-sm"
                           data-confirm={t(
                             "Send this invoice to the resident by email now? Sent invoices cannot be edited."
                           )}
@@ -1056,13 +1240,13 @@ const MAX_MISSING = 2;
                           {t("Send invoice")}
                         </button>
                       </form>
+                    ) : unsentPaid ? (
+                      <a class="btn-secondary btn-sm" href={invoiceHref!}>
+                        {t("Review invoice")}
+                      </a>
                     ) : (
                       <a class="btn-secondary btn-sm" href={invoiceHref!}>
-                        {t(
-                          billingCase.status === "OVERDUE"
-                            ? "Review invoice"
-                            : "View invoice"
-                        )}
+                        {t("View invoice")}
                       </a>
                     )}
                   </td>
@@ -1116,14 +1300,16 @@ const MAX_MISSING = 2;
             })}
             {cases.length === 0 && (
               <tr>
-                <td colspan="7" class="empty-queue">
+                <td colspan="6" class="empty-queue">
                   <strong>
                     {t(
-                      statusFilter === "MISSING_DATA"
-                        ? "No dwellings are missing required billing data."
-                        : search || statusFilter
-                          ? "No billing cases match these filters."
-                          : "No billing cases for this period."
+                      search
+                        ? "No billing cases match these filters."
+                        : statusFilter === "MISSING_DATA"
+                          ? "No dwellings are missing required billing data."
+                          : statusFilter
+                            ? "No billing cases match these filters."
+                            : "No billing cases for this period."
                     )}
                   </strong>
                   <span>{periodName}</span>
@@ -1143,7 +1329,7 @@ const MAX_MISSING = 2;
       {!period.openingReadings &&
         period.status === "OPEN" &&
         dwellingsWithoutCase.length > 0 && (
-          <details id="add-dwelling" class="period-resource panel">
+          <details id="add-dwelling" class="period-resource">
             <summary class="chevron-toggle chevron-toggle-end font-semibold">
               {t("Dwellings not in this period")}
               <span class="ml-2 font-normal text-muted">
@@ -1181,7 +1367,7 @@ const MAX_MISSING = 2;
           </details>
         )}
 
-      <details id="period-tariffs" class="period-resource panel">
+      <details id="period-tariffs" class="period-resource">
         <summary class="chevron-toggle chevron-toggle-end font-semibold">
           {t("Tariffs in this period")}
           <span class="ml-2 font-normal text-muted">
@@ -1231,7 +1417,6 @@ const MAX_MISSING = 2;
 
 <script>
   import { onPageLoad } from "../../../../../../lib/ui/page-lifecycle";
-  import { labelStackTables } from "../../../../../../lib/ui/stack-tables";
 
   onPageLoad(() => {
     if (!document.querySelector(".workbench")) return;
@@ -1242,6 +1427,41 @@ const MAX_MISSING = 2;
         'input[name="invoiceIds"]'
       ),
     ];
+    const setToolbarSpace = (space: string) => {
+      document.documentElement.style.scrollPaddingBottom = space;
+      document
+        .querySelector<HTMLElement>(".workbench")
+        ?.style.setProperty("padding-bottom", space);
+    };
+    controller.signal.addEventListener("abort", () => setToolbarSpace(""));
+    // A bulk action submits only the selected invoices it can act on, so a
+    // blocked one in the selection is not sent to the server to be skipped.
+    // Capture listeners: the queue is re-rendered after saves, and formdata
+    // does not bubble.
+    let bulkStatus = "";
+    document.addEventListener(
+      "submit",
+      (event) => {
+        if ((event.target as Element).id !== "bulk-select-form") return;
+        bulkStatus =
+          (event.submitter as HTMLElement | null)?.dataset.bulkStatus ?? "";
+      },
+      { ...options, capture: true }
+    );
+    document.addEventListener(
+      "formdata",
+      (event) => {
+        if ((event.target as Element).id !== "bulk-select-form" || !bulkStatus)
+          return;
+        const eligible =
+          bulkStatus === "DRAFT" ? "prepareEligible" : "sendEligible";
+        event.formData.delete("invoiceIds");
+        for (const box of boxes())
+          if (box.checked && box.dataset[eligible] === "true")
+            event.formData.append("invoiceIds", box.value);
+      },
+      { ...options, capture: true }
+    );
     const updateSelection = () => {
       const all = boxes();
       const selected = all.filter((box) => box.checked);
@@ -1279,7 +1499,26 @@ const MAX_MISSING = 2;
           selected.length > 0 && selected.length < all.length;
         selectAll.disabled = all.length === 0;
       }
+      // Measured last, once the counts are in.
+      measureToolbar();
     };
+    // On phones the toolbar is pinned to the bottom (fixed). Keep its real
+    // height clear, measured because it wraps by language and width, so a
+    // focused row control and the last row are never hidden under it.
+    const measureToolbar = () => {
+      const toolbar = document.querySelector<HTMLElement>("#bulk-toolbar");
+      const pinned =
+        toolbar &&
+        !toolbar.hidden &&
+        getComputedStyle(toolbar).position === "fixed";
+      setToolbarSpace(
+        pinned
+          ? `${Math.ceil(innerHeight - toolbar.getBoundingClientRect().top) + 12}px`
+          : ""
+      );
+    };
+    // Rotation or a resize can wrap the toolbar or unpin it.
+    addEventListener("resize", measureToolbar, options);
     document.addEventListener(
       "change",
       (event) => {
@@ -1299,6 +1538,12 @@ const MAX_MISSING = 2;
       (event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
+        // A link to the tariffs opens their disclosure, not just scrolls to it.
+        if (target.closest('a[href="#period-tariffs"]')) {
+          const tariffs =
+            document.querySelector<HTMLDetailsElement>("#period-tariffs");
+          if (tariffs) tariffs.open = true;
+        }
         if (target.closest("#clear-selection")) {
           boxes().forEach((box) => {
             box.checked = false;
@@ -1307,7 +1552,7 @@ const MAX_MISSING = 2;
           // Select-all is not shown below sm; fall back to the first case.
           const selectAll =
             document.querySelector<HTMLInputElement>("#select-all");
-          (selectAll?.checkVisibility() ? selectAll : boxes()[0])?.focus();
+          (selectAll?.checkVisibility?.() ? selectAll : boxes()[0])?.focus();
         }
         if (target.closest("[data-open-lock-dialog]")) {
           target.closest("details")?.removeAttribute("open");
@@ -1404,16 +1649,9 @@ const MAX_MISSING = 2;
       },
       options
     );
-    // Drawer saves replace the queue. Delegated controls and freshly applied
-    // mobile labels keep the new rows fully usable without a page navigation.
-    document.addEventListener(
-      "workbench:refreshed",
-      () => {
-        labelStackTables();
-        updateSelection();
-      },
-      options
-    );
+    // Drawer saves replace the queue. Controls are delegated, so only the
+    // selection state has to be read again from the new rows.
+    document.addEventListener("workbench:refreshed", updateSelection, options);
     updateSelection();
     return () => {
       controller.abort();
@@ -1424,43 +1662,28 @@ const MAX_MISSING = 2;
 <style>
   .workbench {
     display: grid;
-    gap: 1.5rem;
+    gap: 1rem;
     min-width: 0;
   }
+  /* Title on the left, navigation and actions on the right; the right group
+     drops to its own row when the two do not fit. */
   .workbench-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1.5rem;
-  }
-  .workbench-header > div {
-    min-width: 0;
-  }
-  .eyebrow {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
-    color: var(--color-muted);
-    font-size: var(--text-xs);
+    justify-content: space-between;
+    gap: 0.75rem 1.5rem;
   }
   .period-title {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.75rem;
-    margin-top: 0.375rem;
+    gap: 0.5rem 0.75rem;
+    min-width: 0;
   }
-  /* Weight comes from .app-content h1.font-display: 600, 700 from 70rem. */
   .period-title h1 {
-    font-size: var(--text-display-lg);
-    line-height: 1.12;
-  }
-  .period-description {
-    margin-top: 0.625rem;
-    max-width: 36rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
+    font-size: var(--text-display-md);
+    line-height: 1.2;
   }
   .period-actions {
     display: flex;
@@ -1468,31 +1691,19 @@ const MAX_MISSING = 2;
     align-items: center;
     justify-content: flex-end;
     gap: 0.5rem;
+    margin-inline-start: auto;
   }
-  .more-menu summary {
-    display: grid;
-    width: var(--control-size-md);
-    min-height: var(--control-size-md);
-    place-items: center;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-control);
-    background: var(--color-surface);
-    color: var(--color-muted);
-    list-style: none;
-    cursor: pointer;
-  }
-  .more-menu summary:hover {
-    color: var(--color-foreground);
-    background: var(--color-surface-hover);
-  }
+  /* The "more" menu uses the shared dropdown panel (global.css). The case
+     menus are native popovers with the same look. */
   .case-menu {
     z-index: var(--z-popover);
     min-width: 11rem;
-    padding: 0.375rem;
+    padding: var(--space-1);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-control);
+    border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--color-surface-raised);
-    box-shadow: var(--elevation-raised);
+    box-shadow: var(--elevation-overlay);
   }
   /* Native top-layer popovers clear table clipping without changing columns. */
   .case-menu {
@@ -1518,39 +1729,69 @@ const MAX_MISSING = 2;
   }
   .case-menu a:hover,
   .case-menu button:hover {
-    background: var(--color-surface-hover);
+    background: var(--color-menu-hover);
   }
+  /* Previous and next month as one joined control, as on the dashboard. */
   .period-navigation {
     display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    font-size: var(--text-xs);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    font-size: var(--text-sm);
   }
   .period-navigation a {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-weight: 550;
-    min-height: 2rem;
-  }
-  .period-navigation a:hover {
-    color: var(--color-primary);
-    text-decoration: underline;
-    text-underline-offset: 0.2em;
-  }
-  .period-navigation [aria-disabled="true"] {
-    display: inline-flex;
-    align-items: center;
-    color: var(--color-muted);
-  }
-  .financial-label {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    justify-content: center;
+    gap: 0.375rem;
+    min-height: var(--control-size-md);
+    padding: 0.5rem 0.875rem;
+    color: var(--color-primary);
+    font-weight: 600;
+    white-space: nowrap;
   }
-  .financial-label :global(svg) {
+  .period-navigation a + a {
+    border-inline-start: 1px solid var(--color-border);
+  }
+  .period-navigation a:first-child {
+    border-start-start-radius: var(--radius-control);
+    border-end-start-radius: var(--radius-control);
+  }
+  .period-navigation a:last-child {
+    border-start-end-radius: var(--radius-control);
+    border-end-end-radius: var(--radius-control);
+  }
+  .period-navigation a:hover {
+    background: var(--color-hover);
+  }
+  /* The money of the month on one line. The breakdown is on the dashboard. */
+  .financial-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 2.5rem;
+    padding: 0.75rem 1.25rem;
+    border: var(--panel-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    font-size: var(--text-sm);
+  }
+  .financial-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
     color: var(--color-muted);
-    flex: none;
+  }
+  .financial-stat strong {
+    color: var(--color-foreground);
+    font-size: var(--text-base);
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .financial-note {
+    color: var(--color-muted);
+    font-size: var(--text-xs);
   }
   .period-resources {
     display: grid;
@@ -1559,6 +1800,9 @@ const MAX_MISSING = 2;
   .period-resource {
     min-width: 0;
     padding: 1rem 1.25rem;
+    border: var(--panel-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
     font-size: var(--text-sm);
   }
   .period-resource summary {
@@ -1567,142 +1811,166 @@ const MAX_MISSING = 2;
   .period-resource[open] summary {
     padding-bottom: 0.5rem;
   }
+  .lock-dialog {
+    width: min(30rem, calc(100vw - 2rem));
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface-raised);
+    color: var(--color-foreground);
+    box-shadow: var(--elevation-modal);
+  }
+  .lock-dialog::backdrop {
+    background: var(--color-backdrop);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lock-dialog {
+      opacity: 0;
+      scale: 0.96;
+      transition:
+        opacity 200ms ease,
+        scale 200ms ease,
+        overlay 200ms allow-discrete,
+        display 200ms allow-discrete;
+    }
+    .lock-dialog[open] {
+      opacity: 1;
+      scale: 1;
+    }
+    @starting-style {
+      .lock-dialog[open] {
+        opacity: 0;
+        scale: 0.96;
+      }
+    }
+    .lock-dialog::backdrop {
+      background: transparent;
+      transition:
+        background-color 200ms ease,
+        overlay 200ms allow-discrete,
+        display 200ms allow-discrete;
+    }
+    .lock-dialog[open]::backdrop {
+      background: var(--color-backdrop);
+    }
+    @starting-style {
+      .lock-dialog[open]::backdrop {
+        background: transparent;
+      }
+    }
+  }
+  .dialog-body {
+    display: flex;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+  .dialog-icon {
+    display: grid;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--tone-warning-bg);
+    color: var(--tone-warning-text);
+    font-weight: 800;
+  }
+  .dialog-body h2 {
+    font-size: var(--text-lg);
+    font-weight: 700;
+  }
+  .dialog-body p {
+    margin-top: 0.5rem;
+    color: var(--color-muted);
+    font-size: var(--text-sm);
+    line-height: 1.6;
+  }
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--color-border);
+  }
   .case-queue {
     display: grid;
     gap: 0;
     min-width: 0;
+    /* The table becomes a list by the room this panel has, not the screen. */
+    container-type: inline-size;
+    border: var(--panel-border);
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
   }
   .queue-heading {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
-    padding: 1.25rem;
+    gap: 0.5rem 1rem;
+    padding: 1rem 1.25rem 0.5rem;
   }
   .queue-heading h2 {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
     font-size: var(--text-base);
     font-weight: 650;
   }
-  .queue-count {
-    display: inline-grid;
-    place-items: center;
-    min-width: 1.5rem;
-    height: 1.5rem;
-    padding-inline: 0.375rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-badge);
-    color: var(--color-muted);
-    font-size: var(--text-xs);
-    font-variant-numeric: tabular-nums;
-  }
-  .queue-heading p {
-    margin-top: 0.25rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .workflow-overview {
-    min-width: 0;
-  }
-  /* Stage filters are tabs, not boxes: one rule under the row, an underline on
-     the active one. Nothing is bordered inside the panel. */
-  .workflow-scroll {
-    padding: 0 1.25rem;
-    overflow-x: auto;
-    /* The row scrolls inside the panel. Positioned, so the screen-reader-only
-       text inside the tabs is clipped with it instead of widening the page. */
-    position: relative;
-    contain: inline-size;
-  }
-  .workflow-rail {
-    display: flex;
-    gap: 0.25rem;
-    min-width: max-content;
-    border-bottom: 1px solid var(--color-border);
-  }
-  .workflow-filter {
-    display: flex;
-    align-items: center;
-    min-height: var(--control-size-md);
-    padding: 0.5rem 0.875rem;
-    border-bottom: 2px solid transparent;
-    color: var(--color-muted);
-    transition: color var(--duration-feedback);
-  }
-  .workflow-filter:hover {
-    color: var(--color-foreground);
-  }
-  .workflow-filter:focus-visible {
-    outline: 2px solid var(--color-focus-ring);
-    outline-offset: -2px;
-  }
-  .workflow-filter[aria-current="page"] {
-    border-bottom-color: var(--color-primary);
-    color: var(--color-foreground);
-  }
-  .workflow-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    white-space: nowrap;
-  }
-  .workflow-label strong {
-    min-width: 1.25rem;
-    padding: 0 0.375rem;
-    border-radius: 999px;
-    background: var(--tone-neutral-bg);
-    color: var(--tone-neutral-text);
-    font-size: var(--text-xs);
-    font-variant-numeric: tabular-nums;
-    line-height: 1.25rem;
-    text-align: center;
-  }
-  .workflow-icon {
-    display: flex;
-    flex: none;
-    color: var(--color-muted);
-  }
-  [data-tone="danger"] .workflow-icon {
-    color: var(--color-destructive);
-  }
-  [data-tone="info"] .workflow-icon {
-    color: var(--color-info);
-  }
-  [data-tone="warning"] .workflow-icon {
-    color: var(--color-warning);
-  }
-  [data-tone="success"] .workflow-icon {
-    color: var(--color-success);
-  }
   .queue-filters {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem;
-    min-width: 0;
-  }
-  .queue-search {
-    position: relative;
-    flex: 1 1 10rem;
+    flex: 0 1 20rem;
     min-width: 0;
   }
   .queue-filters input {
     width: 100%;
     font-size: var(--text-sm);
   }
-  .queue-filters select {
-    padding-left: 0.75rem;
-    max-width: 100%;
-    width: 10.5rem;
+  /* Stage filters are tabs, not boxes: one rule under the row, an underline on
+     the active one. They wrap to a second row instead of scrolling, so no
+     stage is ever hidden. */
+  .workflow-rail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.25rem;
+    padding: 0 1.25rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .workflow-filter {
+    /* Holds the screen-reader-only description, so it cannot widen the page. */
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.625rem;
+    border-bottom: 2px solid transparent;
+    color: var(--color-muted);
     font-size: var(--text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    transition: color var(--duration-feedback);
+  }
+  .workflow-filter:hover {
+    color: var(--color-foreground);
+  }
+  .workflow-filter:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
+  .workflow-filter[aria-current="page"] {
+    border-bottom-color: var(--color-primary);
+    color: var(--color-foreground);
+  }
+  .workflow-filter strong {
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
   }
   .queue-result {
-    padding: 0.75rem 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 1rem;
+    padding: 0.5rem 1.25rem;
     color: var(--color-muted);
     font-size: var(--text-xs);
   }
@@ -1728,7 +1996,8 @@ const MAX_MISSING = 2;
     padding: 0.75rem 1rem;
     border: 1px solid var(--color-input-border);
     border-radius: var(--radius-control);
-    background: var(--color-nav-active-bg);
+    /* Opaque: rows scroll under it. */
+    background: var(--color-surface-raised);
     box-shadow: var(--elevation-raised);
   }
   .bulk-toolbar[hidden] {
@@ -1747,9 +2016,10 @@ const MAX_MISSING = 2;
   .selection-summary > span {
     color: var(--color-muted);
   }
+  /* Five columns that fit the panel: no minimum width, so nothing is pushed
+     off the side at 1024px in any language. Problems sit under the status. */
   .case-table {
     width: 100%;
-    min-width: 55rem;
     border-collapse: separate;
     border-spacing: 0;
     text-align: left;
@@ -1759,9 +2029,7 @@ const MAX_MISSING = 2;
     min-width: 0;
     max-width: 100%;
     border: 0;
-    border-top: 1px solid var(--color-border);
     border-radius: 0 0 var(--radius-panel) var(--radius-panel);
-    corner-shape: squircle;
     box-shadow: none;
     overflow-x: auto;
   }
@@ -1775,7 +2043,7 @@ const MAX_MISSING = 2;
   }
   .case-table th,
   .case-table td {
-    padding: 0.875rem 0.75rem;
+    padding: 0.625rem 0.75rem;
     border-bottom: 1px solid var(--color-border);
     vertical-align: middle;
   }
@@ -1783,7 +2051,7 @@ const MAX_MISSING = 2;
     border-bottom: 0;
   }
   .case-table tbody tr:hover {
-    background: var(--color-surface-hover);
+    background: var(--color-hover);
   }
   .case-table tbody tr[data-selected] {
     background: var(--color-nav-active-bg);
@@ -1792,9 +2060,19 @@ const MAX_MISSING = 2;
     width: 2.75rem;
     text-align: center;
   }
-  .case-table th.select-column,
-  .case-table td.select-column {
-    padding: 0.25rem;
+  /* Routine stages: plain text, so the tinted badges mark only exceptions. */
+  .status-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    letter-spacing: var(--tracking-small);
+    line-height: 1rem;
+  }
+  .dwelling-cell {
+    overflow-wrap: break-word;
   }
   .dwelling-cell a {
     color: var(--color-foreground);
@@ -1807,89 +2085,158 @@ const MAX_MISSING = 2;
   }
   .dwelling-cell span {
     display: block;
-    margin-top: 0.25rem;
     color: var(--color-muted);
     font-size: var(--text-xs);
   }
-  .readiness-ok {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    color: var(--color-muted);
-    font-size: var(--text-xs);
-  }
-  .readiness-list {
+  /* A case's problems: one line under its status. Plain caption text coloured
+     by meaning, separated by dots. A definite max-width: with nowrap, the line
+     would otherwise set the column's minimum width and widen the table. */
+  .readiness-line {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.25rem;
-    max-width: 24rem;
+    align-items: center;
+    gap: 0 0.375rem;
+    min-width: 0;
+    max-width: 18rem;
+    margin-top: 0.25rem;
+    font-size: var(--text-xs);
+    letter-spacing: var(--tracking-small);
+    line-height: 1.5rem;
+    white-space: nowrap;
   }
-  /* One line each. A long meter or rule name truncates (its tooltip carries the
-     full text) instead of growing the row. */
-  .readiness-item {
-    display: block;
-    /* A definite cap: with nowrap, a percentage would let the longest tag set
-       the table's minimum width and push the page sideways. */
-    max-width: 24rem;
+  .readiness-icon {
+    display: flex;
+    flex-shrink: 0;
+    color: var(--color-warning);
+  }
+  .readiness-line[data-tone="danger"] .readiness-icon {
+    color: var(--color-destructive);
+  }
+  .readiness-separator {
+    flex-shrink: 0;
+    color: var(--color-muted);
+  }
+  /* The named problems are the only part that clips; the icon and "+N" sit
+     outside it, so the count can never be pushed out. Its minimum is what its
+     names need (4ch each, a serial's kept digits plus an ellipsis, set per
+     row), so no name
+     is ever clipped away: the column grows that little instead. */
+  .readiness-items {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: 0 0.375rem;
+    min-width: var(--items-min, 0);
     overflow: hidden;
-    padding: 0.25rem 0.5rem;
+  }
+  .readiness-item {
+    padding: 0;
     border: none;
-    border-radius: var(--radius-badge);
-    background: var(--tone-neutral-bg);
-    color: var(--tone-neutral-text);
+    background: none;
+    color: var(--color-muted);
     font: inherit;
     font-size: var(--text-xs);
-    line-height: 1.35;
+    line-height: 1.5;
     text-align: left;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .readiness-item :global(svg) {
     display: inline-block;
     margin-right: 0.25rem;
-    vertical-align: -2px;
+    vertical-align: -3px;
   }
-  /* Only tags that carry their full text in a tooltip truncate; the short fixed
-     ones wrap rather than lose words. */
-  .readiness-item:not([data-tip]) {
-    overflow: visible;
+  /* Named problems keep their width; the last one gives way first and is
+     cut at its end (Apple's tail truncation). */
+  .readiness-line .readiness-item {
+    display: flex;
+    align-items: center;
+    flex: 0 1 auto;
+    min-width: 4ch;
+    overflow: hidden;
+    line-height: 1.5rem;
+  }
+  .readiness-line .readiness-item:not(:has(.mid-truncate)) {
+    display: block;
+    text-overflow: ellipsis;
+  }
+  /* Everything shrinks, so the "+N" is never pushed out; the last name
+     shrinks four times faster, so it gives way first. */
+  .readiness-line .readiness-item[data-last] {
+    flex-shrink: 4;
+  }
+  /* A name told apart by its end (a meter serial) is cut in the middle, so
+     the distinguishing tail stays visible (Apple's middle truncation). */
+  .mid-truncate {
+    display: flex;
+    min-width: 0;
+  }
+  .mid-start {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mid-end {
+    flex-shrink: 0;
+  }
+  /* The menu sits inside the one-line row: undo its nowrap so a long tariff
+     or meter name wraps instead of scrolling sideways on a phone. */
+  .readiness-line .case-menu {
+    max-width: min(20rem, calc(100vw - 1rem));
+    letter-spacing: normal;
     white-space: normal;
   }
-  button.readiness-item {
+  .problem-menu-item {
+    display: block;
+    padding: 0.625rem 0.75rem;
+    font-size: var(--text-sm);
+    overflow-wrap: anywhere;
+  }
+  .case-menu .problem-menu-item[data-tone="danger"] {
+    color: var(--color-destructive);
+  }
+  .case-menu .problem-menu-item[data-tone="warning"] {
+    color: var(--color-warning);
+  }
+  :is(button, a).readiness-item {
     cursor: pointer;
     text-decoration: underline;
     text-decoration-style: dotted;
     text-underline-offset: 2px;
   }
-  button.readiness-item:hover,
-  button.readiness-item:focus-visible {
+  :is(button, a).readiness-item:hover,
+  :is(button, a).readiness-item:focus-visible {
     text-decoration-style: solid;
   }
+  /* The count is never cut. */
   .readiness-more {
-    padding: 0.125rem 0.25rem;
+    flex-shrink: 0;
+    padding: 0;
     border: none;
     background: none;
     color: var(--color-primary);
     font: inherit;
     font-size: var(--text-xs);
     font-weight: 600;
+    line-height: 1.5rem;
     cursor: pointer;
   }
   .readiness-more:hover {
     text-decoration: underline;
   }
   .readiness-item[data-tone="danger"] {
-    background: var(--tone-danger-bg);
-    color: var(--tone-danger-text);
+    color: var(--color-destructive);
   }
   .readiness-item[data-tone="success"] {
-    background: var(--tone-success-bg);
-    color: var(--tone-success-text);
+    color: var(--color-success);
   }
   .readiness-item[data-tone="warning"] {
-    background: var(--tone-warning-bg);
-    color: var(--tone-warning-text);
+    color: var(--color-warning);
+  }
+  /* Tags inside the table are caption text, not bold body text. */
+  .case-table :global(.status-badge) {
+    padding: 0.125rem 0.375rem;
+    font-size: var(--text-xs);
+    font-weight: 500;
+    letter-spacing: var(--tracking-small);
+    line-height: 1rem;
   }
   .numeric-column {
     text-align: right;
@@ -1897,7 +2244,7 @@ const MAX_MISSING = 2;
   }
   .invoice-cell a {
     display: grid;
-    gap: 0.25rem;
+    gap: 0.125rem;
   }
   .invoice-cell span,
   .invoice-cell small {
@@ -1939,67 +2286,37 @@ const MAX_MISSING = 2;
   .empty-queue a {
     margin-top: 1rem;
   }
-  @media (width < 70rem) {
-    .workbench-header {
-      align-items: flex-start;
-    }
-    .queue-filters {
-      width: 100%;
-    }
-  }
-  @media (width < 48rem) {
-    .workbench-header {
-      flex-direction: column;
-      gap: 1rem;
-    }
-    .period-actions {
-      justify-content: flex-start;
-      width: 100%;
-    }
-    .financial-label {
-      font-size: var(--text-xs);
-    }
-    .financial-label :global(svg) {
-      display: none;
-    }
-  }
   @media (width < 40rem) {
-    .workbench {
-      gap: 1rem;
+    .period-actions {
+      width: 100%;
     }
-    .period-actions > a,
-    .period-actions > form {
+    .period-actions > :is(a, form, nav) {
       flex: 1 1 auto;
+    }
+    .period-navigation a {
+      flex: 1;
     }
     .period-actions form .btn-primary {
       width: 100%;
     }
-    .queue-heading {
-      padding: 1rem;
-    }
-    .queue-heading > div {
-      min-width: 0;
-    }
-    .queue-filters {
-      gap: 0.5rem;
-    }
-    .queue-search {
-      flex-basis: 100%;
-    }
-    .queue-filters select {
-      flex: 1;
-      width: 0;
-      min-width: 0;
-    }
-    .workflow-scroll {
-      padding-inline: 0.75rem;
-    }
+    .financial-summary,
+    .queue-heading,
     .queue-result {
       padding-inline: 1rem;
     }
+    .queue-filters {
+      flex-basis: 100%;
+    }
+    .workflow-rail {
+      padding-inline: 0.5rem;
+    }
+    /* Phones: pinned to the bottom, so the actions stay in reach while the
+       admin ticks rows further down. */
     .bulk-toolbar {
-      position: static;
-      margin-inline: 0.75rem;
+      position: fixed;
+      inset: auto 0.75rem 0.75rem;
+      z-index: var(--z-popover);
+      margin: 0;
       padding: 0.75rem;
     }
     .bulk-actions {
@@ -2009,46 +2326,102 @@ const MAX_MISSING = 2;
     .bulk-actions .btn-secondary {
       flex: 1;
     }
-    .case-table-wrap {
-      padding: 0.75rem;
-    }
-    .case-table tr {
-      margin-bottom: 0.75rem;
-    }
-    .case-table tr:last-child {
-      margin-bottom: 0;
-    }
-    .readiness-list {
-      align-items: flex-end;
-    }
-    .next-action {
-      white-space: normal;
-    }
-    .case-menu-trigger {
-      margin-left: auto;
-    }
     .dialog-actions {
       flex-wrap: wrap;
     }
   }
-  @media (width < 40rem) {
-    .readiness-list {
-      flex: 1 1 0;
-      min-width: 0;
-      max-width: none;
+  /* Narrower than the five columns need (54rem holds the longest Russian
+     labels): each case is three short lines instead of a table row. Dwelling
+     and amount, then the status with any problems, then the action. */
+  @container (width < 54rem) {
+    .workflow-filter {
+      min-height: 2.25rem;
     }
-    .readiness-item {
+    .case-table thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+    .case-table,
+    .case-table tbody,
+    .case-table td {
+      display: block;
+    }
+    .case-table tbody tr {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-areas:
+        "select dwelling invoice"
+        "status status status"
+        "action action menu";
+      align-items: center;
+      gap: 0.375rem 0.75rem;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .case-table tbody tr:last-child {
+      border-bottom: 0;
+    }
+    .case-table td {
+      padding: 0;
+      border: 0;
+    }
+    .select-column {
+      grid-area: select;
+      width: auto;
+    }
+    /* A case that cannot be selected gives its checkbox space to the name. */
+    .select-column:not(:has(input)) {
+      display: none;
+    }
+    /* The header row is hidden here; its checkbox must not take focus. */
+    #select-all {
+      display: none;
+    }
+    .dwelling-cell {
+      grid-area: dwelling;
+    }
+    tr:not(:has(input[name="invoiceIds"])) .dwelling-cell {
+      grid-column: 1 / 3;
+    }
+    .invoice-cell {
+      grid-area: invoice;
+    }
+    .status-cell {
+      grid-area: status;
+    }
+    .next-action {
+      grid-area: action;
+      white-space: normal;
+    }
+    .menu-cell {
+      grid-area: menu;
+      width: auto;
+      justify-self: end;
+    }
+    .readiness-line {
       max-width: 100%;
+    }
+    .case-table tbody tr:has(.empty-queue) {
+      display: block;
     }
   }
   @media (pointer: coarse) {
+    .readiness-line {
+      line-height: 2.75rem;
+    }
+    .readiness-line .readiness-item,
+    .readiness-line .readiness-more {
+      line-height: 2.75rem;
+    }
     .readiness-item:is(button, a),
     .readiness-more,
     .clear-filters,
     .clear-selection,
-    .period-resource summary,
-    .period-navigation a {
-      min-height: var(--control-size-md);
+    .period-resource summary {
+      min-height: 2.75rem;
     }
   }
   @media (forced-colors: active) {
@@ -2056,9 +2429,6 @@ const MAX_MISSING = 2;
     .case-table tr[data-selected] {
       outline: 2px solid Highlight;
       outline-offset: -2px;
-    }
-    .readiness-item {
-      border: 1px solid CanvasText;
     }
   }
 </style>

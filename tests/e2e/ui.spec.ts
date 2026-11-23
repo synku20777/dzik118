@@ -261,6 +261,19 @@ test("admin routes, keyboard navigation, filters and locked actions", async ({
   ]) {
     await inspect(page, `${base}/${path}`);
   }
+  await page.goto(`${base}/settings/rules?lang=en`);
+  await expect(page.locator(".mutation-activity")).toBeHidden();
+  await page
+    .locator('.page-actions button[data-open-tariff-drawer="create"]')
+    .click();
+  await expect(
+    page.locator('#tariff-form input:not([type="hidden"])').first()
+  ).toHaveAttribute("id", "tariff-enabled");
+  await expect(page.locator("#tariff-vatRate")).toHaveValue("21");
+  await expect(page.locator("#tariff-drawer-save")).toHaveText("Create tariff");
+  await page
+    .locator("#tariff-drawer footer [data-close-tariff-drawer]")
+    .click();
   await page.goto(`${base}/periods`);
   const periods = await page
     .locator("tbody a")
@@ -281,10 +294,11 @@ test("admin routes, keyboard navigation, filters and locked actions", async ({
       await expect(page.locator("#bulk-toolbar")).toBeHidden();
       selectionChecked = true;
     }
+    // A locked month offers no bulk generation at all.
     if (await page.locator("#locked-notice").count()) {
       await expect(
-        page.getByRole("button", { name: "Generate all eligible" })
-      ).toBeDisabled();
+        page.getByRole("button", { name: "Generate and refresh drafts" })
+      ).toHaveCount(0);
     }
     const invoice = await page
       .locator('tbody a[href*="/invoices/"]')
@@ -299,6 +313,29 @@ test("admin routes, keyboard navigation, filters and locked actions", async ({
   await page.locator("#type-filter").selectOption("PARKING");
   await page.waitForURL(/type=PARKING/);
   await expect(page.locator("tbody tr").first()).toContainText("Parking");
+  const dwellingViews = page.getByRole("navigation", {
+    name: "Dwellings view",
+  });
+  await dwellingViews.getByRole("link", { name: "Building" }).click();
+  await expect(
+    dwellingViews.getByRole("link", { name: "Building" })
+  ).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("region", { name: "Building" })).toBeVisible();
+  const arrange = page.getByRole("button", { name: "Arrange", exact: true });
+  await expect(arrange).toBeHidden();
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect(
+    page.locator("astro-island:not([ssr])").filter({ has: arrange })
+  ).toHaveCount(1);
+  await arrange.click();
+  const done = page.getByRole("button", { name: "Done", exact: true });
+  await expect(done).toBeVisible();
+  await done.click();
+  await page.setViewportSize({ width: 390, height: 900 });
+  await dwellingViews.getByRole("link", { name: "Table" }).click();
+  await expect(
+    page.locator(".table-wrap").filter({ has: page.locator("table") })
+  ).toHaveCSS("border-top-width", "0px");
   await page.goto(`${base}/dashboard`);
   await page.keyboard.press("Tab");
   await expect(
@@ -318,7 +355,7 @@ test("admin routes, keyboard navigation, filters and locked actions", async ({
   await expect(
     page.locator(`.admin-sidebar .app-nav a[href="${base}/guide"]`)
   ).toHaveAttribute("aria-current", "page");
-  await expect(page.locator("main .guide-steps > li")).toHaveCount(10);
+  await expect(page.locator("main .guide-steps > li")).toHaveCount(11);
 });
 
 test("first meter is reconciled immediately and its dynamic archive control works", async ({
@@ -371,13 +408,27 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await expect(page.locator("[data-mutation-summary]")).toHaveText(
     "All changes saved"
   );
+  await expect(page.locator(".mutation-activity")).toBeVisible();
+  await expect(page.locator(".mutation-activity")).toBeHidden({
+    timeout: 6_000,
+  });
   expect(dwellingRequests).toBe(1);
   const dwellingLink = page.locator("tbody a.row-link-target", {
     hasText: dwellingNumber,
   });
   await dwellingLink.click();
 
-  await page.locator("#basic-info-details summary").click();
+  const editBasic = page.locator('[data-editor-open="basic"]');
+  const basicEditor = page.locator("#editor-basic");
+  const cancelBasic = basicEditor.locator("[data-editor-cancel]");
+  const addMeter = page.locator('[data-editor-open="meter"]');
+  const areaBeforeSave = await page
+    .locator('[data-kpi="area"] p')
+    .textContent();
+  const countBeforeSave = await page
+    .locator('[data-kpi="resident-count"] p')
+    .textContent();
+  await editBasic.click();
   const basicInfoBillingName = `Basic E2E ${Date.now()}`;
   const basicInfoArea = "45.75";
   const basicInfoResidentCount = "3";
@@ -427,20 +478,9 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await expect(page.locator("[data-mutation-summary]")).toHaveText(
     "1 change saving"
   );
-  await expect(page.locator('[data-kpi="area"] p')).toHaveText(
-    `${basicInfoArea} m²`
-  );
+  await expect(page.locator('[data-kpi="area"] p')).toHaveText(areaBeforeSave!);
   await expect(page.locator('[data-kpi="resident-count"] p')).toHaveText(
-    basicInfoResidentCount
-  );
-  await expect(page.locator('dd[data-field="billingName"]')).toHaveText(
-    basicInfoBillingName
-  );
-  await expect(page.locator('dd[data-field="areaM2"]')).toHaveText(
-    basicInfoArea
-  );
-  await expect(page.locator('dd[data-field="residentCount"]')).toHaveText(
-    basicInfoResidentCount
+    countBeforeSave!
   );
 
   releaseBasicInfo();
@@ -451,10 +491,7 @@ test("first meter is reconciled immediately and its dynamic archive control work
   page.off("request", onBasicInfoRequest);
 
   await expect(page.locator(".mutation-toasts")).toContainText("Changes saved");
-  await expect(page.locator("#basic-info-details")).not.toHaveAttribute(
-    "open",
-    ""
-  );
+  await expect(basicEditor).toBeHidden();
   await expect(page.locator('[data-kpi="area"] p')).toHaveText(
     `${basicInfoArea} m²`
   );
@@ -487,7 +524,7 @@ test("first meter is reconciled immediately and its dynamic archive control work
   );
 
   // Clear billingName via the form, save, reload, confirm it stays empty
-  await page.locator("#basic-info-details summary").click();
+  await editBasic.click();
   await page.locator('#basic-info-form input[name="billingName"]').fill("");
 
   let releaseClearGate!: () => void;
@@ -512,7 +549,9 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await expect(page.locator("[data-mutation-summary]")).toHaveText(
     "1 change saving"
   );
-  await expect(page.locator('dd[data-field="billingName"]')).toHaveText("—");
+  await expect(page.locator('dd[data-field="billingName"]')).toHaveText(
+    basicInfoBillingName
+  );
 
   releaseClearGate();
   await expect(page.locator("[data-mutation-summary]")).toHaveText(
@@ -521,15 +560,12 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await page.unroute("**/*", holdClearRequest);
 
   await expect(page.locator(".mutation-toasts")).toContainText("Changes saved");
-  await expect(page.locator("#basic-info-details")).not.toHaveAttribute(
-    "open",
-    ""
-  );
+  await expect(basicEditor).toBeHidden();
   await expect(page.locator('dd[data-field="billingName"]')).toHaveText("—");
 
   await page.reload();
   await expect(page.locator('dd[data-field="billingName"]')).toHaveText("—");
-  await page.locator("#basic-info-details summary").click();
+  await editBasic.click();
   await expect(
     page.locator('#basic-info-form input[name="billingName"]')
   ).toHaveValue("");
@@ -570,9 +606,8 @@ test("first meter is reconciled immediately and its dynamic archive control work
       "All changes saved"
     );
     await page.unroute("**/*", hold);
-    // A successful save auto-closes the disclosure (see onSuccess in the
-    // page's script) -- reopen it so the next fill() has a visible input.
-    await page.locator("#basic-info-details summary").click();
+    await expect(basicEditor).toBeHidden();
+    await editBasic.click();
   }
 
   const validEmail = `e2e-${Date.now()}@example.com`;
@@ -585,7 +620,7 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await expect(billingEmailDd).toHaveText("—");
   await page.reload();
   await expect(billingEmailDd).toHaveText("—");
-  await page.locator("#basic-info-details summary").click();
+  await editBasic.click();
   await expect(billingEmailInput).toHaveValue("");
 
   const paddedEmail = `e2e-padded-${Date.now()}@example.com`;
@@ -593,9 +628,9 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await saveBasicInfo();
   await page.reload();
   await expect(billingEmailDd).toHaveText(paddedEmail);
-  await page.locator("#basic-info-details summary").click();
+  await editBasic.click();
   await expect(billingEmailInput).toHaveValue(paddedEmail);
-  await page.locator("#basic-info-details summary").click();
+  await cancelBasic.click();
 
   const emailCheckbox = page.locator(
     '[data-delivery-form] input[name="invoiceByEmail"]'
@@ -759,7 +794,7 @@ test("first meter is reconciled immediately and its dynamic archive control work
   const onPageError = (err: Error) => pageErrors.push(err);
   page.on("pageerror", onPageError);
 
-  await page.locator("#basic-info-details summary").click();
+  await editBasic.click();
   const navBillingName = `Nav Persisted ${Date.now()}`;
   const navArea = (10 + (Date.now() % 9000) / 100).toFixed(2);
   await page
@@ -871,8 +906,8 @@ test("first meter is reconciled immediately and its dynamic archive control work
   expect(pageErrors).toEqual([]);
   page.off("pageerror", onPageError);
 
-  await page.locator("#basic-info-details summary").click();
-  await expect(page.locator("#basic-info-details")).toHaveAttribute("open", "");
+  await editBasic.click();
+  await expect(basicEditor).toBeVisible();
   const preBillingName =
     (
       await page.locator('dd[data-field="billingName"]').textContent()
@@ -941,14 +976,10 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await expect.poll(() => rollbackUpdateRequests).toBe(1);
   await expect.poll(() => mutationStatuses(page)).toContain("pending");
   await expect(page.locator('dd[data-field="billingName"]')).toHaveText(
-    rollbackBillingName
+    preBillingName
   );
-  await expect(page.locator('dd[data-field="areaM2"]')).toHaveText(
-    rollbackArea
-  );
-  await expect(page.locator('[data-kpi="area"] p')).toHaveText(
-    `${rollbackArea} m²`
-  );
+  await expect(page.locator('dd[data-field="areaM2"]')).toHaveText(preAreaM2);
+  await expect(page.locator('[data-kpi="area"] p')).toHaveText(preKpiArea);
 
   releaseRollbackGate();
 
@@ -968,9 +999,7 @@ test("first meter is reconciled immediately and its dynamic archive control work
     page.locator("#basic-info-form button[type=submit]")
   ).toBeEnabled();
 
-  const inlineAlert = page.locator(
-    '#basic-info-details .edit-disclosure-panel [role="alert"]'
-  );
+  const inlineAlert = basicEditor.locator('.form-inline-error[role="alert"]');
   await expect(inlineAlert).toBeVisible();
   await expect(inlineAlert).toHaveText("Could not save dwelling information");
 
@@ -995,11 +1024,11 @@ test("first meter is reconciled immediately and its dynamic archive control work
     "All changes saved"
   );
   await expect.poll(() => mutationStatuses(page)).not.toContain("error");
-  await page.locator("#basic-info-details summary").click();
+  await cancelBasic.click();
 
   await page.getByRole("tab", { name: "Meters" }).click();
   await expect(page.locator("#meters-empty-state")).toBeVisible();
-  await page.locator("#meter-details summary").click();
+  await addMeter.click();
   const label = `Regression meter ${Date.now()}`;
   await page.locator('#meter-form input[name="unit"]').fill("m3");
   await page.locator('#meter-form input[name="label"]').fill(label);
@@ -1042,7 +1071,7 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await expect(row.locator("[data-meter-archive-form]")).toHaveCount(1);
   await expect(page.locator(".mutation-toasts")).toContainText("Meter added");
 
-  await page.locator("#meter-details summary").click();
+  await addMeter.click();
   const secondLabel = `Second meter ${Date.now()}`;
   await page.locator('#meter-form input[name="unit"]').fill("m3");
   await page.locator('#meter-form input[name="label"]').fill(secondLabel);
@@ -1054,7 +1083,7 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await expect(secondRow).not.toHaveAttribute("data-pending");
   expect(createRequests).toBe(2);
 
-  await page.locator("#meter-details summary").click();
+  await addMeter.click();
   const awayLabel = `Navigate-away meter ${Date.now()}`;
   await page.locator('#meter-form input[name="unit"]').fill("m3");
   await page.locator('#meter-form input[name="label"]').fill(awayLabel);
@@ -1098,8 +1127,8 @@ test("first meter is reconciled immediately and its dynamic archive control work
     page.locator("#meters .meter-row", { hasText: awayLabel })
   ).toBeVisible();
 
-  await page.getByRole("tab", { name: "Residents" }).click();
-  await page.locator("#resident-details summary").click();
+  await page.getByRole("tab", { name: "Overview" }).click();
+  await page.locator('[data-editor-open="resident"]').click();
   await page
     .locator('#resident-form input[name="email"]')
     .fill("resident1@example.com");
@@ -1188,7 +1217,7 @@ test("first meter is reconciled immediately and its dynamic archive control work
 
   await page.getByRole("tab", { name: "Meters" }).click();
   await page.getByRole("button", { name: "Active", exact: true }).click();
-  await page.locator("#meter-details summary").click();
+  await addMeter.click();
   const recoveredLabel = `Recovered meter ${Date.now()}`;
   await page.locator('#meter-form input[name="unit"]').fill("m3");
   await page.locator('#meter-form input[name="label"]').fill(recoveredLabel);
@@ -1240,9 +1269,12 @@ test("first meter is reconciled immediately and its dynamic archive control work
   await expect(page.locator("#meter-form button[type=submit]")).toBeEnabled();
   expect(lostResponseRequests).toBe(1);
 
-  await page.locator("#meter-details summary").click();
+  await addMeter.click();
   const rejectedLabel = `Rejected meter ${Date.now()}`;
-  await page.locator('#meter-form input[name="unit"]').fill("x".repeat(21));
+  // Exercise server validation even though the browser caps typed input.
+  await page.locator('#meter-form input[name="unit"]').evaluate((input) => {
+    (input as HTMLInputElement).value = "x".repeat(21);
+  });
   await page.locator('#meter-form input[name="label"]').fill(rejectedLabel);
   await page.locator("#meter-form button[type=submit]").click();
   await expect(
@@ -1295,24 +1327,41 @@ test("resident mobile routes remain separate from administration", async ({
   page,
   request,
 }) => {
+  const mailpit = "http://127.0.0.1:54324/api/v1";
+  const email = "resident1@example.com";
+  const signInMessages = async () => {
+    const response = await request.get(
+      `${mailpit}/search?query=${encodeURIComponent(`to:${email}`)}`
+    );
+    const body = (await response.json()) as {
+      messages: { ID: string; Subject: string }[];
+    };
+    return body.messages.filter((mail) => mail.Subject === "Your sign-in link");
+  };
+  const previousMessages = new Set(
+    (await signInMessages()).map((mail) => mail.ID)
+  );
   await page.goto("/login");
-  await page.locator("#resident-email").fill("resident1@example.com");
+  await page.locator("#resident-email").fill(email);
   await page.getByRole("button", { name: "Send sign-in link" }).click();
   await expect(page).toHaveURL(/sent=1/);
-  const mailbox = await (
-    await request.get("http://127.0.0.1:54324/api/v1/messages")
-  ).json();
-  const message = mailbox.messages.find((m: { To: { Address: string }[] }) =>
-    m.To.some((to) => to.Address === "resident1@example.com")
-  );
+  let messageId: string | undefined;
+  await expect
+    .poll(async () => {
+      messageId = (await signInMessages()).find(
+        (mail) => !previousMessages.has(mail.ID)
+      )?.ID;
+      return messageId;
+    })
+    .toBeDefined();
   const mail = await (
-    await request.get(`http://127.0.0.1:54324/api/v1/message/${message.ID}`)
+    await request.get(`${mailpit}/message/${messageId}`)
   ).json();
   const link = mail.HTML.match(/href="([^"]+)"/)[1].replaceAll("&amp;", "&");
   const localLink = new URL(link);
   await page.goto(localLink.pathname + localLink.search);
   await page.getByRole("button", { name: "Confirm sign-in" }).click();
-  await page.waitForURL(/\/portal\/dwellings(?:\/.*)?$/);
+  await expect(page).toHaveURL(/\/portal\/dwellings(?:\/.*)?$/);
   if (new URL(page.url()).pathname === "/portal/dwellings") {
     await page.locator('main a[href^="/portal/dwellings/"]').first().click();
     await page.waitForURL(/\/portal\/dwellings\/.+/);

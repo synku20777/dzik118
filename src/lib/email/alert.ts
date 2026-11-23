@@ -19,10 +19,23 @@ export interface SchedulerAlertResult {
   organizationId?: string;
   error?: string;
   failedSends?: number;
+  blockedInvoices?: number;
+  failedInvoices?: number;
+}
+
+// Routine skips (already sent, period locked, readings not in yet) are not
+// in these counts, so they never raise an alert.
+function needsAlert(r: SchedulerAlertResult): boolean {
+  return (
+    Boolean(r.error) ||
+    (r.failedSends ?? 0) > 0 ||
+    (r.blockedInvoices ?? 0) > 0 ||
+    (r.failedInvoices ?? 0) > 0
+  );
 }
 
 export function isSchedulerFailure(results: SchedulerAlertResult[]): boolean {
-  return results.some((r) => Boolean(r.error) || (r.failedSends ?? 0) > 0);
+  return results.some(needsAlert);
 }
 
 export function buildSchedulerAlert(
@@ -43,9 +56,7 @@ export function buildSchedulerAlert(
   }
 
   const all = results ?? [];
-  const failed = all.filter(
-    (r) => Boolean(r.error) || (r.failedSends ?? 0) > 0
-  );
+  const failed = all.filter(needsAlert);
   const lines = [`${failed.length} of ${all.length} organizations failed.`];
 
   const maxLines = 10;
@@ -55,6 +66,16 @@ export function buildSchedulerAlert(
     if (item.error) parts.push(safeText(item.error, 200));
     if ((item.failedSends ?? 0) > 0) {
       parts.push(`${item.failedSends} invoice(s) were not delivered`);
+    }
+    if ((item.blockedInvoices ?? 0) > 0) {
+      parts.push(
+        `${item.blockedInvoices} invoice(s) need billing details before they can be sent (see "Needs attention" on the dashboard)`
+      );
+    }
+    if ((item.failedInvoices ?? 0) > 0) {
+      parts.push(
+        `${item.failedInvoices} invoice(s) could not be created because of a technical error`
+      );
     }
     lines.push(`Organization ${orgId}: ${parts.join(". ")}`);
   }

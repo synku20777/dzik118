@@ -30,3 +30,15 @@ export type Db = Awaited<ReturnType<typeof createDb>>;
 // Section 31) should take DbOrTx instead of Db.
 export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 export type DbOrTx = Db | Tx;
+
+// Runs queries one after the other, in place of Promise.all. The single
+// connection runs one query at a time, and pg 9 removes the internal queue
+// that Promise.all on one client relied on. Pass query builders (they start
+// when awaited), not promises that are already running.
+export async function inOrder<T extends readonly PromiseLike<unknown>[]>(
+  queries: readonly [...T]
+): Promise<{ -readonly [K in keyof T]: Awaited<T[K]> }> {
+  const results: unknown[] = [];
+  for (const query of queries) results.push(await query);
+  return results as { -readonly [K in keyof T]: Awaited<T[K]> };
+}

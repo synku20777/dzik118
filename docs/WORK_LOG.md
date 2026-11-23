@@ -987,3 +987,182 @@ Still open:
   strip and the 375 period navigation height (46 px).
 - Native Latvian review of the new strings.
 - A user test.
+
+## Dashboard cards and visible ledger (2026-11-11)
+
+A review of the live dashboard against ADR 0015 found that the cards-on-top
+layout broke the fold rules and that three docs described three layouts. The
+owner decided: keep the cards on top, show the money breakdown always, flag
+passed deadlines, remove the label above the band sentence, the tinted icon
+tiles and the fully rounded bars, and hide the placeholder period button. The
+16 px text option was not taken. Details and measurements are in the 2026-11-11
+addendum of ADR 0015 and in section 10 of `DASHBOARD_GUIDELINES.md`.
+
+Changed: `src/pages/admin/o/[orgId]/dashboard/index.astro`, one selector in
+`src/styles/global.css`, `tests/e2e/dashboard.spec.ts`, and the dashboard docs.
+
+Verified: 389 unit tests, `astro check` (0 errors), ESLint and Prettier on the
+changed files, and the Playwright specs `dashboard`, `current-month`,
+`layout-matrix` and `dark-mode` against `astro dev` with the local demo data.
+Screenshots were read at 1440, 1024, 768 and 390 px (Latvian), 1024 px
+(Russian), in dark mode, and for the setup card.
+
+Follow-up, same day: the owner chose to collapse the breakdown on phones. Where
+the money card is one column, a `<details>` ("Invoice breakdown") starts closed
+(a ResizeObserver script, re-run after the drawer refresh), and the primary
+button is at 722-766 px at 390 x 812. `dashboard.spec.ts` covers it.
+
+Open: the status chip still overlaps the panels; no native Latvian review; no user test. The locked-month
+and all-done states were not rendered in this pass.
+
+## Month workbench second pass (2026-11-11)
+
+A review of the live workbench found the action column cut off below about
+1440 px (all of it in Russian at 1024 px), stage tabs that scrolled out of view,
+two status filters, and a work list that started below the fold at 1280 x 720.
+The owner chose: tabs only, one line of money figures, a table that fits, a
+header cleanup, a confirmation before reopening, translated skip reasons and
+compact phone rows. Details and measurements are in the "Second pass" section of
+`docs/product/CURRENT_MONTH_REDESIGN.md`.
+
+Changed: `src/pages/admin/o/[orgId]/periods/[periodId]/index.astro`, new
+`src/lib/ui/skip-reason.ts` with `tests/unit/skip-reason.test.ts`, strings in
+`src/lib/ui/i18n.ts`, and the specs `current-month`, `dashboard` and `ui`.
+
+Verified: 392 unit tests, `astro check`, ESLint, Prettier, and the Playwright
+specs `current-month`, `dashboard`, `layout-matrix`, `breadcrumbs` and
+`dark-mode`. The first case row moved from 640 to 405 px at 1440 x 900 and from
+742 to 405 px at 1280 x 720; the phone page went from 5974 to 3489 px.
+
+Open: `ui.spec.ts` "admin routes" fails at login for a reason unrelated to this
+change (the demo admin lands on the organization list); no native review of the
+new strings; the status badge size is unchanged.
+
+## Dwelling page second pass (2026-11-11)
+
+Owner-chosen redesign of the dwelling detail page: six real tabs kept in
+`?tab=`, basic and additional information merged, every editor in place and
+one at a time, all saves through `mutate-form` with section refresh,
+confirmations that name the amount or person, retry that re-asks, "Portal
+access" for the residents panel, and Latvian/Russian ledger text and save
+errors. Details and measurements are in the "Second pass" section of
+`docs/product/DWELLING_DETAIL_REDESIGN.md`.
+
+Changed: `src/pages/admin/o/[orgId]/dwellings/[dwellingId].astro`,
+`src/components/ui/ManualPaymentForm.astro` (and its caller on the Payments
+page), `src/lib/ui/mutate-form.ts`, new `src/lib/ui/ledger-description.ts` and
+`src/lib/ui/error-translations.ts`, keys in `src/lib/ui/i18n.ts`, unit tests
+for the three helpers, and the specs `dwelling-detail`, `layout-matrix` and
+`payments-flow`.
+
+Orchestration: Orca run `run_3622293e58b7`. A Codex worker did the read-only
+audit; a Claude build worker hit its weekly limit after one item and was stopped;
+the coordinator built the rest; a Codex worker reviewed the diff.
+
+Open: successful saves were not submitted in a browser; Zod's built-in messages
+are English app-wide; no native review of the new strings.
+
+Review round (2026-11-12): a Codex review found 1 High (an adjustment Retry
+could post twice), 5 Medium and 2 Low issues; all were verified and fixed, and a
+browser check found and fixed a shadowed `form.method` in `src/lib/ui/forms.ts`.
+A first version of that check let requests through (Astro's action URLs end in
+a slash) and changed demo data for dwelling 3; it was repaired through the app
+with the owner's approval. Details are in `DWELLING_DETAIL_REDESIGN.md`.
+
+## Invoice template page (2026-11-12)
+
+Redesign of `settings/invoice-template` after a read-only audit and the owner's
+answers (all recommended). Details: `docs/product/INVOICE_TEMPLATE_REDESIGN.md`.
+
+- Saved in place with a pinned bar for unsaved changes; a rejected save keeps the
+  edits; Discard asks first; Ctrl/Cmd+S saves.
+- Preview period switches without a reload (new read-only `previewLines` action,
+  added to the read-guard allowlist on purpose); month names instead of 2026-09.
+- LV / EN / RU tabs over both columns with a count of untranslated fields; the
+  editor-only section title was removed.
+- Sticky preview drawn at A4 width and scaled to fit; Edit / Preview switch on
+  phones; readable Align and Spacing; Reset with Undo; new text block takes focus.
+- Label set 4: known units print in the invoice language for new invoices; older
+  invoices are unchanged.
+
+Open: a save that reaches the database was not exercised in a browser (the
+request was answered in the page); `ui.spec.ts` not run; no native review of the
+new strings.
+
+## Admin guide update (2026-11-12)
+
+- Setup step 4 describes the new Tariffs page: New tariff, the actions menu
+  (Turn off, Turn on, Archive), Show archived and Restore, and that a restored
+  tariff stays off.
+- New setup step 5, "Set up the invoice template". The guided setup does not
+  include it, so its sentence now names what the guided setup covers.
+- Three new FAQ entries: stop using a tariff, change what an invoice shows,
+  why an older invoice prints units differently.
+- English, Latvian and Russian text added. Written in Simplified Technical
+  English. Three reviewers (Claude Opus 5.5, GPT 6.1 Sol, Gemini 3.8 Flash)
+  checked it against the UI. Their accuracy findings are fixed.
+- The screenshots in `public/guide` are unchanged. The Tariffs and invoice
+  template pictures are out of date.
+
+## Admin guide screenshots (2026-11-12)
+
+- Replaced all nine images in `public/guide` with current local-demo captures.
+  Added `invoice-template.jpg` to setup step 5. All ten images are 1440 × 900,
+  in English, as before. Development toolbar controls are hidden in captures.
+- The workbench capture uses the Prepared filter to show the sending action
+  without the local regression-test dwellings. No billing or settings forms
+  were submitted.
+- Closed the stale-screenshot gap and updated its dashboard documentation
+  references. Guide wording is a separate open item.
+- Playwright checked all eleven image placements in English, Latvian and
+  Russian: each loads at the expected dimensions and has alt text. The guide
+  has no horizontal overflow at 1440 or 390 px. All ten images were visually
+  reviewed. Prettier passes and the code graph was updated.
+- The full test suite was not run for these image and reference changes.
+
+## Resident portal redesign (2026-11-12)
+
+- The user chose bank-transfer improvements and typed meter readings. Added
+  feature suggestions separately in `product/RESIDENT_PORTAL_REDESIGN.md`.
+- Resident-only styles use the house tokens with 18 px body text, at least
+  16 px instructions and 48 px form controls. The header spells out language
+  names; other language-switch callers retain their compact labels.
+- Home leads with the latest published bill and remaining balance, followed
+  by readings. Prior readings and meter numbers are visible. Decimal commas
+  work. Saving one meter preserves other typed entries and shows a receipt.
+  Native submissions still work without JavaScript and redirect after saving.
+- The payment page exposes recipient, IBAN, reference and remaining amount
+  with copy actions and a manual fallback. Its optional banking QR uses the
+  remaining amount. The portal document preview omits the original-amount QR;
+  stored PDFs and other rendering callers keep their existing behavior.
+- Council found two blockers: malformed snapshots could crash the page, and
+  older bills could invite duplicate payment of debt carried into a newer bill.
+  Both are fixed. Damaged details show a readable error without payment controls;
+  older bills link to the latest one and do not offer payment controls. Latest
+  ordering is stable when issue dates match. Original invoice totals are labelled.
+- Checks pass: TypeScript, Astro check, changed-file ESLint, 431 unit tests,
+  33 integration tests and the resident browser test. The latter covers real
+  local database saves, partial payments, clipboard denial, malformed snapshots,
+  carried debt across two invoices, native POST, closed reading periods, all
+  three languages and both themes at 320, 390 and 1440 px. Temporary fixtures
+  are cleaned up. The code graph is updated.
+- Not checked: real transfers, physical QR scans, a screen-reader pass, native
+  translation review or usability sessions with older residents. No deployment
+  or commit was made.
+
+## Resident portal, second pass (2026-11-12)
+
+- Header: brand aligned with the tabs, Profile icon, Sign out moved into the
+  header. Tabs have icons from 640px.
+- Every resident page starts at the left edge of the tabs. Back links have one
+  style and stay only where the tabs do not lead.
+- Meter readings: icon rows, one entry hint, large received figure.
+  Disclosures are panels with a chevron.
+- Contact administrator is one chat with one message box and no Subject field
+  (`sendResidentMessage`, `subjectFromBody`, action `messages.residentSend`).
+  The administrator inbox is unchanged.
+- Calm micro-interactions, off under reduced motion. See
+  `docs/product/RESIDENT_PORTAL_REDESIGN.md`.
+
+Open: the chat does not refresh by itself; no native review of the new
+Latvian and Russian strings; not tested with older residents.

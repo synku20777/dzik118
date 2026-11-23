@@ -7,9 +7,10 @@
 // the first successful send -- a resend reuses the same pdf_object_key/
 // pdf_sha256, never regenerates it (Section 21: "canonical PDF
 // immutable").
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import type { Db, Tx } from "../../db/client";
 import { billingCases, billingPeriods } from "../../db/schema/billing";
+import { dwellings } from "../../db/schema/dwellings";
 import {
   invoiceDeliveries,
   invoiceLines,
@@ -27,6 +28,7 @@ import { recordAuditEvent } from "../../lib/logging/audit";
 import { ConflictError, NotFoundError, toSafeSkipReason } from "../errors";
 import { assertEmailNotSuppressed } from "../email/suppression";
 import { renderInvoiceHtml } from "./invoice-html";
+import { invoiceDelivery } from "./invoice-snapshots";
 import { createInvoiceAccessToken } from "./invoice-tokens";
 import { getInvoice } from "./generation";
 import {
@@ -174,16 +176,9 @@ async function deliver(
     .from(billingPeriods)
     .where(eq(billingPeriods.id, invoice.periodId))
     .limit(1);
-  const recipient = invoice.recipientSnapshot as {
-    billingEmail?: string | null;
-    invoiceByEmail?: boolean;
-    invoiceByPaper?: boolean;
-  };
+  const recipient = invoiceDelivery(invoice.recipientSnapshot);
   const issuer = invoice.issuerSnapshot as { name?: string };
-  // A snapshot taken before per-dwelling delivery preferences existed has
-  // neither key -- treat it as the email-only behavior that was the only
-  // option back then, not as "no delivery method".
-  const invoiceByEmail = recipient.invoiceByEmail ?? true;
+  const invoiceByEmail = recipient.invoiceByEmail;
 
   let emailOutcome: DeliverResult["emailOutcome"] = "NOT_ENABLED";
   let emailErrorCode: string | undefined;
@@ -316,10 +311,30 @@ async function markAttemptTerminalWithAudit(
   await db.transaction(async (tx) => {
     if (targetStatus === "SENT") {
       await markSent(tx, attemptId);
-    } else if (targetStatus === "FAILED") {
-      await markFailed(tx, attemptId, errorCode ?? "DELIVERY_FAILED");
     } else {
-      await markUnknown(tx, attemptId, errorCode ?? "DELIVERY_OUTCOME_UNKNOWN");
+      // Never over a SENT attempt: a late provider answer must not undo a
+      // confirmed delivery, such as an admin's markInvoiceDelivered. A late
+      // definitive FAILED may still replace a stale UNKNOWN.
+      const [settled] = await tx
+        .update(invoiceSendAttempts)
+        .set({
+          status: targetStatus,
+          errorCode:
+            errorCode ??
+            (targetStatus === "FAILED"
+              ? "DELIVERY_FAILED"
+              : "DELIVERY_OUTCOME_UNKNOWN"),
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(invoiceSendAttempts.id, attemptId),
+            ne(invoiceSendAttempts.status, "SENT")
+          )
+        )
+        .returning({ id: invoiceSendAttempts.id });
+      if (!settled) return;
     }
     await recordAuditEvent(tx, {
       organizationId: audit.organizationId,
@@ -573,7 +588,13 @@ async function finalizeInvoiceSentInTx(
     await tx
       .update(billingCases)
       .set({ status: "SENT", statusUpdatedAt: new Date() })
-      .where(eq(billingCases.id, params.billingCaseId));
+      // An invoice paid before its first delivery stays PAID.
+      .where(
+        and(
+          eq(billingCases.id, params.billingCaseId),
+          ne(billingCases.status, "PAID")
+        )
+      );
 
     await recordAuditEvent(tx, {
       organizationId: params.organizationId,
@@ -769,6 +790,34 @@ async function reconcileAttemptForInvoice(
   return { action: "IN_FLIGHT", attempt: reconciled };
 }
 
+// The invoice froze its recipient when it was generated. If the dwelling's
+// billing email was changed since (a new occupant, for example), the old
+// address must not get a new link to the invoice.
+async function assertBillingEmailCurrent(
+  db: Db,
+  organizationId: string,
+  dwellingId: string,
+  invoiceEmail: string
+) {
+  const [dwelling] = await db
+    .select({ billingEmail: dwellings.billingEmail })
+    .from(dwellings)
+    .where(
+      and(
+        eq(dwellings.id, dwellingId),
+        eq(dwellings.organizationId, organizationId)
+      )
+    )
+    .limit(1);
+  const normalize = (email: string | null | undefined) =>
+    (email ?? "").trim().toLowerCase();
+  if (normalize(dwelling?.billingEmail) !== normalize(invoiceEmail)) {
+    throw new ConflictError(
+      "The billing email of this dwelling changed after the invoice was created, so the invoice cannot be emailed to the old address. If it was not sent yet, set its case back to Draft and generate it again"
+    );
+  }
+}
+
 // INV-006. A no-op (idempotent) once the invoice has already been sent --
 // callers that just want "make sure this went out" can call this safely
 // without an extra existence check.
@@ -822,12 +871,8 @@ export async function sendInvoice(
   // the scheduler's bulkSendInvoices catch-and-skip cleanly skip a
   // PAPER-only or no-usable-email invoice with zero provider calls and zero
   // delivery rows.
-  const recipient = invoice.recipientSnapshot as {
-    billingEmail?: string | null;
-    invoiceByEmail?: boolean;
-    invoiceByPaper?: boolean;
-  };
-  const invoiceByEmail = recipient.invoiceByEmail ?? true;
+  const recipient = invoiceDelivery(invoice.recipientSnapshot);
+  const invoiceByEmail = recipient.invoiceByEmail;
   // An attempt already CLAIMED/DISPATCHING must still be reconcilable even
   // if the dwelling's preference has since changed (or was seeded before
   // this preference existed) -- only reject outright when there is no
@@ -848,6 +893,20 @@ export async function sendInvoice(
   if (invoiceByEmail && recipient.billingEmail) {
     await assertEmailNotSuppressed(db, organizationId, recipient.billingEmail);
   }
+  // Runs before every new dispatch: here when no attempt is in flight, and
+  // otherwise in the loop below at the moment this call claims a new attempt
+  // (an attempt in flight must stay reconcilable, so it is not checked here).
+  const assertEmailCurrent = async () => {
+    if (invoiceByEmail && recipient.billingEmail) {
+      await assertBillingEmailCurrent(
+        db,
+        organizationId,
+        invoice.dwellingId,
+        recipient.billingEmail
+      );
+    }
+  };
+  if (!hasActiveAttempt) await assertEmailCurrent();
 
   // 4. Atomic command claim loop (see claimSendCommand: the invoice row
   // lock closes the late-claim race where a loser re-checking for an active
@@ -865,6 +924,22 @@ export async function sendInvoice(
     );
 
     if (claim.outcome === "CLAIMED") {
+      // The attempt that was in flight has ended (this loop gave up on it,
+      // or another sender did), so the email was not checked above. The new
+      // claim is closed again when the check fails, so it blocks nothing.
+      if (hasActiveAttempt) {
+        try {
+          await assertEmailCurrent();
+        } catch (err) {
+          await markFailedConditional(
+            db,
+            claim.attempt.id,
+            "BILLING_EMAIL_CHANGED",
+            "CLAIMED"
+          );
+          throw err;
+        }
+      }
       attempt = claim.attempt;
       break;
     }
@@ -1028,18 +1103,31 @@ export async function bulkSendInvoices(
   actorUserId: string | null
 ): Promise<BulkSendResult> {
   const result: BulkSendResult = { sent: [], skipped: [] };
+  // One query for the whole selection. An invoice sent by another request
+  // after this read is still safe: sendInvoice does nothing for it.
+  const alreadySent = new Set(
+    invoiceIds.length === 0
+      ? []
+      : (
+          await db
+            .select({ id: invoices.id })
+            .from(invoices)
+            .where(
+              and(
+                eq(invoices.organizationId, organizationId),
+                inArray(invoices.id, invoiceIds),
+                isNotNull(invoices.sentAt)
+              )
+            )
+        ).map((row) => row.id)
+  );
   for (const invoiceId of invoiceIds) {
     try {
       // sendInvoice is idempotent (a no-op returning the already-sent
       // invoice) -- checked here first so an already-sent/paid invoice in
       // the selection is reported as skipped, not double-counted as a
       // fresh send.
-      const { invoice: before } = await getInvoice(
-        db,
-        organizationId,
-        invoiceId
-      );
-      if (before.sentAt) {
+      if (alreadySent.has(invoiceId)) {
         result.skipped.push({ invoiceId, reason: "Already sent" });
         continue;
       }
@@ -1081,12 +1169,8 @@ export async function resendInvoice(
   const wasAlreadySent = !!invoice.sentAt;
 
   // Electronic-only check: if dwelling has no email enabled, reject immediately
-  const recipient = invoice.recipientSnapshot as {
-    billingEmail?: string | null;
-    invoiceByEmail?: boolean;
-    invoiceByPaper?: boolean;
-  };
-  const invoiceByEmail = recipient.invoiceByEmail ?? true;
+  const recipient = invoiceDelivery(invoice.recipientSnapshot);
+  const invoiceByEmail = recipient.invoiceByEmail;
   if (!invoiceByEmail) {
     throw new ConflictError(
       "This dwelling has no electronic delivery method enabled; use Record paper dispatch instead."
@@ -1098,6 +1182,12 @@ export async function resendInvoice(
     );
   }
   await assertEmailNotSuppressed(db, organizationId, recipient.billingEmail);
+  await assertBillingEmailCurrent(
+    db,
+    organizationId,
+    invoice.dwellingId,
+    recipient.billingEmail
+  );
 
   // Resend requires prior EMAIL-channel history specifically -- checked
   // regardless of overall wasAlreadySent, since a PAPER dispatch can set
@@ -1281,6 +1371,115 @@ export async function resendInvoice(
 }
 
 /**
+ * An admin confirms, by other means (asking the resident, provider logs),
+ * that an email whose outcome is UNKNOWN did arrive. The attempt becomes
+ * SENT and the invoice is finalized exactly as a confirmed send would be;
+ * no email is sent. Until then the invoice stays unsent (ADR-style policy:
+ * UNKNOWN is never treated as delivered on its own).
+ */
+export async function markInvoiceDelivered(
+  db: Db,
+  organizationId: string,
+  invoiceId: string,
+  attemptId: string,
+  actorUserId: string
+): Promise<{ sentAt: Date | null }> {
+  return db.transaction(async (tx) => {
+    // Attempt, then invoice, then case: the order a sender's own
+    // finalization writes them in, so a late sender cannot deadlock with
+    // this. claimSendCommand never locks an existing attempt row. NO KEY
+    // UPDATE, so a late sender's delivery-row insert (whose foreign keys
+    // take KEY SHARE on both rows) is not blocked and cannot deadlock.
+    await tx
+      .select({ id: invoiceSendAttempts.id })
+      .from(invoiceSendAttempts)
+      .where(eq(invoiceSendAttempts.id, attemptId))
+      .for("no key update");
+    const [invoice] = await tx
+      .select()
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.id, invoiceId),
+          eq(invoices.organizationId, organizationId)
+        )
+      )
+      .for("no key update")
+      .limit(1);
+    if (!invoice) throw new NotFoundError("Invoice not found");
+    const [billingCase] = await tx
+      .select({ status: billingCases.status })
+      .from(billingCases)
+      .where(eq(billingCases.id, invoice.billingCaseId))
+      .for("update");
+    // Same rule as a send: a case pulled back to Draft cannot become sent.
+    if (
+      !billingCase ||
+      !(FIRST_DELIVERY_ELIGIBLE_CASE_STATUSES as readonly string[]).includes(
+        billingCase.status
+      )
+    ) {
+      throw new ConflictError(
+        "Only an invoice that has been prepared can be marked as delivered"
+      );
+    }
+
+    const latest = await getLatestSendAttempt(tx, organizationId, invoiceId);
+    if (latest?.id !== attemptId || latest.status !== "UNKNOWN") {
+      throw new ConflictError(
+        "Only the latest delivery with an unconfirmed outcome can be marked as delivered"
+      );
+    }
+
+    const result = await finalizeInvoiceSentInTx(tx, {
+      organizationId,
+      invoiceId,
+      billingCaseId: invoice.billingCaseId,
+      actorUserId,
+      attemptId,
+      attemptTargetStatus: "SENT",
+      expectedAttemptStatus: "UNKNOWN",
+    });
+    // The email history must then hold a SENT row: every "already
+    // delivered" check (Resend on the page, claimSendCommand's first-send
+    // guard) looks for one. A worker that died before writing its row
+    // leaves none to update, so write one.
+    const confirmed = await tx
+      .update(invoiceDeliveries)
+      .set({ status: "SENT", errorCode: null, sentAt: new Date() })
+      .where(
+        and(
+          eq(invoiceDeliveries.attemptId, attemptId),
+          eq(invoiceDeliveries.status, "UNKNOWN")
+        )
+      )
+      .returning({ id: invoiceDeliveries.id });
+    if (confirmed.length === 0) {
+      await tx.insert(invoiceDeliveries).values({
+        organizationId,
+        invoiceId,
+        attemptId,
+        method: "EMAIL",
+        destinationEmail: invoiceDelivery(invoice.recipientSnapshot)
+          .billingEmail,
+        provider: "manual",
+        status: "SENT",
+        sentAt: new Date(),
+      });
+    }
+    await recordAuditEvent(tx, {
+      organizationId,
+      scopeDwellingId: invoice.dwellingId,
+      actorUserId,
+      action: "INVOICE_DELIVERY_CONFIRMED",
+      entityType: "invoice",
+      entityId: invoiceId,
+    });
+    return { sentAt: result.invoice.sentAt };
+  });
+}
+
+/**
  * Explicit, idempotent, concurrency-safe manual paper dispatch confirmation.
  *
  * Recording physical dispatch is one atomic local DB business event -- no
@@ -1335,10 +1534,8 @@ export async function recordPaperDispatch(
       .limit(1);
     const caseStatus = billingCase?.status;
 
-    const recipient = invoice.recipientSnapshot as {
-      invoiceByPaper?: boolean;
-    };
-    const invoiceByPaper = recipient.invoiceByPaper ?? false;
+    const recipient = invoiceDelivery(invoice.recipientSnapshot);
+    const invoiceByPaper = recipient.invoiceByPaper;
     if (!invoiceByPaper) {
       throw new ConflictError(
         "Paper delivery is not enabled for this dwelling"

@@ -18,6 +18,8 @@ const statuses: Record<string, [string, string, IconName]> = {
   LOCKED: ["Locked", "neutral", "lock"],
   ACTIVE: ["Active", "success", "check"],
   ARCHIVED: ["Archived", "neutral", "archive"],
+  // A tariff that is switched off (kept, not billed).
+  DISABLED: ["Disabled", "neutral", "player-pause"],
   NEW: ["Awaiting reply", "warning", "clock-exclamation"],
   RESOLVED: ["Resolved", "success", "circle-check"],
   PROPOSED: ["Proposed", "info", "clock"],

@@ -20,7 +20,7 @@ import {
 
 export { ValidationError };
 
-export async function getInvoiceTemplate(db: Db, organizationId: string) {
+async function getInvoiceTemplate(db: Db, organizationId: string) {
   const [template] = await db
     .select()
     .from(invoiceTemplates)

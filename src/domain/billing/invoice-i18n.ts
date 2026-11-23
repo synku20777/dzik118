@@ -26,11 +26,17 @@ export const CANONICAL_INVOICE_LOCALE: InvoiceLocale = "lv";
 //   2: adds the issuer registration and VAT number lines.
 //   3: prints quantities without trailing zeros (1, not 1.0000) and unit
 //      prices with at least 2 decimals. The wording is the same as set 2.
-export const CURRENT_LABEL_SET_VERSION = 3;
+//   4: prints known units in the invoice's language (1 mēn., 12 m³) instead of
+//      exactly as typed on the tariff. The wording is the same as set 2.
+export const CURRENT_LABEL_SET_VERSION = 4;
 
 // The first label set that prints trimmed quantities. An invoice generated
 // earlier keeps its old look, so its preview matches the PDF it already has.
 export const TRIMMED_NUMBERS_FROM_LABEL_SET = 3;
+
+// The first label set that translates known units. Same rule: older invoices
+// keep printing the unit as stored.
+export const LOCALIZED_UNITS_FROM_LABEL_SET = 4;
 
 type InvoiceLabelKeyV1 =
   | "invoice"
@@ -183,8 +189,9 @@ const LABEL_SETS: Record<
 > = {
   1: INVOICE_LABELS_V1,
   2: INVOICE_LABELS_V2,
-  // Set 3 has the same wording as set 2 (see CURRENT_LABEL_SET_VERSION).
+  // Sets 3 and 4 have the same wording as set 2 (see CURRENT_LABEL_SET_VERSION).
   3: INVOICE_LABELS_V2,
+  4: INVOICE_LABELS_V2,
 };
 
 // `labelSetVersion` comes from a frozen invoice snapshot -- an unrecognized

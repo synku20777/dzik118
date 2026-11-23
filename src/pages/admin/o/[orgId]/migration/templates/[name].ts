@@ -1,26 +1,14 @@
 import type { APIRoute } from "astro";
 import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../../domain/authorization/guards";
-import {
   CSV_BOM,
   balancesTemplateCsv,
   dwellingsTemplateCsv,
   metersTemplateCsv,
 } from "../../../../../../domain/migration/flow";
 
-export const GET: APIRoute = async ({ params, locals }) => {
+export const GET: APIRoute = async ({ params }) => {
   const organizationId = params.orgId;
   if (!organizationId) return new Response("Not found", { status: 404 });
-  try {
-    requireOrganizationAccess(locals.auth, organizationId);
-  } catch (err) {
-    if (err instanceof ForbiddenError) {
-      return new Response("Forbidden", { status: 403 });
-    }
-    throw err;
-  }
 
   const csv =
     params.name === "dwellings.csv"

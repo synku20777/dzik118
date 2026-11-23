@@ -232,25 +232,6 @@ export async function createRule(
   }
 }
 
-export async function getRule(
-  db: DbOrTx,
-  organizationId: string,
-  ruleId: string
-) {
-  const [rule] = await db
-    .select()
-    .from(billingRules)
-    .where(
-      and(
-        eq(billingRules.id, ruleId),
-        eq(billingRules.organizationId, organizationId)
-      )
-    )
-    .limit(1);
-  if (!rule) throw new NotFoundError("Billing rule not found");
-  return rule;
-}
-
 export async function listRules(
   db: Db,
   organizationId: string,
@@ -297,7 +278,7 @@ export interface UpdateBillingRuleInput {
 // not the patch alone, so e.g. switching to MANUAL_AMOUNT without touching
 // unitPrice still re-checks the combination that will actually be saved.
 export async function updateRule(
-  db: Db,
+  db: DbOrTx,
   organizationId: string,
   ruleId: string,
   input: UpdateBillingRuleInput,
@@ -323,6 +304,11 @@ export async function updateRule(
         .limit(1);
       if (!lockedBefore) throw new NotFoundError("Billing rule not found");
       const before = lockedBefore;
+      if (input.code !== undefined && input.code !== before.code) {
+        throw new ValidationError(
+          "The code cannot be changed after the tariff is created."
+        );
+      }
       const candidate = { ...before, ...patch };
       validateRuleShape(candidate);
 
@@ -412,6 +398,37 @@ export async function updateRule(
   }
 }
 
+export async function setRuleEnabled(
+  db: Db,
+  organizationId: string,
+  ruleId: string,
+  enabled: boolean,
+  actorUserId: string
+) {
+  return db.transaction(async (tx) => {
+    const [rule] = await tx
+      .select()
+      .from(billingRules)
+      .where(
+        and(
+          eq(billingRules.id, ruleId),
+          eq(billingRules.organizationId, organizationId)
+        )
+      )
+      .for("update")
+      .limit(1);
+    if (!rule) throw new NotFoundError("Billing rule not found");
+    if (rule.archivedAt) {
+      if (enabled)
+        throw new ConflictError("Restore the tariff before turning it on.");
+      throw new ConflictError("Archived tariffs cannot be changed.");
+    }
+    if (rule.enabled === enabled) return rule;
+    // Keep the archive check and shared update under the same row lock.
+    return updateRule(tx, organizationId, ruleId, { enabled }, actorUserId);
+  });
+}
+
 export async function archiveRule(
   db: Db,
   organizationId: string,
@@ -442,6 +459,54 @@ export async function archiveRule(
       organizationId
     );
     return rule;
+  });
+}
+
+export async function restoreRule(
+  db: Db,
+  organizationId: string,
+  ruleId: string,
+  actorUserId: string
+) {
+  return db.transaction(async (tx) => {
+    const [before] = await tx
+      .select()
+      .from(billingRules)
+      .where(
+        and(
+          eq(billingRules.id, ruleId),
+          eq(billingRules.organizationId, organizationId)
+        )
+      )
+      .for("update")
+      .limit(1);
+    if (!before) throw new NotFoundError("Billing rule not found");
+    if (!before.archivedAt)
+      throw new ConflictError("Only archived tariffs can be restored.");
+    const [after] = await tx
+      .update(billingRules)
+      .set({ archivedAt: null, enabled: false, updatedAt: new Date() })
+      .where(
+        and(
+          eq(billingRules.id, ruleId),
+          eq(billingRules.organizationId, organizationId)
+        )
+      )
+      .returning();
+    await recordAuditEvent(tx, {
+      organizationId,
+      actorUserId,
+      action: "BILLING_RULE_RESTORED",
+      entityType: "billing_rule",
+      entityId: ruleId,
+      beforeData: before,
+      afterData: after,
+    });
+    await recalculateCaseReadinessForOrganizationOpenPeriods(
+      tx,
+      organizationId
+    );
+    return after;
   });
 }
 

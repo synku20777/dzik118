@@ -2,10 +2,7 @@
 // Section 10, MTR-002/003).
 import { defineAction } from "astro:actions";
 import { z } from "astro/zod";
-import {
-  requireDwellingAccess,
-  requireActiveOrganization,
-} from "../domain/authorization/guards";
+import { requireDwellingAccess } from "../domain/authorization/guards";
 import { submitManualRuleInput } from "../domain/periods/manual-rule-inputs";
 import {
   submitAdminReading,
@@ -18,6 +15,7 @@ import { decimalInput } from "../lib/decimal-input";
 import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
 import { limitOrThrow } from "../lib/http/rate-limit";
+import { orgAction } from "./_org-action";
 
 // Kept as a string end to end (spec Section 17: no JS binary floating
 // point for persisted calculations), validated the same way the domain
@@ -36,7 +34,7 @@ const decimal4 = decimalInput(
 
 export const readings = {
   // MTR-002
-  adminSubmit: defineAction({
+  adminSubmit: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
@@ -46,31 +44,28 @@ export const readings = {
       note: z.string().max(500).optional(),
       force: z.coerce.boolean().optional(),
     }),
-    handler: safeHandler(
-      async (
-        { organizationId, periodId, meterId, currentValue, note, force },
-        { locals }
-      ) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        return withDb((db) =>
-          submitAdminReading(
-            db,
-            organizationId,
-            periodId,
-            meterId,
-            currentValue,
-            locals.auth!.userId,
-            { note, force }
-          )
-        );
-      }
-    ),
+    handler: async (
+      { organizationId, periodId, meterId, currentValue, note, force },
+      { locals }
+    ) => {
+      return withDb((db) =>
+        submitAdminReading(
+          db,
+          organizationId,
+          periodId,
+          meterId,
+          currentValue,
+          locals.auth!.userId,
+          { note, force }
+        )
+      );
+    },
   }),
 
   // The period-wide reading grid. Each row is saved by submitAdminReading on
   // its own, so some rows can succeed while others fail; the result says
   // which. Called from the page script with JSON.
-  adminSubmitBatch: defineAction({
+  adminSubmitBatch: orgAction({
     input: z.object({
       organizationId: z.uuid(),
       periodId: z.uuid(),
@@ -85,40 +80,40 @@ export const readings = {
           "A meter appears more than once"
         ),
     }),
-    handler: safeHandler(
-      async ({ organizationId, periodId, rows }, { locals, cookies, url }) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        // The grid shows row errors as is, so translate them here.
-        const locale = uiLocale(cookies, url);
-        return withDb(async (db) => {
-          const results: {
-            meterId: string;
-            ok: boolean;
-            error?: string;
-          }[] = [];
-          for (const row of rows) {
-            try {
-              await submitAdminReading(
-                db,
-                organizationId,
-                periodId,
-                row.meterId,
-                row.currentValue,
-                locals.auth!.userId
-              );
-              results.push({ meterId: row.meterId, ok: true });
-            } catch (err) {
-              results.push({
-                meterId: row.meterId,
-                ok: false,
-                error: translate(locale, toSafeSkipReason(err)),
-              });
-            }
+    handler: async (
+      { organizationId, periodId, rows },
+      { locals, cookies, url }
+    ) => {
+      // The grid shows row errors as is, so translate them here.
+      const locale = uiLocale(cookies, url);
+      return withDb(async (db) => {
+        const results: {
+          meterId: string;
+          ok: boolean;
+          error?: string;
+        }[] = [];
+        for (const row of rows) {
+          try {
+            await submitAdminReading(
+              db,
+              organizationId,
+              periodId,
+              row.meterId,
+              row.currentValue,
+              locals.auth!.userId
+            );
+            results.push({ meterId: row.meterId, ok: true });
+          } catch (err) {
+            results.push({
+              meterId: row.meterId,
+              ok: false,
+              error: translate(locale, toSafeSkipReason(err)),
+            });
           }
-          return results;
-        });
-      }
-    ),
+        }
+        return results;
+      });
+    },
   }),
 
   // MTR-003
@@ -150,7 +145,7 @@ export const readings = {
 
   // Admin-only: no resident-facing equivalent (spec Section 18 doesn't ask
   // for one, and residents have no visibility into billing rules today).
-  adminSubmitManualRuleInput: defineAction({
+  adminSubmitManualRuleInput: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
@@ -160,25 +155,22 @@ export const readings = {
       value: decimal4,
       note: z.string().max(500).optional(),
     }),
-    handler: safeHandler(
-      async (
-        { organizationId, periodId, dwellingId, billingRuleId, value, note },
-        { locals }
-      ) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        return withDb((db) =>
-          submitManualRuleInput(
-            db,
-            organizationId,
-            periodId,
-            dwellingId,
-            billingRuleId,
-            value,
-            locals.auth!.userId,
-            { note }
-          )
-        );
-      }
-    ),
+    handler: async (
+      { organizationId, periodId, dwellingId, billingRuleId, value, note },
+      { locals }
+    ) => {
+      return withDb((db) =>
+        submitManualRuleInput(
+          db,
+          organizationId,
+          periodId,
+          dwellingId,
+          billingRuleId,
+          value,
+          locals.auth!.userId,
+          { note }
+        )
+      );
+    },
   }),
 };

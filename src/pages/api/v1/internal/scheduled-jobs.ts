@@ -33,10 +33,14 @@ async function notifyFailure(
   if (!ALERT_EMAIL) return;
   try {
     const alert = buildSchedulerAlert(results, thrown);
-    await getEmailService().sendAlert?.({
+    const sent = await getEmailService().sendAlert?.({
       to: ALERT_EMAIL,
       ...alert,
     });
+    // A provider refusal comes back as a result, not as a thrown error.
+    if (sent && !sent.success) {
+      console.error("Scheduler failure alert not delivered:", sent.errorCode);
+    }
   } catch (err) {
     console.error("Failed to send scheduler failure alert:", err);
   }
@@ -48,7 +52,13 @@ export const POST: APIRoute = async ({ request }) => {
     return new Response("Forbidden", { status: 403 });
   }
 
-  const db = await createDb(env.HYPERDRIVE.connectionString);
+  // A refused connection is a failed run too: the owner must hear about it.
+  const db = await createDb(env.HYPERDRIVE.connectionString).catch(
+    async (err) => {
+      await notifyFailure(null, err);
+      throw err;
+    }
+  );
   try {
     let results;
     try {

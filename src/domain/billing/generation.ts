@@ -27,7 +27,6 @@ import {
   compareExact,
   maxExact,
   multiplyAndRound,
-  negateExact,
   percentOf,
   subtractExact,
   sumExact,
@@ -35,18 +34,21 @@ import {
 import { recordAuditEvent } from "../../lib/logging/audit";
 import {
   getInvoiceAllocatedAmount,
-  postAccountEntry,
+  postInvoiceCharge,
 } from "../accounts/ledger";
 import {
   buildBalanceSnapshot,
   buildPenaltySnapshot,
   resolveStatementFinancials,
 } from "../accounts/statements";
+import { syncDwellingSettlement } from "../accounts/settlement";
 import {
   ConflictError,
   NotFoundError,
   ValidationError,
+  skipKind,
   toSafeSkipReason,
+  type SkipKind,
 } from "../errors";
 import {
   invoiceBlockerMessage,
@@ -55,6 +57,10 @@ import {
 } from "../periods/case-readiness";
 import { carryForwardMissingReadings } from "../periods/readings";
 import { buildInvoiceTemplateSnapshot } from "./invoice-template-schema";
+import {
+  missingBillingDetails,
+  parseInvoiceSnapshots,
+} from "./invoice-snapshots";
 import { getEffectiveRules } from "./rules";
 
 export { ConflictError, NotFoundError, ValidationError };
@@ -338,6 +344,7 @@ export async function generateInvoice(
       dwellingId,
       currency: org.currency,
       issueDate: period.invoiceIssueDate,
+      invoiceId: existingInvoice?.id,
       currentCharges: total,
       manualAdjustment: existingInvoice?.manualAdjustment ?? "0.00",
       lateFeeAdjustment: existingInvoice?.lateFeeAdjustment ?? "0.00",
@@ -398,6 +405,9 @@ export async function generateInvoice(
           // skip regenerating, emailing a PDF for stale line/total data.
           pdfObjectKey: null,
           pdfSha256: null,
+          // Its content changed, so it is not prepared any more: only a new
+          // preparation (not a status override) may post the new amounts.
+          preparedAt: null,
           updatedAt: new Date(),
         })
         .where(eq(invoices.id, existingInvoice.id))
@@ -470,7 +480,7 @@ export async function generateInvoice(
 
 export interface BulkGenerateResult {
   generated: string[];
-  skipped: { dwellingId: string; reason: string }[];
+  skipped: { dwellingId: string; reason: string; kind: SkipKind }[];
 }
 
 // INV-002: each case generates in its own transaction (via generateInvoice)
@@ -506,6 +516,7 @@ export async function bulkGenerateInvoices(
       result.skipped.push({
         dwellingId: billingCase.dwellingId,
         reason: `Already ${billingCase.status}`,
+        kind: "ROUTINE",
       });
       continue;
     }
@@ -522,6 +533,7 @@ export async function bulkGenerateInvoices(
       result.skipped.push({
         dwellingId: billingCase.dwellingId,
         reason: toSafeSkipReason(err),
+        kind: skipKind(err),
       });
     }
   }
@@ -593,15 +605,14 @@ export async function getInvoiceForResident(
     invoice.organizationId,
     invoice.id
   );
-  // Older paid invoices have no allocation rows: trust paidAt, as
-  // getInvoiceForDwellingPeriod does.
-  const legacyPaid = !!invoice.paidAt && paidAmount === "0.00";
-  const remainingAmount = legacyPaid
+  // Paid means its own amount is covered (ADR 0016), also by money paid on
+  // a later invoice or with no allocation row at all, as getInvoiceForDwellingPeriod does.
+  const remainingAmount = invoice.paidAt
     ? "0.00"
     : maxExact("0.00", subtractExact(invoice.amountDue, paidAmount));
   return {
     ...result,
-    paidAmount: legacyPaid ? invoice.amountDue : paidAmount,
+    paidAmount: invoice.paidAt ? invoice.amountDue : paidAmount,
     remainingAmount,
   };
 }
@@ -639,7 +650,7 @@ export async function listInvoicesForDwelling(db: Db, dwellingId: string) {
         inArray(billingCases.status, ["SENT", "PAID", "OVERDUE"])
       )
     )
-    .orderBy(invoices.issueDate);
+    .orderBy(invoices.issueDate, invoices.createdAt);
 }
 
 // Phase I (Resident UX) - "current invoice" for the resident dwelling
@@ -689,32 +700,10 @@ export async function getInvoiceForDwellingPeriod(
   );
   return {
     ...invoice,
-    outstandingAmount:
-      invoice.paidAt && allocated === "0.00"
-        ? "0.00"
-        : maxExact(subtractExact(invoice.amountDue, allocated), "0.00"),
+    outstandingAmount: invoice.paidAt
+      ? "0.00"
+      : maxExact(subtractExact(invoice.amountDue, allocated), "0.00"),
   };
-}
-
-// Internal/admin-side counterpart to getInvoiceForDwellingPeriod, which
-// deliberately hides unissued (DRAFT/PREPARED) invoices from the resident
-// dashboard. The scheduler needs the opposite: right after
-// bulkGenerateInvoices creates a DRAFT invoice, it must find that exact
-// invoice's id to hand to bulkPrepareInvoices next, so it cannot filter by
-// case status at all. Never expose this to a resident-facing caller.
-export async function getInvoiceIdForDwellingPeriod(
-  db: Db,
-  dwellingId: string,
-  periodId: string
-): Promise<string | null> {
-  const [invoice] = await db
-    .select({ id: invoices.id })
-    .from(invoices)
-    .where(
-      and(eq(invoices.dwellingId, dwellingId), eq(invoices.periodId, periodId))
-    )
-    .limit(1);
-  return invoice?.id ?? null;
 }
 
 // INV-004: normal transition only from DRAFT.
@@ -758,33 +747,38 @@ export async function prepareInvoice(
       throw new ConflictError("Only a DRAFT invoice can be prepared");
     }
 
-    const issuer = invoice.issuerSnapshot as Record<string, unknown>;
-    const recipient = invoice.recipientSnapshot as Record<string, unknown>;
-    const payment = invoice.paymentSnapshot as Record<string, unknown>;
-    if (!issuer.name || !issuer.addressLine1) {
-      throw new ValidationError(
-        "Issuer details are incomplete; update organization settings before preparing"
+    // Only after an override back to Draft. The payment was matched against
+    // the amount due the invoice had then; a new amount due under it would
+    // let the invoice count as paid while money is still owed.
+    const allocated = await getInvoiceAllocatedAmount(
+      tx,
+      organizationId,
+      invoiceId
+    );
+    if (compareExact(allocated, "0.00") > 0) {
+      throw new ConflictError(
+        "This invoice already has a payment. Reverse the payment before preparing the invoice again"
       );
     }
-    if (
-      (!recipient.billingName && !recipient.occupantName) ||
-      !recipient.billingAddress
-    ) {
-      throw new ValidationError(
-        "This dwelling is missing a billing/occupant name or a billing address"
+    // Same rule as generateInvoice: a status override back to Draft does not
+    // make a sent or paid invoice changeable. Preparing would give it a new
+    // amount due under the PDF the resident already has. After the payment
+    // check, so an invoice paid before it was sent gets that message.
+    if (invoice.sentAt || invoice.paidAt) {
+      throw new ConflictError(
+        "This invoice has already been sent and can no longer be prepared again; issue a correction document instead"
       );
     }
-    if (!payment.iban || !payment.bankName) {
-      throw new ValidationError(
-        "Organization payment details are incomplete (both bank name and IBAN are required)"
-      );
-    }
+
+    const problem = missingBillingDetails(parseInvoiceSnapshots(invoice));
+    if (problem) throw new ValidationError(problem);
 
     const financials = await resolveStatementFinancials(tx, {
       organizationId,
       dwellingId: invoice.dwellingId,
       currency: invoice.currency,
       issueDate: invoice.issueDate,
+      invoiceId,
       currentCharges: invoice.currentCharges,
       manualAdjustment: invoice.manualAdjustment,
       lateFeeAdjustment: invoice.lateFeeAdjustment,
@@ -809,51 +803,47 @@ export async function prepareInvoice(
       })
       .where(eq(invoices.id, invoiceId))
       .returning();
-    await postAccountEntry(tx, {
+    const entry = {
       organizationId,
       dwellingId: invoice.dwellingId,
       effectiveDate: invoice.issueDate,
-      type: "INVOICE_CHARGE",
-      debit: prepared.currentCharges,
-      credit: "0.00",
       currency: invoice.currency,
       invoiceId,
-      description: `Current charges ${invoice.invoiceNumber}`,
-      metadata: { invoiceNumber: invoice.invoiceNumber },
-      idempotencyKey: `invoice:${invoiceId}:current-charges`,
-    });
-    if (compareExact(prepared.lateFeeApplied, "0.00") > 0) {
-      await postAccountEntry(tx, {
-        organizationId,
-        dwellingId: invoice.dwellingId,
-        effectiveDate: invoice.issueDate,
+    };
+    await postInvoiceCharge(
+      tx,
+      {
+        ...entry,
+        type: "INVOICE_CHARGE",
+        description: `Current charges ${invoice.invoiceNumber}`,
+        metadata: { invoiceNumber: invoice.invoiceNumber },
+        idempotencyKey: `invoice:${invoiceId}:current-charges`,
+      },
+      prepared.currentCharges
+    );
+    await postInvoiceCharge(
+      tx,
+      {
+        ...entry,
         type: "LATE_FEE",
-        debit: prepared.lateFeeApplied,
-        credit: "0.00",
-        currency: invoice.currency,
-        invoiceId,
         description: `Late fee ${invoice.invoiceNumber}`,
         metadata: penaltySnapshot,
         idempotencyKey: `invoice:${invoiceId}:late-fee`,
-      });
-    }
-    if (compareExact(prepared.manualAdjustment, "0.00") !== 0) {
-      const isCredit = compareExact(prepared.manualAdjustment, "0.00") < 0;
-      await postAccountEntry(tx, {
-        organizationId,
-        dwellingId: invoice.dwellingId,
-        effectiveDate: invoice.issueDate,
+      },
+      prepared.lateFeeApplied
+    );
+    await postInvoiceCharge(
+      tx,
+      {
+        ...entry,
         type: "MANUAL_ADJUSTMENT",
-        debit: isCredit ? "0.00" : prepared.manualAdjustment,
-        credit: isCredit ? negateExact(prepared.manualAdjustment) : "0.00",
-        currency: invoice.currency,
-        invoiceId,
         description: `Manual adjustment ${invoice.invoiceNumber}`,
         metadata: invoice.manualAdjustmentSnapshot,
         actorUserId: actorUserId ?? undefined,
         idempotencyKey: `invoice:${invoiceId}:manual-adjustment`,
-      });
-    }
+      },
+      prepared.manualAdjustment
+    );
     await tx
       .update(billingCases)
       .set({ status: "PREPARED", statusUpdatedAt: new Date() })
@@ -867,13 +857,25 @@ export async function prepareInvoice(
       entityId: invoiceId,
       afterData: prepared,
     });
-    return prepared;
+    // A credit already on the account can cover it in full (ADR 0016). Only
+    // this invoice can change: a newer charge never uncovers an older one.
+    await syncDwellingSettlement(
+      tx,
+      organizationId,
+      invoice.dwellingId,
+      invoice.currency
+    );
+    const [settled] = await tx
+      .select()
+      .from(invoices)
+      .where(eq(invoices.id, invoiceId));
+    return settled;
   });
 }
 
 export interface BulkPrepareResult {
   prepared: string[];
-  skipped: { invoiceId: string; reason: string }[];
+  skipped: { invoiceId: string; reason: string; kind: SkipKind }[];
 }
 
 // Spec Section 27: workbench "bulk selection" -- prepares whichever
@@ -894,6 +896,7 @@ export async function bulkPrepareInvoices(
       result.skipped.push({
         invoiceId,
         reason: toSafeSkipReason(err),
+        kind: skipKind(err),
       });
     }
   }
@@ -945,6 +948,18 @@ export async function overrideCaseStatus(
     if (newStatus === "SENT" && (!invoice || !invoice.sentAt)) {
       throw new ConflictError(
         "A case can be set to Sent only when its invoice was sent"
+      );
+    }
+    // A status override posts nothing to the account, so it must not skip the
+    // preparation that does.
+    if (newStatus === "PREPARED" && !invoice?.preparedAt) {
+      throw new ConflictError(
+        "A case can be set to Prepared only when its invoice was prepared"
+      );
+    }
+    if (newStatus === "OVERDUE" && !invoice?.sentAt) {
+      throw new ConflictError(
+        "A case can be set to Overdue only when its invoice was sent"
       );
     }
     if (newStatus === "PAID" && (!invoice || !invoice.paidAt)) {

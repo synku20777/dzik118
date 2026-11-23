@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { renderInvoiceHtml } from "../../src/domain/billing/invoice-html";
+import {
+  renderInvoiceHtml,
+  renderInvoicePreview,
+} from "../../src/domain/billing/invoice-html";
+import {
+  missingBillingDetails,
+  readInvoiceSnapshots,
+} from "../../src/domain/billing/invoice-snapshots";
+import { ConflictError } from "../../src/domain/errors";
 import {
   createDefaultInvoiceTemplateConfig,
   type InvoiceTemplateConfigV2,
@@ -57,6 +65,54 @@ function snapshot(
     ...overrides,
   };
 }
+
+describe("invoice snapshots", () => {
+  it("accepts an older snapshot with fewer fields and unknown ones", () => {
+    const html = renderInvoiceHtml(
+      makeInvoice({
+        issuerSnapshot: { name: "Old Org", legacyField: 1 },
+        recipientSnapshot: {},
+        paymentSnapshot: { iban: null },
+      }),
+      [makeLine()]
+    );
+    expect(html).toContain("Old Org");
+  });
+
+  it("stops on a damaged snapshot and names the reason in a preview", () => {
+    for (const damaged of [
+      { issuerSnapshot: null },
+      { recipientSnapshot: "Jane Doe" },
+      { paymentSnapshot: { iban: 42 } },
+    ]) {
+      expect(() =>
+        renderInvoiceHtml(makeInvoice(damaged), [makeLine()])
+      ).toThrow(ConflictError);
+    }
+    const preview = renderInvoicePreview(
+      makeInvoice({ issuerSnapshot: null }),
+      [makeLine()],
+      "lv",
+      (text) => `<${text}>`
+    );
+    expect(preview).toContain("&lt;This invoice cannot be shown");
+  });
+
+  it("gives the same reason prepareInvoice refuses an invoice for", () => {
+    const complete = {
+      issuer: { name: "Org", addressLine1: "1 Main St" },
+      recipient: { billingName: "Jane", billingAddress: "2 Side St" },
+      payment: { iban: "LV00TEST", bankName: "Bank" },
+    };
+    expect(missingBillingDetails(complete)).toBeNull();
+    expect(
+      missingBillingDetails({ ...complete, recipient: { billingName: "Jane" } })
+    ).toContain("billing address");
+    expect(
+      readInvoiceSnapshots(makeInvoice({ issuerSnapshot: [] }))
+    ).toBeNull();
+  });
+});
 
 describe("renderInvoiceHtml", () => {
   it("includes the invoice number, line items, and totals", () => {
@@ -171,6 +227,36 @@ describe("renderInvoiceHtml", () => {
     expect(v2).toContain(">15.0000<");
     const unstamped = renderInvoiceHtml(makeInvoice(), lines);
     expect(unstamped).toContain(">1.0000 month<");
+
+    // Set 4 prints known units in the invoice's language; sets 3 and below
+    // (above) keep the unit as typed.
+    const v4 = (locale: "lv" | "en" | "ru") =>
+      renderInvoiceHtml(
+        makeInvoice({
+          templateSnapshot: snapshot(createDefaultInvoiceTemplateConfig(), {
+            labelSetVersion: 4,
+          }),
+        }),
+        [
+          ...lines,
+          {
+            description: "Extra",
+            quantity: "1.0000",
+            unit: "bundle",
+            unitPrice: "1.0000",
+            netAmount: "1.00",
+            vatAmount: "0.21",
+            grossAmount: "1.21",
+          },
+        ] as never[],
+        locale
+      );
+    expect(v4("lv")).toContain(">12.345 m³<");
+    expect(v4("lv")).toContain(">1 mēn.<");
+    expect(v4("en")).toContain(">1 month<");
+    expect(v4("ru")).toContain(">1 мес.<");
+    // An unknown unit is printed as typed.
+    expect(v4("lv")).toContain(">1 bundle<");
   });
 
   it("escapes HTML in every snapshot field to prevent injection into the rendered document", () => {
@@ -634,6 +720,17 @@ describe("SEPA QR in the payment block", () => {
   // Matches the actual rendered element, not the (always-present, static)
   // ".payment-qr" CSS rule in the document's inline <style> block.
   const QR_ELEMENT = 'class="payment-qr"';
+
+  it("can omit the document QR in a portal preview without changing the original invoice", () => {
+    const invoice = validPaymentInvoice();
+    const preview = renderInvoicePreview(invoice, [], "en", (text) => text, {
+      showPaymentQr: false,
+    });
+    expect(preview).not.toContain(QR_ELEMENT);
+    expect(preview).toContain("88.10");
+    expect(preview).toContain("DE89370400440532013000");
+    expect(renderInvoiceHtml(invoice, [])).toContain(QR_ELEMENT);
+  });
 
   it("embeds a QR code alongside the human-readable payment text when the payment data is valid", () => {
     const html = renderInvoiceHtml(validPaymentInvoice(), []);

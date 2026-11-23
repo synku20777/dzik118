@@ -14,7 +14,7 @@ import { dwellings, meters } from "../../db/schema/dwellings";
 import { invoices } from "../../db/schema/invoices";
 import { getApplicableRulesForDwelling } from "../billing/rules";
 import { wasMeterActiveDuringPeriod } from "./case-readiness";
-import { findPreviousValue } from "./readings";
+import { findPreviousValues } from "./readings";
 import { caseMatchesStatus, type CaseStatusFilter } from "./case-filter";
 
 // Spec Section 27's required default sort: status priority first, then
@@ -34,7 +34,7 @@ const STATUS_PRIORITY: Record<
   PAID: 6,
 };
 
-function compareDwellingNumbers(a: string, b: string): number {
+export function compareDwellingNumbers(a: string, b: string): number {
   const na = Number(a);
   const nb = Number(b);
   if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
@@ -65,6 +65,8 @@ export async function listCasesForPeriod(
       missingData: billingCases.missingData,
       invoiceId: invoices.id,
       invoiceNumber: invoices.invoiceNumber,
+      invoiceSentAt: invoices.sentAt,
+      invoicePaidAt: invoices.paidAt,
       invoiceTotal: invoices.total,
       invoiceCurrentCharges: invoices.currentCharges,
       invoiceAmountDue: invoices.amountDue,
@@ -87,7 +89,13 @@ export async function listCasesForPeriod(
 
   const search = options.search?.trim().toLowerCase();
   const filtered = rows.filter((row) => {
-    if (!caseMatchesStatus(row.status, options.statusFilter)) {
+    if (
+      !caseMatchesStatus(
+        row.status,
+        options.statusFilter,
+        row.invoiceId !== null && row.invoiceSentAt === null
+      )
+    ) {
       return false;
     }
     if (search && !row.dwellingNumber.toLowerCase().includes(search)) {
@@ -150,6 +158,7 @@ export async function listMetersWithReadingForPeriod(
       label: meters.label,
       serialNumber: meters.serialNumber,
       unit: meters.unit,
+      installedAt: meters.installedAt,
       archivedAt: meters.archivedAt,
       currentValue: meterReadings.currentValue,
       previousValue: meterReadings.previousValue,
@@ -171,6 +180,50 @@ export async function listMetersWithReadingForPeriod(
       )
     )
     .orderBy(meters.createdAt);
+}
+
+// Meter types active during the period, for each dwelling with a case in it.
+// A meter tariff can bill only a dwelling that has its type.
+export async function listActiveMeterTypesForPeriod(
+  db: Db,
+  organizationId: string,
+  period: { id: string; startsOn: string; endsOn: string }
+): Promise<Map<string, Set<string>>> {
+  const rows = await db
+    .select({
+      dwellingId: billingCases.dwellingId,
+      type: meters.type,
+      installedAt: meters.installedAt,
+      archivedAt: meters.archivedAt,
+    })
+    .from(billingCases)
+    .leftJoin(
+      meters,
+      and(
+        eq(meters.dwellingId, billingCases.dwellingId),
+        eq(meters.organizationId, organizationId)
+      )
+    )
+    .where(
+      and(
+        eq(billingCases.periodId, period.id),
+        eq(billingCases.organizationId, organizationId)
+      )
+    );
+  const byDwelling = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const types = byDwelling.get(row.dwellingId) ?? new Set<string>();
+    byDwelling.set(row.dwellingId, types);
+    if (
+      row.type &&
+      wasMeterActiveDuringPeriod(
+        { installedAt: row.installedAt, archivedAt: row.archivedAt },
+        period
+      )
+    )
+      types.add(row.type);
+  }
+  return byDwelling;
 }
 
 // The period-wide reading grid: one row per meter that was active during the
@@ -230,9 +283,17 @@ export async function listReadingGridForPeriod(
     )
     .orderBy(dwellings.number, meters.type);
 
+  const active = rows.filter((row) => wasMeterActiveDuringPeriod(row, period));
+  // One query for all meters without a reading yet, not one per meter: at the
+  // start of a month that was 600 round trips for 300 dwellings.
+  const previousValues = await findPreviousValues(
+    db,
+    active.filter((row) => !row.currentValue).map((row) => row.meterId),
+    period
+  );
+
   const grid = [];
-  for (const row of rows) {
-    if (!wasMeterActiveDuringPeriod(row, period)) continue;
+  for (const row of active) {
     const missing = (
       row.missingData as { reason?: string; meterId?: string }[]
     ).some((m) => m?.reason === "NO_READING" && m.meterId === row.meterId);
@@ -249,7 +310,7 @@ export async function listReadingGridForPeriod(
       source: row.source,
       previousValue: row.currentValue
         ? row.storedPreviousValue
-        : await findPreviousValue(db, row.meterId, period),
+        : (previousValues.get(row.meterId) ?? null),
       missing,
     });
   }

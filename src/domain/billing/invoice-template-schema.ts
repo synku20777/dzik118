@@ -69,14 +69,11 @@ export const MANDATORY_BLOCK_TYPES = [
   "line-items",
   "payment",
 ] as const;
-export type MandatoryBlockType = (typeof MANDATORY_BLOCK_TYPES)[number];
 
 // Genuinely optional: zero or one of each, visibility toggleable. Unlike
 // V1, these may be entirely absent from `document.blocks` -- "optional"
 // means may-not-exist, not just may-be-hidden.
 export const OPTIONAL_BUILTIN_BLOCK_TYPES = ["default-note", "footer"] as const;
-export type OptionalBuiltinBlockType =
-  (typeof OPTIONAL_BUILTIN_BLOCK_TYPES)[number];
 
 export const BUILTIN_BLOCK_TYPES = [
   ...MANDATORY_BLOCK_TYPES,
@@ -107,10 +104,6 @@ const invoiceTemplateBlockSchema = z.discriminatedUnion("type", [
   }),
 ]);
 export type InvoiceTemplateBlock = z.infer<typeof invoiceTemplateBlockSchema>;
-export type InvoiceCustomTextBlock = Extract<
-  InvoiceTemplateBlock,
-  { type: "text" }
->;
 
 // `visible` deliberately removed (V1 had it): a row that contributes to the
 // invoice total must always render. Bold/spacing are harmless presentation
@@ -122,7 +115,6 @@ const rowPresentationSchema = z.object({
   bold: z.boolean().optional(),
   spacingBefore: spacingSchema.optional(),
 });
-export type InvoiceRowPresentation = z.infer<typeof rowPresentationSchema>;
 
 // Optional translated copies of an admin-configured template text field.
 // LV lives on the existing top-level column/field (headerText, etc.); EN/RU
@@ -140,9 +132,6 @@ const templateTextTranslationsSchema = z.object({
   paymentInstructions: localizedTextSchema.optional(),
   defaultNote: localizedTextSchema.optional(),
 });
-export type TemplateTextTranslations = z.infer<
-  typeof templateTextTranslationsSchema
->;
 
 // Structural shape only -- no cross-field invariants yet. Split out from
 // invoiceTemplateConfigV2Schema below so the read path can validate shape,

@@ -12,4 +12,13 @@ describe("describeError", () => {
     expect(described.message).not.toContain("a@b.com");
     expect(described.message).not.toContain("secret");
   });
+
+  it("does not throw on a non-string message", () => {
+    expect(describeError({ message: 42 }).message).toBe("[object Object]");
+    expect(describeError({ message: "outer", cause: { message: 7 } })).toEqual({
+      name: undefined,
+      code: undefined,
+      message: "outer",
+    });
+  });
 });

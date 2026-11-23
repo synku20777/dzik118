@@ -4,21 +4,11 @@ const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 // Migration Center: start an import and see the past ones (ADR 0013).
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { listMigrationImports } from "../../../../../domain/migration/flow";
 import { withRequestDb } from "../../../../../lib/db-request";
 
 const organizationId = Astro.params.orgId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const [organization, imports] = await withRequestDb(async (db) => [
   await getOrganization(db, organizationId),

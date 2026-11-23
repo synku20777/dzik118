@@ -4,8 +4,6 @@ import { z } from "astro/zod";
 import {
   ForbiddenError,
   requireDwellingAccess,
-  requireActiveOrganization,
-  requireOrganizationAccess,
 } from "../domain/authorization/guards";
 import { getDwelling } from "../domain/organizations/dwellings";
 import {
@@ -15,10 +13,12 @@ import {
   markConversationRead,
   reply,
   resolveConversation,
+  sendResidentMessage,
 } from "../domain/messaging/conversations";
 import { safeHandler } from "./_errors";
 import { withRequestDb as withDb } from "../lib/db-request";
 import { limitOrThrow } from "../lib/http/rate-limit";
+import { orgAction } from "./_org-action";
 
 export const messages = {
   createConversation: defineAction({
@@ -44,12 +44,34 @@ export const messages = {
     }),
   }),
 
+  // The resident portal's one message box (no Subject field): the domain
+  // picks the open conversation or starts one.
+  residentSend: defineAction({
+    accept: "form",
+    input: z.object({
+      dwellingId: z.uuid(),
+      body: z.string().trim().min(1).max(4000),
+    }),
+    handler: safeHandler(async ({ dwellingId, body }, { locals }) => {
+      requireDwellingAccess(locals.auth, dwellingId);
+      await limitOrThrow("message", locals.auth!.userId);
+      const message = await withDb((db) =>
+        sendResidentMessage(db, dwellingId, body, locals.auth!)
+      );
+      return {
+        id: message.id,
+        body: message.body,
+        createdAt: message.createdAt,
+      };
+    }),
+  }),
+
   // Admin-initiated counterpart to createConversation above (same
   // role-split shape as readings.submitAdmin/submitResident) -- the
   // dwelling is looked up scoped to organizationId first so an admin
   // can't originate a conversation for a dwelling outside their org, the
   // same tenant-scoped-query pattern used everywhere else in this app.
-  createConversationAdmin: defineAction({
+  createConversationAdmin: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
@@ -57,23 +79,23 @@ export const messages = {
       subject: z.string().min(1).max(200),
       body: z.string().min(1).max(4000),
     }),
-    handler: safeHandler(
-      async ({ organizationId, dwellingId, subject, body }, { locals }) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        await limitOrThrow("message", locals.auth!.userId);
-        return withDb(async (db) => {
-          await getDwelling(db, organizationId, dwellingId);
-          return createConversation(
-            db,
-            dwellingId,
-            subject,
-            body,
-            locals.auth!.userId,
-            "ADMIN"
-          );
-        });
-      }
-    ),
+    handler: async (
+      { organizationId, dwellingId, subject, body },
+      { locals }
+    ) => {
+      await limitOrThrow("message", locals.auth!.userId);
+      return withDb(async (db) => {
+        await getDwelling(db, organizationId, dwellingId);
+        return createConversation(
+          db,
+          dwellingId,
+          subject,
+          body,
+          locals.auth!.userId,
+          "ADMIN"
+        );
+      });
+    },
   }),
 
   // Both admin and resident call this one action (spec Section 10 lists a
@@ -105,53 +127,48 @@ export const messages = {
   // the page's initial load) keeps the unread state correct for as long
   // as the admin keeps the conversation open, matching a normal chat's
   // read-receipt behavior.
-  getThread: defineAction({
+  getThread: orgAction({
+    allowArchived: true,
     input: z.object({
       organizationId: z.uuid(),
       conversationId: z.uuid(),
     }),
-    handler: safeHandler(
-      async ({ organizationId, conversationId }, { locals }) => {
-        requireOrganizationAccess(locals.auth, organizationId);
-        return withDb(async (db) => {
-          const conversation = await getConversationForAdmin(
-            db,
-            organizationId,
-            conversationId
-          );
-          await markConversationRead(db, organizationId, conversationId);
-          const messagesList = await listMessagesForConversation(
-            db,
-            conversationId
-          );
-          return {
-            status: conversation.status,
-            occupantName: conversation.occupantName,
-            messages: messagesList,
-          };
-        });
-      }
-    ),
+    handler: async ({ organizationId, conversationId }) => {
+      return withDb(async (db) => {
+        const conversation = await getConversationForAdmin(
+          db,
+          organizationId,
+          conversationId
+        );
+        await markConversationRead(db, organizationId, conversationId);
+        const messagesList = await listMessagesForConversation(
+          db,
+          conversationId
+        );
+        return {
+          status: conversation.status,
+          occupantName: conversation.occupantName,
+          messages: messagesList,
+        };
+      });
+    },
   }),
 
-  resolve: defineAction({
+  resolve: orgAction({
     accept: "form",
     input: z.object({
       organizationId: z.uuid(),
       conversationId: z.uuid(),
     }),
-    handler: safeHandler(
-      async ({ organizationId, conversationId }, { locals }) => {
-        requireActiveOrganization(locals.auth, organizationId);
-        return withDb((db) =>
-          resolveConversation(
-            db,
-            organizationId,
-            conversationId,
-            locals.auth!.userId
-          )
-        );
-      }
-    ),
+    handler: async ({ organizationId, conversationId }, { locals }) => {
+      return withDb((db) =>
+        resolveConversation(
+          db,
+          organizationId,
+          conversationId,
+          locals.auth!.userId
+        )
+      );
+    },
   }),
 };

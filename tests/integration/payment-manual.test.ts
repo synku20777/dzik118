@@ -598,7 +598,8 @@ describe("Manual payment entry and matching (Scope Q)", () => {
         .select()
         .from(invoices)
         .where(eq(invoices.id, invoiceB.id));
-      // B carries A's unpaid debt forward, so A's amount only part-pays B.
+      // Matched to B, the money still covers the oldest invoice first (ADR
+      // 0016): A is paid again, B's own charges are not.
       expect(paidB.paidAt).toBeNull();
       expect(await getInvoiceAllocatedAmount(db, org.id, invoiceB.id)).toBe(
         matchA.proposedAllocationAmount
@@ -608,7 +609,7 @@ describe("Manual payment entry and matching (Scope Q)", () => {
         .select()
         .from(invoices)
         .where(eq(invoices.id, invoiceA.id));
-      expect(stillUnpaidA.paidAt).toBeNull();
+      expect(stillUnpaidA.paidAt).not.toBeNull();
 
       const balance = await getDwellingAccountBalance(
         db,

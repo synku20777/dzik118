@@ -40,7 +40,7 @@ function confirmDialog(): HTMLDialogElement {
 function askToConfirm(
   message: string,
   submitter: HTMLElement | null,
-  form: HTMLFormElement
+  form: Element
 ): Promise<boolean> {
   const dialog = confirmDialog();
   const [, title = message, rest = ""] =
@@ -81,6 +81,24 @@ function askToConfirm(
   );
 }
 
+function confirmationPending(): boolean {
+  const pending = document.getElementById("confirm-dialog");
+  return (
+    !!pending && (pending.hasAttribute("open") || "asking" in pending.dataset)
+  );
+}
+
+// The same question for a script action that is not a form submit, such as a
+// row-menu button: the trigger's label and tone set the confirm button. While
+// another question is open, the answer is no.
+export function confirmAction(
+  message: string,
+  trigger: HTMLElement
+): Promise<boolean> {
+  if (confirmationPending()) return Promise.resolve(false);
+  return askToConfirm(message, trigger, trigger);
+}
+
 document.addEventListener(
   "submit",
   (event) => {
@@ -93,12 +111,7 @@ document.addEventListener(
     // While a confirmation is pending, another submit is dropped, so one
     // answer can never submit two forms. The state lives on the dialog, so a
     // page swap that removes it mid-question cannot leave this stuck.
-    const pending = document.getElementById("confirm-dialog");
-    if (
-      pending &&
-      (pending.hasAttribute("open") || "asking" in pending.dataset)
-    )
-      return;
+    if (confirmationPending()) return;
     void askToConfirm(message, submitter, form).then((ok) => {
       if (!ok || !form.isConnected) return;
       // requestSubmit dispatches synchronously, so the flag covers exactly
@@ -124,7 +137,9 @@ document.addEventListener("submit", (event) => {
   const form = event.target;
   if (
     !(form instanceof HTMLFormElement) ||
-    form.method.toLowerCase() !== "post" ||
+    // getAttribute, not form.method: a field named "method" (the payment
+    // form's) shadows the property and made this throw.
+    (form.getAttribute("method") ?? "get").toLowerCase() !== "post" ||
     event.defaultPrevented
   )
     return;

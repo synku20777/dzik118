@@ -27,7 +27,6 @@ export type InvoiceSendAttemptStatus =
   (typeof invoiceSendAttemptStatusEnum.enumValues)[number];
 
 export type InvoiceSendAttempt = typeof invoiceSendAttempts.$inferSelect;
-export type NewInvoiceSendAttempt = typeof invoiceSendAttempts.$inferInsert;
 
 export type ClaimSendAttemptResult =
   | { claimed: true; attempt: InvoiceSendAttempt }

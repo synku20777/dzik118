@@ -19,6 +19,7 @@ import {
 } from "../../src/domain/billing/generation";
 import { createLateFeePolicy } from "../../src/domain/accounts/settings";
 import { createDwellingAccountAdjustment } from "../../src/domain/accounts/adjustments";
+import { postAccountEntry } from "../../src/domain/accounts/ledger";
 import {
   buildBalanceSnapshot,
   buildPenaltySnapshot,
@@ -72,7 +73,6 @@ describe("statement financials and snapshots", () => {
 
     expect(financials.accountBalance).toBe("0.00");
     expect(financials.policy).toBeNull();
-    expect(financials.oldestUnpaid).toBeUndefined();
     expect(financials.balance.previousOutstanding).toBe("0.00");
     expect(financials.balance.previousCreditApplied).toBe("0.00");
     expect(financials.balance.lateFee).toBe("0.00");
@@ -145,9 +145,6 @@ describe("statement financials and snapshots", () => {
       manualAdjustment: "0.00",
     });
 
-    expect(financials.oldestUnpaid).toBeDefined();
-    expect(financials.oldestUnpaid?.invoiceNumber).toBe(invoice1.invoiceNumber);
-    expect(financials.oldestUnpaid?.dueDate).toBe("2026-02-14");
     expect(financials.accountBalance).toBe("85.00");
     expect(financials.balance.previousOutstanding).toBe("85.00");
     expect(financials.balance.amountDue).toBe("185.00");
@@ -240,11 +237,79 @@ describe("statement financials and snapshots", () => {
       manualAdjustment: "0.00",
     });
 
-    expect(financials.oldestUnpaid?.invoiceNumber).toBe(invoice1.invoiceNumber);
-    expect(financials.oldestUnpaid?.dueDate).toBe("2026-02-14");
     expect(financials.accountBalance).toBe("100.00");
     expect(financials.balance.previousOutstanding).toBe("100.00");
     expect(financials.balance.amountDue).toBe("160.00");
+
+    // On 1 March only the January invoice is late (due 14 February). The
+    // February one is due 14 March, so it is debt but not late-fee principal.
+    await createLateFeePolicy(db, {
+      organizationId: org.id,
+      effectiveFrom: "2025-01-01",
+      enabled: true,
+      dailyRate: "0.5000",
+      graceDays: 0,
+      maxPenaltyPercent: "10.00",
+      stopsAtCap: true,
+      actorUserId: seedAdminId,
+    });
+    const onFirstOfMarch = await resolveStatementFinancials(db, {
+      organizationId: org.id,
+      dwellingId: dwelling.id,
+      currency: "EUR",
+      issueDate: "2026-03-01",
+      currentCharges: "60.00",
+      manualAdjustment: "0.00",
+    });
+    expect(onFirstOfMarch.accountBalance).toBe("100.00");
+    // Only January: 50 x 0.5% x 15 days (15 Feb - 1 Mar).
+    expect(onFirstOfMarch.lateFee.sources.map((s) => s.invoiceId)).toEqual([
+      invoice1.id,
+    ]);
+    expect(onFirstOfMarch.lateFee.appliedAmount).toBe("3.75");
+
+    // An invoice in another currency gets no late fee on a EUR statement.
+    await db.$client.query("update invoices set currency = $1 where id = $2", [
+      "USD",
+      invoice1.id,
+    ]);
+    const inEuro = await resolveStatementFinancials(db, {
+      organizationId: org.id,
+      dwellingId: dwelling.id,
+      currency: "EUR",
+      issueDate: "2026-03-31",
+      currentCharges: "60.00",
+      manualAdjustment: "0.00",
+    });
+    expect(inEuro.lateFee.sources.map((s) => s.invoiceId)).toEqual([
+      invoice2.id,
+    ]);
+    await db.$client.query("update invoices set currency = $1 where id = $2", [
+      "EUR",
+      invoice1.id,
+    ]);
+
+    // An invoice money covered before its due date is not late.
+    await postAccountEntry(db, {
+      organizationId: org.id,
+      dwellingId: dwelling.id,
+      effectiveDate: "2026-02-10",
+      type: "PAYMENT",
+      debit: "0.00",
+      credit: "50.00",
+      currency: "EUR",
+      description: "Paid on time",
+      idempotencyKey: `it-stmt-on-time:${dwelling.id}`,
+    });
+    const withJanuaryCovered = await resolveStatementFinancials(db, {
+      organizationId: org.id,
+      dwellingId: dwelling.id,
+      currency: "EUR",
+      issueDate: "2026-03-01",
+      currentCharges: "60.00",
+      manualAdjustment: "0.00",
+    });
+    expect(withJanuaryCovered.lateFee.appliedAmount).toBe("0.00");
 
     await cleanupOrg(org.id);
   });
@@ -433,7 +498,6 @@ describe("statement financials and snapshots", () => {
     });
     expect(finModerate.lateFee.appliedAmount).toBe("1.50");
     expect(finModerate.lateFee.rawAmount).toBe("1.50");
-    expect(finModerate.lateFee.capAmount).toBe("10.00");
     expect(Number(finModerate.lateFee.appliedAmount)).toBeGreaterThan(0);
 
     // 2. Extended overdue where daily rate accrual exceeds cap:
@@ -449,7 +513,6 @@ describe("statement financials and snapshots", () => {
       manualAdjustment: "0.00",
     });
     expect(finCapped.lateFee.rawAmount).toBe("20.00");
-    expect(finCapped.lateFee.capAmount).toBe("10.00");
     expect(finCapped.lateFee.appliedAmount).toBe("10.00");
     expect(finCapped.lateFee.stopsAtCap).toBe(true);
     expect(finCapped.balance.lateFee).toBe("10.00");
@@ -547,12 +610,16 @@ describe("statement financials and snapshots", () => {
       graceDays: 0,
       maxPenaltyPercent: "15.0000",
       stopsAtCap: true,
-      eligiblePrincipal: "200.00",
-      excludedOpeningDebt: "0.00",
-      firstPenaltyDate: "2026-02-15",
-      overdueDays: 45,
-      rawAmount: "9.00", // 200 * 0.1% * 45 = 9.00
-      capAmount: "30.00", // 200 * 15% = 30.00
+      rawAmount: "9.00", // 200 * 0.1% * 45 = 9.00, under the 30.00 cap
+      sources: [
+        {
+          invoiceId: invoice1.id,
+          invoiceNumber: invoice1.invoiceNumber,
+          firstPenaltyDate: "2026-02-15",
+          accrued: "9.00",
+          charged: "9.00",
+        },
+      ],
     });
 
     // Also verify when policy is absent
@@ -567,8 +634,7 @@ describe("statement financials and snapshots", () => {
     const noPolicySnapshot = buildPenaltySnapshot(noPolicyFinancials);
     expect(noPolicySnapshot.policyId).toBeNull();
     expect(noPolicySnapshot.enabled).toBe(false);
-    expect(noPolicySnapshot.firstPenaltyDate).toBeNull();
-    expect(noPolicySnapshot.overdueDays).toBe(0);
+    expect(noPolicySnapshot.sources).toEqual([]);
     expect(noPolicySnapshot.rawAmount).toBe("0.00");
 
     await cleanupOrg(org.id);

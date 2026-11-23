@@ -290,7 +290,7 @@ const show = true;
     expect(missingFieldErrorAttrs).toEqual([]);
   });
 
-  it("adopts FieldError in dwelling detail and hardened per-field ARIA & lifecycle guards in tariff drawer", () => {
+  it("adopts FieldError in dwelling detail and per-field ARIA in the tariff drawer", () => {
     const dwellingDetail = readFileSync(
       resolve(root, "src/pages/admin/o/[orgId]/dwellings/[dwellingId].astro"),
       "utf8"
@@ -302,11 +302,11 @@ const show = true;
       resolve(root, "src/pages/admin/o/[orgId]/settings/rules.astro"),
       "utf8"
     );
-    expect(rules).toContain("setDrawerFieldError");
-    expect(rules).toContain("clearDrawerFieldError");
-    expect(rules).toContain("setSavingState");
-    expect(rules).toContain("KNOWN_TARIFF_FIELDS");
-    expect(rules).toContain("clearDwellingIdsError");
-    expect(rules).toContain('id="tariff-unitPrice-error"');
+    // Each field error is its own paragraph after the field, linked by
+    // aria-describedby, and cleared with the field's invalid state.
+    expect(rules).toContain('paragraph.className = "field-error"');
+    expect(rules).toContain('field.setAttribute("aria-invalid", "true")');
+    expect(rules).toContain('field.removeAttribute("aria-invalid")');
+    expect(rules).toMatch(/aria-describedby[\s\S]*paragraph\.id/);
   });
 });

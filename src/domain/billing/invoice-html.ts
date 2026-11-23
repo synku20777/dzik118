@@ -17,12 +17,16 @@
 // exactly what makes it safe to also bundle into the client-side editor.
 import { trimDecimal } from "../../lib/decimal-trim";
 import { escapeHtml } from "../../lib/html-escape";
+import { unitLabel } from "../../lib/ui/units";
+import { ConflictError } from "../errors";
 import {
+  LOCALIZED_UNITS_FROM_LABEL_SET,
   TRIMMED_NUMBERS_FROM_LABEL_SET,
   pickLocalizedText,
   translateInvoiceLabel,
   type InvoiceLocale,
 } from "./invoice-i18n";
+import { parseInvoiceSnapshots } from "./invoice-snapshots";
 import { tryBuildSepaQrSvg } from "./sepa-qr";
 import {
   normalizeInvoiceTemplateSnapshot,
@@ -67,35 +71,6 @@ export interface InvoiceHtmlLine {
   vatAmount: string;
   grossAmount: string;
   sourceSnapshot: unknown;
-}
-
-interface IssuerSnapshot {
-  name?: string;
-  registrationNumber?: string | null;
-  vatNumber?: string | null;
-  addressLine1?: string;
-  addressLine2?: string | null;
-  city?: string | null;
-  postalCode?: string | null;
-  countryCode?: string;
-  email?: string | null;
-  phone?: string | null;
-}
-
-interface RecipientSnapshot {
-  dwellingNumber?: string;
-  displayName?: string | null;
-  occupantName?: string | null;
-  billingName?: string | null;
-  billingEmail?: string | null;
-  billingAddress?: string | null;
-}
-
-interface PaymentSnapshot {
-  bankName?: string | null;
-  iban?: string | null;
-  bic?: string | null;
-  currency?: string;
 }
 
 // The full billing_rules row is already snapshotted onto every line's
@@ -173,19 +148,37 @@ export function rowPresentationKey(line: InvoiceHtmlLine): string {
   return source?.code ?? line.id;
 }
 
+// For a preview on a page (an iframe's srcdoc). A damaged invoice shows the
+// reason in place of the document, and the rest of the page still loads.
+export function renderInvoicePreview(
+  invoice: InvoiceHtmlInvoice,
+  lines: InvoiceHtmlLine[],
+  locale: InvoiceLocale,
+  translateMessage: (text: string) => string,
+  options: { showPaymentQr?: boolean } = {}
+): string {
+  try {
+    return renderInvoiceHtml(invoice, lines, locale, options);
+  } catch (err) {
+    if (!(err instanceof ConflictError)) throw err;
+    return `<p style="font-family: sans-serif;">${escapeHtml(translateMessage(err.message))}</p>`;
+  }
+}
+
 export function renderInvoiceHtml(
   invoice: InvoiceHtmlInvoice,
   lines: InvoiceHtmlLine[],
-  locale: InvoiceLocale = "lv"
+  locale: InvoiceLocale = "lv",
+  { showPaymentQr = true }: { showPaymentQr?: boolean } = {}
 ): string {
-  const issuer = invoice.issuerSnapshot as IssuerSnapshot;
-  const recipient = invoice.recipientSnapshot as RecipientSnapshot;
-  const payment = invoice.paymentSnapshot as PaymentSnapshot;
+  const { issuer, recipient, payment } = parseInvoiceSnapshots(invoice);
   const template = normalizeInvoiceTemplateSnapshot(invoice.templateSnapshot);
   // Pinned per invoice at generation, like the label wording: an invoice
   // generated before label set 3 keeps printing its figures as stored.
   const trimNumbers =
     template.labelSetVersion >= TRIMMED_NUMBERS_FROM_LABEL_SET;
+  const localizeUnits =
+    template.labelSetVersion >= LOCALIZED_UNITS_FROM_LABEL_SET;
   const label = (key: Parameters<typeof translateInvoiceLabel>[1]) =>
     translateInvoiceLabel(locale, key, template.labelSetVersion);
   // Labels for these exist from label set 2 on; older invoices never show them.
@@ -227,14 +220,16 @@ export function renderInvoiceHtml(
   // editable "QR data" source. tryBuildSepaQrSvg never throws: a
   // non-EUR/zero-due/missing-BIC/malformed-IBAN invoice (including old
   // historical data) simply renders without a QR.
-  const qrSvg = tryBuildSepaQrSvg({
-    beneficiaryName: issuer.name ?? "",
-    iban: payment.iban ?? "",
-    bic: payment.bic ?? null,
-    currency: invoice.currency,
-    amountDue: invoice.amountDue,
-    invoiceNumber: invoice.invoiceNumber,
-  });
+  const qrSvg = showPaymentQr
+    ? tryBuildSepaQrSvg({
+        beneficiaryName: issuer.name ?? "",
+        iban: payment.iban ?? "",
+        bic: payment.bic ?? null,
+        currency: invoice.currency,
+        amountDue: invoice.amountDue,
+        invoiceNumber: invoice.invoiceNumber,
+      })
+    : null;
 
   // No `visible` check here (V1 had one): a row that contributes to the
   // invoice total is never hideable, in the schema and here alike -- see
@@ -255,7 +250,7 @@ export function renderInvoiceHtml(
       return `
         <tr${trStyle}>
           <td${cellStyle}>${escapeHtml(localizedLineDescription(line, locale))}</td>
-          <td class="num"${cellStyle}>${escapeHtml(trimNumbers ? trimDecimal(line.quantity) : line.quantity)} ${escapeHtml(line.unit)}</td>
+          <td class="num"${cellStyle}>${escapeHtml(trimNumbers ? trimDecimal(line.quantity) : line.quantity)} ${escapeHtml(localizeUnits && line.unit ? unitLabel(line.unit, locale) : line.unit)}</td>
           <td class="num"${cellStyle}>${escapeHtml(line.unitPrice ? (trimNumbers ? trimDecimal(line.unitPrice, 2) : line.unitPrice) : "—")}</td>
           <td class="num"${cellStyle}>${escapeHtml(line.netAmount)}</td>
           <td class="num"${cellStyle}>${escapeHtml(line.vatAmount)}</td>

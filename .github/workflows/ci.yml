@@ -67,11 +67,74 @@ jobs:
           git status --porcelain drizzle
           test -z "$(git status --porcelain drizzle)"
 
-      # Non-blocking for now: 7 high-severity advisories already exist.
-      # Remove continue-on-error once they're resolved.
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
-        continue-on-error: true
 
       - name: Build project
         run: npm run build
+
+  # The money, payment and tenant-isolation rules are tested here, not in the
+  # unit tests. A plain Postgres is enough for 28 of the 34 files; the six
+  # excluded below need Supabase Storage or Auth and still run locally only
+  # (`npx supabase start`, then `npm run test:integration`).
+  integration:
+    name: Integration tests (Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Not blocking until this job has passed once on GitHub: it was checked
+    # against a local Postgres 17 container only. Remove the next line then.
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      # Dummy values: six suites read these when they load.
+      SUPABASE_URL: http://127.0.0.1:54321
+      SUPABASE_PUBLISHABLE_KEY: ci-dummy-publishable-key
+      SUPABASE_SECRET_KEY: ci-dummy-secret-key
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The migrations revoke rights from the roles a Supabase database has.
+      - name: Create the Supabase roles
+        run: psql "$DATABASE_URL" -c "create role anon; create role authenticated; create role service_role;"
+
+      # drizzle-kit can exit 0 after a failed migration, so count what was
+      # applied against the journal.
+      - name: Apply migrations
+        run: |
+          npx drizzle-kit migrate
+          applied=$(psql "$DATABASE_URL" -tA -c "select count(*) from drizzle.__drizzle_migrations")
+          expected=$(node -p "require('./drizzle/migrations/meta/_journal.json').entries.length")
+          echo "applied $applied of $expected migrations"
+          test "$applied" = "$expected"
+
+      - name: Run integration tests
+        run: >-
+          npx vitest run --config vitest.integration.config.ts
+          --exclude "**/admin-ux.test.ts"
+          --exclude "**/automation.test.ts"
+          --exclude "**/invoice-delivery.test.ts"
+          --exclude "**/organizations-dwellings.test.ts"
+          --exclude "**/resident-ux.test.ts"
+          --exclude "**/security.test.ts"

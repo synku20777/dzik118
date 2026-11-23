@@ -4,7 +4,6 @@ import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
 import { getInvoice } from "../../../../../../../../domain/billing/generation";
 import { ensureCanonicalPdf } from "../../../../../../../../domain/billing/sending";
-import { requireOrganizationAccess } from "../../../../../../../../domain/authorization/guards";
 import { parseInvoiceLocale } from "../../../../../../../../domain/billing/invoice-i18n";
 import { renderInvoiceHtml } from "../../../../../../../../domain/billing/invoice-html";
 import { renderPdf } from "../../../../../../../../lib/pdf/render";
@@ -14,6 +13,7 @@ import {
   invoicePdfNotReadyResponse,
 } from "../../../../../../../../lib/storage/invoices";
 import { toApiErrorResponse } from "../../../../../../../../lib/http/api-error";
+import { ValidationError } from "../../../../../../../../domain/errors";
 import { withRequestDb } from "../../../../../../../../lib/db-request";
 import { getSupabaseAdmin } from "../../../../../../../../actions/_supabase_admin";
 import { limitOrThrow } from "../../../../../../../../lib/http/rate-limit";
@@ -24,11 +24,12 @@ export const GET: APIRoute = async ({ params, locals, url }) => {
   const organizationId = params.orgId;
   const invoiceId = params.invoiceId;
   if (!organizationId || !invoiceId) {
-    return toApiErrorResponse(new Error("missing params"));
+    return toApiErrorResponse(
+      new ValidationError("An organization id and an invoice id are required")
+    );
   }
 
   try {
-    requireOrganizationAccess(locals.auth, organizationId);
     await limitOrThrow("pdf", locals.auth!.userId);
   } catch (err) {
     return toApiErrorResponse(err);

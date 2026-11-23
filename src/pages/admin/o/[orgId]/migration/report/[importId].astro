@@ -5,10 +5,6 @@ const t = (text: string) => translate(locale, text);
 // Reconciliation report of an opening balance import (ADR 0013): the totals of
 // the file against the totals rebuilt from the ledger entries of this import.
 import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../../domain/authorization/guards";
 import { NotFoundError } from "../../../../../../domain/errors";
 import { getOrganization } from "../../../../../../domain/organizations/organizations";
 import { getBalanceReport } from "../../../../../../domain/migration/balances";
@@ -16,12 +12,6 @@ import { withRequestDb } from "../../../../../../lib/db-request";
 
 const organizationId = Astro.params.orgId!;
 const importId = Astro.params.importId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 // A malformed id would be a database error, not a missing report.
 if (!/^[0-9a-f-]{36}$/i.test(importId)) {

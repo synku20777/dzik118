@@ -2,6 +2,7 @@
 // (spec Section 15.3). Resolves identity only; org/dwelling-specific checks
 // happen at the page/action level via src/domain/authorization/guards.ts,
 // per Section 15.3's "avoid database-heavy authorization globally".
+import { getActionContext } from "astro:actions";
 import { defineMiddleware } from "astro:middleware";
 import { env, tracing } from "cloudflare:workers";
 import {
@@ -11,6 +12,8 @@ import {
 } from "astro:env/server";
 import { createDb } from "./db/client";
 import { loadAuthContext } from "./domain/authorization/context";
+import { ForbiddenError } from "./domain/authorization/guards";
+import { toApiErrorResponse } from "./lib/http/api-error";
 import {
   getRequestContext,
   hashIp,
@@ -129,6 +132,22 @@ const handle = defineMiddleware(async (context, next) => {
     }
   }
 
+  // Default deny for every page and API whose path names an organization or
+  // a dwelling, so a new page cannot forget the check (guards are in-memory,
+  // so Section 15.3's "no database-heavy authorization globally" holds).
+  const orgId = /^\/(?:api\/v1\/)?admin\/o\/([^/]+)/.exec(url.pathname)?.[1];
+  const dwellingId = /^\/portal\/dwellings\/([^/]+)/.exec(url.pathname)?.[1];
+  if (
+    (orgId && !locals.auth?.organizationIds.includes(orgId)) ||
+    (dwellingId && !locals.auth?.dwellingIds.includes(dwellingId))
+  ) {
+    return respond(
+      url.pathname.startsWith("/api/")
+        ? toApiErrorResponse(new ForbiddenError())
+        : redirect("/unauthorized")
+    );
+  }
+
   // See docs/decisions/0002-admin-aal2-boundary.md. Also covers /_actions/**
   // and /api/v1/admin/** -- Astro Actions and the admin API are reachable
   // independently of the /admin/** page routes (same reasoning as every
@@ -161,8 +180,61 @@ const handle = defineMiddleware(async (context, next) => {
   // protected paths). Public paths remain reachable, matching Section 15.3's
   // instruction to reject disabled users only where it matters.
 
+  // Post/redirect/get for every plain HTML form action: after a success the
+  // browser is sent back to the page with a GET, so a refresh cannot submit
+  // again. The result travels in a cookie only that page receives. A failure
+  // renders in place, so the form keeps what the user typed.
+  const { action, setActionResult, serializeActionResult } =
+    getActionContext(context);
+  const stored = cookies.get(ACTION_RESULT_COOKIE);
+  let restored: { name?: unknown; path?: unknown; result?: unknown } = {};
+  try {
+    restored = stored?.json() ?? {};
+  } catch {
+    // A malformed cookie only loses the success message.
+  }
+  // The cookie path also matches child pages, so only the page that set it
+  // takes it, and only a success: nothing else may plant an error message.
+  if (request.method === "GET" && restored.path === url.pathname) {
+    cookies.delete(ACTION_RESULT_COOKIE, { path: url.pathname });
+    const result = restored.result as { type?: unknown } | undefined;
+    if (
+      typeof restored.name === "string" &&
+      (result?.type === "data" || result?.type === "empty")
+    ) {
+      setActionResult(restored.name, result as never);
+    }
+  } else if (action?.calledFrom === "form") {
+    const result = serializeActionResult(await action.handler());
+    const value = JSON.stringify({
+      name: action.name,
+      path: url.pathname,
+      result,
+    });
+    if (result.type !== "error") {
+      // shortcut: a result over ~3 KB cannot fit a cookie, so the page
+      // reloads without its success message; move to Astro sessions or
+      // return less from that action if a message goes missing.
+      if (encodeURIComponent(value).length <= 3000) {
+        cookies.set(ACTION_RESULT_COOKIE, value, {
+          path: url.pathname,
+          httpOnly: true,
+          secure: isHttps,
+          sameSite: "lax",
+          maxAge: 60,
+        });
+      }
+      const target = new URL(url);
+      target.searchParams.delete("_action");
+      return respond(redirect(target.pathname + target.search, 303));
+    }
+    setActionResult(action.name, result);
+  }
+
   return respond(await tracing.enterSpan("route.render", () => next()));
 });
+
+const ACTION_RESULT_COOKIE = "action_result";
 
 // Every audit row written while this request runs carries its request ID and
 // hashed IP (see src/lib/logging/request-context.ts).

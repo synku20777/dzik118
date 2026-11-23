@@ -5,21 +5,20 @@ import {
   subtractExact,
 } from "../../lib/decimal2";
 
-/** Single source of truth for invoice paid/outstanding amounts across ledger
- *  allocations and direct paidAt fallbacks. Caps paid at non-negative
- *  amountDue so `paid + outstanding === max(amountDue, 0)` even if an unsent
- *  partially-paid invoice was later regenerated for a lower amount. */
+/** Single source of truth for invoice paid/outstanding amounts. A Paid
+ *  invoice (paidAt set) shows nothing still due, also when the money was
+ *  matched to another invoice (ADR 0016); otherwise its ledger allocations
+ *  count. Caps paid at non-negative amountDue so
+ *  `paid + outstanding === max(amountDue, 0)`. */
 export function computeInvoicePaidAndOutstanding(
   invoice: { amountDue: string; paidAt: Date | null },
   allocatedByInvoice: ReadonlyMap<string, string>,
   invoiceId: string
 ): { paid: string; outstanding: string } {
   const due = maxExact(invoice.amountDue, "0.00");
-  const hasLedgerAllocation = allocatedByInvoice.has(invoiceId);
-  const rawPaid =
-    invoice.paidAt && !hasLedgerAllocation
-      ? due
-      : maxExact(allocatedByInvoice.get(invoiceId) ?? "0.00", "0.00");
+  const rawPaid = invoice.paidAt
+    ? due
+    : maxExact(allocatedByInvoice.get(invoiceId) ?? "0.00", "0.00");
   const paid = minExact(rawPaid, due);
   const outstanding = maxExact(subtractExact(due, paid), "0.00");
   return { paid, outstanding };

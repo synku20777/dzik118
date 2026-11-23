@@ -3,14 +3,22 @@
 // uniform "invalid or expired" response are identical; only what each
 // route does with a successfully resolved token differs.
 import { env } from "cloudflare:workers";
+import { ConflictError, rethrowUnexpected } from "../../domain/errors";
 
-// A function, not a shared module-level constant: constructing a Response
-// outside a request handler is disallowed in the Workers runtime
-// ("Disallowed operation called within global scope").
-export function invalidInvoiceLinkResponse(): Response {
+// The answer to anything a token route catches. A bad, revoked or expired
+// token gets one uniform response (spec Section 24: a public caller cannot
+// tell these apart). A damaged invoice says so, and an outage goes to the
+// error page: neither is a bad link, and the holder of a working link can
+// read the invoice anyway.
+export function invoiceTokenErrorResponse(err: unknown): Response {
+  const headers = { "Content-Type": "text/plain; charset=utf-8" };
+  if (err instanceof ConflictError) {
+    return new Response(err.message, { status: 409, headers });
+  }
+  rethrowUnexpected(err);
   return new Response("This link is invalid or has expired.", {
     status: 404,
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
+    headers,
   });
 }
 

@@ -24,10 +24,6 @@ const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { listDwellings } from "../../../../../domain/organizations/dwellings";
 import {
@@ -40,14 +36,9 @@ import { withRequestDb } from "../../../../../lib/db-request";
 import { resolvePaginationLinks } from "../../../../../lib/ui/pagination";
 import { fieldErrorAttrs } from "../../../../../lib/ui/field-error-attrs";
 import { initials } from "../../../../../lib/ui/initials";
+import { rethrowUnexpected } from "../../../../../domain/errors";
 
 const organizationId = Astro.params.orgId!;
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const replyResult = Astro.getActionResult(actions.messages.reply);
 const resolveResult = Astro.getActionResult(actions.messages.resolve);
@@ -174,7 +165,8 @@ if (selectedId) {
         return { selectedConversation: conversation, selectedMessages: msgs };
       }
     ));
-  } catch {
+  } catch (err) {
+    rethrowUnexpected(err);
     selectedConversation = null;
   }
 }
@@ -890,7 +882,7 @@ const conversationStatusMap = Object.fromEntries(
     border-bottom: 0;
   }
   .messages-list-item:hover {
-    background: var(--color-surface-hover);
+    background: var(--color-hover);
   }
   .messages-list-item[aria-current="true"] {
     background: var(--color-nav-active-bg);
@@ -983,7 +975,7 @@ const conversationStatusMap = Object.fromEntries(
     align-items: center;
     gap: 1rem;
     padding: 1rem 1.25rem;
-    border: 1px solid var(--color-border);
+    border: var(--panel-border);
     border-radius: var(--radius-panel);
     corner-shape: squircle;
     background: var(--color-surface-hover);

@@ -6,26 +6,16 @@ import {
   translate,
   uiLocale,
 } from "../../../../../../lib/ui/i18n";
-import {
-  ForbiddenError,
-  requireOrganizationAccess,
-} from "../../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../../domain/organizations/organizations";
 import { getPeriod } from "../../../../../../domain/periods/periods";
 import { listReadingGridForPeriod } from "../../../../../../domain/periods/cases";
 import { withRequestDb } from "../../../../../../lib/db-request";
+import { rethrowUnexpected } from "../../../../../../domain/errors";
 import { subtractDecimal3 } from "../../../../../../lib/decimal3";
 import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
 
 const organizationId = Astro.params.orgId!;
 const periodId = Astro.params.periodId!;
-
-try {
-  requireOrganizationAccess(Astro.locals.auth, organizationId);
-} catch (err) {
-  if (err instanceof ForbiddenError) return Astro.redirect("/unauthorized");
-  throw err;
-}
 
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
@@ -37,7 +27,8 @@ try {
     period: await getPeriod(db, organizationId, periodId),
     gridRows: await listReadingGridForPeriod(db, organizationId, periodId),
   })));
-} catch {
+} catch (err) {
+  rethrowUnexpected(err);
   return Astro.redirect(`/admin/o/${organizationId}/periods`);
 }
 

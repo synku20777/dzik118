@@ -885,6 +885,18 @@ describe("invoice generation", () => {
     await expect(
       generateInvoice(db, org.id, period.id, dwelling.id, seedAdminId)
     ).rejects.toBeInstanceOf(ConflictError);
+    // Preparing again would give the sent invoice a new amount due.
+    await expect(
+      prepareInvoice(db, org.id, invoice.id, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
+    // The same for an invoice that is paid and was never sent.
+    await db.$client.query(
+      "update invoices set sent_at = null, paid_at = now() where id = $1",
+      [invoice.id]
+    );
+    await expect(
+      prepareInvoice(db, org.id, invoice.id, seedAdminId)
+    ).rejects.toBeInstanceOf(ConflictError);
 
     await cleanupOrg(org.id);
   });
@@ -948,16 +960,20 @@ describe("invoice generation", () => {
       )
     ).rejects.toBeInstanceOf(ConflictError);
 
-    const updated = await overrideCaseStatus(
-      db,
-      org.id,
-      invoice.billingCaseId,
-      "PREPARED",
-      "valid prepared override",
-      seedAdminId
-    );
-    expect(updated.status).toBe("PREPARED");
-    expect(updated.manualStatusOverride).toBe(true);
+    // An override posts nothing to the account: Prepared needs a real
+    // preparation, Overdue needs a sent invoice.
+    for (const status of ["PREPARED", "OVERDUE"] as const) {
+      await expect(
+        overrideCaseStatus(
+          db,
+          org.id,
+          invoice.billingCaseId,
+          status,
+          "attempt to skip preparation",
+          seedAdminId
+        )
+      ).rejects.toBeInstanceOf(ConflictError);
+    }
 
     await expect(
       overrideCaseStatus(

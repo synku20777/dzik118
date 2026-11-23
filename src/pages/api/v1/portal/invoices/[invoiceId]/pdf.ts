@@ -13,6 +13,7 @@ import {
   invoicePdfNotReadyResponse,
 } from "../../../../../../lib/storage/invoices";
 import { toApiErrorResponse } from "../../../../../../lib/http/api-error";
+import { ValidationError } from "../../../../../../domain/errors";
 import { withRequestDb } from "../../../../../../lib/db-request";
 import { getSupabaseAdmin } from "../../../../../../actions/_supabase_admin";
 import { limitOrThrow } from "../../../../../../lib/http/rate-limit";
@@ -21,12 +22,14 @@ export const GET: APIRoute = async ({ params, locals, url }) => {
   const invoiceId = params.invoiceId;
   const dwellingId = url.searchParams.get("dwellingId");
   if (!invoiceId || !dwellingId) {
-    return toApiErrorResponse(new Error("missing params"));
+    return toApiErrorResponse(
+      new ValidationError("An invoice id and a dwelling id are required")
+    );
   }
 
   try {
     requireDwellingAccess(locals.auth, dwellingId);
-    await limitOrThrow("pdf", locals.auth!.userId);
+    await limitOrThrow("pdf", locals.auth.userId);
   } catch (err) {
     return toApiErrorResponse(err);
   }
