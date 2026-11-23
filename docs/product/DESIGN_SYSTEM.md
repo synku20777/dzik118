@@ -35,7 +35,7 @@ and bone (dark structure and text), daugava (action and navigation), verdigris
 | `--color-surface` | Panels, tables, fields, menus. |
 | `--color-surface-hover` | Static tints: the table header and disabled fields. Equal to the canvas in light mode. Do not use it for hover (use `--color-hover`). |
 | `--color-surface-raised` | Background of elevated surfaces: toasts, menus, popovers, dialogs, drawers (tooltips and the bulk-action toolbar keep their own fill). Equal to surface in light mode, one step lighter in dark mode, where shadows cannot show depth. |
-| `--color-hover` | Hover fill of interactive things: table rows, secondary and ghost buttons, menu items, tabs, nav links. Inside a raised surface (menus, dialogs, the drawer) dark mode uses one step lighter (`--palette-night-725`), because the shared dark hover equals the raised fill. Darker than both canvas and surface in light mode (about 1.1 against the canvas, 1.3 against the surface) so a hovered button on the page background does not disappear. `--color-surface-hover` stays for static tints (table header, disabled fields). |
+| `--color-hover` | Hover fill for table rows and other controls with a tinted hover state. Inside a raised surface (menus, dialogs, the drawer) dark mode uses one step lighter (`--palette-night-725`), because the shared dark hover equals the raised fill. Darker than both canvas and surface in light mode (about 1.1 against the canvas, 1.3 against the surface). |
 | `--color-foreground` / `--color-muted` | Text, and secondary text. Muted keeps 4.5:1 on canvas and surface. |
 | `--color-border` | Dividers: table rows, list rows, tab underline, metric dividers, progress tracks. Not used for container outlines. |
 | `--panel-border` | The `border` shorthand of every container (panel, table wrap, metric strip, card, shell edge). It is `0 solid transparent`: containers have no outline and are told apart by the canvas/surface step. In Windows high-contrast mode it becomes `1px solid CanvasText`. Set it to `1px solid var(--color-border)` to bring outlines back. Use `.contained` on a utility-styled container. |
@@ -161,8 +161,8 @@ named layer (an open row menu's row, the `/design-system` top bar).
 
 In dark mode shadows are replaced by a hairline `--color-border` ring (floating
 surfaces keep an outline; only containers on the page lose theirs), and the
-element uses `--color-surface-raised`. `--shadow-control` is the thumb shadow
-for toggles.
+element uses `--color-surface-raised`. `--shadow-control` lifts switch thumbs
+and selected segments.
 
 ### Motion and icons
 
@@ -221,11 +221,11 @@ labels, a controller), not to wrap one element.
 out of a dialog or an optional step; it underlines on hover). Sizes: default
 44px, `btn-sm` 36px (44px on coarse pointers).
 
-- States: hover and active fill per variant; on a pointer device hover also
-  draws a 4px ring (`--hover-ring`) in the button's own colour, so the edge
-  grows instead of the button moving. `disabled` or `aria-disabled` at 45%
-  opacity; `aria-busy="true"` sets the progress cursor. The caller owns
-  duplicate-submit prevention.
+- States: active fill per variant. On hover, secondary buttons keep their
+  resting fill and draw the 4px ring (`--hover-ring`); primary and destructive
+  buttons change fill and draw a ring in their own colour. `disabled` or
+  `aria-disabled` at 45% opacity; `aria-busy="true"` sets the progress cursor.
+  The caller owns duplicate-submit prevention.
 - Use a `<button>` for actions and an `<a>` for navigation.
 - Do: one `btn-primary` per view region. Don't: stack two primaries, or use
   `btn-danger` for a confirm that is not destructive.
@@ -233,9 +233,11 @@ out of a dialog or an optional step; it underlines on hover). Sizes: default
 ### Icon button
 
 `icon-btn` (44px), `icon-btn-sm` (36px, 44px on coarse pointers). Always
-`aria-label`. `icon-btn-danger` is a delete: its icon turns destructive under
-the pointer, with a destructive ring. `icon-btn-ghost` has no border until
-hovered, for a dialog's close button or a row of several icon actions.
+`aria-label`. Standard icon buttons keep their resting fill on hover and draw
+the 4px ring. `icon-btn-danger` is a delete: its icon turns destructive under
+the pointer, with a destructive ring. `icon-btn-ghost` stays transparent
+and gains a border and ring on hover. Use it for a close button or a row of
+several icon actions.
 Don't use it for an action that has room for a visible label.
 
 ### Button group
@@ -250,8 +252,9 @@ purpose is not clear from the buttons.
 text colour; `link-underlined` keeps the underline at rest. A link inside
 running text is always `link-underlined`, so it does not rely on colour alone.
 Block link: put `has-block-link` on a card and `block-link` on the one link in
-it; the link's hit area stretches over the card and the card shows the focus
-ring. Other controls in that card must sit above it (`row-link-above`).
+it. The link's hit area stretches over the card. Hover keeps the card fill and
+underlines the link in the primary colour. Keyboard focus outlines the card.
+Other controls in that card must sit above it (`row-link-above`).
 
 ### Avatar
 
@@ -370,8 +373,8 @@ Tariffs); `DISABLED` (neutral, `player-pause`) is a tariff that is switched off.
   no outline like `panel`. `box-well` sets it back on `--color-well` (below the
   surface in both themes; in light mode it is the canvas tone, so use it inside
   a panel or box); `box-raised` and `box-floating` bring it forward with
-  `--elevation-raised` and `--elevation-overlay`. A link box hovers to
-  `--color-hover`. Depth never changes on hover.
+  `--elevation-raised` and `--elevation-overlay`. A box rendered as an anchor
+  hovers to `--color-hover`. Depth never changes on hover.
 - `divider` is a hairline between groups, `divider-soft` fades out at both
   ends, `spacer` keeps the same gap with no line. Use them on an `<hr>`.
 
@@ -410,7 +413,8 @@ admin layout, so pages only declare their trail. It is a `<nav>` named
 `tabs` is a row of links to sibling views on a 2px rule; the current one carries
 `aria-current="page"` and draws a 2px primary line over the rule. Hover darkens
 the text only. These are navigation, not `role="tab"` widgets. `toggle-tabs` is
-a segmented control on a well: the selected segment lifts onto the surface.
+a segmented control with a recessed track and a raised selection. In light
+mode both use limestone tones distinct from the page canvas and paper surface.
 Use labels around visually hidden radios (in a `role="radiogroup"`) when the
 choice stays on the page, links with `aria-current` when it changes the URL.
 `LanguageSwitch` is toggle tabs. `filter-bar` groups labelled filter controls on a panel

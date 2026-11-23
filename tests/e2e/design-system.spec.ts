@@ -346,6 +346,18 @@ test("button variants retain semantic press feedback and disabled affordance", a
         })
         .toBeGreaterThanOrEqual(4.5);
     }
+    for (const name of ["Cancel changes", "Remove example", "More actions"]) {
+      const button = page.locator(".button-variants").getByRole("button", {
+        name,
+        exact: true,
+      });
+      const restingFill = await button.evaluate(
+        (element) => getComputedStyle(element).backgroundColor
+      );
+      await button.hover();
+      await expect(button).toHaveCSS("background-color", restingFill);
+      await expect(button).toHaveCSS("box-shadow", /4px/);
+    }
     const danger = page.locator(".button-variants .btn-danger").first();
     const resolve = (token: string) =>
       page.evaluate((token) => {
@@ -371,6 +383,70 @@ test("button variants retain semantic press feedback and disabled affordance", a
       await page.mouse.up();
     }
   }
+});
+
+test("hovering the block-link card marks its link and keeps the card fill", async ({
+  page,
+}) => {
+  await page.goto("/design-system#link");
+  const card = page.locator(".block-link-specimen");
+  const link = card.getByRole("link", { name: "Dwelling 12" });
+  for (const theme of ["light", "dark"]) {
+    await page.mouse.move(0, 0);
+    await page.evaluate((theme) => {
+      document.documentElement.dataset.theme = theme;
+    }, theme);
+    const restingFill = await card.evaluate(
+      (element) => getComputedStyle(element).backgroundColor
+    );
+    await expect(link).toHaveCSS("text-decoration-line", "none");
+    await card.hover({ position: { x: 16, y: 16 } });
+    await expect(link).toHaveCSS("text-decoration-line", "underline");
+    await expect(card).toHaveCSS("background-color", restingFill);
+  }
+});
+
+test("the selected toggle tab lifts above the track and follows keyboard selection", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/design-system#tabs");
+  const track = page.getByRole("radiogroup", { name: "Show amounts" });
+  const selected = track.locator("label:has(input:checked)");
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((theme) => {
+      document.documentElement.dataset.theme = theme;
+    }, theme);
+    const { canvas, paper, trackFill } = await track.evaluate((element) => {
+      const probe = document.createElement("span");
+      probe.style.backgroundColor = "var(--color-surface)";
+      document.body.append(probe);
+      const paper = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return {
+        canvas: getComputedStyle(document.body).backgroundColor,
+        paper,
+        trackFill: getComputedStyle(element).backgroundColor,
+      };
+    });
+    await expect(selected).not.toHaveCSS("background-color", trackFill);
+    await expect(selected).not.toHaveCSS("box-shadow", "none");
+    expect(await contrastRatio(selected, "color")).toBeGreaterThanOrEqual(4.5);
+    if (theme === "light") {
+      expect(trackFill).not.toBe(canvas);
+      expect(trackFill).not.toBe(paper);
+      await expect(selected).not.toHaveCSS("background-color", canvas);
+      await expect(selected).not.toHaveCSS("background-color", paper);
+    }
+  }
+  await track.getByRole("radio", { name: "With VAT", exact: true }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(track.getByRole("radio", { name: "Without VAT" })).toBeChecked();
+  await expect(track.locator("label").first()).toHaveCSS("box-shadow", "none");
+  await expect(track.locator("label").last()).not.toHaveCSS(
+    "box-shadow",
+    "none"
+  );
 });
 
 test("organization disclosure fits a scrolling sidebar and closes with Escape", async ({

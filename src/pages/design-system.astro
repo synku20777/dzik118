@@ -1179,8 +1179,8 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
                     <code>icon-btn-danger, icon-btn-ghost</code>
                   </td>
                   <td>
-                    Delete turns red under the pointer; ghost has no border
-                    until hovered
+                    Delete turns red under the pointer. Ghost stays transparent
+                    and gains a border on hover.
                   </td>
                 </tr>
                 <tr>
@@ -1204,8 +1204,8 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
           </div>
           <h2>States</h2>
           <p>
-            On hover a button grows a 4px ring in its own colour instead of
-            moving. Hover and focus are also checked with real browser input.
+            Secondary, standard icon and ghost icon buttons keep their resting
+            fill on hover and show a 4px ring.
           </p>
           <div class="state-grid">
             {states.map((state) => (
@@ -1788,8 +1788,9 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
           <h2>Block link</h2>
           <p>
             The one link in a card stretches over the whole card, so the card is
-            the target. Mark the card <code>has-block-link</code>; it shows the
-            focus ring.
+            the target. Hover underlines the link in the primary colour. Mark
+            the card <code>has-block-link</code> to show its keyboard focus
+            ring.
           </p>
           <div class="ds-specimen">
             <div class="box has-block-link block-link-specimen">
@@ -2263,9 +2264,9 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
           <pre class="ds-code"><code>{`<nav class="tabs" aria-label="Readings">\n  <a href="…" aria-current="page">All</a>\n  <a href="…">Missing</a>\n</nav>`}</code></pre>
           <h2>Toggle tabs</h2>
           <p>
-            A segmented control. Use labels around radios when the choice stays
-            on the page, links with <code>aria-current</code> when it changes
-            the URL. The language switch is one.
+            The selected segment sits above the recessed track. Use labels
+            around radios for an in-page choice and links with
+            <code>aria-current</code> when the choice changes the URL.
           </p>
           <div class="ds-specimen ds-inline">
             <div
