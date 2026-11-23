@@ -19,6 +19,17 @@ const locale = uiLocale(Astro.cookies, Astro.url);
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <!-- --color-canvas per theme; theme.ts keeps these in step with a stored theme. -->
+    <meta
+      name="theme-color"
+      content="#f7f4ee"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#0e1517"
+      media="(prefers-color-scheme: dark)"
+    />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script>
       import "../lib/ui/field-errors";
@@ -31,6 +42,11 @@ const locale = uiLocale(Astro.cookies, Astro.url);
             document.documentElement.setAttribute("data-theme", stored);
             const meta = document.querySelector('meta[name="color-scheme"]');
             if (meta) meta.content = stored;
+            document
+              .querySelectorAll('meta[name="theme-color"]')
+              .forEach(function (m) {
+                m.content = stored === "dark" ? "#0e1517" : "#f7f4ee";
+              });
           }
         } catch (e) {
           void e;
@@ -53,7 +69,7 @@ const locale = uiLocale(Astro.cookies, Astro.url);
         ></path>
       </svg>
     </div>
-    <header class="absolute top-4 right-4 z-10 flex items-center gap-2">
+    <header class="absolute top-4 right-4 z-(--z-sticky) flex items-center gap-2">
       <LanguageSwitch />
       <ThemeToggle />
     </header>

@@ -11,6 +11,7 @@ import MutationStatus from "../components/ui/MutationStatus.astro";
 import Breadcrumbs, { type Crumb } from "../components/ui/Breadcrumbs.astro";
 import DevFontPreview from "../components/ui/DevFontPreview.astro";
 import { ClientRouter } from "astro:transitions";
+import { resolveDevFontPreview } from "../lib/ui/dev-font-preview";
 import { translate, uiLocale } from "../lib/ui/i18n";
 import { countUnreadConversationsForOrganization } from "../domain/messaging/conversations";
 import { withRequestDb } from "../lib/db-request";
@@ -54,9 +55,13 @@ const trail: Crumb[] | undefined =
             ...breadcrumbs,
           ]
       : breadcrumbs;
-const previewFontUrl = import.meta.env.DEV
-  ? "/src/fonts/MedeoSansVariable.woff2"
-  : undefined;
+/* global __ASTRO_DEV_SERVER__ */
+const devFontPreview = __ASTRO_DEV_SERVER__
+  ? resolveDevFontPreview(
+      __ASTRO_DEV_SERVER__,
+      import.meta.env.PUBLIC_FONT_PREVIEW
+    )
+  : null;
 const residentAccess = (Astro.locals.auth?.dwellingIds.length ?? 0) > 0;
 const { unreadMessages, switcherOrganizations } = organizationId
   ? await withRequestDb(async (db) => {
@@ -75,6 +80,17 @@ const { unreadMessages, switcherOrganizations } = organizationId
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <!-- --color-canvas per theme; theme.ts keeps these in step with a stored theme. -->
+    <meta
+      name="theme-color"
+      content="#f7f4ee"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#0e1517"
+      media="(prefers-color-scheme: dark)"
+    />
     <ClientRouter fallback="swap" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script is:inline>
@@ -85,6 +101,11 @@ const { unreadMessages, switcherOrganizations } = organizationId
             document.documentElement.setAttribute("data-theme", stored);
             const meta = document.querySelector('meta[name="color-scheme"]');
             if (meta) meta.content = stored;
+            document
+              .querySelectorAll('meta[name="theme-color"]')
+              .forEach(function (m) {
+                m.content = stored === "dark" ? "#0e1517" : "#f7f4ee";
+              });
           }
         } catch (e) {
           void e;
@@ -93,7 +114,11 @@ const { unreadMessages, switcherOrganizations } = organizationId
     </script>
     <title>{title}</title>
   </head>
-  <body data-working-label={t("Working…")}>
+  <body
+    data-working-label={t("Working…")}
+    data-confirm-label={t("Confirm")}
+    data-cancel-label={t("Cancel")}
+  >
     <a class="skip-link" href="#main-content">
       {t("Skip to content")}
     </a>
@@ -124,7 +149,8 @@ const { unreadMessages, switcherOrganizations } = organizationId
         {t("Namkopa")}
       </span>
       <button type="button" class="btn-secondary btn-sm" data-open-mobile-nav>
-        {t("Menu")} ☰
+        {t("Menu")}
+        <Icon name="menu" size="sm" />
       </button>
     </header>
     <dialog
@@ -177,10 +203,10 @@ const { unreadMessages, switcherOrganizations } = organizationId
     </main>
     <MutationStatus />
     <Tooltips />
-    {previewFontUrl && (
+    {devFontPreview && (
       <DevFontPreview
-        fontUrl={previewFontUrl}
-        italicFontUrl="/src/fonts/MedeoSansVariable-Italic.woff2"
+        fontUrl={devFontPreview.regular}
+        italicFontUrl={devFontPreview.italic}
       />
     )}
     <script>

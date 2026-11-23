@@ -3,6 +3,7 @@ import { translate, uiLocale } from "../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import PaginationBar from "../../../../../components/ui/PaginationBar.astro";
 import { formatDate } from "../../../../../lib/ui/i18n";
 import {
   ForbiddenError,
@@ -17,6 +18,7 @@ import {
 } from "../../../../../domain/audit/audit-log";
 import { parseDateInput } from "../../../../../lib/date-input";
 import { withRequestDb } from "../../../../../lib/db-request";
+import { resolvePaginationLinks } from "../../../../../lib/ui/pagination";
 
 const organizationId = Astro.params.orgId!;
 try {
@@ -47,7 +49,7 @@ const pageSize = 50;
 
 const {
   organization,
-  logs,
+  logs: logsPlusOne,
   availableActions,
   availableEntityTypes,
   availableActors,
@@ -62,7 +64,8 @@ const {
       fromDate: fromFilter,
       toDate: toFilter,
       timezone: organization.timezone,
-      limit: pageSize,
+      // One extra row tells us whether a next page exists.
+      limit: pageSize + 1,
       offset: (page - 1) * pageSize,
     }),
     availableActions: await listDistinctAuditActions(db, organizationId),
@@ -93,6 +96,12 @@ const pageHref = (p: number) => {
   q.set("page", String(p));
   return `?${q}`;
 };
+const logs = logsPlusOne.slice(0, pageSize);
+const { previousHref, nextHref } = resolvePaginationLinks({
+  page,
+  hasNext: logsPlusOne.length > pageSize,
+  buildHref: pageHref,
+});
 
 const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParams()}`;
 ---
@@ -111,11 +120,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
         <label class="field-label" for="action">
           {t("Action")}
         </label>
-        <select
-          id="action"
-          name="action"
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-sm"
-        >
+        <select id="action" name="action" class="mt-1 text-sm">
           <option value="" selected={!actionFilter}>
             {t("All actions")}
           </option>
@@ -127,17 +132,10 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
         </select>
       </div>
       <div>
-        <label
-          class="field-label"
-          for="entityType"
-        >
+        <label class="field-label" for="entityType">
           {t("Entity type")}
         </label>
-        <select
-          id="entityType"
-          name="entityType"
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-sm"
-        >
+        <select id="entityType" name="entityType" class="mt-1 text-sm">
           <option value="" selected={!entityTypeFilter}>
             {t("All entity types")}
           </option>
@@ -152,11 +150,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
         <label class="field-label" for="actor">
           {t("Actor")}
         </label>
-        <select
-          id="actor"
-          name="actor"
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-sm"
-        >
+        <select id="actor" name="actor" class="mt-1 text-sm">
           <option value="" selected={!actorFilter}>
             {t("All actors")}
           </option>
@@ -176,7 +170,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
           id="from"
           name="from"
           value={fromFilter ?? ""}
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-sm"
+          class="mt-1 text-sm"
         />
       </div>
       <div>
@@ -188,7 +182,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
           id="to"
           name="to"
           value={toFilter ?? ""}
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-sm"
+          class="mt-1 text-sm"
         />
       </div>
       <button type="submit" class="btn-primary">
@@ -256,7 +250,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
                     <summary class="chevron-toggle text-muted hover:underline">
                       {t("View")}
                     </summary>
-                    <pre class="mt-2 max-w-md overflow-x-auto rounded bg-surface-hover p-2 text-xs">
+                    <pre class="mt-2 max-w-md overflow-x-auto rounded-control bg-surface-hover p-2 text-xs">
                         {JSON.stringify(
                           { before: log.beforeData, after: log.afterData },
                           null,
@@ -281,24 +275,10 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
       </table>
     </div>
 
-    <div class="flex justify-between text-sm text-muted">
-      <a
-        href={pageHref(Math.max(1, page - 1))}
-        class:list={{ "pointer-events-none opacity-40": page <= 1 }}
-      >
-        ← {t("Previous")}
-      </a>
-      <span>
-        {t("Page")} {page}
-      </span>
-      <a
-        href={pageHref(page + 1)}
-        class:list={{
-          "pointer-events-none opacity-40": logs.length < pageSize,
-        }}
-      >
-        {t("Next →")}
-      </a>
-    </div>
+    <PaginationBar
+      page={page}
+      previousHref={previousHref}
+      nextHref={nextHref}
+    />
   </div>
 </AdminLayout>

@@ -189,15 +189,24 @@ describe("theme management", () => {
     expect(beforeSwapListener).not.toBeNull();
 
     const newRootAttributes: Record<string, string> = {};
+    const scheme = { content: "light dark" };
+    const themeColors = [{ content: "#f7f4ee" }, { content: "#0e1517" }];
     const newDocument = {
       documentElement: {
         setAttribute(name: string, val: string) {
           newRootAttributes[name] = val;
         },
       },
+      querySelector: (sel: string) =>
+        sel === 'meta[name="color-scheme"]' ? scheme : null,
+      querySelectorAll: (sel: string) =>
+        sel === 'meta[name="theme-color"]' ? themeColors : [],
     };
     beforeSwapListener!({ newDocument });
     expect(newRootAttributes["data-theme"]).toBe("dark");
+    // The incoming page's own metas would otherwise follow the OS again.
+    expect(scheme.content).toBe("dark");
+    expect(themeColors.map((m) => m.content)).toEqual(["#0e1517", "#0e1517"]);
   });
 
   it("does not write an attribute onto the incoming document when no theme is set", () => {

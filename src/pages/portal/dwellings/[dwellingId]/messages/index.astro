@@ -1,4 +1,5 @@
 ---
+import Icon from "../../../../../components/ui/Icon.astro";
 import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
 import {
   translate,
@@ -59,31 +60,26 @@ const conversations = await withRequestDb((db) =>
     <div class="space-y-6">
       <a
         href={`/portal/dwellings/${dwellingId}`}
-        class="text-sm text-muted hover:underline"
+        class="inline-flex items-center gap-1 text-sm text-muted hover:underline"
       >
-        ← {t("Dwelling")} {dwelling.number}
+        <Icon name="arrow-left" size="sm" />
+        {t("Dwelling")} {dwelling.number}
       </a>
 
       <h1 class="text-xl font-bold text-foreground">{t("Messages")}</h1>
 
       {createResult?.error && (
-        <p
-          class="rounded-control bg-danger-surface p-3 text-sm text-destructive"
-          role="alert"
-        >
+        <p class="notice notice-danger" role="alert">
           {friendlyActionErrorMessage(createResult.error, locale)}
         </p>
       )}
       {replyResult?.error && (
-        <p
-          class="rounded-control bg-danger-surface p-3 text-sm text-destructive"
-          role="alert"
-        >
+        <p class="notice notice-danger" role="alert">
           {friendlyActionErrorMessage(replyResult.error, locale)}
         </p>
       )}
 
-      <section class="rounded-panel border border-border bg-surface p-4">
+      <section class="panel p-4">
         <h2 class="text-base font-semibold text-foreground">
           {t("New message")}
         </h2>
@@ -94,10 +90,7 @@ const conversations = await withRequestDb((db) =>
         >
           <input type="hidden" name="dwellingId" value={dwellingId} />
           <div>
-            <label
-              for="subject"
-              class="field-label"
-            >
+            <label for="subject" class="field-label">
               {t("Subject")}
             </label>
             <input
@@ -106,7 +99,7 @@ const conversations = await withRequestDb((db) =>
               type="text"
               required
               placeholder={t("What's this about?")}
-              class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
+              class="mt-1 w-full text-sm"
             />
           </div>
           <div>
@@ -118,7 +111,7 @@ const conversations = await withRequestDb((db) =>
               name="body"
               required
               rows="3"
-              class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
+              class="mt-1 w-full text-sm"
             ></textarea>
           </div>
           <button type="submit" class="btn-primary w-full sm:w-auto">
@@ -131,7 +124,7 @@ const conversations = await withRequestDb((db) =>
         <p class="text-sm text-muted">{t("No conversations yet.")}</p>
       ) : (
         conversations.map(({ conversation, messages }) => (
-          <section class="rounded-panel border border-border bg-surface p-4">
+          <section class="panel p-4">
             <div class="flex items-center justify-between">
               <h3 class="font-medium text-foreground">
                 {conversation.subject}
@@ -169,7 +162,7 @@ const conversations = await withRequestDb((db) =>
                   name="body"
                   required
                   rows="2"
-                  class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
+                  class="mt-1 w-full text-sm"
                 />
                 <button type="submit" class="btn-primary w-full sm:w-auto">
                   {t("Reply")}

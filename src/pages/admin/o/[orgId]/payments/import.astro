@@ -116,7 +116,7 @@ if (Astro.request.method === "POST") {
       <form
         method="POST"
         enctype="multipart/form-data"
-        class="max-w-lg space-y-3 rounded-panel border border-border bg-surface p-6"
+        class="box max-w-lg space-y-3"
       >
         <div>
           <label class="field-label" for="file">
@@ -138,7 +138,7 @@ if (Astro.request.method === "POST") {
     )}
 
     {step === "preview" && headerError && (
-      <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
+      <p class="notice notice-danger" role="alert">
         {headerError}
       </p>
     )}
@@ -146,7 +146,7 @@ if (Astro.request.method === "POST") {
     {step === "preview" && !headerError && (
       <div class="space-y-4">
         {isDuplicateFile && (
-          <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
+          <p class="notice notice-danger" role="alert">
             {t(
               "This exact file has already been imported for this organization. Importing it again will be blocked."
             )}
@@ -212,7 +212,7 @@ if (Astro.request.method === "POST") {
           (skipped).
         </p>
         {confirmError && (
-          <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
+          <p class="notice notice-danger" role="alert">
             {confirmError}
           </p>
         )}
@@ -234,7 +234,7 @@ if (Astro.request.method === "POST") {
     )}
 
     {step === "result" && result && (
-      <div class="rounded-panel border border-border bg-surface p-6">
+      <div class="box">
         <p class="text-sm text-foreground">
           Imported {result.imported} transaction(s), skipped {result.errored}{" "}
           row(s) with errors, proposed {result.proposed} exact match(es).

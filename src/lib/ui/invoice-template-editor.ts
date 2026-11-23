@@ -34,6 +34,13 @@
 // <details>/<summary> popover (zero extra JS, keyboard accessible by
 // default) holding that row's Spacing control.
 import Sortable from "sortablejs";
+import { ICONS, type IconName } from "./icons";
+
+// Same geometry as Icon.astro, for icons this script builds. Static registry
+// markup (icons.ts), not user input.
+function iconMarkup(name: IconName): string {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: var(--icon-size-sm); height: var(--icon-size-sm); stroke-width: var(--icon-stroke)">${ICONS[name]}</svg>`;
+}
 import { onPageLoad } from "./page-lifecycle";
 import {
   renderInvoiceHtml,
@@ -214,7 +221,11 @@ onPageLoad(() => {
     control: HTMLInputElement | HTMLSelectElement
   ): HTMLLabelElement {
     const label = document.createElement("label");
-    label.className = "tpl-control";
+    // A checkbox label is its whole 44px hit target (.check-row).
+    label.className =
+      control instanceof HTMLInputElement && control.type === "checkbox"
+        ? "tpl-control check-row"
+        : "tpl-control";
     // appendChild, not append(): this project's TS program resolves
     // Element.append()'s overloads incorrectly (see workbench-drawer.ts's
     // identical note -- @cloudflare/workers-types' ambient globals collide
@@ -247,10 +258,10 @@ onPageLoad(() => {
     onChange: (checked: boolean) => void
   ): HTMLLabelElement {
     const label = document.createElement("label");
-    label.className = "tpl-toggle";
+    label.className = "toggle-switch";
     const input = document.createElement("input");
     input.type = "checkbox";
-    input.className = "tpl-toggle-input";
+    input.setAttribute("role", "switch");
     input.setAttribute("aria-label", ariaLabel);
     input.checked = checked;
     input.addEventListener("change", () => {
@@ -259,9 +270,10 @@ onPageLoad(() => {
       refreshPreview();
     });
     const track = document.createElement("span");
-    track.className = "tpl-toggle-track";
+    track.className = "toggle-switch-track";
+    track.setAttribute("aria-hidden", "true");
     const thumb = document.createElement("span");
-    thumb.className = "tpl-toggle-thumb";
+    thumb.className = "toggle-switch-thumb";
     track.appendChild(thumb);
     label.appendChild(input);
     label.appendChild(track);
@@ -375,7 +387,7 @@ onPageLoad(() => {
     const handle = document.createElement("span");
     handle.className = "tpl-drag-handle-static";
     handle.setAttribute("aria-hidden", "true");
-    handle.textContent = "⋮⋮";
+    handle.innerHTML = iconMarkup("grip-vertical");
     li.appendChild(handle);
 
     const title = document.createElement("span");
@@ -407,7 +419,7 @@ onPageLoad(() => {
     summary.className = "tpl-overflow-btn tpl-icon-button";
     summary.setAttribute("aria-label", s("More options"));
     summary.dataset.tip = s("More options");
-    summary.textContent = "⋯";
+    summary.innerHTML = iconMarkup("dots");
     overflow.appendChild(summary);
     const popover = document.createElement("div");
     popover.className = "tpl-popover";
@@ -593,7 +605,7 @@ onPageLoad(() => {
     const handle = document.createElement("span");
     handle.className = "tpl-drag-handle";
     handle.setAttribute("aria-hidden", "true");
-    handle.textContent = "⋮⋮";
+    handle.innerHTML = iconMarkup("grip-vertical");
     header.appendChild(handle);
 
     const num = document.createElement("span");
@@ -624,11 +636,21 @@ onPageLoad(() => {
 
     const accordionBtn = document.createElement("button");
     accordionBtn.type = "button";
-    accordionBtn.className = "tpl-accordion-btn";
-    const chevron = document.createElement("span");
-    chevron.className = "tpl-chevron-icon";
+    accordionBtn.className = "icon-btn icon-btn-sm tpl-accordion-btn";
+    const chevron = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "svg"
+    );
+    chevron.setAttribute("class", "tpl-chevron-icon");
+    chevron.setAttribute("viewBox", "0 0 24 24");
+    chevron.setAttribute("width", "16");
+    chevron.setAttribute("height", "16");
+    chevron.setAttribute("fill", "none");
+    chevron.setAttribute("stroke", "currentColor");
+    chevron.setAttribute("stroke-linecap", "round");
+    chevron.setAttribute("stroke-linejoin", "round");
     chevron.setAttribute("aria-hidden", "true");
-    chevron.textContent = "›";
+    chevron.innerHTML = ICONS["chevron-right"];
     accordionBtn.appendChild(chevron);
     headerActions.appendChild(accordionBtn);
 

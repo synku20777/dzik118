@@ -23,6 +23,7 @@ import { getSetupProgress } from "../../../../../domain/onboarding/progress";
 import { getFirstBillingPeriod } from "../../../../../domain/periods/periods";
 import { withRequestDb } from "../../../../../lib/db-request";
 import { orgLocalDateString } from "../../../../../lib/org-time";
+import { fieldErrorAttrs } from "../../../../../lib/ui/field-error-attrs";
 
 const organizationId = Astro.params.orgId!;
 try {
@@ -118,7 +119,7 @@ const needsPeriodPage =
           </p>
         )}
 
-        <div class="panel p-6 space-y-4">
+        <div class="box space-y-4">
           <h2 class="text-base font-semibold text-foreground">
             {t("Your first billing period")}
           </h2>
@@ -167,7 +168,7 @@ const needsPeriodPage =
         <form
           method="POST"
           action={actions.periods.create}
-          class="panel p-6 space-y-6"
+          class="box space-y-6"
         >
           <input type="hidden" name="organizationId" value={organizationId} />
           <p class="setup-required-note">
@@ -181,10 +182,7 @@ const needsPeriodPage =
 
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label
-                  for="year"
-                  class="field-label"
-                >
+                <label for="year" class="field-label">
                   {t("Year")}
                 </label>
                 <input
@@ -196,17 +194,14 @@ const needsPeriodPage =
                   max="2200"
                   required
                   value={val("year", defaultYear)}
-                  aria-describedby="year-error"
-                  class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
+                  class="mt-1 block w-full text-sm"
+                  {...fieldErrorAttrs(result?.error, "year")}
                 />
                 <FieldError name="year" error={result?.error} />
               </div>
 
               <div>
-                <label
-                  for="month"
-                  class="field-label"
-                >
+                <label for="month" class="field-label">
                   {t("Month")}
                 </label>
                 <input
@@ -218,8 +213,8 @@ const needsPeriodPage =
                   max="12"
                   required
                   value={val("month", defaultMonth)}
-                  aria-describedby="month-error"
-                  class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
+                  class="mt-1 block w-full text-sm"
+                  {...fieldErrorAttrs(result?.error, "month")}
                 />
                 <FieldError name="month" error={result?.error} />
               </div>
@@ -233,10 +228,7 @@ const needsPeriodPage =
 
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label
-                  for="startsOn"
-                  class="field-label"
-                >
+                <label for="startsOn" class="field-label">
                   {t("Starts on")}
                 </label>
                 <input
@@ -245,17 +237,14 @@ const needsPeriodPage =
                   type="date"
                   required
                   value={val("startsOn", defaultStartsOn)}
-                  aria-describedby="startsOn-error"
-                  class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
+                  class="mt-1 block w-full text-sm"
+                  {...fieldErrorAttrs(result?.error, "startsOn")}
                 />
                 <FieldError name="startsOn" error={result?.error} />
               </div>
 
               <div>
-                <label
-                  for="endsOn"
-                  class="field-label"
-                >
+                <label for="endsOn" class="field-label">
                   {t("Ends on")}
                 </label>
                 <input
@@ -264,18 +253,15 @@ const needsPeriodPage =
                   type="date"
                   required
                   value={val("endsOn", defaultEndsOn)}
-                  aria-describedby="endsOn-error"
-                  class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
+                  class="mt-1 block w-full text-sm"
+                  {...fieldErrorAttrs(result?.error, "endsOn")}
                 />
                 <FieldError name="endsOn" error={result?.error} />
               </div>
             </div>
 
             <div>
-              <label
-                for="readingDeadline"
-                class="field-label"
-              >
+              <label for="readingDeadline" class="field-label">
                 {t("Reading deadline")}
               </label>
               <input
@@ -283,8 +269,8 @@ const needsPeriodPage =
                 name="readingDeadline"
                 type="date"
                 value={val("readingDeadline", "")}
-                aria-describedby="readingDeadline-error"
-                class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
+                class="mt-1 block w-full text-sm"
+                {...fieldErrorAttrs(result?.error, "readingDeadline")}
               />
               <FieldError name="readingDeadline" error={result?.error} />
             </div>
@@ -297,10 +283,7 @@ const needsPeriodPage =
 
             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label
-                  for="invoiceIssueDate"
-                  class="field-label"
-                >
+                <label for="invoiceIssueDate" class="field-label">
                   {t("Invoice issue date")}
                 </label>
                 <input
@@ -309,17 +292,14 @@ const needsPeriodPage =
                   type="date"
                   required
                   value={val("invoiceIssueDate", defaultInvoiceIssueDate)}
-                  aria-describedby="invoiceIssueDate-error"
-                  class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
+                  class="mt-1 block w-full text-sm"
+                  {...fieldErrorAttrs(result?.error, "invoiceIssueDate")}
                 />
                 <FieldError name="invoiceIssueDate" error={result?.error} />
               </div>
 
               <div>
-                <label
-                  for="invoiceDueDate"
-                  class="field-label"
-                >
+                <label for="invoiceDueDate" class="field-label">
                   {t("Invoice due date")}
                 </label>
                 <input
@@ -328,8 +308,8 @@ const needsPeriodPage =
                   type="date"
                   required
                   value={val("invoiceDueDate", defaultInvoiceDueDate)}
-                  aria-describedby="invoiceDueDate-error"
-                  class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
+                  class="mt-1 block w-full text-sm"
+                  {...fieldErrorAttrs(result?.error, "invoiceDueDate")}
                 />
                 <FieldError name="invoiceDueDate" error={result?.error} />
               </div>

@@ -178,10 +178,8 @@ const bootstrap = {
       display
     >
       <div class="header-actions">
-        <a href={`${base}/guide`} class="btn-secondary settings-help">
-          <span class="settings-help-icon" aria-hidden="true">
-            ?
-          </span>
+        <a href={`${base}/guide`} class="btn-secondary">
+          <Icon name="help-circle" size="sm" />
           {t("Need help?")}
         </a>
         <div class="header-action-buttons">
@@ -363,7 +361,7 @@ const bootstrap = {
 
 <style is:global>
   /* is:global, not Astro's default scoped style: almost everything below
-     (.tpl-block, .tpl-toggle, .tpl-popover, etc.) is created client-side
+     (.tpl-block, .tpl-popover, etc.) is created client-side
      by invoice-template-editor.ts via document.createElement, which never
      receives Astro's scoping attribute -- a scoped style would silently
      fail to match any of it. Same reasoning as
@@ -428,11 +426,7 @@ const bootstrap = {
     color: var(--color-muted);
   }
   .tpl-period-select select {
-    padding: 0.3rem 0.5rem;
     font-size: var(--text-sm);
-    border-radius: var(--radius-control);
-    background-color: var(--color-surface);
-    color: var(--color-foreground);
   }
   .tpl-period-note {
     margin: 0 0 0.75rem;
@@ -446,17 +440,8 @@ const bootstrap = {
     flex: 0 0 auto;
   }
   .tpl-zoom-select {
-    padding: 0.25rem 0.5rem;
     font-size: var(--text-sm);
     font-weight: 500;
-    border-radius: var(--radius-control);
-    background-color: var(--color-surface);
-    color: var(--color-foreground);
-    cursor: pointer;
-  }
-  .tpl-zoom-select:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
   }
   .tpl-editor-toolbar {
     display: flex;
@@ -482,8 +467,9 @@ const bootstrap = {
     flex-direction: column;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--color-surface);
-    transition: border-color 0.15s ease;
+    transition: border-color var(--duration-fast) ease;
   }
   .tpl-block:hover {
     border-color: var(--color-muted);
@@ -533,26 +519,18 @@ const bootstrap = {
     margin-left: auto;
   }
   .tpl-accordion-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: none;
-    padding: 0.25rem;
-    color: var(--color-muted);
-    cursor: pointer;
-    border-radius: var(--radius-control);
     flex: 0 0 auto;
   }
-  .tpl-accordion-btn:hover {
-    color: var(--color-foreground);
-    background: var(--color-surface-hover);
-  }
   .tpl-chevron-icon {
-    transition: transform 0.2s ease;
+    transition: transform var(--duration-normal) var(--ease-standard);
   }
   .tpl-accordion-btn[aria-expanded="true"] .tpl-chevron-icon {
     transform: rotate(90deg);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tpl-chevron-icon {
+      transition: none;
+    }
   }
   .tpl-block-detail {
     padding: 0 0.75rem 0.75rem;
@@ -575,29 +553,13 @@ const bootstrap = {
   .tpl-input,
   .tpl-select {
     width: 100%;
-    padding: 0.4rem 0.5rem;
-    border-radius: var(--radius-control);
-    background-color: var(--color-surface);
-    color: var(--color-foreground);
     font: inherit;
     font-size: var(--text-sm);
-    box-sizing: border-box;
-  }
-  .tpl-input:focus,
-  .tpl-select:focus,
-  .tpl-textarea:focus {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 1px;
   }
   .tpl-textarea {
     width: 100%;
-    padding: 0.5rem;
-    border-radius: var(--radius-control);
-    background-color: var(--color-surface);
-    color: var(--color-foreground);
     font: inherit;
     font-size: var(--text-sm);
-    box-sizing: border-box;
     resize: vertical;
   }
   .tpl-sub-label {
@@ -694,10 +656,11 @@ const bootstrap = {
     position: absolute;
     right: 0;
     top: calc(100% + 4px);
-    z-index: 30;
+    z-index: var(--z-overlay);
     background: var(--color-surface-raised);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     box-shadow: var(--elevation-overlay);
     padding: 0.5rem;
     min-width: 7rem;
@@ -705,53 +668,10 @@ const bootstrap = {
   .tpl-popover .tpl-field {
     margin-top: 0;
   }
-  .tpl-toggle {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    cursor: pointer;
-    flex: 0 0 auto;
-  }
-  .tpl-toggle-input {
-    position: absolute;
-    opacity: 0;
-    width: 1px;
-    height: 1px;
-    margin: 0;
-  }
-  .tpl-toggle-track {
-    width: 2.25rem;
-    height: 1.25rem;
-    border-radius: 9999px;
-    background: var(--color-border);
-    transition: background 0.15s ease;
-    display: inline-block;
-    position: relative;
-  }
-  .tpl-toggle-thumb {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 1rem;
-    height: 1rem;
-    border-radius: 50%;
-    background: var(--color-control-thumb);
-    transition: transform 0.15s ease;
-    box-shadow: var(--shadow-control);
-  }
-  .tpl-toggle-input:checked + .tpl-toggle-track {
-    background: var(--color-primary);
-  }
-  .tpl-toggle-input:checked + .tpl-toggle-track .tpl-toggle-thumb {
-    transform: translateX(1rem);
-  }
-  .tpl-toggle-input:focus-visible + .tpl-toggle-track {
-    outline: 2px solid var(--color-primary);
-    outline-offset: 2px;
-  }
   .tpl-editor-canvas {
     background: var(--color-surface-hover);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     padding: 1.25rem;
     overflow: auto;
   }
@@ -773,13 +693,8 @@ const bootstrap = {
     height: 80vh;
     background: #fff;
     border: 1px solid var(--color-border);
-    border-radius: 0.25rem;
+    border-radius: var(--radius-badge);
     transform-origin: top left;
-    transition: transform 0.15s ease;
-  }
-  .tpl-period-select select,
-  .tpl-zoom-select,
-  .tpl-select {
-    padding-inline-end: 2.25rem;
+    transition: transform var(--duration-fast) var(--ease-standard);
   }
 </style>

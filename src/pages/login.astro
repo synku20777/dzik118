@@ -36,45 +36,42 @@ const adminLinkError = errorCode === "6";
 ---
 
 <AuthLayout title={t("Sign in") + " - " + t("Namkopa")}>
-  <div class="w-full max-w-md space-y-6">
+  <div class="w-full max-w-(--width-narrow) space-y-6">
     <div class="mb-2 space-y-3 text-center">
       <p class="font-display text-2xl font-semibold">{t("Namkopa")}</p>
       <Ornament />
     </div>
     {noAccountError && (
-      <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
+      <p class="notice notice-danger" role="alert">
         {t(
           "We couldn't find an account for that sign-in. If you believe this is a mistake, contact your administrator."
         )}
       </p>
     )}
     {adminLinkError && (
-      <p
-        class="rounded-control bg-danger-surface p-3 text-sm text-destructive"
-        role="alert"
-      >
+      <p class="notice notice-danger" role="alert">
         {t(
           "Administrators sign in with a password. Use the Admin sign in form on this page."
         )}
       </p>
     )}
     {rateLimitedError && (
-      <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
+      <p class="notice notice-danger" role="alert">
         {t("Too many sign-in attempts. Please wait a minute and try again.")}
       </p>
     )}
-    <div class="rounded-panel border border-border bg-surface p-8">
+    <div class="panel p-8">
       <h1 class="text-xl font-bold text-foreground">{t("Resident sign in")}</h1>
       <p class="mt-1 text-sm text-muted">
         {t("Enter your email and we'll send you a secure sign-in link.")}
       </p>
       {sent && (
-        <p class="mt-4 rounded-control bg-success-surface p-3 text-sm text-success">
+        <p class="notice notice-success mt-4" role="status">
           {t("If that email is registered, a sign-in link is on its way.")}
         </p>
       )}
       {expiredLinkError && (
-        <p class="mt-4 rounded-control bg-danger-surface p-3 text-sm text-destructive">
+        <p class="notice notice-danger mt-4" role="alert">
           {t(
             "This sign-in link is invalid or has expired. Request a new one below."
           )}
@@ -86,19 +83,17 @@ const adminLinkError = errorCode === "6";
         class="mt-4 space-y-3"
       >
         <div>
-          <label
-            class="field-label"
-            for="resident-email"
-          >
+          <label class="field-label" for="resident-email">
             {t("Email")}
           </label>
           <input
+            spellcheck="false"
             id="resident-email"
             name="email"
             type="email"
             required
             autocomplete="email"
-            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
+            class="mt-1 w-full text-sm"
           />
         </div>
         <button type="submit" class="btn-primary w-full">
@@ -107,23 +102,20 @@ const adminLinkError = errorCode === "6";
       </form>
     </div>
 
-    <div class="rounded-panel border border-border bg-surface p-8">
+    <div class="panel p-8">
       <h2 class="text-lg font-bold text-foreground">{t("Admin sign in")}</h2>
       {passwordReset && (
-        <p
-          class="mt-4 rounded-control bg-success-surface p-3 text-sm text-success"
-          role="status"
-        >
+        <p class="notice notice-success mt-4" role="status">
           {t("Password updated. Sign in with your new password.")}
         </p>
       )}
       {adminError && (
-        <p class="mt-4 rounded-control bg-danger-surface p-3 text-sm text-destructive">
+        <p class="notice notice-danger mt-4" role="alert">
           {t("Incorrect email or password.")}
         </p>
       )}
       {unexpectedError && (
-        <p class="mt-4 rounded-control bg-danger-surface p-3 text-sm text-destructive">
+        <p class="notice notice-danger mt-4" role="alert">
           {t("Something went wrong. Please try again.")}
         </p>
       )}
@@ -134,26 +126,21 @@ const adminLinkError = errorCode === "6";
         class="mt-4 space-y-3"
       >
         <div>
-          <label
-            class="field-label"
-            for="admin-email"
-          >
+          <label class="field-label" for="admin-email">
             {t("Email")}
           </label>
           <input
+            spellcheck="false"
             id="admin-email"
             name="email"
             type="email"
             required
             autocomplete="email"
-            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
+            class="mt-1 w-full text-sm"
           />
         </div>
         <div>
-          <label
-            class="field-label"
-            for="admin-password"
-          >
+          <label class="field-label" for="admin-password">
             {t("Password")}
           </label>
           <input
@@ -162,7 +149,7 @@ const adminLinkError = errorCode === "6";
             type="password"
             required
             autocomplete="current-password"
-            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
+            class="mt-1 w-full text-sm"
           />
         </div>
         <button type="submit" class="btn-primary w-full">

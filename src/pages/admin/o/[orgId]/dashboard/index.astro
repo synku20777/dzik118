@@ -27,6 +27,7 @@ import Icon from "../../../../../components/ui/Icon.astro";
 import {
   collectionShare,
   formatCollectionShare,
+  getReadingsProgressState,
 } from "../../../../../lib/ui/dashboard-collection";
 import type { IconName } from "../../../../../lib/ui/icons";
 import {
@@ -318,6 +319,12 @@ function formatMoney(value: string, currency: string): string {
 
 const collectionRatio = summary
   ? collectionShare(summary.totalPaid, summary.amountDue)
+  : null;
+const readingsState = summary
+  ? getReadingsProgressState(
+      summary.progress.readingsDone,
+      summary.progress.dwellingsTotal
+    )
   : null;
 
 type MissingItem =
@@ -904,7 +911,7 @@ function readingsHref(
                 <div class="collection-hero">
                   <a
                     class="collection-link"
-                    href={`${base}/payments?view=CONFIRMED`}
+                    href={`${base}/payments?status=received&periodId=${summary.period.id}#history`}
                   >
                     <strong class="collection-received">
                       {formatMoney(summary.totalPaid, organization.currency)}
@@ -984,7 +991,11 @@ function readingsHref(
             <a
               class="dashboard-metric dashboard-collection panel"
               data-metric="readings"
-              href={`${workbenchPath}?status=MISSING_DATA`}
+              href={
+                readingsState!.kind === "remaining"
+                  ? `${workbenchPath}?status=MISSING_DATA`
+                  : workbenchPath
+              }
             >
               <span class="metric-label">{t("Readings")}</span>
               <div class="collection-hero">
@@ -1021,16 +1032,13 @@ function readingsHref(
                 />
               </div>
               <span class="metric-foot">
-                {summary.progress.dwellingsTotal -
-                  summary.progress.readingsDone >
-                0
-                  ? fill(t("{count} still to enter"), {
-                      count: String(
-                        summary.progress.dwellingsTotal -
-                          summary.progress.readingsDone
-                      ),
-                    })
-                  : t("All readings are in")}
+                {readingsState!.kind === "empty"
+                  ? t("No dwellings in this period")
+                  : readingsState!.kind === "remaining"
+                    ? fill(t("{count} still to enter"), {
+                        count: String(readingsState!.remaining),
+                      })
+                    : t("All readings are in")}
                 <Icon name="arrow-right" size="xs" />
               </span>
             </a>
@@ -1207,10 +1215,13 @@ function readingsHref(
                                   {row.item.status === "OVERDUE" ? (
                                     <p class="attention-details">
                                       <strong>
-                                        {formatMoney(
-                                          row.item.overdueAmount ?? "0.00",
-                                          organization!.currency
-                                        )}
+                                        {row.item.overdueAmount !== null
+                                          ? formatMoney(
+                                              row.item.overdueAmount,
+                                              row.item.overdueCurrency ??
+                                                organization!.currency
+                                            )
+                                          : "—"}
                                       </strong>
                                       {row.item.dueDate && (
                                         <span>
@@ -1528,6 +1539,7 @@ function readingsHref(
   }
   .dashboard-title-row h1 {
     font-size: var(--text-display-md);
+    font-weight: 600;
     line-height: 1.2;
     overflow-wrap: break-word;
   }
@@ -1550,7 +1562,7 @@ function readingsHref(
     align-items: center;
     justify-content: center;
     gap: 0.375rem;
-    min-height: 2.75rem;
+    min-height: var(--control-size-md);
     padding: 0.5rem 0.75rem;
     font-size: var(--text-sm);
   }
@@ -1709,7 +1721,7 @@ function readingsHref(
   @media (pointer: coarse) {
     .collection-unpaid,
     .collection-link {
-      min-height: 2.75rem;
+      min-height: var(--control-size-md);
       align-items: center;
     }
   }
@@ -1789,7 +1801,7 @@ function readingsHref(
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
-    min-height: 2.75rem;
+    min-height: var(--control-size-md);
     color: var(--color-primary);
     font-size: var(--text-sm);
     font-weight: 600;
@@ -1814,7 +1826,7 @@ function readingsHref(
     align-items: start;
     gap: 0.25rem 0.5rem;
     padding-top: 0.875rem;
-    border-top: 2px solid var(--color-border);
+    border-top: 1px solid var(--color-border);
     min-width: 0;
   }
   .month-progress li::before {
@@ -1947,7 +1959,7 @@ function readingsHref(
   .attention-heading > a {
     display: inline-flex;
     align-items: center;
-    min-height: 2.75rem;
+    min-height: var(--control-size-md);
     color: var(--color-foreground);
     font-size: var(--text-sm);
     font-weight: 600;
@@ -2019,7 +2031,7 @@ function readingsHref(
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
-    min-height: 2.75rem;
+    min-height: var(--control-size-md);
     font-weight: 600;
     color: var(--color-primary);
   }
@@ -2038,15 +2050,16 @@ function readingsHref(
   }
   .info-tip-panel {
     position: absolute;
-    z-index: 20;
+    z-index: var(--z-popover);
     top: calc(100% + 0.5rem);
     right: 0;
     width: min(23rem, 85vw);
     padding: 0.75rem 1.25rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--color-surface-raised);
-    box-shadow: var(--elevation-raised);
+    box-shadow: var(--elevation-overlay);
   }
   .money-breakdown dl > div {
     display: grid;
@@ -2146,7 +2159,7 @@ function readingsHref(
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    min-height: 2.75rem;
+    min-height: var(--control-size-md);
     padding: 0.5rem;
     border-radius: var(--radius-control);
   }

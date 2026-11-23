@@ -1,0 +1,56 @@
+---
+import Icon from "./Icon.astro";
+import { translate, uiLocale } from "../../lib/ui/i18n";
+
+interface Props {
+  page: number;
+  totalPages?: number;
+  previousHref?: string | null;
+  nextHref?: string | null;
+  label?: string;
+  class?: string;
+}
+
+const {
+  page,
+  totalPages,
+  previousHref,
+  nextHref,
+  label,
+  class: className,
+} = Astro.props;
+const locale = uiLocale(Astro.cookies, Astro.url);
+const t = (text: string) => translate(locale, text);
+---
+
+<nav
+  class:list={["pagination-bar", className]}
+  aria-label={label ?? t("Pagination")}
+>
+  {previousHref ? (
+    <a href={previousHref} class="btn-secondary btn-sm">
+      <Icon name="arrow-left" size="sm" />
+      {t("Previous")}
+    </a>
+  ) : (
+    <span class="btn-secondary btn-sm" role="link" aria-disabled="true">
+      <Icon name="arrow-left" size="sm" />
+      {t("Previous")}
+    </span>
+  )}
+  <span class="pagination-page">
+    {t("Page")} {page}
+    {totalPages !== undefined ? ` ${t("of")} ${totalPages}` : ""}
+  </span>
+  {nextHref ? (
+    <a href={nextHref} class="btn-secondary btn-sm">
+      {t("Next")}
+      <Icon name="arrow-right" size="sm" />
+    </a>
+  ) : (
+    <span class="btn-secondary btn-sm" role="link" aria-disabled="true">
+      {t("Next")}
+      <Icon name="arrow-right" size="sm" />
+    </span>
+  )}
+</nav>

@@ -12,6 +12,22 @@ export default defineConfig({
   // personalized and uncacheable, so the prefetch cannot be reused: the click
   // then waits for it and loads the page a second time. Prefetch off.
   prefetch: false,
+  integrations: [
+    {
+      name: "namkopa-dev-server-flag",
+      hooks: {
+        "astro:config:setup"({ command, updateConfig }) {
+          updateConfig({
+            vite: {
+              define: {
+                __ASTRO_DEV_SERVER__: JSON.stringify(command === "dev"),
+              },
+            },
+          });
+        },
+      },
+    },
+  ],
   vite: {
     plugins: [tailwindcss()],
     // Discovered lazily on the first authed render; mid-request re-optimization

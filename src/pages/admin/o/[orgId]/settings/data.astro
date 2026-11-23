@@ -6,6 +6,7 @@ const t = (text: string) => translate(locale, text);
 // import/export index (spec Section 9.2, 11, 27 "Settings:
 // data/import/export").
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
 import {
   ForbiddenError,
   requireOrganizationAccess,
@@ -39,40 +40,45 @@ const organization = await withRequestDb((db) =>
     <li>
       <a
         href={`/admin/o/${organizationId}/migration`}
-        class="panel block p-5 font-medium text-primary hover:underline"
+        class="box flex items-center gap-3 font-medium text-primary hover:underline"
       >
+        <Icon name="database" size="sm" />
         {t("Migration Center")}
       </a>
     </li>
     <li>
       <a
         href={`/admin/o/${organizationId}/dwellings/import`}
-        class="panel block p-5 font-medium text-primary hover:underline"
+        class="box flex items-center gap-3 font-medium text-primary hover:underline"
       >
+        <Icon name="upload" size="sm" />
         {t("Import dwellings (CSV)")}
       </a>
     </li>
     <li>
       <a
         href={`/api/v1/admin/o/${organizationId}/dwellings/export`}
-        class="panel block p-5 font-medium text-primary hover:underline"
+        class="box flex items-center gap-3 font-medium text-primary hover:underline"
       >
+        <Icon name="download" size="sm" />
         {t("Export dwellings (CSV)")}
       </a>
     </li>
     <li>
       <a
         href={`/api/v1/admin/o/${organizationId}/readings/export`}
-        class="panel block p-5 font-medium text-primary hover:underline"
+        class="box flex items-center gap-3 font-medium text-primary hover:underline"
       >
+        <Icon name="download" size="sm" />
         {t("Export meter readings (CSV)")}
       </a>
     </li>
     <li>
       <a
         href={`/admin/o/${organizationId}/payments/import`}
-        class="panel block p-5 font-medium text-primary hover:underline"
+        class="box flex items-center gap-3 font-medium text-primary hover:underline"
       >
+        <Icon name="upload" size="sm" />
         {t("Import bank statement (CSV)")}
       </a>
     </li>

@@ -10,20 +10,26 @@ import { listDwellings } from "../../../../../domain/organizations/dwellings";
 import {
   translate,
   uiLocale,
+  fill,
   formatMoney,
   formatDate,
+  formatPeriod,
   plural,
   friendlyActionErrorMessage,
 } from "../../../../../lib/ui/i18n";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
 import { actions } from "astro:actions";
 import {
   ForbiddenError,
   requireOrganizationAccess,
 } from "../../../../../domain/authorization/guards";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { listPeriods } from "../../../../../domain/periods/periods";
+import { effectiveConfirmedAllocation } from "../../../../../domain/periods/invoice-balance";
 import { listBankImports } from "../../../../../domain/payments/bank-import";
 import {
+  getPeriodLegacyPaidTotal,
   listPaymentMatches,
   listUnmatchedTransactions,
 } from "../../../../../domain/payments/matching";
@@ -37,6 +43,10 @@ import ManualPaymentForm from "../../../../../components/ui/ManualPaymentForm.as
 import { compareExact, sumExact } from "../../../../../lib/decimal2";
 import { parseDateInput } from "../../../../../lib/date-input";
 import { orgLocalDateString } from "../../../../../lib/org-time";
+import {
+  resolvePeriodFilter,
+  summarizePeriodPayments,
+} from "../../../../../lib/ui/dashboard-collection";
 import { withRequestDb } from "../../../../../lib/db-request";
 
 const locale = uiLocale(Astro.cookies, Astro.url);
@@ -60,8 +70,12 @@ const reverseDwellingResult = Astro.getActionResult(
 const editResult = Astro.getActionResult(actions.payments.editUnmatched);
 
 const base = `/admin/o/${organizationId}`;
+const rawPeriodId = Astro.url.searchParams.get("periodId");
 const {
   organization,
+  periods,
+  periodFilter,
+  legacyPaidTotal,
   dwellingDirectory,
   rawImports,
   proposedMatches,
@@ -75,9 +89,23 @@ const {
   receivables,
 } = await withRequestDb(async (db) => {
   const organization = await getOrganization(db, organizationId);
+  const periods = await listPeriods(db, organizationId);
+  const periodFilter = resolvePeriodFilter(periods, rawPeriodId);
+  const legacyPaidTotal =
+    periodFilter.kind === "selected"
+      ? await getPeriodLegacyPaidTotal(
+          db,
+          organizationId,
+          periodFilter.period.id,
+          organization.currency
+        )
+      : "0.00";
   const today = orgLocalDateString(new Date(), organization.timezone);
   return {
     organization,
+    periods,
+    periodFilter,
+    legacyPaidTotal,
     dwellingDirectory: await listDwellings(db, organizationId, {
       includeArchived: true,
       limit: 2147483647,
@@ -170,7 +198,10 @@ interface HistoryRow {
   reference: string | null;
   method: "BANK" | "CASH";
   amount: string;
+  allocatedAmount?: string;
   currency: string;
+  invoiceCurrency?: string;
+  invoiceAmountDue?: string;
   status: Status;
   invoiceId?: string;
   invoiceNumber?: string;
@@ -190,7 +221,11 @@ const matchRows = (list: typeof confirmedMatches, status: Status) =>
     reference: m.transactionReference,
     method: m.transactionPaymentMethod,
     amount: m.transactionAmount,
+    allocatedAmount:
+      status === "CONFIRMED" ? effectiveConfirmedAllocation(m) : undefined,
     currency: m.transactionCurrency,
+    invoiceCurrency: m.invoiceCurrency,
+    invoiceAmountDue: m.amountDue,
     status,
     invoiceId: m.invoiceId,
     invoiceNumber: m.invoiceNumber,
@@ -253,11 +288,20 @@ const statusLabels = {
 
 const rawQ = Astro.url.searchParams.get("q")?.trim();
 const q = rawQ ? rawQ.slice(0, 100) : undefined;
+const billingPeriods = periods.filter((p) => !p.openingReadings);
+const selectedPeriod = periodFilter.period;
+const selectablePeriods =
+  selectedPeriod && selectedPeriod.openingReadings
+    ? [selectedPeriod, ...billingPeriods]
+    : billingPeriods;
 const from = parseDateInput(Astro.url.searchParams.get("from"));
 const to = parseDateInput(Astro.url.searchParams.get("to"));
 
 const rows = allRows.filter((r) => {
   if (statusKey && r.status !== statusFilters[statusKey]) return false;
+  if (periodFilter.kind === "unknown") return false;
+  if (periodFilter.kind === "selected" && r.periodId !== periodFilter.period.id)
+    return false;
   if (from && r.date < from) return false;
   if (to && r.date > to) return false;
   if (!q) return true;
@@ -271,15 +315,20 @@ const rows = allRows.filter((r) => {
     `${t("Dwelling")} ${r.dwellingLabel}`,
   ].some((v) => v?.toLowerCase().includes(needle));
 });
-const filtered = Boolean(statusKey || q || from || to);
-// Totals never mix currencies: with more than one in view, count only.
-const mixedCurrency = rows.some((r) => r.currency !== organization.currency);
-const receivedRows = rows.filter((r) => r.status === "CONFIRMED");
-const receivedTotal = sumExact(
-  receivedRows
-    .filter((r) => r.currency === organization.currency)
-    .map((r) => r.amount)
+const filtered = Boolean(
+  statusKey || periodFilter.kind !== "all" || q || from || to
 );
+const showConfirmedTotals = !statusKey || statusKey === "received";
+// Totals never mix currencies: org-wide lists suppress sums when mixed, while
+// period drill-downs keep the organization-currency subtotal with a badge.
+const paymentSummary = summarizePeriodPayments(rows, organization.currency);
+const showLegacyPaidNote =
+  periodFilter.kind === "selected" &&
+  showConfirmedTotals &&
+  !q &&
+  !from &&
+  !to &&
+  compareExact(legacyPaidTotal, "0.00") > 0;
 const imports = [...rawImports].reverse();
 ---
 
@@ -300,7 +349,7 @@ const imports = [...rawImports].reverse();
       <ButtonGroup label={t("Payment actions")}>
         <details class="edit-disclosure" open={!!recordManualResult?.error}>
           <summary class="btn-secondary">{t("Record a payment")}</summary>
-          <div class="edit-disclosure-panel">
+          <div class="edit-disclosure-panel box box-floating">
             <ManualPaymentForm
               organizationId={organizationId}
               invoices={openInvoices}
@@ -747,13 +796,16 @@ const imports = [...rawImports].reverse();
       <form method="GET" class="filters" action="#history">
         <div>
           <label for="payments-q">{t("Search")}</label>
-          <input
-            type="search"
-            id="payments-q"
-            name="q"
-            value={q ?? ""}
-            placeholder={t("Dwelling, invoice, payer or reference")}
-          />
+          <div class="input-icon">
+            <Icon name="search" size="sm" />
+            <input
+              type="search"
+              id="payments-q"
+              name="q"
+              value={q ?? ""}
+              placeholder={t("Dwelling, invoice, payer or reference")}
+            />
+          </div>
         </div>
         <div>
           <label for="payments-status">{t("Status")}</label>
@@ -766,6 +818,22 @@ const imports = [...rawImports].reverse();
                 </option>
               )
             )}
+          </select>
+        </div>
+        <div>
+          <label for="payments-period">{t("Period")}</label>
+          <select id="payments-period" name="periodId">
+            {periodFilter.kind === "unknown" && (
+              <option value={rawPeriodId!} selected>
+                {t("Unavailable period")}
+              </option>
+            )}
+            <option value="">{t("All periods")}</option>
+            {selectablePeriods.map((p) => (
+              <option value={p.id} selected={p.id === selectedPeriod?.id}>
+                {formatPeriod(p.year, p.month, locale)}
+              </option>
+            ))}
           </select>
         </div>
         <div>
@@ -799,11 +867,27 @@ const imports = [...rawImports].reverse();
               : t("No payments yet.")
           }
           description={
-            filtered
-              ? undefined
-              : t("Import a bank statement or record a payment to begin.")
+            showLegacyPaidNote
+              ? fill(
+                  t(
+                    "{amount} marked paid on invoices without a payment record."
+                  ),
+                  { amount: money(legacyPaidTotal) }
+                )
+              : filtered
+                ? undefined
+                : t("Import a bank statement or record a payment to begin.")
           }
-        />
+        >
+          {showLegacyPaidNote && (
+            <a
+              class="btn-secondary"
+              href={`${base}/periods/${selectedPeriod!.id}?status=PAID`}
+            >
+              {t("View paid invoices")}
+            </a>
+          )}
+        </EmptyState>
       ) : (
         <>
           <p class="result-note" role="status">
@@ -813,14 +897,52 @@ const imports = [...rawImports].reverse();
               "{n} payment",
               "{n} payments"
             )}
-            {!mixedCurrency && (
-              <>
-                {" "}
-                ·{" "}
-                {t("{total} received").replace("{total}", money(receivedTotal))}
-              </>
-            )}
+            {showConfirmedTotals &&
+              (selectedPeriod
+                ? (!paymentSummary.mixedCurrency ||
+                    paymentSummary.orgCurrencyConfirmedCount > 0) && (
+                    <>
+                      {" "}
+                      ·{" "}
+                      {fill(t("{total} applied to {period}"), {
+                        total: money(paymentSummary.appliedTotal),
+                        period: formatPeriod(
+                          selectedPeriod.year,
+                          selectedPeriod.month,
+                          locale
+                        ),
+                      })}
+                      {paymentSummary.hasOverpaymentDifference &&
+                        ` (${t("{total} received").replace("{total}", money(paymentSummary.receivedTotal))})`}
+                      {paymentSummary.mixedCurrency &&
+                        ` · ${fill(t("{currency} only"), { currency: organization.currency })}`}
+                    </>
+                  )
+                : !paymentSummary.mixedCurrency && (
+                    <>
+                      {" "}
+                      ·{" "}
+                      {t("{total} received").replace(
+                        "{total}",
+                        money(paymentSummary.receivedTotal)
+                      )}
+                    </>
+                  ))}
           </p>
+          {showLegacyPaidNote && (
+            <p class="result-note">
+              {fill(
+                t("{amount} marked paid on invoices without a payment record."),
+                { amount: money(legacyPaidTotal) }
+              )}{" "}
+              <a
+                class="link"
+                href={`${base}/periods/${selectedPeriod!.id}?status=PAID`}
+              >
+                {t("View paid invoices")}
+              </a>
+            </p>
+          )}
           <div class="table-wrap stack-table">
             <table class="history-table w-full text-left text-body-sm">
               <caption class="sr-only">{t("Payment history")}</caption>
@@ -949,6 +1071,7 @@ const imports = [...rawImports].reverse();
                               <button
                                 type="submit"
                                 class="btn-secondary"
+                                data-confirm-tone="danger"
                                 data-confirm={
                                   r.directReversible
                                     ? t(
@@ -1037,15 +1160,10 @@ const imports = [...rawImports].reverse();
   }
   .edit-disclosure-panel {
     position: absolute;
-    z-index: 15;
+    z-index: var(--z-popover);
     top: calc(100% + 0.5rem);
     right: 0;
     width: min(28rem, 90vw);
-    padding: 1.25rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-    box-shadow: var(--elevation-flat);
   }
   .calm {
     padding: 1.25rem 1.5rem;
@@ -1175,9 +1293,6 @@ const imports = [...rawImports].reverse();
       font-size: inherit;
       font-weight: 700;
       color: inherit;
-    }
-    .history-table td[data-col="status"] :global(.status-badge) {
-      font-size: var(--text-xs);
     }
     .history-table td[data-col="amount"] {
       grid-area: amount;

@@ -116,8 +116,6 @@
   --palette-verdigris-200-a18: rgb(191 216 209 / 18%);
   --palette-amber-200-a18: rgb(232 201 154 / 18%);
   --palette-brick-200-a18: rgb(229 194 186 / 18%);
-  --palette-brick-200-a15: rgb(229 194 186 / 15%);
-  --palette-brick-700-a08: rgb(120 53 41 / 8%);
   --palette-pine-200-a16: rgb(203 209 188 / 16%);
 
   --palette-night-950: #0e1517;
@@ -147,10 +145,6 @@
     var(--palette-brick-900),
     var(--palette-brick-400)
   );
-  --color-destructive-hover-bg: light-dark(
-    var(--palette-brick-700-a08),
-    var(--palette-brick-200-a15)
-  );
   /* Form inputs get a deeper border than --color-border's card/table
      hairlines so the field edge stays visible (WCAG 1.4.11). */
   --color-input-border: light-dark(
@@ -162,14 +156,42 @@
     var(--palette-daugava-200)
   );
   --color-on-primary: light-dark(var(--palette-paper), var(--palette-ink-900));
-  --color-backdrop: rgb(9 15 27 / 55%);
-  --color-control-thumb: var(--palette-paper);
+  --color-backdrop: rgb(14 21 23 / 55%); /* --palette-night-950 at 55% */
+  /* Switch thumbs sit on --color-primary when checked, so they track
+     --color-on-primary in both light and dark modes (WCAG 1.4.11 >= 3:1). */
+  --color-control-thumb: var(--color-on-primary);
   --color-table-th-bg: light-dark(
     var(--palette-limestone-75),
     var(--palette-night-850)
   );
   --color-org-context-bg: var(--color-table-th-bg);
   --color-nav-active-bg: var(--tone-info-bg);
+  /* Menus, dropdown items and the app navigation: a faint wash of the text
+     colour on hover and a stronger one for the selected item, so both read in
+     either theme without a second palette. */
+  --color-menu-hover: color-mix(
+    in srgb,
+    var(--color-foreground) 5%,
+    transparent
+  );
+  --color-menu-selected: color-mix(
+    in srgb,
+    var(--color-foreground) 9%,
+    transparent
+  );
+  /* A recessed fill: below the surface in both themes. */
+  --color-well: light-dark(
+    var(--palette-limestone-100),
+    var(--palette-night-950)
+  );
+  /* The pulsing dot beside a required boxed field's label. */
+  /* Brick, one step deeper than the text tone in dark mode so it reads red. */
+  --color-required: light-dark(
+    var(--palette-brick-600),
+    var(--palette-brick-400)
+  );
+  /* Hover outline on buttons: a 4px ring in the button's own colour. */
+  --hover-ring: 0 0 0 4px;
 
   /* Tones: one background/text pair per meaning, shared by badges, notices
      and meter chips so the same meaning always looks the same. */
@@ -250,13 +272,9 @@
   --space-12: calc(var(--spacing) * 12);
   --space-16: calc(var(--spacing) * 16);
 
-  /* Semantic layout spacing. Screens ask for these instead of picking a
-     number, so a rhythm change is one edit. */
-  --gap-field: var(--space-4); /* between form fields */
+  /* Semantic layout spacing for CSS outside utilities. Region and field
+     rhythm uses Tailwind utilities (space-y-6, space-y-4, p-6, p-4). */
   --gap-label: var(--space-1); /* label to its control */
-  --gap-section: var(--space-6); /* between panels and page sections */
-  --pad-panel: var(--space-6); /* inside an ordinary panel */
-  --pad-panel-compact: var(--space-4); /* inside a dense panel or card */
   --gutter: var(--space-4); /* page edge; grows at sm and lg, see below */
 
   /* Page widths: where a screen stops growing. */
@@ -268,7 +286,6 @@
 
   --control-size-sm: 2.25rem;
   --control-size-md: 2.75rem;
-  --control-size-lg: 3rem;
 
   /* Body copy stays neutral; small labels and headings have their own
      optical spacing so translated UI is not needlessly widened. */
@@ -283,6 +300,14 @@
   --duration-normal: 180ms;
   --duration-panel: 220ms;
   --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Stacking scale: name the layer, never a bare number. */
+  --z-raised: 1; /* above a sibling overlay (stretched-link rows) */
+  --z-sticky: 10; /* sticky bars inside content */
+  --z-popover: 20; /* menus, popovers, the admin sidebar */
+  --z-overlay: 30; /* floating panels above popovers */
+  --z-toast: 90; /* save-status toasts */
+  --z-skip-link: 100; /* always on top when focused */
 
   /* Tabler Icons (Outline) system -- see src/components/ui/Icon.astro.
      Sizes keep the original 24x24 viewBox even when displayed smaller. */
@@ -456,10 +481,11 @@
   --color-danger-surface: var(--tone-danger-bg);
   --color-success-surface: var(--tone-success-bg);
   --color-info-surface: var(--tone-info-bg);
-  --radius-badge: 0.3125rem;
-  --radius-input: 0.4375rem;
-  --radius-control: 0.5rem;
-  --radius-panel: 0.625rem;
+  --radius-check: 0.3125rem; /* checkbox squares */
+  --radius-badge: 0.5rem;
+  --radius-input: 0.75rem;
+  --radius-control: 0.75rem;
+  --radius-panel: 1rem;
   --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9l6 6l6-6'/%3E%3C/svg%3E");
   --font-sans:
     "Switzer", "Overused Grotesk", "Segoe UI", ui-sans-serif, system-ui,
@@ -509,7 +535,9 @@
      appearance:none on every <button> and <summary> in the app too. */
   select {
     appearance: none;
-    padding-right: 2.25rem;
+    padding-inline-end: 2.25rem;
+    /* A data URI cannot read CSS variables: the stroke is --palette-ink-500
+       here and --palette-night-300 in the dark rules below. */
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2358666c' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6l6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 0.75rem center;
@@ -551,18 +579,118 @@
   /* A select keeps its own wider right padding for the arrow (set above). */
   select {
     padding-block: 0.5rem;
-    padding-left: 0.75rem;
+    padding-inline-start: 0.75rem;
   }
   input::placeholder,
   textarea::placeholder {
     color: var(--color-muted);
     opacity: 1;
   }
-  input[type="checkbox"],
-  input[type="radio"] {
-    width: 1rem;
-    height: 1rem;
+  /* Checkbox and radio: an 18px square (a circle for radios) with a soft inset
+     shade; checked fills with --color-primary and shows the mark in
+     --color-on-primary. Switches (role="switch") keep their own track. The
+     shared rules sit in :where() so the radio rules below can win. */
+  input:where([type="checkbox"]:not([role="switch"]), [type="radio"]) {
+    appearance: none;
+    display: inline-grid;
+    place-content: center;
     flex-shrink: 0;
+    width: 1.125rem;
+    height: 1.125rem;
+    margin: 0;
+    vertical-align: middle;
+    border: 1px solid var(--color-input-border);
+    border-radius: var(--radius-check);
+    background: var(--color-surface);
+    box-shadow: inset 0 1px 2px
+      color-mix(in srgb, var(--color-foreground) 8%, transparent);
+    cursor: pointer;
+  }
+  input:where([type="checkbox"]:not([role="switch"]), [type="radio"])::before {
+    content: "";
+    width: 0.75rem;
+    height: 0.75rem;
+    background: var(--color-on-primary);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5l10-10'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+    scale: 0;
+  }
+  input[type="checkbox"]:indeterminate::before {
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M6 12h12'/%3E%3C/svg%3E");
+  }
+  input[type="radio"] {
+    border-radius: 50%;
+  }
+  input[type="radio"]::before {
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 50%;
+    mask: none;
+  }
+  /* A radio group with nothing chosen matches :indeterminate too, so the
+     mixed state is for checkboxes only. */
+  input:where([type="checkbox"]:not([role="switch"]), [type="radio"]):where(
+      :checked,
+      [type="checkbox"]:indeterminate
+    ) {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    box-shadow: none;
+  }
+  input:where([type="checkbox"]:not([role="switch"]), [type="radio"]):where(
+      :checked,
+      [type="checkbox"]:indeterminate
+    )::before {
+    scale: 1;
+  }
+  input:where([type="checkbox"]:not([role="switch"]), [type="radio"]):where(
+      :not(:disabled)
+    ):hover {
+    border-color: var(--color-foreground);
+  }
+  input:where([type="checkbox"]:not([role="switch"]), [type="radio"]):where(
+      :not(:disabled)
+    ):where(:checked, [type="checkbox"]:indeterminate):hover {
+    border-color: var(--color-primary-hover);
+    background: var(--color-primary-hover);
+  }
+  input:where([type="checkbox"]:not([role="switch"]), [type="radio"]):disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    input:where(
+        [type="checkbox"]:not([role="switch"]),
+        [type="radio"]
+      )::before {
+      transition: scale var(--duration-fast) var(--ease-standard);
+    }
+  }
+  @media (forced-colors: active) {
+    input:where([type="checkbox"]:not([role="switch"]), [type="radio"]) {
+      forced-color-adjust: none;
+      border-color: CanvasText;
+      background: Canvas;
+    }
+    input:where([type="checkbox"]:not([role="switch"]), [type="radio"]):where(
+        :checked,
+        [type="checkbox"]:indeterminate
+      ) {
+      border-color: Highlight;
+      background: Highlight;
+    }
+    input:where(
+        [type="checkbox"]:not([role="switch"]),
+        [type="radio"]
+      )::before {
+      background: HighlightText;
+    }
+    input:where(
+        [type="checkbox"]:not([role="switch"]),
+        [type="radio"]
+      ):disabled {
+      border-color: GrayText;
+    }
   }
   label {
     line-height: 1.5;
@@ -573,6 +701,14 @@
   th {
     font-weight: 600;
     white-space: nowrap;
+  }
+  /* Column headers: small capitals set apart from the data below. Row
+     headers (th scope="row") hold data and keep normal case. */
+  thead th {
+    font-size: var(--text-xs);
+    font-weight: 550;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
   td {
     vertical-align: middle;
@@ -596,17 +732,51 @@
   ):focus-visible:not([aria-invalid="true"]) {
   border-color: var(--color-primary);
 }
+/* Colour grading: the field's border and fill take the tone of its state.
+   aria-invalid is the error; data-tone="warning" or "success" mark the rest. */
 input[aria-invalid="true"],
 select[aria-invalid="true"],
 textarea[aria-invalid="true"] {
   border-color: var(--color-destructive);
 }
-input:disabled,
+/* Checkbox and radio keep their own fill: checked is primary. */
+:is(
+  input:not([type="checkbox"], [type="radio"]),
+  select,
+  textarea
+)[aria-invalid="true"] {
+  background-color: var(--tone-danger-bg);
+}
+:is(input, select, textarea)[data-tone="warning"] {
+  border-color: var(--color-warning);
+  background-color: var(--tone-warning-bg);
+}
+:is(input, select, textarea)[data-tone="success"] {
+  border-color: var(--color-success);
+  background-color: var(--tone-success-bg);
+}
+/* Inside a boxed field the frame carries the tone, so the control stays
+   clear. Unlayered, and the doubled class outranks the rules above. */
+.field-box.field-box > :is(input, select, textarea) {
+  border: 0;
+  background-color: transparent;
+}
+/* The frame draws the focus ring; one ring, not two. */
+.field-box.field-box > :is(input, select, textarea):focus-visible {
+  outline: none;
+}
+input:not([type="checkbox"], [type="radio"]):disabled,
 select:disabled,
 textarea:disabled {
   cursor: not-allowed;
   background-color: var(--color-surface-hover);
   color: var(--color-muted);
+}
+/* Every single-select uses the custom SVG chevron inset 0.75rem from the
+   trailing edge. Keep its clearance unlayered so utility shorthands cannot
+   collapse option text onto the arrow. */
+:where(select:not([multiple])) {
+  padding-inline-end: 2.25rem;
 }
 
 /* Section 4 type scale (UI_SPECIFICATION.md Sec. 4.1). Named utilities so
@@ -631,16 +801,6 @@ textarea:disabled {
     line-height: 1.25rem; /* 20px */
     font-weight: var(--font-regular-weight);
   }
-  .text-body {
-    font-size: var(--text-base); /* 16px */
-    line-height: 1.5rem; /* 24px */
-    font-weight: var(--font-regular-weight);
-  }
-  .text-ui-strong {
-    font-size: var(--text-base); /* 16px */
-    line-height: 1.375rem; /* 22px */
-    font-weight: 600;
-  }
   .text-h3 {
     letter-spacing: var(--tracking-heading);
     font-size: var(--text-xl); /* 20px */
@@ -664,8 +824,9 @@ textarea:disabled {
     font-optical-sizing: auto;
   }
   /* Fraunces axes. opsz is left out on purpose: font-optical-sizing: auto sets
-     it from the rendered font size. Weight follows size (600 at 36px or
-     below, 700 above): see the min-width rules on h1.font-display below. */
+     it from the rendered font size. Weight is set by breakpoint (600, then
+     700 from 70rem where a heading can pass 36px): see the min-width rules on
+     h1.font-display below. */
   .font-display,
   .brand {
     font-variation-settings:
@@ -754,7 +915,8 @@ textarea:disabled {
       transition:
         background-color var(--duration-fast) ease,
         border-color var(--duration-fast) ease,
-        color var(--duration-fast) ease;
+        color var(--duration-fast) ease,
+        box-shadow var(--duration-fast) ease;
     }
   }
   .btn-primary {
@@ -784,13 +946,39 @@ textarea:disabled {
   .btn-danger:where(:not(:disabled):not([aria-disabled="true"])):hover {
     background: var(--color-destructive-hover);
   }
+  /* Ghost: a button that reads as a link, for the quiet way out of a dialog
+     or a secondary step. It underlines on hover instead of filling. */
   .btn-ghost {
-    border: 1px solid transparent;
     background: transparent;
+    border: 1px solid transparent;
     color: var(--color-primary);
   }
   .btn-ghost:where(:not(:disabled):not([aria-disabled="true"])):hover {
-    background: var(--color-surface-hover);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+  }
+  /* Hover outline: a 4px ring in the button's own colour, so the control grows
+     its edge instead of moving. Pointer devices only; a tap leaves no ring. */
+  @media (hover: hover) {
+    .btn-primary:where(:not(:disabled):not([aria-disabled="true"])):hover {
+      box-shadow: var(--hover-ring)
+        color-mix(in srgb, var(--color-primary) 22%, transparent);
+    }
+    .btn-danger:where(:not(:disabled):not([aria-disabled="true"])):hover {
+      box-shadow: var(--hover-ring)
+        color-mix(in srgb, var(--color-destructive) 22%, transparent);
+    }
+    :is(.btn-secondary, .icon-btn):where(
+        :not(:disabled):not([aria-disabled="true"])
+      ):hover {
+      box-shadow: var(--hover-ring)
+        color-mix(in srgb, var(--color-border) 70%, transparent);
+    }
+    .icon-btn-danger:where(:not(:disabled):not([aria-disabled="true"])):hover {
+      box-shadow: var(--hover-ring)
+        color-mix(in srgb, var(--color-destructive) 16%, transparent);
+    }
   }
   /* Press feedback begins on pointer-down without moving the label or
      delaying the click. Color transitions can be redirected immediately. */
@@ -802,7 +990,7 @@ textarea:disabled {
     background: var(--color-destructive-active);
     transition-duration: var(--duration-feedback);
   }
-  :is(.btn-secondary, .btn-ghost, .icon-btn):where(
+  :is(.btn-secondary, .icon-btn):where(
       :not(:disabled):not([aria-disabled="true"])
     ):active {
     background: var(--color-nav-active-bg);
@@ -826,10 +1014,6 @@ textarea:disabled {
     min-height: var(--control-size-sm);
     padding: var(--space-2) var(--space-3);
     font-size: var(--text-sm);
-  }
-  .btn-lg {
-    min-height: var(--control-size-lg);
-    padding: var(--space-3) var(--space-6);
   }
   @media (pointer: coarse) {
     .btn-sm {
@@ -870,12 +1054,27 @@ textarea:disabled {
       height: var(--control-size-md);
     }
   }
-  .icon-btn-danger:where(:not(:disabled):not([aria-disabled="true"])):hover {
-    background: var(--color-destructive-hover-bg);
-    color: var(--color-destructive);
+  /* No border until hovered: for a close button in a dialog head or a
+     toolbar of several icon actions. */
+  .icon-btn-ghost {
+    border-color: transparent;
+    background: transparent;
   }
-  .icon-btn-danger:where(:not(:disabled):not([aria-disabled="true"])):active {
-    background: var(--color-destructive-hover-bg);
+  .icon-btn-ghost:where(:not(:disabled):not([aria-disabled="true"])):hover {
+    border-color: var(--color-border);
+  }
+  /* Delete: the icon turns destructive under the pointer, so the meaning
+     shows before the click, not after it. */
+  .icon-btn-danger:where(:not(:disabled):not([aria-disabled="true"])):is(
+      :hover,
+      :active
+    ) {
+    border-color: color-mix(
+      in srgb,
+      var(--color-destructive) 45%,
+      var(--color-border)
+    );
+    background: var(--color-surface);
     color: var(--color-destructive);
   }
   :is(
@@ -904,7 +1103,7 @@ textarea:disabled {
   }
   .row-link-above {
     position: relative;
-    z-index: 1;
+    z-index: var(--z-raised);
   }
   .row-link:focus-within {
     outline: 2px solid var(--color-focus-ring);
@@ -915,6 +1114,7 @@ textarea:disabled {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     box-shadow: var(--elevation-flat);
   }
   .table-wrap {
@@ -928,6 +1128,7 @@ textarea:disabled {
     grid-template-columns: repeat(var(--metrics, 4), minmax(0, 1fr));
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--color-surface);
   }
   .metric {
@@ -1007,7 +1208,8 @@ textarea:disabled {
     font-weight: 600;
     line-height: 1.15;
   }
-  /* 3.2vw passes 36px at 1125px (70.3125rem): Fraunces is 700 above 36px. */
+  /* Fraunces weight by breakpoint (ADR 0010): 700 from 70rem, where 3.2vw
+     reaches about 36px. */
   @media (width >= 70rem) {
     .page-header :is(h1, h2, h3).font-display {
       font-weight: 700;
@@ -1061,7 +1263,7 @@ textarea:disabled {
   .btn-group > :is(a, button):focus-visible,
   .btn-group > details:is([open], :hover, :focus-within) > summary {
     position: relative;
-    z-index: 1;
+    z-index: var(--z-raised);
   }
   @media (width < 40rem) {
     .btn-group {
@@ -1139,7 +1341,7 @@ textarea:disabled {
   }
   @media (prefers-reduced-motion: no-preference) {
     summary.chevron-toggle::after {
-      transition: transform 150ms ease;
+      transition: transform var(--duration-fast) var(--ease-standard);
     }
   }
   /* The breadcrumb trail (components/ui/Breadcrumbs.astro): rendered once by
@@ -1203,6 +1405,7 @@ textarea:disabled {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     box-shadow: var(--elevation-flat);
     min-width: 0;
   }
@@ -1272,7 +1475,7 @@ textarea:disabled {
     border-radius: var(--radius-badge);
     padding: 0.25rem 0.5rem;
     font-size: var(--text-base);
-    font-weight: 600;
+    font-weight: var(--font-regular-weight);
     line-height: 1.4;
     background: var(--tone-neutral-bg);
     color: var(--tone-neutral-text);
@@ -1299,10 +1502,12 @@ textarea:disabled {
     background: var(--color-surface);
     border: 1px dashed var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
   }
   .notice {
     padding: 1rem;
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--tone-info-bg);
     color: var(--tone-info-text);
     font-size: var(--text-sm);
@@ -1316,17 +1521,24 @@ textarea:disabled {
     background: var(--tone-danger-bg);
     color: var(--tone-danger-text);
   }
+  .notice-success {
+    background: var(--tone-success-bg);
+    color: var(--tone-success-text);
+  }
   .section-title {
     font-size: var(--text-base);
     font-weight: 650;
     margin-bottom: 1rem;
   }
   /* Form field parts. The control itself is styled by the base layer; the
-     label, hint and error text come from these classes. Link hint and error
-     to the control with aria-describedby (FieldError renders id="<name>-error"). */
+     label, hint and error text come from these classes. Link always-present
+     hints via aria-describedby in markup; field-errors.ts links rendered
+     FieldError elements (id="<control>-error") automatically. */
   /* Typography comes from the shared label role above. */
+  /* With the control's mt-1, the label sits 8px above it. */
   .field-label {
     display: block;
+    margin-bottom: var(--space-1);
     color: var(--color-foreground);
   }
   /* Checkbox or radio with its text: the whole row is the 44px target. */
@@ -1335,6 +1547,159 @@ textarea:disabled {
     align-items: center;
     gap: var(--space-2);
     min-height: var(--control-size-md);
+  }
+  /* Expanded hit wrapper around standalone checkboxes inside dense table cells
+     (36px desktop, 44px coarse pointer). */
+  .check-target {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--control-size-sm);
+    min-height: var(--control-size-sm);
+    cursor: pointer;
+  }
+  @media (pointer: coarse) {
+    .check-target {
+      min-width: var(--control-size-md);
+      min-height: var(--control-size-md);
+    }
+  }
+  /* Binary switch: hollow outline = OFF, solid primary fill = ON.
+     Uses --color-muted for the unchecked track border and thumb (>= 4.8:1
+     on every surface) and --color-primary / --color-control-thumb when
+     checked (> 9:1 in both themes). Track and thumb carry aria-hidden="true"
+     while <input type="checkbox" role="switch"> spans the hit area. */
+  .toggle-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-width: var(--control-size-md);
+    min-height: 1.5rem;
+    cursor: pointer;
+  }
+  .toggle-switch:has(input:disabled) {
+    cursor: not-allowed;
+  }
+  .toggle-switch input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: inherit;
+  }
+  .toggle-switch-track {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 2.75rem;
+    height: 1.5rem;
+    border-radius: 999px;
+    border: 2px solid var(--color-muted);
+    background: var(--color-surface);
+    pointer-events: none;
+  }
+  .toggle-switch-thumb {
+    position: relative;
+    left: 2px;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    background: var(--color-muted);
+    box-shadow: var(--shadow-control);
+  }
+  .toggle-switch input:not(:disabled):hover + .toggle-switch-track {
+    border-color: var(--color-foreground);
+  }
+  .toggle-switch
+    input:not(:disabled):hover
+    + .toggle-switch-track
+    .toggle-switch-thumb {
+    background: var(--color-foreground);
+  }
+  .toggle-switch input:checked + .toggle-switch-track {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+  }
+  .toggle-switch input:not(:disabled):checked:hover + .toggle-switch-track {
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+  }
+  .toggle-switch input:checked + .toggle-switch-track .toggle-switch-thumb {
+    transform: translateX(1.25rem);
+    background: var(--color-control-thumb);
+  }
+  .toggle-switch
+    input:not(:disabled):checked:hover
+    + .toggle-switch-track
+    .toggle-switch-thumb {
+    background: var(--color-control-thumb);
+  }
+  .toggle-switch input:focus-visible + .toggle-switch-track {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+  .toggle-switch input:disabled + .toggle-switch-track {
+    opacity: 0.45;
+  }
+  @media (pointer: coarse) {
+    .toggle-switch {
+      min-width: var(--control-size-md);
+      min-height: var(--control-size-md);
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .toggle-switch-track {
+      transition:
+        background-color var(--duration-fast) var(--ease-standard),
+        border-color var(--duration-fast) var(--ease-standard);
+    }
+    .toggle-switch-thumb {
+      transition:
+        transform var(--duration-fast) var(--ease-standard),
+        background-color var(--duration-fast) var(--ease-standard);
+    }
+  }
+  @media (forced-colors: active) {
+    .toggle-switch-track,
+    .toggle-switch input:not(:disabled):hover + .toggle-switch-track {
+      forced-color-adjust: none;
+      background: Canvas;
+      border-color: CanvasText;
+    }
+    .toggle-switch-thumb,
+    .toggle-switch
+      input:not(:disabled):hover
+      + .toggle-switch-track
+      .toggle-switch-thumb {
+      background: CanvasText;
+    }
+    .toggle-switch input:checked + .toggle-switch-track,
+    .toggle-switch input:not(:disabled):checked:hover + .toggle-switch-track {
+      background: Highlight;
+      border-color: Highlight;
+    }
+    .toggle-switch input:checked + .toggle-switch-track .toggle-switch-thumb,
+    .toggle-switch
+      input:not(:disabled):checked:hover
+      + .toggle-switch-track
+      .toggle-switch-thumb {
+      background: HighlightText;
+    }
+    .toggle-switch input:disabled + .toggle-switch-track {
+      opacity: 1;
+      background: Canvas;
+      border-color: GrayText;
+    }
+    .toggle-switch input:disabled + .toggle-switch-track .toggle-switch-thumb {
+      background: GrayText;
+    }
+    .toggle-switch input:focus-visible + .toggle-switch-track {
+      outline-color: CanvasText;
+    }
   }
   .field-hint {
     margin-top: var(--gap-label);
@@ -1355,27 +1720,61 @@ textarea:disabled {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
   }
+  /* Tabs: plain labels on a 2px rule; the open tab draws its own primary
+     line over the rule. */
   .tabs {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.25rem;
-    border-bottom: 1px solid var(--color-border);
     margin: 1.5rem 0;
+    box-shadow: inset 0 -2px 0 var(--color-border);
   }
   .tabs a {
-    padding: 0.75rem 1rem;
-    font-size: var(--text-sm);
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--control-size-md);
+    padding: 0.625rem 1rem;
     color: var(--color-muted);
-    border-radius: var(--radius-control);
+    font-size: var(--text-sm);
+    text-decoration: none;
   }
-  .tabs a:not([aria-current="page"]):hover {
+  .tabs a:hover {
     color: var(--color-foreground);
-    background: var(--color-surface-hover);
   }
   .tabs a[aria-current="page"] {
-    color: var(--color-primary);
-    background: var(--color-nav-active-bg);
+    color: var(--color-foreground);
+    font-weight: 600;
+    box-shadow: inset 0 -2px 0 var(--color-primary);
+  }
+  .tabs a:focus-visible {
+    outline-offset: -2px;
+  }
+  @media (forced-colors: active) {
+    .tabs {
+      border-bottom: 1px solid CanvasText;
+    }
+    .tabs a[aria-current="page"] {
+      border-bottom: 2px solid Highlight;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .tabs a {
+      transition:
+        color var(--duration-fast) ease,
+        box-shadow var(--duration-fast) ease;
+    }
+  }
+  .pagination-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+    font-size: var(--text-sm);
+    color: var(--color-muted);
+  }
+  .pagination-page {
     font-weight: 600;
   }
   .skip-link {
@@ -1386,7 +1785,7 @@ textarea:disabled {
     background: var(--color-surface);
     color: var(--color-foreground);
     border: 1px solid var(--color-border);
-    z-index: 100;
+    z-index: var(--z-skip-link);
     transform: translateY(-200%);
   }
   .skip-link:focus {
@@ -1428,7 +1827,7 @@ textarea:disabled {
     display: flex;
     flex-direction: column;
     overflow-y: auto;
-    z-index: 20;
+    z-index: var(--z-popover);
   }
   .app-nav {
     display: grid;
@@ -1438,10 +1837,11 @@ textarea:disabled {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem;
+    gap: 0.625rem;
+    padding: 0.625rem 0.75rem;
     border-radius: var(--radius-control);
     font-size: var(--text-sm);
+    font-weight: 500;
     color: var(--color-muted);
   }
   /* Unread counter on the Messages item. Pushed to the end of the row. */
@@ -1458,13 +1858,13 @@ textarea:disabled {
     text-align: center;
   }
   .app-nav a:hover {
-    background: var(--color-surface-hover);
+    background: var(--color-menu-hover);
     color: var(--color-foreground);
   }
   .app-nav a[aria-current="page"] {
-    background: var(--color-nav-active-bg);
-    color: var(--color-primary);
-    font-weight: 650;
+    background: var(--color-menu-selected);
+    color: var(--color-foreground);
+    font-weight: 600;
   }
   .nav-icon {
     width: 1.125rem;
@@ -1513,14 +1913,8 @@ textarea:disabled {
     }
   }
   @keyframes nav-icon-arrive {
-    0% {
+    from {
       transform: scale(0.8);
-    }
-    60% {
-      transform: scale(1.18);
-    }
-    100% {
-      transform: scale(1);
     }
   }
   .sidebar-account {
@@ -1542,18 +1936,6 @@ textarea:disabled {
     min-width: 0;
     margin: 0;
     padding-inline: 0.25rem;
-  }
-  .account-avatar {
-    display: grid;
-    place-items: center;
-    flex-shrink: 0;
-    width: 1.75rem;
-    height: 1.75rem;
-    border-radius: 999px;
-    background: var(--color-nav-active-bg);
-    color: var(--color-primary);
-    font-size: var(--text-xs);
-    font-weight: 700;
   }
   .account-email {
     min-width: 0;
@@ -1604,53 +1986,21 @@ textarea:disabled {
       transform: scale(0.985);
     }
   }
-  /* Language: one segmented control instead of three loose links. The border
-     is a shadow so the segments keep the full 44px touch height. */
-  .lang-switch {
+  /* Language switch: toggle tabs (markup carries both classes), sized to sit
+     beside the 44px theme button. */
+  .lang-switch.toggle-tabs {
     display: flex;
-    overflow: hidden;
-    border-radius: var(--radius-control);
-    background: var(--color-surface);
-    box-shadow: 0 0 0 1px var(--color-border);
+  }
+  .lang-switch.toggle-tabs > * {
+    flex: 1 1 0;
+    padding-inline: var(--space-2);
     font-size: var(--text-xs);
     font-weight: 600;
-  }
-  .lang-switch > * {
-    display: inline-flex;
-    flex: 1;
-    align-items: center;
-    justify-content: center;
-    min-width: 2.75rem;
-    min-height: var(--control-size-md);
-    color: var(--color-muted);
-    text-decoration: none;
-  }
-  .lang-switch > * + * {
-    border-left: 1px solid var(--color-border);
-  }
-  /* Inside the clipped group the global ring would be cut off. */
-  .lang-switch > a:focus-visible {
-    outline-offset: -3px;
   }
   /* In the sidebar the switch takes the width the theme button leaves. */
   .account-tools .lang-switch {
     flex: 1;
     min-width: 0;
-  }
-  .lang-switch > a:hover {
-    background: var(--color-surface-hover);
-    color: var(--color-foreground);
-  }
-  .lang-switch > [aria-current] {
-    background: var(--color-nav-active-bg);
-    color: var(--color-primary);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .lang-switch > a {
-      transition:
-        background-color var(--duration-fast) ease,
-        color var(--duration-fast) ease;
-    }
   }
   .admin-content {
     margin-left: 15rem;
@@ -1714,6 +2064,7 @@ textarea:disabled {
     padding: 1.5rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--color-surface);
   }
   .current-invoice .amount {
@@ -1726,6 +2077,7 @@ textarea:disabled {
   .invoice-list {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--color-surface);
     overflow: hidden;
   }
@@ -1742,6 +2094,7 @@ textarea:disabled {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     padding: 1.25rem;
   }
   .disclosure > summary {
@@ -1749,10 +2102,14 @@ textarea:disabled {
     align-items: center;
     gap: 0.5rem;
     min-height: var(--control-size-md);
-    font-weight: 600;
-    font-size: var(--text-sm);
     cursor: pointer;
     list-style: none;
+  }
+  /* Default type only: :where() keeps it below a type role (.text-h3) on the
+     summary. */
+  :where(.disclosure) > summary {
+    font-weight: 600;
+    font-size: var(--text-sm);
   }
   .disclosure > summary::-webkit-details-marker {
     display: none;
@@ -1780,6 +2137,901 @@ textarea:disabled {
   }
   .disclosure[open] > summary {
     margin-bottom: 1.25rem;
+  }
+
+  /* Floating action menu (DESIGN_SYSTEM.md "Row menu"): a <details> whose
+     summary opens a small panel of actions. .row-menu is the 36px dots
+     button for one table row; .more-menu brings its own summary styling. */
+  .row-menu,
+  .more-menu {
+    position: relative;
+  }
+  .row-menu {
+    display: inline-block;
+  }
+  :is(.row-menu, .more-menu) > summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  :is(.row-menu, .more-menu) > summary::-webkit-details-marker {
+    display: none;
+  }
+  .row-menu > summary {
+    display: grid;
+    min-width: var(--control-size-sm);
+    min-height: var(--control-size-sm);
+    place-items: center;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface);
+    color: var(--color-muted);
+  }
+  .row-menu > summary:hover,
+  .row-menu[open] > summary {
+    background: var(--color-surface-hover);
+    color: var(--color-foreground);
+  }
+  @media (pointer: coarse) {
+    .row-menu > summary {
+      min-width: var(--control-size-md);
+      min-height: var(--control-size-md);
+    }
+  }
+  :is(.row-menu, .more-menu) > div {
+    position: absolute;
+    z-index: var(--z-popover);
+    top: calc(100% + 0.375rem);
+    right: 0;
+    min-width: 11rem;
+  }
+  :is(.row-menu, .more-menu) .menu-disabled {
+    padding: 0.5rem 0.75rem;
+    color: var(--color-muted);
+    font-size: var(--text-sm);
+  }
+
+  /* Links (DESIGN_SYSTEM.md "Link"). .link is the primary colour and
+     underlines on hover; .link-ghost takes the text colour; .link-underlined
+     keeps the line at rest, which a link inside running text needs so it does
+     not rely on colour alone. */
+  .link {
+    color: var(--color-primary);
+    text-decoration: none;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+  }
+  .link:hover,
+  .link-underlined {
+    text-decoration-line: underline;
+  }
+  .link-underlined:hover {
+    text-decoration-thickness: 2px;
+  }
+  .link-ghost {
+    color: var(--color-foreground);
+  }
+  /* Block link: the one link inside a card stretches over the whole card
+     (which carries .has-block-link). The card shows the focus ring. */
+  .has-block-link {
+    position: relative;
+  }
+  .block-link::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+  .block-link:focus-visible {
+    outline: none;
+  }
+  .has-block-link:has(.block-link:focus-visible) {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 3px;
+  }
+
+  /* Avatar: the initials of who is signed in, in a hairline circle. Three
+     sizes; the letters are set in Fraunces like the wordmark. */
+  .avatar {
+    display: inline-grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    background: var(--color-surface);
+    box-shadow:
+      inset 0 0 0 1px
+        color-mix(in srgb, var(--color-foreground) 16%, transparent),
+      0 1px 4px color-mix(in srgb, var(--color-foreground) 12%, transparent);
+    color: var(--color-foreground);
+    font-family: var(--font-display);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    font-variation-settings:
+      "SOFT" 40,
+      "WONK" 0;
+    letter-spacing: normal;
+    line-height: 1;
+    user-select: none;
+  }
+  .avatar-sm {
+    width: 1.5rem;
+    height: 1.5rem;
+    font-size: var(--text-xs);
+    font-weight: 600;
+  }
+  .avatar-lg {
+    width: 2.25rem;
+    height: 2.25rem;
+    font-size: var(--text-base);
+  }
+
+  /* Box: a padded group of content about one subject. The default sits flat
+     with a hairline; well, raised and floating step it back or forward on the
+     elevation scale. */
+  .box {
+    display: block;
+    padding: var(--space-5) var(--space-6);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    corner-shape: squircle;
+    background: var(--color-surface);
+  }
+  .box-well {
+    border-color: transparent;
+    background: var(--color-well);
+  }
+  .box-raised,
+  .box-floating {
+    border-color: transparent;
+    background: var(--color-surface-raised);
+    box-shadow: var(--elevation-raised);
+  }
+  .box-floating {
+    box-shadow: var(--elevation-overlay);
+  }
+  /* A box that is a link, or carries one stretched over it. */
+  :is(a.box, .box.has-block-link):hover {
+    border-color: color-mix(
+      in srgb,
+      var(--color-primary) 45%,
+      var(--color-border)
+    );
+  }
+
+  /* Dropdown (DESIGN_SYSTEM.md "Dropdown"): <details class="dropdown"
+     data-dismiss> with any button-styled <summary> and a .dropdown-panel of
+     items. The row and "more" menus share the panel and items. */
+  .dropdown {
+    position: relative;
+    display: inline-block;
+  }
+  .dropdown > summary {
+    list-style: none;
+  }
+  .dropdown > summary::-webkit-details-marker {
+    display: none;
+  }
+  /* The chevron-right icon, turned to point down, and up while open. */
+  .dropdown-chevron {
+    color: currentColor;
+    opacity: 0.7;
+    rotate: 90deg;
+  }
+  .dropdown[open] .dropdown-chevron {
+    rotate: -90deg;
+  }
+  .dropdown-panel {
+    position: absolute;
+    z-index: var(--z-popover);
+    top: calc(100% + var(--space-1));
+    left: 0;
+    min-width: 13rem;
+  }
+  .dropdown-end > .dropdown-panel {
+    right: 0;
+    left: auto;
+  }
+  :is(.row-menu, .more-menu) > div,
+  .dropdown-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: var(--space-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface-raised);
+    box-shadow: var(--elevation-overlay);
+  }
+  :is(.row-menu, .more-menu) > div :is(a, button),
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    padding: 0.375rem var(--space-3);
+    border: 0;
+    border-radius: var(--radius-badge);
+    background: transparent;
+    color: var(--color-foreground);
+    font: inherit;
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  :is(.row-menu, .more-menu) > div :is(a, button):hover,
+  .dropdown-item:hover {
+    background: var(--color-menu-hover);
+  }
+  .dropdown-item[aria-current] {
+    background: var(--color-menu-selected);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+  .dropdown-item > svg {
+    flex-shrink: 0;
+    color: var(--color-muted);
+  }
+  .dropdown-item[aria-current] > svg {
+    color: currentColor;
+  }
+  /* A second, quieter line under the item's name. */
+  .dropdown-item-note {
+    display: block;
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+  }
+  :is(.row-menu, .more-menu) .menu-danger,
+  .dropdown-item-danger,
+  .dropdown-item-danger > svg {
+    color: var(--color-destructive);
+  }
+  .dropdown-divider {
+    height: 1px;
+    margin: var(--space-1);
+    border: 0;
+    background: var(--color-border);
+  }
+  /* Quick actions at the top of a dropdown menu: an icon over a short label,
+     two to a row. */
+  .dropdown-tiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+    margin-bottom: var(--space-1);
+  }
+  .dropdown-tile {
+    display: grid;
+    justify-items: center;
+    gap: var(--space-1);
+    padding: var(--space-3) var(--space-2);
+    border-radius: var(--radius-badge);
+    background: var(--color-menu-hover);
+    color: var(--color-foreground);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    line-height: 1.3;
+    text-align: center;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+  .dropdown-tile:only-child {
+    grid-column: 1 / -1;
+  }
+  .dropdown-tile:hover {
+    background: var(--color-menu-selected);
+  }
+  .dropdown-tile > svg {
+    color: var(--color-muted);
+  }
+
+  /* Menu: a list of links for moving around content. Items have room on both
+     sides of the icon, a faint wash on hover and a stronger one when
+     selected. Section labels stay in sentence case. */
+  .menu-label {
+    margin: var(--space-4) 0 var(--space-1);
+    padding-inline: var(--space-3);
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: var(--tracking-small);
+  }
+  .menu-label:first-child {
+    margin-top: 0;
+  }
+  .menu-list {
+    display: grid;
+    gap: 1px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  :is(.menu-list a, .menu-tree > summary) {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--control-size-sm);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-control);
+    color: var(--color-foreground);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    text-decoration: none;
+  }
+  :is(.menu-list a, .menu-tree > summary):hover {
+    background: var(--color-menu-hover);
+  }
+  .menu-list a[aria-current] {
+    background: var(--color-menu-selected);
+    font-weight: 600;
+  }
+  :is(.menu-list a, .menu-tree > summary) > svg {
+    flex-shrink: 0;
+    color: var(--color-muted);
+  }
+  .menu-list a[aria-current] > svg {
+    color: var(--color-foreground);
+  }
+  /* Tree: a group that folds open on its summary. Its children hang off a
+     guide line under the group's icon. */
+  .menu-tree > summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  .menu-tree > summary::-webkit-details-marker {
+    display: none;
+  }
+  .menu-tree > summary::after {
+    content: "";
+    width: 1rem;
+    height: 1rem;
+    margin-inline-start: auto;
+    background: var(--color-muted);
+    mask: var(--chevron) center / contain no-repeat;
+    rotate: -90deg;
+  }
+  .menu-tree[open] > summary::after {
+    rotate: 0deg;
+  }
+  @media (forced-colors: active) {
+    .menu-tree > summary::after {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
+  }
+  .menu-tree > .menu-list {
+    margin: var(--space-1) 0 var(--space-1) 1.3125rem;
+    padding-inline-start: var(--space-2);
+    border-inline-start: 2px solid var(--color-menu-selected);
+  }
+  @media (pointer: coarse) {
+    :is(.menu-list a, .menu-tree > summary, .dropdown-item) {
+      min-height: var(--control-size-md);
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    :is(.menu-list a, .menu-tree > summary, .dropdown-item, .dropdown-tile) {
+      transition: background-color var(--duration-feedback) ease;
+    }
+    .menu-tree > summary::after,
+    .dropdown-chevron {
+      transition: rotate var(--duration-normal) var(--ease-standard);
+    }
+  }
+
+  /* Boxed field: the label sits inside the field's frame, over the control,
+     and the whole frame takes the field's state. .is-required adds a pulsing
+     dot on its edge; the control still carries required. */
+  .field-box {
+    position: relative;
+    display: grid;
+    border: 1px solid var(--color-input-border);
+    border-radius: var(--radius-input);
+    background: var(--color-surface);
+    box-shadow: inset 0 1px 2px
+      color-mix(in srgb, var(--color-foreground) 5%, transparent);
+  }
+  .field-box > label {
+    padding: var(--space-2) var(--space-3) 0;
+    color: var(--color-muted);
+    font-size: var(--text-sm);
+    line-height: 1.25rem;
+  }
+  .field-box:is(:hover, :focus-within) > label {
+    color: var(--color-foreground);
+  }
+  .field-optional {
+    color: var(--color-muted);
+    font-style: italic;
+  }
+  .field-box > :is(input, select, textarea) {
+    width: 100%;
+    min-height: 2rem;
+    padding: var(--space-1) var(--space-3) var(--space-2);
+    border: 0;
+    border-radius: 0 0 var(--radius-input) var(--radius-input);
+    background-color: transparent;
+    box-shadow: none;
+  }
+  .field-box > textarea {
+    min-height: 5rem;
+    resize: vertical;
+  }
+  .field-box:focus-within {
+    border-color: var(--color-primary);
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+  /* Dark tones are translucent, so each tint is laid over the surface. */
+  .field-box:has(> [data-tone="warning"]) {
+    border-color: var(--color-warning);
+    background:
+      linear-gradient(var(--tone-warning-bg), var(--tone-warning-bg)),
+      var(--color-surface);
+  }
+  .field-box:has(> [aria-invalid="true"]) {
+    border-color: var(--color-destructive);
+    background:
+      linear-gradient(var(--tone-danger-bg), var(--tone-danger-bg)),
+      var(--color-surface);
+  }
+  .field-box:has(> :is([data-tone="warning"], [aria-invalid="true"])) > label {
+    color: var(--color-foreground);
+  }
+  .field-box.is-required > label::after {
+    content: "";
+    display: inline-block;
+    width: 0.4375rem;
+    height: 0.4375rem;
+    margin-inline-start: var(--space-2);
+    border-radius: 50%;
+    background: var(--color-required);
+    vertical-align: 0.125em;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .field-box.is-required > label::after {
+      animation: required-pulse 2s ease-out infinite;
+    }
+  }
+  @keyframes required-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0.3em 0.3em
+        color-mix(in srgb, var(--color-required) 45%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 0 transparent;
+    }
+  }
+  /* Compact form: boxed fields share one frame, split by hairlines. Two
+     columns from sm (--cols sets more); .field-span takes the whole row. */
+  .field-group {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--color-input-border);
+    border-radius: var(--radius-input);
+    background: var(--color-input-border);
+  }
+  @media (width >= 40rem) {
+    .field-group {
+      grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr));
+    }
+  }
+  .field-group > .field-span {
+    grid-column: 1 / -1;
+  }
+  .field-group > .field-box {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .field-group > .field-box:focus-within {
+    outline-offset: -2px;
+  }
+  .field-group > .check-row {
+    padding-inline: var(--space-3);
+    background: var(--color-surface);
+  }
+  /* An icon inside a text field: the leading one says what goes in, a trailing
+     .input-icon-end shows the field's state. Both are decorative. */
+  .input-icon {
+    position: relative;
+    display: block;
+  }
+  .input-icon > svg {
+    position: absolute;
+    top: 50%;
+    left: var(--space-3);
+    translate: 0 -50%;
+    color: var(--color-muted);
+    pointer-events: none;
+  }
+  .input-icon > svg.input-icon-end {
+    right: var(--space-3);
+    left: auto;
+  }
+  .input-icon > :is(input, select) {
+    width: 100%;
+  }
+  .input-icon:has(> svg:not(.input-icon-end)) > :is(input, select) {
+    padding-inline-start: 2.5rem;
+  }
+  .input-icon:has(> .input-icon-end) > input {
+    padding-inline-end: 2.5rem;
+  }
+  .input-icon:has([aria-invalid="true"]) > .input-icon-end {
+    color: var(--color-destructive);
+  }
+  .input-icon:has([data-tone="warning"]) > .input-icon-end {
+    color: var(--color-warning);
+  }
+  .input-icon:has([data-tone="success"]) > .input-icon-end {
+    color: var(--color-success);
+  }
+
+  /* Toggle tabs: a segmented control on a well. The selected segment lifts
+     onto the surface. Links (aria-current), buttons (aria-pressed) or labels
+     around a visually hidden radio all work. */
+  .toggle-tabs {
+    display: inline-flex;
+    max-width: 100%;
+    gap: 2px;
+    padding: var(--space-1);
+    border-radius: var(--radius-control);
+    background: var(--color-surface-hover);
+  }
+  .toggle-tabs > :is(a, button, label, span) {
+    position: relative;
+    display: inline-flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--control-size-sm);
+    padding: 0.375rem var(--space-4);
+    border: 0;
+    border-radius: var(--radius-badge);
+    background: transparent;
+    color: var(--color-muted);
+    font: inherit;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .toggle-tabs > :is(a, button, label):hover {
+    background: color-mix(in srgb, var(--color-surface) 55%, transparent);
+    color: var(--color-foreground);
+  }
+  .toggle-tabs
+    > :is(
+      [aria-current]:not([aria-current="false"]),
+      [aria-pressed="true"],
+      :has(input:checked)
+    ) {
+    background: var(--color-surface-raised);
+    color: var(--color-foreground);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--color-foreground) 6%, transparent),
+      var(--elevation-raised);
+    cursor: default;
+  }
+  .toggle-tabs > label > input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .toggle-tabs > label:has(input:focus-visible) {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+  @media (pointer: coarse) {
+    .toggle-tabs > :is(a, button, label, span) {
+      min-height: var(--control-size-md);
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .toggle-tabs > :is(a, button, label) {
+      transition:
+        background-color var(--duration-fast) ease,
+        color var(--duration-fast) ease,
+        box-shadow var(--duration-fast) ease;
+    }
+  }
+  @media (forced-colors: active) {
+    .toggle-tabs
+      > :is(
+        [aria-current]:not([aria-current="false"]),
+        [aria-pressed="true"],
+        :has(input:checked)
+      ) {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
+
+  /* Divider and spacer: a hairline between groups, a version that fades out at
+     both ends, and the same gap with no line at all. */
+  .divider,
+  .divider-soft,
+  .spacer {
+    height: 1px;
+    margin-block: var(--space-6);
+    border: 0;
+    background: var(--color-border);
+  }
+  .divider-soft {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--color-border) 12%,
+      var(--color-border) 88%,
+      transparent
+    );
+  }
+  .spacer {
+    background: transparent;
+  }
+
+  /* Modal card: a dialog with a head (icon, title, close), a body that
+     scrolls, and a foot of actions. .modal-card-centered stacks an icon,
+     title and text in the middle for a short task. */
+  .modal-card {
+    width: min(34rem, calc(100vw - 2rem));
+    max-height: calc(100dvh - 4rem);
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    corner-shape: squircle;
+    background: var(--color-surface-raised);
+    color: var(--color-foreground);
+    box-shadow: var(--elevation-modal);
+  }
+  .modal-card[open] {
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-card::backdrop {
+    background: var(--color-backdrop);
+  }
+  .modal-card-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-5) var(--space-6);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .modal-card-head > svg {
+    flex-shrink: 0;
+    color: var(--color-primary);
+  }
+  .modal-card-head > h2 {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--text-lg);
+    font-weight: 650;
+    letter-spacing: var(--tracking-heading);
+  }
+  .modal-card-head > form {
+    margin-inline-end: calc(var(--space-2) * -1);
+  }
+  .modal-card-body {
+    flex: 1;
+    min-height: 0;
+    padding: var(--space-5) var(--space-6);
+    overflow-y: auto;
+    font-size: var(--text-sm);
+    line-height: 1.6;
+  }
+  /* A body that opens with its own title: confirmations (forms.ts). */
+  .modal-card-body > h2 {
+    font-size: var(--text-lg);
+    font-weight: 650;
+    letter-spacing: var(--tracking-heading);
+    line-height: 1.4;
+  }
+  .modal-card-body > h2 + p {
+    margin-top: var(--space-2);
+    color: var(--color-muted);
+  }
+  .modal-card-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-6);
+    border-top: 1px solid var(--color-border);
+  }
+  .modal-card-centered .modal-card-body {
+    display: grid;
+    justify-items: center;
+    gap: var(--space-3);
+    padding-block: var(--space-8) var(--space-6);
+    text-align: center;
+  }
+  .modal-card-centered .modal-card-body > svg {
+    color: var(--color-primary);
+  }
+  .modal-card-centered .modal-card-body > h2 {
+    font-size: var(--text-display-sm);
+    line-height: var(--text-display-sm--line-height);
+  }
+  .modal-card-centered .modal-card-body > p {
+    max-width: 26rem;
+    color: var(--color-muted);
+  }
+  .modal-card-centered .modal-card-foot {
+    justify-content: center;
+    padding-top: 0;
+    border-top: 0;
+  }
+  .modal-card-centered > form:first-child {
+    position: absolute;
+    top: var(--space-3);
+    right: var(--space-3);
+  }
+  /* Full-screen modal: the page blurs out behind the canvas colour and one
+     message sits in the middle. Close sits in the top corner. */
+  .modal-full {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    padding: var(--space-16) var(--gutter);
+    border: 0;
+    background: color-mix(in srgb, var(--color-canvas) 86%, transparent);
+    backdrop-filter: blur(24px);
+    color: var(--color-foreground);
+  }
+  .modal-full[open] {
+    display: grid;
+    place-items: center;
+    overflow-y: auto;
+  }
+  .modal-full::backdrop {
+    background: transparent;
+  }
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+    .modal-full {
+      background: var(--color-canvas);
+      backdrop-filter: none;
+    }
+  }
+  .modal-full-body {
+    display: grid;
+    justify-items: center;
+    gap: var(--space-4);
+    width: min(33rem, 100%);
+    text-align: center;
+  }
+  .modal-full-body > p {
+    color: var(--color-muted);
+  }
+  .modal-full > form:first-child {
+    position: absolute;
+    top: var(--space-4);
+    right: var(--space-4);
+  }
+
+  /* Confirmation modal (lock a period, archive a dwelling). */
+  .lock-dialog {
+    width: min(30rem, calc(100vw - 2rem));
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-panel);
+    corner-shape: squircle;
+    background: var(--color-surface-raised);
+    color: var(--color-foreground);
+    box-shadow: var(--elevation-modal);
+  }
+  .lock-dialog::backdrop {
+    background: var(--color-backdrop);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    :is(.lock-dialog, .modal-card, .modal-full) {
+      opacity: 0;
+      scale: 0.96;
+      transition:
+        opacity var(--duration-panel) var(--ease-standard),
+        scale var(--duration-panel) var(--ease-standard),
+        overlay var(--duration-panel) allow-discrete,
+        display var(--duration-panel) allow-discrete;
+    }
+    :is(.lock-dialog, .modal-card, .modal-full)[open] {
+      opacity: 1;
+      scale: 1;
+    }
+    @starting-style {
+      :is(.lock-dialog, .modal-card, .modal-full)[open] {
+        opacity: 0;
+        scale: 0.96;
+      }
+    }
+    /* The full-screen modal fades; growing the whole screen would be noise. */
+    .modal-full,
+    .modal-full[open] {
+      scale: 1;
+    }
+    @starting-style {
+      .modal-full[open] {
+        scale: 1;
+      }
+    }
+    :is(.lock-dialog, .modal-card)::backdrop {
+      background: transparent;
+      transition:
+        background-color var(--duration-panel) var(--ease-standard),
+        overlay var(--duration-panel) allow-discrete,
+        display var(--duration-panel) allow-discrete;
+    }
+    :is(.lock-dialog, .modal-card)[open]::backdrop {
+      background: var(--color-backdrop);
+    }
+    @starting-style {
+      :is(.lock-dialog, .modal-card)[open]::backdrop {
+        background: transparent;
+      }
+    }
+  }
+  .lock-dialog .dialog-body {
+    display: flex;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+  .lock-dialog .dialog-icon {
+    display: grid;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--tone-warning-bg);
+    color: var(--tone-warning-text);
+  }
+  .lock-dialog .dialog-body h2 {
+    font-size: var(--text-lg);
+    font-weight: 700;
+  }
+  .lock-dialog .dialog-body p {
+    margin-top: 0.5rem;
+    color: var(--color-muted);
+    font-size: var(--text-sm);
+    line-height: 1.6;
+  }
+  .lock-dialog .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  /* Invoice HTML preview: a white "paper" iframe on a tinted well. */
+  .invoice-preview-frame-wrap {
+    padding: 1rem;
+    border-radius: var(--radius-panel);
+    corner-shape: squircle;
+    background: var(--color-surface-hover);
+  }
+  .invoice-preview-frame {
+    display: block;
+    width: min(210mm, 100%);
+    height: 70vh;
+    margin-inline: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-badge);
+    background: #fff; /* the invoice is paper in both themes */
   }
 }
 .app-content h1 {
@@ -1867,7 +3119,7 @@ textarea:disabled {
   inset-block: 0;
   inset-inline-end: 0;
   inset-inline-start: auto;
-  width: min(480px, 100vw);
+  width: min(30rem, 100vw);
   max-width: 100vw;
   height: 100%;
   max-height: 100%;
@@ -2014,7 +3266,7 @@ html:has(.context-drawer:modal) {
      reliably beats .context-drawer's own width rule regardless of source
      order -- both are unlayered CSS, so plain specificity decides. */
   .context-drawer.mobile-nav-drawer {
-    width: min(320px, 100vw);
+    width: min(20rem, 100vw);
   }
   .mobile-nav-drawer .app-nav {
     padding-top: 1rem;
@@ -2070,12 +3322,14 @@ html:has(.context-drawer:modal) {
   max-width: min(18rem, calc(100vw - 1rem));
   overflow: visible;
   border: 0;
-  border-radius: var(--radius-control);
-  background: var(--color-foreground);
-  color: var(--color-surface);
-  box-shadow: var(--elevation-overlay);
+  border-radius: var(--radius-badge);
+  background: var(--color-surface-raised);
+  color: var(--color-foreground);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-foreground) 12%, transparent),
+    var(--elevation-overlay);
   font-size: var(--text-xs);
-  font-weight: 500;
+  font-weight: var(--font-regular-weight);
   line-height: 1.4;
   text-wrap: pretty;
   opacity: 0;
@@ -2085,6 +3339,46 @@ html:has(.context-drawer:modal) {
 .tooltip[data-placement="bottom"] {
   transform: translateY(-4px) scale(0.97);
   transform-origin: top center;
+}
+.tooltip[data-placement="right"] {
+  transform: translateX(-4px) scale(0.97);
+  transform-origin: left center;
+}
+.tooltip[data-placement="left"] {
+  transform: translateX(4px) scale(0.97);
+  transform-origin: right center;
+}
+.tooltip:is(
+  [data-tone="info"],
+  [data-tone="success"],
+  [data-tone="warning"],
+  [data-tone="danger"]
+) {
+  box-shadow: var(--elevation-overlay);
+}
+.tooltip[data-tone="info"] {
+  background:
+    linear-gradient(var(--tone-info-bg), var(--tone-info-bg)),
+    var(--color-surface-raised);
+  color: var(--tone-info-text);
+}
+.tooltip[data-tone="success"] {
+  background:
+    linear-gradient(var(--tone-success-bg), var(--tone-success-bg)),
+    var(--color-surface-raised);
+  color: var(--tone-success-text);
+}
+.tooltip[data-tone="warning"] {
+  background:
+    linear-gradient(var(--tone-warning-bg), var(--tone-warning-bg)),
+    var(--color-surface-raised);
+  color: var(--tone-warning-text);
+}
+.tooltip[data-tone="danger"] {
+  background:
+    linear-gradient(var(--tone-danger-bg), var(--tone-danger-bg)),
+    var(--color-surface-raised);
+  color: var(--tone-danger-text);
 }
 .tooltip[data-visible] {
   opacity: 1;
@@ -2097,8 +3391,8 @@ html:has(.context-drawer:modal) {
 @media (prefers-reduced-motion: no-preference) {
   .tooltip {
     transition:
-      opacity 140ms ease,
-      transform 180ms var(--ease-standard);
+      opacity var(--duration-fast) ease,
+      transform var(--duration-normal) var(--ease-standard);
   }
 }
 @media (forced-colors: active) {
@@ -2113,10 +3407,14 @@ html:has(.context-drawer:modal) {
    and hover colours; this only adds the motion. */
 @media (prefers-reduced-motion: no-preference) {
   :is(.row-menu, .more-menu) > div,
+  .dropdown-panel,
   .edit-disclosure-panel,
   .tpl-popover {
     transform-origin: top right;
     animation: panel-in var(--duration-panel) var(--ease-standard) both;
+  }
+  .dropdown:not(.dropdown-end) > .dropdown-panel {
+    transform-origin: top left;
   }
   :is(.row-menu, .more-menu) :is(a, button),
   .messages-list-item,
@@ -2222,6 +3520,7 @@ html:has(.context-drawer:modal) {
     padding: 0.375rem 0;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--color-surface);
   }
   .stack-table td {
@@ -2236,7 +3535,8 @@ html:has(.context-drawer:modal) {
        wrap inside the card instead of widening the page. */
     overflow-wrap: anywhere;
   }
-  .stack-table td > * {
+  /* .check-target keeps its own minimum hit width. */
+  .stack-table td > :not(.check-target) {
     min-width: 0;
   }
   .stack-table td[data-label]:not([data-label=""])::before {

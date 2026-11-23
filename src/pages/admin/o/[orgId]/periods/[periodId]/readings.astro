@@ -1,4 +1,5 @@
 ---
+import Icon from "../../../../../../components/ui/Icon.astro";
 import {
   entityLabel,
   formatPeriod,
@@ -134,7 +135,7 @@ function getInitialConsumption(
     </nav>
 
     {visibleRows.length === 0 ? (
-      <div class="rounded-panel border border-border bg-surface p-6 text-center text-muted text-body-sm">
+      <div class="box text-center text-muted text-body-sm">
         <p>
           {filter === "missing"
             ? t("No missing readings.")
@@ -216,13 +217,13 @@ function getInitialConsumption(
                           value={row.currentValue ?? ""}
                           disabled={isLocked}
                           aria-describedby={`err-${row.meterId}`}
-                          class="rounded-control border border-(--color-input-border) px-3 py-1.5 text-body-sm tabular-nums w-32"
+                          class="text-body-sm tabular-nums w-32"
                         />
                         <span
                           class="reading-saved-indicator hidden text-success font-semibold"
                           aria-hidden="true"
                         >
-                          ✓
+                          <Icon name="check" size="sm" />
                         </span>
                       </div>
                       <p

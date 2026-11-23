@@ -26,7 +26,7 @@ test("Dwelling detail reads as one summary, filters by section and stays readabl
   await expect(page.locator("main h1")).toHaveCount(1);
   // One summary surface; the area and resident values are the only <p> in
   // their stat, so the optimistic edit updates the value and not the label.
-  const stats = page.locator(".dwelling-summary .summary-stat");
+  const stats = page.locator("[data-dwelling-detail] .metric-strip .metric");
   await expect(stats).toHaveCount(4);
   for (const kpi of ["area", "resident-count", "invoice-delivery"])
     await expect(page.locator(`[data-kpi="${kpi}"] p`)).toHaveCount(1);

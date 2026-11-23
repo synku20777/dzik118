@@ -5,7 +5,22 @@
 // client-facing message instead of a generic one.
 export class NotFoundError extends Error {}
 export class ConflictError extends Error {}
-export class ValidationError extends Error {}
+export class ValidationError extends Error {
+  readonly fields?: Record<string, string[]>;
+
+  constructor(
+    message: string,
+    options?: { field?: string; fields?: Record<string, string[]> }
+  ) {
+    super(message);
+    this.name = "ValidationError";
+    if (options?.fields) {
+      this.fields = options.fields;
+    } else if (options?.field) {
+      this.fields = { [options.field]: [message] };
+    }
+  }
+}
 export class RateLimitedError extends Error {
   constructor(message = "Too many requests. Try again in a minute.") {
     super(message);

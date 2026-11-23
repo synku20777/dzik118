@@ -320,6 +320,7 @@ const lv: Record<string, string> = {
   "Add admin": "Pievienot administratoru",
   "Admin users": "Administratori",
   "Your organizations": "Jūsu organizācijas",
+  Organizations: "Organizācijas",
   "Create organization": "Izveidot organizāciju",
   Create: "Izveidot",
   Account: "Konts",
@@ -663,6 +664,7 @@ const lv: Record<string, string> = {
   Previous: "Iepriekšējā",
   Next: "Nākamā",
   Page: "Lapa",
+  Pagination: "Lapu navigācija",
   "Import bank statement": "Importēt bankas izrakstu",
   "Bank imports": "Bankas importi",
   Imports: "Importi",
@@ -778,6 +780,7 @@ const lv: Record<string, string> = {
   "Show earlier changes ({count})": "Rādīt agrākās izmaiņas ({count})",
   "{count} still to enter": "Jāievada vēl: {count}",
   "All readings are in": "Visi rādījumi ievadīti",
+  "No dwellings in this period": "Šajā periodā nav īpašumu",
   "Dwelling, invoice, payer or reference":
     "Īpašums, rēķins, maksātājs vai atsauce",
   "{done} of {total} dwellings": "{done} no {total} īpašumiem",
@@ -900,6 +903,13 @@ const lv: Record<string, string> = {
   "{n} payments|one": "{n} maksājums",
   "{n} payments|other": "{n} maksājumi",
   "{total} received": "{total} saņemti",
+  "{total} applied to {period}": "{total} ieskaitīts par {period}",
+  "{amount} marked paid on invoices without a payment record.":
+    "{amount} atzīmēts kā apmaksāts rēķinos bez maksājuma ieraksta.",
+  "View paid invoices": "Skatīt apmaksātos rēķinus",
+  "All periods": "Visi periodi",
+  "Unavailable period": "Nepieejams periods",
+  "{currency} only": "tikai {currency}",
   "{count} payments · {total} received": "{count} maksājumi · {total} saņemti",
   "{suggested} suggested · {unmatched} unmatched":
     "{suggested} ieteikti · {unmatched} nesaistīti",
@@ -1680,7 +1690,7 @@ const lv: Record<string, string> = {
     "Dienu skaits no apmaksas termiņa līdz nokavējuma maksas piemērošanai.",
   "Number of days after the invoice date.":
     "Dienu skaits pēc rēķina izrakstīšanas datuma.",
-  "Number, occupant, address...": "Numurs, iedzīvotājs, adrese...",
+  "Number, occupant, address…": "Numurs, iedzīvotājs, adrese…",
   "Only for meter consumption rules.": "Tikai skaitītāja patēriņa noteikumiem.",
   "Open dwelling": "Atvērt īpašumu",
   "Organization summary": "Organizācijas kopsavilkums",
@@ -1693,10 +1703,9 @@ const lv: Record<string, string> = {
   "Rule summary": "Noteikuma kopsavilkums",
   "Rules applied to future late-fee calculations. Existing invoices keep their original financial snapshot.":
     "Noteikumi tiek piemēroti turpmākajiem nokavējuma maksas aprēķiniem. Esošie rēķini saglabā sākotnējos finanšu datus.",
-  "Search messages by subject or content...":
-    "Meklēt ziņas pēc tēmas vai satura...",
-  "Search rules by name or code...":
-    "Meklēt noteikumus pēc nosaukuma vai koda...",
+  "Search messages by subject or content…":
+    "Meklēt ziņas pēc tēmas vai satura…",
+  "Search rules by name or code…": "Meklēt noteikumus pēc nosaukuma vai koda…",
   "Select a conversation to view it here.":
     "Izvēlieties sarunu, lai to skatītu šeit.",
   "Send message": "Sūtīt ziņu",
@@ -1717,7 +1726,7 @@ const lv: Record<string, string> = {
     "Šī informācija tiek izmantota rēķinos un oficiālajā saziņā.",
   "This is how your organization details appear on invoices.":
     "Tā jūsu organizācijas dati tiks attēloti rēķinos.",
-  "Type your reply...": "Ierakstiet savu atbildi...",
+  "Type your reply…": "Ierakstiet savu atbildi…",
   "Unique identifier (e.g. cold_water).":
     "Unikāls identifikators (piem., cold_water).",
   "Unit of measurement.": "Mērvienība.",
@@ -1958,7 +1967,7 @@ const lv: Record<string, string> = {
   "Applies only to the dwellings you choose. New dwellings are not included automatically.":
     "Attiecas tikai uz jūsu izvēlētajiem īpašumiem. Jauni īpašumi netiek pievienoti automātiski.",
   "Search dwellings": "Meklēt īpašumus",
-  "Filter by dwelling number...": "Filtrēt pēc īpašuma numura...",
+  "Filter by dwelling number…": "Filtrēt pēc īpašuma numura…",
   "Select all visible": "Atlasīt visus redzamos",
   "-- select a dwelling --": "-- izvēlieties īpašumu --",
   Validity: "Derīgums",
@@ -2591,6 +2600,7 @@ const ru: Record<string, string> = {
   "Add admin": "Добавить администратора",
   "Admin users": "Администраторы",
   "Your organizations": "Ваши организации",
+  Organizations: "Организации",
   "Create organization": "Создать организацию",
   Create: "Создать",
   Account: "Аккаунт",
@@ -2961,6 +2971,7 @@ const ru: Record<string, string> = {
   Previous: "Предыдущая",
   Next: "Следующая",
   Page: "Страница",
+  Pagination: "Навигация по страницам",
   "Import bank statement": "Импортировать банковскую выписку",
   "Bank imports": "Импорт из банка",
   Imports: "Импорт",
@@ -3074,6 +3085,7 @@ const ru: Record<string, string> = {
   "Show earlier changes ({count})": "Показать более ранние изменения ({count})",
   "{count} still to enter": "Осталось ввести: {count}",
   "All readings are in": "Все показания введены",
+  "No dwellings in this period": "В этом периоде нет помещений",
   "Dwelling, invoice, payer or reference":
     "Помещение, счёт, плательщик или назначение",
   "{done} of {total} dwellings": "{done} из {total} помещений",
@@ -3198,6 +3210,13 @@ const ru: Record<string, string> = {
   "{n} payments|many": "{n} платежей",
   "{n} payments|other": "{n} платежа",
   "{total} received": "{total} получено",
+  "{total} applied to {period}": "{total} зачтено за {period}",
+  "{amount} marked paid on invoices without a payment record.":
+    "{amount} отмечено оплаченным в счетах без записи о платеже.",
+  "View paid invoices": "Посмотреть оплаченные счета",
+  "All periods": "Все периоды",
+  "Unavailable period": "Недоступный период",
+  "{currency} only": "только {currency}",
   "{count} payments · {total} received": "{count} платежей · {total} получено",
   "{suggested} suggested · {unmatched} unmatched":
     "{suggested} предложено · {unmatched} не сопоставлено",
@@ -3984,7 +4003,7 @@ const ru: Record<string, string> = {
     "Количество дней после срока оплаты до начисления платы за просрочку.",
   "Number of days after the invoice date.":
     "Количество дней после даты выставления счёта.",
-  "Number, occupant, address...": "Номер, жилец, адрес...",
+  "Number, occupant, address…": "Номер, жилец, адрес…",
   "Only for meter consumption rules.": "Только для правил расхода по счётчику.",
   "Open dwelling": "Открыть помещение",
   "Organization summary": "Сводка по организации",
@@ -3997,9 +4016,9 @@ const ru: Record<string, string> = {
   "Rule summary": "Сводка по правилу",
   "Rules applied to future late-fee calculations. Existing invoices keep their original financial snapshot.":
     "Правила применяются к будущим расчётам платы за просрочку. Существующие счета сохраняют исходные финансовые данные.",
-  "Search messages by subject or content...":
-    "Поиск сообщений по теме или содержанию...",
-  "Search rules by name or code...": "Поиск правил по названию или коду...",
+  "Search messages by subject or content…":
+    "Поиск сообщений по теме или содержанию…",
+  "Search rules by name or code…": "Поиск правил по названию или коду…",
   "Select a conversation to view it here.":
     "Выберите переписку, чтобы просмотреть её здесь.",
   "Send message": "Отправить сообщение",
@@ -4020,7 +4039,7 @@ const ru: Record<string, string> = {
     "Эта информация используется в счетах и в официальной переписке.",
   "This is how your organization details appear on invoices.":
     "Так данные вашей организации будут отображаться в счетах.",
-  "Type your reply...": "Введите ответ...",
+  "Type your reply…": "Введите ответ…",
   "Unique identifier (e.g. cold_water).":
     "Уникальный идентификатор (например, cold_water).",
   "Unit of measurement.": "Единица измерения.",
@@ -4260,7 +4279,7 @@ const ru: Record<string, string> = {
   "Applies only to the dwellings you choose. New dwellings are not included automatically.":
     "Применяется только к выбранным вами помещениям. Новые помещения не добавляются автоматически.",
   "Search dwellings": "Поиск помещений",
-  "Filter by dwelling number...": "Фильтр по номеру помещения...",
+  "Filter by dwelling number…": "Фильтр по номеру помещения…",
   "Select all visible": "Выбрать все видимые",
   "-- select a dwelling --": "-- выберите помещение --",
   Validity: "Срок действия",

@@ -72,7 +72,7 @@ try {
       {t("Dwelling")} {dwelling.number}: {t("Readings")}
     </h1>
     {submitResult?.error && (
-      <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
+      <p class="notice notice-danger" role="alert">
         {friendlyActionErrorMessage(submitResult.error, locale)}
       </p>
     )}
@@ -86,7 +86,7 @@ try {
       {meters
         .filter((m) => !m.archivedAt)
         .map((m) => (
-          <section class="rounded-panel border border-border bg-surface p-4">
+          <section class="panel p-4">
             <h2 class="font-medium text-foreground">
               {m.label ?? entityLabel(m.type, locale)}{" "}
               <span class="text-body-sm text-muted">
@@ -114,10 +114,7 @@ try {
                 <input type="hidden" name="periodId" value={periodId} />
                 <input type="hidden" name="meterId" value={m.meterId} />
                 <div>
-                  <label
-                    for={"reading-" + m.meterId}
-                    class="field-label"
-                  >
+                  <label for={"reading-" + m.meterId} class="field-label">
                     {t("Current value")}
                   </label>
                   <input
@@ -128,11 +125,11 @@ try {
                     pattern="\d+(\.\d{1,3})?"
                     required
                     value={m.currentValue ?? ""}
-                    class="mt-1 w-40 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                    class="mt-1 w-40 text-body-sm"
                   />
                 </div>
                 {m.currentValue !== null && (
-                  <label class="flex items-center gap-2 pb-2 text-body-sm text-foreground">
+                  <label class="check-row text-body-sm text-foreground">
                     <input type="checkbox" name="force" value="true" />
                     {t("Confirm even if lower than previous")}
                   </label>

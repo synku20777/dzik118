@@ -23,6 +23,17 @@ const base = "/portal/dwellings/" + dwellingId;
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <!-- --color-canvas per theme; theme.ts keeps these in step with a stored theme. -->
+    <meta
+      name="theme-color"
+      content="#f7f4ee"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#0e1517"
+      media="(prefers-color-scheme: dark)"
+    />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script is:inline>
       (function () {
@@ -32,6 +43,11 @@ const base = "/portal/dwellings/" + dwellingId;
             document.documentElement.setAttribute("data-theme", stored);
             const meta = document.querySelector('meta[name="color-scheme"]');
             if (meta) meta.content = stored;
+            document
+              .querySelectorAll('meta[name="theme-color"]')
+              .forEach(function (m) {
+                m.content = stored === "dark" ? "#0e1517" : "#f7f4ee";
+              });
           }
         } catch (e) {
           void e;
@@ -40,7 +56,11 @@ const base = "/portal/dwellings/" + dwellingId;
     </script>
     <title>{title}</title>
   </head>
-  <body data-working-label={t("Working…")}>
+  <body
+    data-working-label={t("Working…")}
+    data-confirm-label={t("Confirm")}
+    data-cancel-label={t("Cancel")}
+  >
     <a class="skip-link" href="#main-content">
       {t("Skip to content")}
     </a>

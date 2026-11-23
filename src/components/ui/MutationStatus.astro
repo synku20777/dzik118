@@ -1,5 +1,6 @@
 ---
 import { translate, uiLocale } from "../../lib/ui/i18n";
+import Icon from "./Icon.astro";
 
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
@@ -42,7 +43,7 @@ const strings = {
   <details class="mutation-activity">
     <summary class="mutation-summary">
       <span aria-hidden="true" data-mutation-summary-icon>
-        ✓
+        <Icon name="check" size="sm" />
       </span>
       <span data-mutation-summary aria-live="polite">
         {strings.allSaved}
@@ -59,6 +60,12 @@ const strings = {
   import { actions } from "astro:actions";
   import { navigate } from "astro:transitions/client";
   import { onPageLoad } from "../../lib/ui/page-lifecycle";
+  import { ICONS, type IconName } from "../../lib/ui/icons";
+
+  // Static registry markup (icons.ts), not user input.
+  function setIcon(el: HTMLElement, name: IconName) {
+    el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: var(--icon-size-sm); height: var(--icon-size-sm); stroke-width: var(--icon-stroke)">${ICONS[name]}</svg>`;
+  }
   import {
     completeMutation,
     confirmMutation,
@@ -133,12 +140,14 @@ const strings = {
         container.appendChild(item);
       }
       const icon = item.querySelector<HTMLElement>(".mutation-item-icon")!;
-      icon.textContent =
+      setIcon(
+        icon,
         mutation.status === "success"
-          ? "✓"
+          ? "check"
           : mutation.status === "error"
-            ? "!"
-            : "◌";
+            ? "alert-triangle"
+            : "loader"
+      );
       item.querySelector("strong")!.textContent = mutation.label;
       item.querySelector("small")!.textContent = statusText(mutation, strings);
       const dismiss =
@@ -236,7 +245,10 @@ const strings = {
             ? strings.oneSaving
             : strings.manySaving.replace("{n}", String(active))
           : strings.allSaved;
-      summaryIcon.textContent = errors ? "!" : active ? "◌" : "✓";
+      setIcon(
+        summaryIcon,
+        errors ? "alert-triangle" : active ? "loader" : "check"
+      );
       root.dataset.state = errors ? "error" : active ? "pending" : "saved";
       renderItems(toasts, mutations, strings);
       renderItems(list, mutations, strings);
@@ -247,7 +259,7 @@ const strings = {
 <style is:global>
   #mutation-status {
     position: fixed;
-    z-index: 90;
+    z-index: var(--z-toast);
     right: 1rem;
     bottom: 1rem;
     display: grid;
@@ -275,6 +287,7 @@ const strings = {
     padding: 0.75rem 0.875rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--color-surface-raised);
     box-shadow: var(--elevation-raised);
   }
@@ -346,7 +359,7 @@ const strings = {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    min-height: 2.75rem;
+    min-height: var(--control-size-md);
     padding: 0.625rem 0.875rem;
     border: 1px solid var(--color-border);
     border-radius: 999px;
@@ -395,6 +408,7 @@ const strings = {
     overflow: auto;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--color-surface-raised);
     box-shadow: var(--elevation-raised);
   }

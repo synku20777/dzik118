@@ -198,11 +198,7 @@ const config = {
   .drawer-info-banner {
     display: flex;
     gap: 0.75rem;
-    padding: 1rem;
     margin-bottom: 1.25rem;
-    border-radius: var(--radius-panel);
-    background: var(--tone-info-bg);
-    color: var(--tone-info-text);
   }
   .drawer-info-icon {
     display: grid;
@@ -226,11 +222,7 @@ const config = {
     font-size: var(--text-sm);
     opacity: 0.85;
   }
-  .drawer-info-banner[data-tone="warning"] {
-    background: var(--tone-warning-bg);
-    color: var(--tone-warning-text);
-  }
-  .drawer-info-banner[data-tone="warning"] .drawer-info-icon {
+  .notice-warning.drawer-info-banner .drawer-info-icon {
     background: var(--color-warning);
   }
   .drawer-blockers {
@@ -243,6 +235,7 @@ const config = {
     padding: 1.25rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--color-surface);
   }
   .drawer-meter + .drawer-meter {
@@ -261,6 +254,7 @@ const config = {
     flex: 0 0 auto;
     place-items: center;
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     font-size: var(--text-xl);
   }
   .drawer-meter-icon svg {
@@ -314,6 +308,7 @@ const config = {
     margin-bottom: 1.25rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--color-surface);
   }
   .drawer-resident-main {
@@ -329,6 +324,7 @@ const config = {
     flex: 0 0 auto;
     place-items: center;
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--tone-neutral-bg);
     color: var(--color-muted);
   }
@@ -357,10 +353,7 @@ const config = {
     margin-top: 0;
   }
   .drawer-field-row-label {
-    display: block;
     margin-bottom: 0.5rem;
-    font-size: var(--text-sm);
-    font-weight: 600;
     color: var(--color-muted);
   }
   .drawer-field-row-control {
@@ -373,40 +366,36 @@ const config = {
     color: var(--color-muted);
     font-size: var(--text-sm);
   }
-  .drawer-readonly-box,
-  .drawer-input-box {
+  .drawer-readonly-box {
     flex: 1 1 auto;
     min-width: 0;
     width: 100%;
-    padding: 0.75rem 0.75rem;
-    border-width: 1px;
-    border-style: solid;
-    border-radius: var(--radius-control);
+    min-height: var(--control-size-md);
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-input);
+    background: var(--color-surface-hover);
+    color: var(--color-muted);
     font-size: var(--text-sm);
     font-variant-numeric: tabular-nums;
     font-family: inherit;
     box-sizing: border-box;
   }
-  .drawer-readonly-box {
-    border-color: var(--color-border);
-    background: var(--color-surface-hover);
-    color: var(--color-muted);
-  }
-  .drawer-input-box,
-  .drawer-textarea-box {
-    background: var(--color-surface);
-    color: var(--color-foreground);
+  .drawer-input-box {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    font-family: inherit;
   }
   .drawer-textarea-box {
     display: block;
     width: 100%;
     min-height: 5.5rem;
-    padding: 0.75rem 0.75rem;
-    border-radius: var(--radius-control);
     font-size: var(--text-sm);
     font-family: inherit;
     resize: vertical;
-    box-sizing: border-box;
   }
   .drawer-field {
     margin-top: 1.25rem;
@@ -414,17 +403,8 @@ const config = {
   .drawer-field:first-of-type {
     margin-top: 0;
   }
-  .drawer-field-label {
-    display: block;
+  .drawer-field > .field-label {
     margin-bottom: 0.5rem;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--color-foreground);
-  }
-  .drawer-field-error {
-    margin-top: 0.5rem;
-    color: var(--color-destructive);
-    font-size: var(--text-sm);
   }
   .drawer-section-heading {
     margin-top: 1.5rem;

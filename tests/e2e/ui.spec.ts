@@ -36,6 +36,11 @@ const dbUrl = process.env.DATABASE_URL;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY;
 
+// data-confirm asks in a modal card (src/lib/ui/forms.ts); accept it.
+async function acceptConfirm(page: Page) {
+  await page.locator("#confirm-dialog [data-confirm-ok]").click();
+}
+
 async function loginAdmin(page: Page): Promise<string> {
   await page.goto("/login");
   await page.locator("#admin-email").fill("admin.a@example.com");
@@ -1142,6 +1147,7 @@ test("first meter is reconciled immediately and its dynamic archive control work
     }
   });
   await row.getByRole("button", { name: "Archive", exact: true }).click();
+  await acceptConfirm(page);
   await expect(row).toBeHidden();
   await expect(page.locator("#meters-empty-state")).toBeHidden();
   await expect(secondRow).toBeVisible();
@@ -1479,7 +1485,7 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
 
     // 4. Assert: after fetching PDF, case status is STILL PREPARED, sentAt is null,
     // and no PAPER delivery row exists
-    await expect(page.locator("h1 .status-badge")).toContainText("Prepared");
+    await expect(page.locator("h1 ~ .status-badge")).toContainText("Prepared");
     const [inv2DbCheck] = await db
       .select({ sentAt: invoices.sentAt })
       .from(invoices)
@@ -1505,19 +1511,24 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
 
     // 6. Click "Record paper dispatch"
     await recordPaperBtn2.click();
+    await acceptConfirm(page);
 
     // Assert: after the resulting page reload, exactly one "Paper dispatched" status is shown
     // button replaced by static text, case status badge shows SENT
-    await expect(page.locator("h1 .status-badge")).toContainText("Sent");
+    await expect(page.locator("h1 ~ .status-badge")).toContainText("Sent");
     // "Paper dispatched" now legitimately appears twice: the action-area
-    // badge ("✓ Paper dispatched") and the delivery-history row's status
+    // badge ([data-paper-dispatched]) and the delivery-history row's status
     // cell (issue 5: PAPER+SENT reads "Paper dispatched", not generic
     // "Sent") -- assert both are present rather than using an ambiguous
     // exact-text locator.
-    await expect(page.getByText("✓ Paper dispatched")).toBeVisible();
+    await expect(page.locator("[data-paper-dispatched]")).toHaveText(
+      "Paper dispatched"
+    );
     await expect(
-      page.getByText("Paper dispatched", { exact: true })
-    ).toBeVisible();
+      page
+        .locator("section", { hasText: "Delivery history" })
+        .locator("tbody tr", { hasText: "Paper" })
+    ).toContainText("Paper dispatched");
     await expect(
       page.getByRole("button", {
         name: "Record paper dispatch",
@@ -1528,8 +1539,10 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
     // 7. Reload the page again and confirm there is still only ONE paper delivery record
     // and the page does not offer to record it again
     await page.reload();
-    await expect(page.locator("h1 .status-badge")).toContainText("Sent");
-    await expect(page.getByText("✓ Paper dispatched")).toBeVisible();
+    await expect(page.locator("h1 ~ .status-badge")).toContainText("Sent");
+    await expect(page.locator("[data-paper-dispatched]")).toHaveText(
+      "Paper dispatched"
+    );
     await expect(
       page.getByRole("button", {
         name: "Record paper dispatch",
@@ -1609,7 +1622,7 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
     await page.reload();
 
     // Assert: invoice remains PREPARED (paper preference did not silently mark it SENT)
-    await expect(page.locator("h1 .status-badge")).toContainText("Prepared");
+    await expect(page.locator("h1 ~ .status-badge")).toContainText("Prepared");
 
     // Assert: a single clear retry action is present (Send button, not both Send and Resend)
     await expect(
@@ -1623,10 +1636,13 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
     await page
       .getByRole("button", { name: "Record paper dispatch", exact: true })
       .click();
+    await acceptConfirm(page);
 
     // Assert: invoice becomes SENT, exactly one PAPER delivery row/status appears
-    await expect(page.locator("h1 .status-badge")).toContainText("Sent");
-    await expect(page.getByText("✓ Paper dispatched")).toBeVisible();
+    await expect(page.locator("h1 ~ .status-badge")).toContainText("Sent");
+    await expect(page.locator("[data-paper-dispatched]")).toHaveText(
+      "Paper dispatched"
+    );
 
     // Assert: earlier FAILED email delivery row is still shown as FAILED in delivery history
     const historySection3 = page.locator("section", {
@@ -1697,9 +1713,10 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
     await page
       .getByRole("button", { name: "Record paper dispatch", exact: true })
       .click();
+    await acceptConfirm(page);
 
     // Assert: invoice becomes SENT
-    await expect(page.locator("h1 .status-badge")).toContainText("Sent");
+    await expect(page.locator("h1 ~ .status-badge")).toContainText("Sent");
 
     // Assert: delivery history still shows EMAIL as "Needs attention", never rewritten to Sent or Failed
     const historySection4 = page.locator("section", {
@@ -1817,9 +1834,10 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
 
     // Send for real through the browser UI
     await sendBtn6.click();
+    await acceptConfirm(page);
 
     // Assert page updates to SENT
-    await expect(page.locator("h1 .status-badge")).toContainText("Sent");
+    await expect(page.locator("h1 ~ .status-badge")).toContainText("Sent");
 
     // Verify Mailpit actually received the real SMTP email
     await expect
@@ -1897,7 +1915,7 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
 
     // Overall invoice is already SENT (via paper), but the electronic
     // action must still be "Send", not "Resend" -- no EMAIL attempt exists.
-    await expect(page.locator("h1 .status-badge")).toContainText("Sent");
+    await expect(page.locator("h1 ~ .status-badge")).toContainText("Sent");
     const sendBtn7 = page.getByRole("button", { name: "Send", exact: true });
     await expect(sendBtn7).toBeVisible();
     await expect(sendBtn7).toBeEnabled();
@@ -1906,6 +1924,7 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
     ).toHaveCount(0);
 
     await sendBtn7.click();
+    await acceptConfirm(page);
 
     // Real SMTP send actually happened.
     await expect
@@ -1933,7 +1952,9 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
     await expect(
       page.getByRole("button", { name: "Resend", exact: true })
     ).toBeVisible();
-    await expect(page.getByText("✓ Paper dispatched")).toBeVisible();
+    await expect(page.locator("[data-paper-dispatched]")).toHaveText(
+      "Paper dispatched"
+    );
     const historySection7 = page.locator("section", {
       hasText: "Delivery history",
     });
@@ -1976,6 +1997,7 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
     const inv8Url = `${base}/periods/${periodId}/invoices/${inv8.invoice.id}`;
     await page.goto(inv8Url);
     await page.getByRole("button", { name: "Send", exact: true }).click();
+    await acceptConfirm(page);
     await expect
       .poll(async () => {
         const resp = await page.request.get(
@@ -2030,6 +2052,7 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
       );
 
     await resendBtn8.click();
+    await acceptConfirm(page);
 
     // Clicking Resend actually retried: one MORE real message arrives.
     await expect
@@ -2083,6 +2106,7 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
     const inv9Url = `${base}/periods/${periodId}/invoices/${inv9.invoice.id}`;
     await page.goto(inv9Url);
     await page.getByRole("button", { name: "Send", exact: true }).click();
+    await acceptConfirm(page);
     await expect
       .poll(async () => {
         const resp = await page.request.get(
@@ -2099,7 +2123,7 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
         );
       })
       .toBe(true);
-    await expect(page.locator("h1 .status-badge")).toContainText("Sent");
+    await expect(page.locator("h1 ~ .status-badge")).toContainText("Sent");
 
     const resendBtn9 = page.getByRole("button", {
       name: "Resend",
@@ -2130,6 +2154,7 @@ test("invoice delivery UI lifecycle: unknown, paper-only, email+paper, unknown+p
     // No reload: click the SAME already-rendered button, submitting the
     // SAME commandId the crashed attempt was claimed under.
     await resendBtn9.click();
+    await acceptConfirm(page);
 
     await expect
       .poll(async () => {

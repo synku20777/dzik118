@@ -1,7 +1,9 @@
 ---
+import Icon from "../../../../../components/ui/Icon.astro";
 // Phase E (Periods/meters/readings) - period history/create (spec Section
 // 9.2, 27 "Periods: History", PER-001).
 import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import PaginationBar from "../../../../../components/ui/PaginationBar.astro";
 import KpiCard from "../../../../../components/ui/KpiCard.astro";
 import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
 import {
@@ -22,6 +24,8 @@ import {
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { listPeriods } from "../../../../../domain/periods/periods";
 import { withRequestDb } from "../../../../../lib/db-request";
+import { resolvePaginationLinks } from "../../../../../lib/ui/pagination";
+import { fieldErrorAttrs } from "../../../../../lib/ui/field-error-attrs";
 
 const organizationId = Astro.params.orgId!;
 try {
@@ -55,6 +59,11 @@ const pageHref = (p: number) => {
   q.set("page", String(p));
   return `?${q}`;
 };
+const { previousHref, nextHref } = resolvePaginationLinks({
+  page,
+  hasNext: page < totalPages,
+  buildHref: pageHref,
+});
 ---
 
 <AdminLayout
@@ -76,7 +85,8 @@ const pageHref = (p: number) => {
         class="btn-primary"
         data-open-details="create-period"
       >
-        {t("Create period")} →
+        <Icon name="plus" size="sm" />
+        {t("Create period")}
       </a>
     </PageHeader>
     <div class="grid gap-4 sm:grid-cols-3">
@@ -176,25 +186,12 @@ const pageHref = (p: number) => {
     </div>
 
     {totalPages > 1 && (
-      <div class="flex justify-between text-sm text-muted">
-        <a
-          href={pageHref(Math.max(1, page - 1))}
-          class:list={{ "pointer-events-none opacity-40": page <= 1 }}
-        >
-          ← {t("Previous")}
-        </a>
-        <span>
-          {t("Page")} {page} {t("of")} {totalPages}
-        </span>
-        <a
-          href={pageHref(page + 1)}
-          class:list={{
-            "pointer-events-none opacity-40": page >= totalPages,
-          }}
-        >
-          {t("Next")} →
-        </a>
-      </div>
+      <PaginationBar
+        page={page}
+        totalPages={totalPages}
+        previousHref={previousHref}
+        nextHref={nextHref}
+      />
     )}
 
     <details
@@ -204,7 +201,7 @@ const pageHref = (p: number) => {
     >
       <summary>{t("Create period")}</summary>
       {createResult?.error && (
-        <p class="mt-3 rounded-control bg-danger-surface p-3 text-sm text-destructive">
+        <p class="notice notice-danger mt-3" role="alert">
           {t(createResult.error.message)}
         </p>
       )}
@@ -221,10 +218,10 @@ const pageHref = (p: number) => {
           <input
             id="year"
             name="year"
-            aria-describedby="year-error"
             type="number"
             required
-            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
+            class="mt-1 w-full text-sm"
+            {...fieldErrorAttrs(createResult?.error, "year")}
           />
           <FieldError name="year" error={createResult?.error} />
         </div>
@@ -235,12 +232,12 @@ const pageHref = (p: number) => {
           <input
             id="month"
             name="month"
-            aria-describedby="month-error"
             type="number"
             min="1"
             max="12"
             required
-            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
+            class="mt-1 w-full text-sm"
+            {...fieldErrorAttrs(createResult?.error, "month")}
           />
           <FieldError name="month" error={createResult?.error} />
         </div>
@@ -248,19 +245,16 @@ const pageHref = (p: number) => {
           {t("Billing window")}
         </h3>
         <div>
-          <label
-            class="field-label"
-            for="startsOn"
-          >
+          <label class="field-label" for="startsOn">
             {t("Starts on")}
           </label>
           <input
             id="startsOn"
             name="startsOn"
-            aria-describedby="startsOn-error"
             type="date"
             required
-            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
+            class="mt-1 w-full text-sm"
+            {...fieldErrorAttrs(createResult?.error, "startsOn")}
           />
           <FieldError name="startsOn" error={createResult?.error} />
         </div>
@@ -271,26 +265,23 @@ const pageHref = (p: number) => {
           <input
             id="endsOn"
             name="endsOn"
-            aria-describedby="endsOn-error"
             type="date"
             required
-            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
+            class="mt-1 w-full text-sm"
+            {...fieldErrorAttrs(createResult?.error, "endsOn")}
           />
           <FieldError name="endsOn" error={createResult?.error} />
         </div>
         <div>
-          <label
-            class="field-label"
-            for="readingDeadline"
-          >
+          <label class="field-label" for="readingDeadline">
             {t("Reading deadline")}
           </label>
           <input
             id="readingDeadline"
             name="readingDeadline"
-            aria-describedby="readingDeadline-error"
             type="date"
-            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
+            class="mt-1 w-full text-sm"
+            {...fieldErrorAttrs(createResult?.error, "readingDeadline")}
           />
           <FieldError name="readingDeadline" error={createResult?.error} />
         </div>
@@ -299,36 +290,30 @@ const pageHref = (p: number) => {
           {t("Invoice dates")}
         </h3>
         <div>
-          <label
-            class="field-label"
-            for="invoiceIssueDate"
-          >
+          <label class="field-label" for="invoiceIssueDate">
             {t("Invoice issue date")}
           </label>
           <input
             id="invoiceIssueDate"
             name="invoiceIssueDate"
-            aria-describedby="invoiceIssueDate-error"
             type="date"
             required
-            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
+            class="mt-1 w-full text-sm"
+            {...fieldErrorAttrs(createResult?.error, "invoiceIssueDate")}
           />
           <FieldError name="invoiceIssueDate" error={createResult?.error} />
         </div>
         <div>
-          <label
-            class="field-label"
-            for="invoiceDueDate"
-          >
+          <label class="field-label" for="invoiceDueDate">
             {t("Invoice due date")}
           </label>
           <input
             id="invoiceDueDate"
             name="invoiceDueDate"
-            aria-describedby="invoiceDueDate-error"
             type="date"
             required
-            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 text-sm"
+            class="mt-1 w-full text-sm"
+            {...fieldErrorAttrs(createResult?.error, "invoiceDueDate")}
           />
           <FieldError name="invoiceDueDate" error={createResult?.error} />
         </div>

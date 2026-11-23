@@ -1,8 +1,9 @@
 # Namkopa design system
 
 The runtime contract lives in `src/styles/global.css`. `/design-system` renders
-the shared CSS and Astro components, lists source declarations and component
-files, and resolves color values from the active theme. Its inventories describe
+the shared CSS and Astro components one topic at a time (Foundation, then
+Components A to Z; the URL fragment picks the topic), lists source declarations
+and component files, and resolves color values from the active theme. Its inventories describe
 what exists; they do not certify accessibility or workflow coverage.
 
 This document has three parts: [Tokens](#tokens), [Components](#components) and
@@ -16,7 +17,7 @@ Tokens come in three tiers. Each tier references only the tier above it.
 | Tier | Prefix | Rule |
 | --- | --- | --- |
 | 1 Palette | `--palette-*` | Raw Riga colors. Declared in `:root`, not `@theme`, so Tailwind builds no utilities for them. Components never use them. |
-| 2 Semantic | `--color-*`, `--tone-*`, `--text-*`, `--gap-*`, `--pad-*`, `--gutter`, `--elevation-*` | What a component asks for. Defined with `light-dark()`, so one declaration serves both themes. |
+| 2 Semantic | `--color-*`, `--tone-*`, `--text-*`, `--gap-label`, `--gutter`, `--elevation-*`, `--z-*` | What a component asks for. Theme-dependent colors are defined with `light-dark()`, so one declaration serves both themes. |
 | 3 Component | `--color-meter-*` | Domain names that alias a tone, so a meter chip matches its meaning. Add a tier 3 token only when the domain name carries information a tone does not. |
 
 New code uses tier 2. Hex values appear only in tier 1 and in the standalone
@@ -42,6 +43,12 @@ and bone (dark structure and text), daugava (action and navigation), verdigris
 | `--color-positive-secondary` | Quiet positive state (pine), for example gas meters and credits. |
 | `--color-focus-ring` | Opaque focus outline. |
 | `--color-backdrop` | Scrim behind dialogs and drawers. |
+| `--color-menu-hover` / `--color-menu-selected` | Hover and selected washes for menu items, dropdown items and the sidebar navigation: the foreground colour at 5% and 9%, so they read in both themes. |
+| `--color-required` | The pulsing dot beside a required boxed field's label (the destructive red). |
+| `--color-well` | Recessed fill for `box-well`: below the surface in both themes. |
+
+`--hover-ring` is the 4px spread of the button hover outline; each button
+colours it from its own fill.
 
 Tones are one background and text pair per meaning: `--tone-neutral`,
 `-info`, `-success`, `-warning`, `-danger`, `-positive`, each with `-bg` and
@@ -56,7 +63,8 @@ Replaced names: `--color-badge-*` and `--color-notice-*` became `--tone-*`.
 
 `--font-sans` is Switzer, then Overused Grotesk (Cyrillic and fallback glyphs).
 `--font-display` is Fraunces, reserved for period headings, the wordmark,
-selected dwelling numbers and significant empty states. Never use it in tables,
+selected dwelling numbers, significant empty states, avatar initials and the
+title of a centered or full-screen modal. Never use it in tables,
 forms, buttons or badges.
 
 | Token | Size | Line height | Use |
@@ -75,18 +83,17 @@ Rules:
 
 - Use a step, in CSS (`font-size: var(--text-sm)`) or as a Tailwind utility
   (`text-sm`, `text-display-sm`). Do not write a font-size literal.
-- The named roles `.text-caption`, `.text-label`, `.text-body-sm`, `.text-body`,
-  `.text-ui-strong`, `.text-h3` and `.text-h2` bind a step to weight and
-  tracking. Prefer a role when one fits.
+- The named roles `.text-caption`, `.text-label`, `.text-body-sm`, `.text-h3`
+  and `.text-h2` bind a step to weight and tracking. Prefer a role when one
+  fits. Body text needs no role: it is the default.
 - Tracking: body `--tracking-sans` (0), small text `--tracking-small`, headings
   `--tracking-heading`, display `--tracking-display`. Fraunces weight is 600 up
   to 36px and 700 above.
 - Numbers in tables and figures use tabular figures.
 - Line length stays under 80 characters for body copy.
 
-Known exception: the `/design-system` page's own illustration (hero lockup, the
-stat figure and the miniature shell diagrams) uses bespoke sizes because it is
-illustration, not product UI.
+Known exception: the `/design-system` page's miniature shell diagrams use
+bespoke sizes because they are illustration, not product UI.
 
 ### Spacing
 
@@ -95,19 +102,19 @@ Tailwind's `--spacing` (0.25rem) is the single source. `--space-1` to
 written outside utility classes. Geometry uses `rem`, so layout follows the
 user's text size.
 
-Semantic layout tokens name the rhythm, so screens stop choosing numbers:
+Layout rhythm uses Tailwind utilities, so it stays one scale:
 
-| Token | Value | Use |
+| Rhythm | Value | Use |
 | --- | --- | --- |
-| `--gap-label` | 4px | Label to its control. |
-| `--gap-field` | 16px | Between form fields. |
-| `--gap-section` | 24px | Between panels and page sections. |
-| `--pad-panel` | 24px | Inside an ordinary panel. |
-| `--pad-panel-compact` | 16px | Inside a dense panel or card. |
+| `--gap-label` | 4px | Label to its control (CSS outside utilities). |
+| `space-y-4`, `gap-4` | 16px | Between form fields. |
+| `space-y-6` | 24px | Between panels and page sections. |
+| `p-6` | 24px | Inside an ordinary panel. |
+| `p-4` | 16px | Inside a dense panel or card. |
 | `--gutter` | 16px; 24px from `sm`; fluid 34 to 48px from `lg` | Page edge padding. |
 
 Control heights: `--control-size-sm` 36px (expands to 44px on coarse
-pointers), `--control-size-md` 44px, `--control-size-lg` 48px.
+pointers), `--control-size-md` 44px.
 
 ### Breakpoints
 
@@ -126,9 +133,12 @@ so it fits, or use a container query inside the component.
 
 ### Radius
 
-`--radius-badge` 5px, `--radius-input` 7px, `--radius-control` 8px,
-`--radius-panel` 10px. Radius encodes hierarchy: small marks are tighter than
-containers.
+`--radius-check` 5px (checkboxes), `--radius-badge` 8px, `--radius-input` 12px,
+`--radius-control` 12px, `--radius-panel` 16px. Radius encodes hierarchy: small marks are tighter than
+containers. Panels (anything with `--radius-panel`: cards, KPI cards, metric
+strips, tables, notices, dialogs, the organization menu) add
+`corner-shape: squircle` next to the radius; controls, inputs and badges stay
+round. Browsers without `corner-shape` fall back to round corners.
 
 ### Elevation
 
@@ -138,6 +148,14 @@ containers.
 | Raised | `--elevation-raised` | Toolbars and toasts. |
 | Overlay | `--elevation-overlay` | Menus, tooltips and popovers. |
 | Modal | `--elevation-modal` | Dialogs and floating panels. `--elevation-modal-side` is the drawer variant. |
+
+Stacking uses the `--z-*` scale, never a bare number: `--z-raised` (1, above a
+sibling overlay), `--z-sticky` (10), `--z-popover` (20, menus, popovers and the
+sidebar), `--z-overlay` (30, floating panels above popovers), `--z-toast` (90)
+and `--z-skip-link` (100). Native dialogs and popovers use the top layer
+instead. Local exceptions are relative: `z-index: -1` puts a decoration behind
+its own content, and `calc(var(--z-…) + 1)` lifts one element just above a
+named layer (an open row menu's row, the `/design-system` top bar).
 
 In dark mode shadows are replaced by a hairline `--color-border` ring, and the
 element uses `--color-surface-raised`. `--shadow-control` is the thumb shadow
@@ -196,11 +214,14 @@ labels, a controller), not to wrap one element.
 ### Button
 
 `btn-primary` (the one main action of a view), `btn-secondary`, `btn-danger`
-(destructive and irreversible), `btn-ghost` (low emphasis). Sizes: default
-44px, `btn-sm` 36px (44px on coarse pointers), `btn-lg` 48px.
+(destructive and irreversible) and `btn-ghost` (reads as a link: the quiet way
+out of a dialog or an optional step; it underlines on hover). Sizes: default
+44px, `btn-sm` 36px (44px on coarse pointers).
 
-- States: hover and active fill per variant; `disabled` or `aria-disabled`
-  at 45% opacity; `aria-busy="true"` sets the progress cursor. The caller owns
+- States: hover and active fill per variant; on a pointer device hover also
+  draws a 4px ring (`--hover-ring`) in the button's own colour, so the edge
+  grows instead of the button moving. `disabled` or `aria-disabled` at 45%
+  opacity; `aria-busy="true"` sets the progress cursor. The caller owns
   duplicate-submit prevention.
 - Use a `<button>` for actions and an `<a>` for navigation.
 - Do: one `btn-primary` per view region. Don't: stack two primaries, or use
@@ -208,8 +229,10 @@ labels, a controller), not to wrap one element.
 
 ### Icon button
 
-`icon-btn` (44px), `icon-btn-sm` (36px, 44px on coarse pointers),
-`icon-btn-danger` (hover and press tint to destructive). Always `aria-label`.
+`icon-btn` (44px), `icon-btn-sm` (36px, 44px on coarse pointers). Always
+`aria-label`. `icon-btn-danger` is a delete: its icon turns destructive under
+the pointer, with a destructive ring. `icon-btn-ghost` has no border until
+hovered, for a dialog's close button or a row of several icon actions.
 Don't use it for an action that has room for a visible label.
 
 ### Button group
@@ -218,11 +241,32 @@ Don't use it for an action that has room for a visible label.
 `<details>` menu into one control with `role="group"`. Name the group when its
 purpose is not clear from the buttons.
 
+### Link
+
+`link` is the primary colour and underlines on hover; `link-ghost` takes the
+text colour; `link-underlined` keeps the underline at rest. A link inside
+running text is always `link-underlined`, so it does not rely on colour alone.
+Block link: put `has-block-link` on a card and `block-link` on the one link in
+it; the link's hit area stretches over the card and the card shows the focus
+ring. Other controls in that card must sit above it (`row-link-above`).
+
+### Avatar
+
+`avatar` (28px), `avatar-sm` (24px), `avatar-lg` (36px): initials in Fraunces
+in a hairline circle. It is decoration next to a name or email, so give it
+`aria-hidden="true"`. `initials()` (`src/lib/ui/initials.ts`) builds up to two
+initials from a name or an email's local part ("anna.berzina" gives "AB"). Used
+for the signed-in account, a dwelling's residents, admin users, the message
+thread and the occupant column of the dwellings list. No photos.
+
 ### Form field
 
-Parts: `field-label`, the control (give it `mt-1`, which is `--gap-label`),
-optional `field-hint`, optional `FieldError` (`error`, `name`, `id?`) which
-renders `field-error` with `id="<name>-error"` and `role="alert"`. Pass `id`
+Parts: `field-label` (4px margin below), the control (give it `mt-1`, which is
+`--gap-label`, so the label sits 8px above it),
+optional `field-hint`, optional `FieldError` (`error`, `name`, `id?`,
+`label?`) which renders `field-error` with `id="<name>-error"` and
+`role="alert"`; `label` prefixes the message with the field's name, for errors
+listed under a compact form. Pass `id`
 when the control's id is not the field name, for example a form rendered twice
 on one page; it must be `<control id>-error`. `FieldError` renders nothing for
 an empty message list.
@@ -230,8 +274,44 @@ an empty message list.
 - Controls (input, select, textarea) are styled by the base layer: 44px
   minimum height, `--color-input-border`, `--radius-input`, placeholder in
   muted. Use utilities for width and spacing only; do not restyle the border,
-  radius or padding. Checkbox and radio are 16px with an `accent-color` of
-  primary; put them in a `check-row` label so the whole 44px row is the target.
+  radius or padding. Checkbox and radio are 18px marks drawn by the base layer
+  (a `--radius-check` square, a circle for radio): checked fills
+  `--color-primary` and shows the mark in `--color-on-primary`; indeterminate
+  shows a bar; disabled is 45%. Put them in a `check-row` label so the whole
+  44px row is the target; a radio group goes in a `fieldset` with a `legend`.
+- Boxed field: `field-box` wraps a `<label>` and its control, with the label
+  inside the frame above the control. The frame takes the state: `aria-invalid`
+  on the control tints it danger, `data-tone="warning"` tints it warning.
+  `is-required` adds a pulsing red `--color-required` dot after the label text
+  (static under reduced motion); the control still needs `required`. Mark
+  optional fields with `<span class="field-optional">· optional</span>` in the
+  label. A `field-error` or `field-hint` goes under the frame, outside it; in a
+  compact form, under the whole group, naming the field (`FieldError label`;
+  `bindMutationForm` places client-side errors the same way). The dwelling
+  page's edit forms (basic information, meters, additional information) are
+  compact forms.
+  Tints are laid over `--color-surface`, since the dark tones are translucent.
+- Compact form: `field-group` puts boxed fields in one frame split by
+  hairlines, two columns from `sm` (`--cols` sets more); `field-span` takes a
+  whole row, and a `check-row` can join it.
+- Icons: `input-icon` wraps a control and an `Icon`. A leading icon says what
+  goes in; a trailing `input-icon-end` icon shows the state and takes its
+  colour. Both are decorative.
+- Colour grading: an invalid control (`aria-invalid="true"`) gets the danger
+  border and `--tone-danger-bg` fill; `data-tone="warning"` and
+  `data-tone="success"` do the same with their tones. Text still says what is
+  wrong.
+- Switch: use `.toggle-switch` wrapping `<input type="checkbox" role="switch">`
+  and `<span class="toggle-switch-track" aria-hidden="true"><span class="toggle-switch-thumb"></span></span>`.
+  Unchecked state uses a hollow `--color-surface` track with `--color-muted`
+  border and thumb (>= 4.8:1 contrast on surface and elevated backgrounds);
+  checked state fills `--color-primary` with a `--color-control-thumb`
+  (`--color-on-primary`) thumb (> 9:1 in both themes). Visual size is 44×24px,
+  expanding its hit area to `--control-size-md` (44×44px) under
+  `@media (pointer: coarse)`, with `--color-focus-ring` on `:focus-visible`,
+  `--duration-fast`/`--ease-standard` transitions under
+  `prefers-reduced-motion: no-preference`, and `CanvasText`/`Highlight` fills in
+  `forced-colors: active`.
 - States: focus (border to primary plus the 2px outline), invalid
   (`aria-invalid="true"`, border to destructive, survives focus), disabled
   (`--color-surface-hover` fill, muted text).
@@ -248,13 +328,13 @@ an empty message list.
 `StatusBadge` (`status`: a domain status). The mapping in
 `src/lib/ui/invoice-status.ts` supplies label, tone and icon; the markup is
 `status-badge` with `data-tone` of neutral, info, success, warning or danger.
-Colors are the `--tone-*` pair. State is carried by icon and text, never color
+Text is regular weight (400). Colors are the `--tone-*` pair. State is carried by icon and text, never color
 alone; forced-colors mode draws a system-color outline.
 
 ### Notice
 
-`notice` (info), `notice notice-warning`, `notice notice-danger` on a `<p>` or
-`<div>`. Tone pair from `--tone-*`.
+`notice` (info), `notice notice-success`, `notice notice-warning`,
+`notice notice-danger` on a `<p>` or `<div>`. Tone pair from `--tone-*`.
 
 - Accessibility: add `role="alert"` for a danger notice that appears after an
   action, `role="status"` for other notices that appear after an action. A
@@ -265,7 +345,8 @@ alone; forced-colors mode draws a system-color outline.
 ### Panel, metrics and KPI
 
 - `panel` is the default container: surface, 1px border, `--radius-panel`,
-  flat. Pad it with `--pad-panel` (`p-6`) or `--pad-panel-compact` (`p-4`).
+  flat. A padded panel is a `box` (below); `panel p-4` stays for a dense one,
+  and `panel` alone for a container whose children pad themselves.
 - `table-wrap` is a panel that scrolls horizontally.
 - `metric-strip` with `metric`, `metric-label`, `metric-value`, `metric-note`
   (`--metrics` sets the column count, default 4; 2 columns below `md`);
@@ -279,11 +360,20 @@ alone; forced-colors mode draws a system-color outline.
 - `empty-state` can be used as a class without the component for a one-off
   empty region.
 - Don't add a shadow to a panel; don't nest a panel in a panel.
+- `box` is a padded panel for one subject (`--space-5` by `--space-6`).
+  `box-well` sets it back on `--color-well` (below the surface in both
+  themes); `box-raised` and
+  `box-floating` bring it forward with `--elevation-raised` and
+  `--elevation-overlay`. Depth never changes on hover.
+- `divider` is a hairline between groups, `divider-soft` fades out at both
+  ends, `spacer` keeps the same gap with no line. Use them on an `<hr>`.
 
 ### Data table
 
-A `<table>` inside `table-wrap`: header cell `th` (semibold, no wrap, tinted
-`--color-table-th-bg`), tabular figures, right-aligned numbers.
+A `<table>` inside `table-wrap`: column headers (`thead th`) are small
+capitals (12px, uppercase, 0.04em tracking, weight 550, no wrap, tinted
+`--color-table-th-bg`); row headers keep normal case. Tabular figures,
+right-aligned numbers.
 
 - Add `stack-table` to the wrapper to render each row as a labelled card below
   `sm`; the script copies column headers into `data-label`.
@@ -298,7 +388,11 @@ A `<table>` inside `table-wrap`: header cell `th` (semibold, no wrap, tinted
 `PageHeader` (`title`, `headingLevel` h1 default, `description?`, `eyebrow?`,
 `display?`, `accent?`) and a default slot for actions (wrap them in
 `page-actions`). `display` selects the Fraunces treatment for period and month
-headings and the top-level admin index pages (dwellings, messages, rules).
+headings, the top-level admin index pages (dwellings, messages, payments,
+periods, guide, settings and its billing, rules and invoice-template pages) and
+the payments ledger (building ledger and dwelling account statement).
+Migration and payment-transaction pages keep the plain sans `h1`. Money figures
+are never Fraunces, even when large.
 `Breadcrumbs`
 (`items`: `{ label, href? }`, last crumb has no `href`) is rendered once by the
 admin layout, so pages only declare their trail. It is a `<nav>` named
@@ -306,9 +400,13 @@ admin layout, so pages only declare their trail. It is a `<nav>` named
 
 ### Tabs and filter bar
 
-`tabs` is a row of links to sibling views; the current one carries
-`aria-current="page"`. Hover tints the others. These are navigation, not
-`role="tab"` widgets. `filter-bar` groups labelled filter controls on a panel
+`tabs` is a row of links to sibling views on a 2px rule; the current one carries
+`aria-current="page"` and draws a 2px primary line over the rule. Hover darkens
+the text only. These are navigation, not `role="tab"` widgets. `toggle-tabs` is
+a segmented control on a well: the selected segment lifts onto the surface.
+Use labels around visually hidden radios (in a `role="radiogroup"`) when the
+choice stays on the page, links with `aria-current` when it changes the URL.
+`LanguageSwitch` is toggle tabs. `filter-bar` groups labelled filter controls on a panel
 surface and wraps; below `sm` its fields flex from 9rem and fill the width.
 
 ### Empty state
@@ -324,20 +422,83 @@ the next action. Say what is missing and give the action that fixes it. Reserve
 optional detail, not for navigation. A bare `<details>` text toggle (no panel)
 is allowed for a small inline reveal.
 
+### Dropdown and menu
+
+`dropdown` on a `<details data-dismiss>` (closes on a pick, an outside click or
+Escape; Escape, and a pick that leaves focus in the panel, return focus to the
+summary) with a button-styled `<summary>` and a
+`dropdown-panel` (`dropdown-end` aligns it right). Items are `dropdown-item`
+links or buttons with an optional leading `Icon`; `aria-current` marks the
+chosen one, `dropdown-item-note` adds a quieter second line,
+`dropdown-item-danger` marks a destructive item (last), `dropdown-divider`
+separates groups. The chevron is `chevron-right` with `dropdown-chevron`.
+
+A dropdown menu puts `dropdown-tiles` (two `dropdown-tile` quick actions, an
+icon over a short label) and labelled menu groups in the panel. The
+organization switcher is one. Nested dropdowns are not part of the system.
+
+`menu-list` is a list of links: a faint `--color-menu-hover` wash on hover, the
+stronger `--color-menu-selected` wash and semibold text for `aria-current`, a
+muted icon with room on both sides. `menu-label` heads a group in sentence
+case. `menu-tree` on a `<details>` inside a list item folds a group open; its
+children hang off a guide line. The sidebar navigation uses the same washes.
+
 ### Row menu
 
 `row-menu` is a `<details>` whose `<summary aria-label>` is a dots button (36px,
-44px on coarse pointers) opening a small floating menu (`--elevation-raised`,
+44px on coarse pointers) opening a small floating menu (`--elevation-overlay`,
 `--color-surface-raised`) of actions for one row. Used by the dwellings,
 messages and rules lists. The summary's `aria-label` names the action and the
-shared tooltip shows it.
+shared tooltip shows it. `more-menu` is the same floating menu for a page's
+header actions; it brings its own summary (a `btn-secondary` or an icon
+button). Menu items are the `a` and `button` elements in the panel and share
+the dropdown's panel and item styles; `menu-danger` marks a destructive item
+and `menu-disabled` an unavailable one.
+
+### Confirmation dialog
+
+`lock-dialog` on a native `<dialog>` (opened with `showModal()`), with
+`dialog-body` (a warning `dialog-icon` plus title and text) and
+`dialog-actions`. Give it `aria-labelledby` and `aria-describedby`.
+
+For a one-line "are you sure", put `data-confirm="…"` on the form or its submit
+button instead: `src/lib/ui/forms.ts` asks in a modal card (the first sentence
+is the title, the rest the text), with a confirm button that repeats the
+submitter's label and Cancel focused. The confirm button is `btn-danger` when
+the submitter is a danger button or carries `data-confirm-tone="danger"`. The
+browser's own `confirm()` is not used; the remaining exceptions are the
+synchronous discard prompts of the workbench drawer, the tariff drawer and the
+invoice template editor.
+
+### Modal
+
+Modals stop the page, so use them sparingly. Both are native `<dialog>`
+elements opened with `showModal()` and named by `aria-labelledby`; Escape and a
+close button (`icon-btn icon-btn-ghost` in a `<form method="dialog">`) end
+them.
+
+- `modal-card`: `modal-card-head` (icon, `<h2>`, close), `modal-card-body`
+  (scrolls), `modal-card-foot` (the primary action, then `btn-ghost` to
+  leave). `modal-card-centered` stacks an icon, a Fraunces title and short text
+  in the middle, with the close button in the corner.
+- `modal-full`: the whole screen in the canvas colour at 86% over a 24px blur,
+  one message in `modal-full-body` and the close button in the top corner. For a
+  moment that deserves the full stop: the setup review page shows it once per
+  organization (remembered in local storage) when set up is complete.
 
 ### Tooltip
 
 One shared tooltip (`Tooltips` calls `installTooltips`, include it once per
 layout) shows for `[data-tip]`, clipped text (`data-tip-clipped`),
-`.icon-btn[aria-label]` and `.row-menu > summary[aria-label]`. A pointer waits
-400ms; keyboard focus shows it at once. Touch has no tooltip, so the text must
+`.icon-btn[aria-label]` and `.row-menu > summary[aria-label]`. It is a light
+square: `--color-surface-raised`, a hairline and `--elevation-overlay`, with no
+arrow. A pointer waits 400ms, then the next tooltips along a row show at once;
+keyboard focus shows it at once. Variations on the target:
+`data-tip-tone` (info, success, warning, danger) tints it with the tone pair,
+`data-tip-placement` (`left`, `right`, `bottom`) moves it when it fits, and
+`data-tip-delay` (ms) holds it back where the pointer easily crosses it by
+accident (keyboard focus still shows it at once). A tooltip that does not fit
+on its side flips and stays inside the viewport. Touch has no tooltip, so the text must
 never be the only place information lives. Don't add one to a control with a
 visible label. Known gap: the truncated current breadcrumb shows its full text
 only on hover, because it is not focusable.
@@ -376,9 +537,11 @@ pages only register mutations.
 `AppNavigation` (`organizationId`, `unreadMessages?`) is the single sidebar nav
 with `aria-current="page"` and an unread badge. `OrganizationSwitcher`
 (`organizationId?`, `organizationName?`, `organizations`, `residentAccess`) is a
-disclosure menu at the top of the sidebar; Escape closes it and returns focus to
-the trigger. `SidebarAccount` (`email?`), `ThemeToggle` (`data-theme-toggle`)
-and `LanguageSwitch` make up the account block. Below `lg` the same nav lives in
+dropdown menu at the top of the sidebar: tiles for all organizations and the
+resident view, then the organizations; Escape closes it and returns focus to
+the trigger. `SidebarAccount` (`email?`, shown with an `avatar`), `ThemeToggle`
+(`data-theme-toggle`) and `LanguageSwitch` make up the account block. Sidebar
+links use the menu washes. Below `lg` the same nav lives in
 the mobile drawer.
 
 ### Setup wizard
@@ -410,7 +573,7 @@ a rule for new work and a view does not follow it yet, the exception is named.
 | --- | --- | --- |
 | Admin | everything under `/admin/o/<org>` | From `lg`: fixed 15rem sidebar (`AppNavigation`, organization switcher, account block) and a content area with `margin-left: 15rem`. Below `lg`: no sidebar; a top bar (`admin-mobile`) opens the same navigation in a drawer capped at 320px. The content area pads `--gutter` at the sides and 6rem below, and 2rem above from `lg`, 1.5rem from `sm` to `lg`, 1.25rem below `sm`. It stops at `--width-shell`. The layout renders the skip link and breadcrumbs. |
 | Resident | `/portal` | No sidebar. A header holds the brand, theme and language toggles and the profile link; the text nav (`resident-nav`) is the first thing in `<main>`. One centered column at `--width-reading`, padded by `--gutter`. It is the same layout at every width. |
-| Auth | `/login`, password reset | A centered card (`max-w-md`, which equals `--width-narrow`). Language and theme controls are positioned absolutely in the top-right corner. An architectural line drawing sits behind the card from `md` and is hidden below. |
+| Auth | `/login`, password reset | A centered card (`max-w-(--width-narrow)`). Language and theme controls are positioned absolutely in the top-right corner. An architectural line drawing sits behind the card from `md` and is hidden below. |
 
 The admin and resident shells never mix: the resident shell has no admin
 chrome, and a resident route must not render `.admin-sidebar`.
@@ -419,7 +582,7 @@ chrome, and a resident route must not render `.admin-sidebar`.
 
 | Token | Value | Used by today | Intended use |
 | --- | --- | --- | --- |
-| `--width-narrow` | 28rem | Nothing yet; the login card uses `max-w-md`, the same value. | Auth card, single-purpose forms. |
+| `--width-narrow` | 28rem | Auth and error cards (`max-w-(--width-narrow)`). | Auth card, single-purpose forms. |
 | `--width-reading` | 50rem | Resident column and header. | Resident column, prose pages. |
 | `--width-wizard` | 76rem | Guided setup. | Guided setup. |
 | `--width-content` | 94rem | The dashboard. | Standard admin pages. Other admin pages currently fill `--width-shell`. |
@@ -446,7 +609,7 @@ at 60rem) instead of adding a breakpoint.
 ### Grid recipes
 
 - **Card grid.** `grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr))`
-  with `gap: var(--gap-section)`: as many columns as fit, one on a phone. The
+  with `gap-6`: as many columns as fit, one on a phone. The
   dwelling summary uses `minmax(13rem, 1fr)`; use the `min(100%, …)` form in new
   code so a narrow container cannot overflow.
 - **Metric strip.** `metric-strip` and `--metrics`: one surface, dividers, four
@@ -457,9 +620,9 @@ at 60rem) instead of adding a breakpoint.
   narrower than the two panes need. Hide the wrapper, not just the grid, when
   the content is filtered away.
 - **Form grid.** Two columns of fields from `sm`; one below, with the exceptions
-  above. Fields keep `--gap-field` between them and their label `--gap-label`
-  above (`gap-3` and `gap-4` appear in older forms).
-- **Stack.** The default: `space-y-6` (`--gap-section`) between regions,
+  above. Fields keep `gap-4` between them and their label `--gap-label`
+  above (`gap-3` appears in older forms).
+- **Stack.** The default: `space-y-6` between regions,
   `space-y-4` inside a panel.
 
 ### Table to card
@@ -490,10 +653,10 @@ dashboard's setup card sits above its header; dwelling panels contain
 
 **Login and auth.** Auth shell. The login page holds two sign-in forms in one
 column: resident (email, sign-in link, the page `h1`) and admin (email and
-password). Messages are plain danger-tinted paragraphs above each form; the page
-renders no `field-error` and its messages do not carry `role="alert"` (an
-exception to the field pattern, as is the password reset page, which shows one
-form-level alert; the in-app forms follow the pattern).
+password). Messages are `notice` paragraphs above each form, `notice-danger`
+with `role="alert"` and `notice-success` with `role="status"`. The page renders
+no `field-error` (an exception to the field pattern, as is the password reset
+page, which shows one form-level alert; the in-app forms follow the pattern).
 Below `md` the line drawing is hidden.
 
 **Admin dashboard.** Width `--width-content`. The setup card comes first when

@@ -7,6 +7,8 @@ const t = (text: string) => translate(locale, text);
 // per-dwelling (dwellings/[dwellingId]), not repeated here, since access is
 // dwelling-scoped, not organization-scoped (spec Section 8).
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
+import { initials } from "../../../../../lib/ui/initials";
 import { actions } from "astro:actions";
 import {
   ForbiddenError,
@@ -56,17 +58,22 @@ const currentUserId = Astro.locals.auth!.userId;
       )}
     </p>
     {(addResult?.error || removeResult?.error) && (
-      <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
+      <p class="notice notice-danger" role="alert">
         {addResult?.error?.message ?? removeResult?.error?.message}
       </p>
     )}
-    <div class="rounded-panel border border-border bg-surface p-6">
+    <div class="box">
       <ul class="divide-y divide-border">
         {members.map((m) => (
-          <li class="flex items-center justify-between py-2 text-body-sm">
-            <span>
-              {m.displayName ?? m.email}{" "}
-              <span class="text-muted">({m.email})</span>
+          <li class="flex items-center justify-between gap-3 py-2 text-body-sm">
+            <span class="flex min-w-0 items-center gap-3">
+              <span class="avatar" aria-hidden="true">
+                {initials(m.displayName ?? m.email)}
+              </span>
+              <span class="min-w-0">
+                {m.displayName ?? m.email}{" "}
+                <span class="text-muted">({m.email})</span>
+              </span>
             </span>
             {m.userId !== currentUserId && (
               <form
@@ -82,7 +89,8 @@ const currentUserId = Astro.locals.auth!.userId;
                 <button
                   type="submit"
                   data-confirm={`${t("Remove")} ${m.email}?`}
-                  class="text-destructive hover:underline"
+                  data-confirm-tone="danger"
+                  class="btn-secondary btn-sm"
                 >
                   {t("Remove")}
                 </button>
@@ -97,14 +105,18 @@ const currentUserId = Astro.locals.auth!.userId;
         class="mt-4 flex gap-2"
       >
         <input type="hidden" name="organizationId" value={organizationId} />
-        <input
-          aria-label="Email"
-          name="email"
-          type="email"
-          required
-          placeholder="admin@example.com"
-          class="flex-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-        />
+        <div class="input-icon flex-1">
+          <Icon name="mail" size="sm" />
+          <input
+            spellcheck="false"
+            aria-label={t("Email")}
+            name="email"
+            type="email"
+            required
+            placeholder="admin@example.com"
+            class="text-body-sm"
+          />
+        </div>
         <button type="submit" class="btn-primary">
           {t("Add admin")}
         </button>

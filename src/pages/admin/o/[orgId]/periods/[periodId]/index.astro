@@ -271,21 +271,27 @@ const MAX_MISSING = 2;
     <nav class="period-navigation" aria-label={t("Period navigation")}>
       {previousPeriod ? (
         <a href={`/admin/o/${organizationId}/periods/${previousPeriod.id}`}>
-          <span aria-hidden="true">←</span>
+          <Icon name="arrow-left" size="sm" />
           <span>
             {formatPeriod(previousPeriod.year, previousPeriod.month, locale)}
           </span>
         </a>
       ) : (
-        <span aria-disabled="true">← {t("Previous period")}</span>
+        <span aria-disabled="true">
+          <Icon name="arrow-left" size="sm" />
+          {t("Previous period")}
+        </span>
       )}
       {nextPeriod ? (
         <a href={`/admin/o/${organizationId}/periods/${nextPeriod.id}`}>
           <span>{formatPeriod(nextPeriod.year, nextPeriod.month, locale)}</span>
-          <span aria-hidden="true">→</span>
+          <Icon name="arrow-right" size="sm" />
         </a>
       ) : (
-        <span aria-disabled="true">{t("Next period")} →</span>
+        <span aria-disabled="true">
+          {t("Next period")}
+          <Icon name="arrow-right" size="sm" />
+        </span>
       )}
     </nav>
 
@@ -298,7 +304,7 @@ const MAX_MISSING = 2;
       >
         <div class="dialog-body">
           <div class="dialog-icon" aria-hidden="true">
-            !
+            <Icon name="alert-triangle" size="sm" />
           </div>
           <div>
             <h2 id="lock-dialog-title">{t("Lock this period?")}</h2>
@@ -349,42 +355,46 @@ const MAX_MISSING = 2;
       </div>
     )}
 
-    <section class="financial-summary" aria-labelledby="financial-heading">
-      <h2 id="financial-heading" class="sr-only">
-        {t("Financial summary")}
-      </h2>
-      <div class="financial-stat">
-        <span class="financial-label">
+    <h2 id="financial-heading" class="sr-only">
+      {t("Financial summary")}
+    </h2>
+    <section
+      class="metric-strip financial-summary"
+      style="--metrics: 3"
+      aria-labelledby="financial-heading"
+    >
+      <div class="metric financial-stat">
+        <span class="metric-label financial-label">
           <Icon name="receipt-euro" size="sm" />
           {t("Total to pay")}
         </span>
-        <strong class="font-display">
+        <strong class="metric-value">
           {formatMoney(summary.amountDue, organization.currency, locale)}
         </strong>
-        <span>
+        <span class="metric-note">
           {t("Current charges")}:{" "}
           {formatMoney(summary.currentCharges, organization.currency, locale)}
         </span>
       </div>
-      <div class="financial-stat">
-        <span class="financial-label">
+      <div class="metric financial-stat">
+        <span class="metric-label financial-label">
           <Icon name="coin" size="sm" />
           {t("Received in payments")}
         </span>
-        <strong class="font-display">
+        <strong class="metric-value">
           {formatMoney(summary.totalPaid, organization.currency, locale)}
         </strong>
-        <span>{t("of total to pay")}</span>
+        <span class="metric-note">{t("of total to pay")}</span>
       </div>
-      <div class="financial-stat">
-        <span class="financial-label">
+      <div class="metric financial-stat">
+        <span class="metric-label financial-label">
           <Icon name="clock" size="sm" />
           {t("Still unpaid")}
         </span>
-        <strong class="font-display">
+        <strong class="metric-value">
           {formatMoney(summary.totalOutstanding, organization.currency, locale)}
         </strong>
-        <span>{t("of total to pay")}</span>
+        <span class="metric-note">{t("of total to pay")}</span>
       </div>
     </section>
 
@@ -458,7 +468,7 @@ const MAX_MISSING = 2;
       </p>
     )}
 
-    <section class="case-queue" aria-labelledby="queue-heading">
+    <section class="case-queue panel" aria-labelledby="queue-heading">
       <div class="queue-heading">
         <div>
           <h2 id="queue-heading">
@@ -469,7 +479,7 @@ const MAX_MISSING = 2;
           </p>
         </div>
         <form method="GET" class="queue-filters">
-          <div class="queue-search">
+          <div class="queue-search input-icon">
             <Icon name="search" size="sm" />
             <label class="sr-only" for="search">
               {t("Search dwelling")}
@@ -610,11 +620,13 @@ const MAX_MISSING = 2;
           <thead>
             <tr>
               <th scope="col" class="select-column">
-                <input
-                  type="checkbox"
-                  id="select-all"
-                  aria-label={t("Select all eligible invoices")}
-                />
+                <label class="check-target">
+                  <input
+                    type="checkbox"
+                    id="select-all"
+                    aria-label={t("Select all eligible invoices")}
+                  />
+                </label>
               </th>
               <th scope="col">{t("Dwelling")}</th>
               <th scope="col">{t("Billing inputs")}</th>
@@ -718,17 +730,19 @@ const MAX_MISSING = 2;
                     {billingCase.invoiceId &&
                       (billingCase.status === "DRAFT" ||
                         billingCase.status === "PREPARED") && (
-                        <input
-                          type="checkbox"
-                          name="invoiceIds"
-                          data-prepare-eligible={
-                            prepareEligible ? "true" : "false"
-                          }
-                          data-send-eligible={sendEligible ? "true" : "false"}
-                          aria-label={`${t("Select invoice")} ${billingCase.invoiceNumber}`}
-                          value={billingCase.invoiceId}
-                          form="bulk-select-form"
-                        />
+                        <label class="check-target">
+                          <input
+                            type="checkbox"
+                            name="invoiceIds"
+                            data-prepare-eligible={
+                              prepareEligible ? "true" : "false"
+                            }
+                            data-send-eligible={sendEligible ? "true" : "false"}
+                            aria-label={`${t("Select invoice")} ${billingCase.invoiceNumber}`}
+                            value={billingCase.invoiceId}
+                            form="bulk-select-form"
+                          />
+                        </label>
                       )}
                   </td>
                   <td class="dwelling-cell">
@@ -1129,7 +1143,7 @@ const MAX_MISSING = 2;
       {!period.openingReadings &&
         period.status === "OPEN" &&
         dwellingsWithoutCase.length > 0 && (
-          <details id="add-dwelling" class="period-resource">
+          <details id="add-dwelling" class="period-resource panel">
             <summary class="chevron-toggle chevron-toggle-end font-semibold">
               {t("Dwellings not in this period")}
               <span class="ml-2 font-normal text-muted">
@@ -1167,7 +1181,7 @@ const MAX_MISSING = 2;
           </details>
         )}
 
-      <details id="period-tariffs" class="period-resource">
+      <details id="period-tariffs" class="period-resource panel">
         <summary class="chevron-toggle chevron-toggle-end font-semibold">
           {t("Tariffs in this period")}
           <span class="ml-2 font-normal text-muted">
@@ -1291,7 +1305,8 @@ const MAX_MISSING = 2;
           });
           updateSelection();
           // Select-all is not shown below sm; fall back to the first case.
-          const selectAll = document.querySelector<HTMLInputElement>("#select-all");
+          const selectAll =
+            document.querySelector<HTMLInputElement>("#select-all");
           (selectAll?.checkVisibility() ? selectAll : boxes()[0])?.focus();
         }
         if (target.closest("[data-open-lock-dialog]")) {
@@ -1436,9 +1451,9 @@ const MAX_MISSING = 2;
     gap: 0.75rem;
     margin-top: 0.375rem;
   }
+  /* Weight comes from .app-content h1.font-display: 600, 700 from 70rem. */
   .period-title h1 {
     font-size: var(--text-display-lg);
-    font-weight: 700;
     line-height: 1.12;
   }
   .period-description {
@@ -1453,9 +1468,6 @@ const MAX_MISSING = 2;
     align-items: center;
     justify-content: flex-end;
     gap: 0.5rem;
-  }
-  .more-menu {
-    position: relative;
   }
   .more-menu summary {
     display: grid;
@@ -1473,23 +1485,14 @@ const MAX_MISSING = 2;
     color: var(--color-foreground);
     background: var(--color-surface-hover);
   }
-  .more-menu summary::-webkit-details-marker {
-    display: none;
-  }
-  .more-menu > div,
   .case-menu {
-    z-index: 20;
+    z-index: var(--z-popover);
     min-width: 11rem;
     padding: 0.375rem;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     background: var(--color-surface-raised);
     box-shadow: var(--elevation-raised);
-  }
-  .more-menu > div {
-    position: absolute;
-    top: calc(100% + 0.375rem);
-    right: 0;
   }
   /* Native top-layer popovers clear table clipping without changing columns. */
   .case-menu {
@@ -1503,7 +1506,6 @@ const MAX_MISSING = 2;
     overflow: auto;
     color: var(--color-foreground);
   }
-  .more-menu button,
   .case-menu a,
   .case-menu button {
     display: block;
@@ -1514,7 +1516,6 @@ const MAX_MISSING = 2;
     font-size: var(--text-sm);
     text-align: left;
   }
-  .more-menu button:hover,
   .case-menu a:hover,
   .case-menu button:hover {
     background: var(--color-surface-hover);
@@ -1542,44 +1543,14 @@ const MAX_MISSING = 2;
     align-items: center;
     color: var(--color-muted);
   }
-  .financial-summary {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-  }
-  .financial-stat {
-    display: grid;
-    align-content: start;
-    gap: 0.375rem;
-    min-width: 0;
-    padding: 1.25rem 1.5rem;
-  }
-  .financial-stat + .financial-stat {
-    border-left: 1px solid var(--color-border);
-  }
   .financial-label {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: var(--text-sm);
-    font-weight: 550;
   }
   .financial-label :global(svg) {
     color: var(--color-muted);
     flex: none;
-  }
-  .financial-stat strong {
-    font-size: var(--text-display-md);
-    line-height: 1.2;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    overflow-wrap: anywhere;
-  }
-  .financial-stat > span:last-child {
-    color: var(--color-muted);
-    font-size: var(--text-xs);
   }
   .period-resources {
     display: grid;
@@ -1588,9 +1559,6 @@ const MAX_MISSING = 2;
   .period-resource {
     min-width: 0;
     padding: 1rem 1.25rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
     font-size: var(--text-sm);
   }
   .period-resource summary {
@@ -1599,95 +1567,10 @@ const MAX_MISSING = 2;
   .period-resource[open] summary {
     padding-bottom: 0.5rem;
   }
-  .lock-dialog {
-    width: min(30rem, calc(100vw - 2rem));
-    margin: auto;
-    padding: 0;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface-raised);
-    color: var(--color-foreground);
-    box-shadow: var(--elevation-modal);
-  }
-  .lock-dialog::backdrop {
-    background: var(--color-backdrop);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .lock-dialog {
-      opacity: 0;
-      scale: 0.96;
-      transition:
-        opacity 200ms ease,
-        scale 200ms ease,
-        overlay 200ms allow-discrete,
-        display 200ms allow-discrete;
-    }
-    .lock-dialog[open] {
-      opacity: 1;
-      scale: 1;
-    }
-    @starting-style {
-      .lock-dialog[open] {
-        opacity: 0;
-        scale: 0.96;
-      }
-    }
-    .lock-dialog::backdrop {
-      background: transparent;
-      transition:
-        background-color 200ms ease,
-        overlay 200ms allow-discrete,
-        display 200ms allow-discrete;
-    }
-    .lock-dialog[open]::backdrop {
-      background: var(--color-backdrop);
-    }
-    @starting-style {
-      .lock-dialog[open]::backdrop {
-        background: transparent;
-      }
-    }
-  }
-  .dialog-body {
-    display: flex;
-    gap: 1rem;
-    padding: 1.5rem;
-  }
-  .dialog-icon {
-    display: grid;
-    width: 2.25rem;
-    height: 2.25rem;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--tone-warning-bg);
-    color: var(--tone-warning-text);
-    font-weight: 800;
-  }
-  .dialog-body h2 {
-    font-size: var(--text-lg);
-    font-weight: 700;
-  }
-  .dialog-body p {
-    margin-top: 0.5rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-    line-height: 1.6;
-  }
-  .dialog-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-    padding: 1rem 1.5rem;
-    border-top: 1px solid var(--color-border);
-  }
   .case-queue {
     display: grid;
     gap: 0;
     min-width: 0;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
   }
   .queue-heading {
     display: flex;
@@ -1743,7 +1626,7 @@ const MAX_MISSING = 2;
   .workflow-filter {
     display: flex;
     align-items: center;
-    min-height: 2.75rem;
+    min-height: var(--control-size-md);
     padding: 0.5rem 0.875rem;
     border-bottom: 2px solid transparent;
     color: var(--color-muted);
@@ -1753,7 +1636,7 @@ const MAX_MISSING = 2;
     color: var(--color-foreground);
   }
   .workflow-filter:focus-visible {
-    outline: 2px solid var(--color-primary);
+    outline: 2px solid var(--color-focus-ring);
     outline-offset: -2px;
   }
   .workflow-filter[aria-current="page"] {
@@ -1808,17 +1691,8 @@ const MAX_MISSING = 2;
     flex: 1 1 10rem;
     min-width: 0;
   }
-  .queue-search :global(svg) {
-    position: absolute;
-    top: 50%;
-    left: 0.75rem;
-    transform: translateY(-50%);
-    color: var(--color-muted);
-    pointer-events: none;
-  }
   .queue-filters input {
     width: 100%;
-    padding-left: 2.25rem;
     font-size: var(--text-sm);
   }
   .queue-filters select {
@@ -1844,7 +1718,7 @@ const MAX_MISSING = 2;
   .bulk-toolbar {
     position: sticky;
     top: 0.75rem;
-    z-index: 10;
+    z-index: var(--z-sticky);
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -1887,6 +1761,7 @@ const MAX_MISSING = 2;
     border: 0;
     border-top: 1px solid var(--color-border);
     border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+    corner-shape: squircle;
     box-shadow: none;
     overflow-x: auto;
   }
@@ -1916,6 +1791,10 @@ const MAX_MISSING = 2;
   .select-column {
     width: 2.75rem;
     text-align: center;
+  }
+  .case-table th.select-column,
+  .case-table td.select-column {
+    padding: 0.25rem;
   }
   .dwelling-cell a {
     color: var(--color-foreground);
@@ -2077,12 +1956,6 @@ const MAX_MISSING = 2;
       justify-content: flex-start;
       width: 100%;
     }
-    .financial-stat {
-      padding: 1rem;
-    }
-    .financial-stat strong {
-      font-size: var(--text-2xl);
-    }
     .financial-label {
       font-size: var(--text-xs);
     }
@@ -2100,22 +1973,6 @@ const MAX_MISSING = 2;
     }
     .period-actions form .btn-primary {
       width: 100%;
-    }
-    .financial-summary {
-      grid-template-columns: 1fr 1fr;
-    }
-    .financial-stat:first-of-type {
-      grid-column: 1 / -1;
-      border-bottom: 1px solid var(--color-border);
-    }
-    .financial-stat:nth-of-type(2) {
-      border-left: 0;
-    }
-    .financial-stat:first-of-type strong {
-      font-size: var(--text-display-md);
-    }
-    .financial-stat strong {
-      font-size: var(--text-2xl);
     }
     .queue-heading {
       padding: 1rem;
@@ -2191,7 +2048,7 @@ const MAX_MISSING = 2;
     .clear-selection,
     .period-resource summary,
     .period-navigation a {
-      min-height: 2.75rem;
+      min-height: var(--control-size-md);
     }
   }
   @media (forced-colors: active) {

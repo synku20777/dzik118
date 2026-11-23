@@ -19,7 +19,7 @@ const ordered = [...organizations].sort(
 );
 ---
 
-<details class="organization-switcher" name="organization-switcher">
+<details class="organization-switcher dropdown" name="organization-switcher">
   <summary class="organization-trigger">
     <span class="organization-symbol">
       <Icon name="building" size="sm" />
@@ -31,39 +31,45 @@ const ordered = [...organizations].sort(
       <Icon name="chevron-right" size="xs" />
     </span>
   </summary>
-  <nav class="organization-menu" aria-label={t("Switch organization")}>
-    {ordered.length > 0 && (
-      <ul class="organization-options">
-        {ordered.map((org) => (
-          <li>
-            <a
-              href={`/admin/o/${org.id}/dashboard`}
-              aria-current={org.id === organizationId ? "true" : undefined}
-            >
-              <span class="organization-option-name">
-                {org.name}
-                {org.archivedAt && (
-                  <span class="organization-archived">{t("Archived")}</span>
-                )}
-              </span>
-              {org.id === organizationId && <Icon name="check" size="sm" />}
-            </a>
-          </li>
-        ))}
-      </ul>
-    )}
-    <div class="organization-menu-actions">
-      <a href="/admin/organizations">
-        <Icon name="building-community" size="sm" />
+  <nav
+    class="organization-menu dropdown-panel"
+    aria-label={t("Switch organization")}
+  >
+    <div class="dropdown-tiles">
+      <a class="dropdown-tile" href="/admin/organizations">
+        <Icon name="building-community" />
         {t("Your organizations")}
       </a>
       {residentAccess && (
-        <a href="/portal">
-          <Icon name="user" size="sm" />
+        <a class="dropdown-tile" href="/portal">
+          <Icon name="user" />
           {t("Switch to resident view")}
         </a>
       )}
     </div>
+    {ordered.length > 0 && (
+      <>
+        <p class="menu-label">{t("Organizations")}</p>
+        <ul class="organization-options menu-list">
+          {ordered.map((org) => (
+            <li>
+              <a
+                href={`/admin/o/${org.id}/dashboard`}
+                aria-current={org.id === organizationId ? "true" : undefined}
+              >
+                <span class="organization-option-name">
+                  {org.name}
+                  {org.archivedAt && (
+                    <span class="organization-archived">{t("Archived")}</span>
+                  )}
+                </span>
+                {org.id === organizationId && <Icon name="check" size="sm" />}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </>
+    )}
   </nav>
 </details>
 
@@ -132,47 +138,30 @@ const ordered = [...organizations].sort(
   .organization-switcher[open]:not([data-closing]) .organization-chevron {
     transform: rotate(-90deg);
   }
+  /* The shared dropdown menu (global.css), placed to float over the
+     navigation instead of pushing it down. It spans exactly the trigger's
+     width, so the scrolling sidebar or drawer does not clip it. */
+  .organization-switcher {
+    display: block;
+  }
   .organization-menu {
-    /* Floats over the navigation instead of pushing it down. It spans exactly
-       the trigger's width (left/right 0), so the scrolling sidebar or drawer
-       does not clip it or its focus rings. */
-    position: absolute;
-    z-index: 30;
+    z-index: var(--z-overlay);
     top: calc(100% + var(--space-2));
-    left: 0;
     right: 0;
-    padding: 0.375rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface-raised);
-    box-shadow: var(--elevation-overlay);
+    min-width: 0;
   }
   .organization-options {
-    list-style: none;
-    padding: 0;
-    margin: 0;
     max-height: 16rem;
     overflow-y: auto;
   }
-  .organization-menu a {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    min-height: 2.75rem;
-    padding: 0.625rem 0.75rem;
-    border-radius: var(--radius-control);
-    font-size: var(--text-sm);
+  .organization-options a {
     line-height: 1.45;
-    color: var(--color-foreground);
-    text-decoration: none;
   }
-  .organization-menu a:hover {
-    background: var(--color-surface-hover);
-  }
-  .organization-menu a[aria-current] {
-    background: var(--color-nav-active-bg);
+  .organization-options a[aria-current] {
     color: var(--color-primary);
-    font-weight: 600;
+  }
+  .organization-options a[aria-current] > svg {
+    color: currentColor;
   }
   .organization-option-name {
     flex: 1;
@@ -184,9 +173,6 @@ const ordered = [...organizations].sort(
     font-size: var(--text-xs);
     font-weight: 400;
     color: var(--color-muted);
-  }
-  .organization-menu-actions {
-    padding-top: 0.375rem;
   }
   /* Motion answers the person's action: the trigger sinks when pressed, the
      chevron turns, and the menu eases in as it opens. */
@@ -202,19 +188,16 @@ const ordered = [...organizations].sort(
     .organization-chevron {
       transition: transform var(--duration-panel) var(--ease-standard);
     }
-    /* In: a little slower, settling past rest. Out: quicker and straight, so
-       closing never makes the person wait (bindOrganizationSwitcher keeps the
-       menu open until this animation ends). */
+    /* In: the standard panel ease, no overshoot. Out: quicker, so closing
+       never makes the person wait (bindOrganizationSwitcher keeps the menu
+       open until this animation ends). */
     .organization-menu {
       transform-origin: top;
-      animation: organization-menu-in 260ms cubic-bezier(0.22, 1.2, 0.36, 1)
+      animation: organization-menu-in var(--duration-panel) var(--ease-standard)
         both;
     }
     .organization-switcher[data-closing] .organization-menu {
-      animation: organization-menu-out 140ms ease-in both;
-    }
-    .organization-menu a {
-      transition: background-color var(--duration-fast) ease;
+      animation: organization-menu-out var(--duration-fast) ease-in both;
     }
   }
   @keyframes organization-menu-in {
@@ -228,9 +211,5 @@ const ordered = [...organizations].sort(
       opacity: 0;
       transform: translateY(-6px) scale(0.97);
     }
-  }
-  .organization-options + .organization-menu-actions {
-    margin-top: 0.375rem;
-    border-top: 1px solid var(--color-border);
   }
 </style>

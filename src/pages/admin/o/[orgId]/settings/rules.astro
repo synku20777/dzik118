@@ -228,10 +228,8 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       )}
       display
     >
-      <a href={`${base}/guide`} class="btn-secondary settings-help">
-        <span class="settings-help-icon" aria-hidden="true">
-          ?
-        </span>
+      <a href={`${base}/guide`} class="btn-secondary">
+        <Icon name="help-circle" size="sm" />
         {t("Help & guidance")}
       </a>
     </PageHeader>
@@ -250,24 +248,24 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
         <label class="field-label" for="search">
           {t("Search")}
         </label>
-        <input
-          id="search"
-          name="search"
-          value={search}
-          placeholder={t("Search rules by name or code...")}
-          autocomplete="off"
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-body-sm"
-        />
+        <div class="input-icon mt-1">
+          <Icon name="search" size="sm" />
+          <input
+            id="search"
+            name="search"
+            type="search"
+            value={search}
+            placeholder={t("Search rules by name or code…")}
+            autocomplete="off"
+            class="text-body-sm"
+          />
+        </div>
       </div>
       <div>
         <label class="field-label" for="type-filter">
           {t("Type")}
         </label>
-        <select
-          id="type-filter"
-          name="type"
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-        >
+        <select id="type-filter" name="type" class="mt-1 text-body-sm">
           <option value="">{t("All types")}</option>
           {calculationTypes.map((type) => (
             <option value={type} selected={typeFilter === type}>
@@ -280,11 +278,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
         <label class="field-label" for="status-filter">
           {t("Status")}
         </label>
-        <select
-          id="status-filter"
-          name="status"
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-        >
+        <select id="status-filter" name="status" class="mt-1 text-body-sm">
           <option value="">{t("All statuses")}</option>
           <option value="ACTIVE" selected={statusFilter === "ACTIVE"}>
             {t("Active")}
@@ -297,7 +291,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
           </option>
         </select>
       </div>
-      <label class="flex items-center gap-2 pb-2 text-body-sm text-foreground">
+      <label class="check-row text-body-sm text-foreground">
         <input
           id="show-archived"
           type="checkbox"
@@ -440,7 +434,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
                       <summary
                         aria-label={`${t("More actions")}: ${rule.name}`}
                       >
-                        •••
+                        <Icon name="dots" size="sm" />
                       </summary>
                       <div>
                         <form
@@ -455,6 +449,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
                           <input type="hidden" name="ruleId" value={rule.id} />
                           <button
                             type="submit"
+                            class="menu-danger"
                             data-confirm={t(
                               "Archive this tariff? It will no longer be used for new invoices."
                             )}
@@ -499,7 +494,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
           </div>
         </div>
 
-        <div class="rule-tips">
+        <div class="rule-tips panel">
           <h3>{t("Good to know")}</h3>
           <div class="rule-tip">
             <span
@@ -643,13 +638,31 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
           <div class="rule-field">
             <label for="tariff-name">{t("Name")} *</label>
             <input id="tariff-name" name="name" type="text" required />
+            <p
+              id="tariff-name-error"
+              class="field-error"
+              role="alert"
+              hidden
+            ></p>
           </div>
           <div class="rule-field">
             <label for="tariff-code">{t("Code")} *</label>
-            <input id="tariff-code" name="code" type="text" required />
+            <input
+              spellcheck="false"
+              id="tariff-code"
+              name="code"
+              type="text"
+              required
+            />
             <p class="rule-field-hint">
               {t("Unique identifier (e.g. cold_water).")}
             </p>
+            <p
+              id="tariff-code-error"
+              class="field-error"
+              role="alert"
+              hidden
+            ></p>
           </div>
         </div>
         <div class="rule-field-row">
@@ -661,6 +674,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               type="text"
               maxlength="200"
             />
+            <p
+              id="tariff-nameEn-error"
+              class="field-error"
+              role="alert"
+              hidden
+            ></p>
           </div>
           <div class="rule-field">
             <label for="tariff-nameRu">{t("Russian invoice label")}</label>
@@ -670,6 +689,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               type="text"
               maxlength="200"
             />
+            <p
+              id="tariff-nameRu-error"
+              class="field-error"
+              role="alert"
+              hidden
+            ></p>
           </div>
         </div>
         <div class="rule-field">
@@ -680,6 +705,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
             class="drawer-textarea-box"
             rows="2"
           ></textarea>
+          <p
+            id="tariff-description-error"
+            class="field-error"
+            role="alert"
+            hidden
+          ></p>
         </div>
 
         <h3 class="drawer-section-heading">{t("Calculation")}</h3>
@@ -691,6 +722,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
                 <option value={type}>{calculationTypeLabels[type]}</option>
               ))}
             </select>
+            <p
+              id="tariff-calculationType-error"
+              class="field-error"
+              role="alert"
+              hidden
+            ></p>
           </div>
           <div class="rule-field">
             <label for="tariff-unit">{t("Unit")} *</label>
@@ -701,6 +738,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               required
               placeholder={t("e.g. m3, month, person")}
             />
+            <p
+              id="tariff-unit-error"
+              class="field-error"
+              role="alert"
+              hidden
+            ></p>
           </div>
           <div class="rule-field" data-meter-type-field>
             <label for="tariff-meterType">{t("Meter type")}</label>
@@ -713,6 +756,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               <option value="HEAT">{t("Heat")}</option>
               <option value="OTHER">{t("Other")}</option>
             </select>
+            <p
+              id="tariff-meterType-error"
+              class="field-error"
+              role="alert"
+              hidden
+            ></p>
           </div>
         </div>
         <div class="rule-field-row">
@@ -727,6 +776,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
             <p class="rule-field-hint">
               {t("A price of 0.00 is valid and will show on the invoice.")}
             </p>
+            <p
+              id="tariff-unitPrice-error"
+              class="field-error"
+              role="alert"
+              hidden
+            ></p>
           </div>
           <div class="rule-field">
             <label for="tariff-vatRate">{t("VAT %")}</label>
@@ -736,6 +791,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               type="text"
               placeholder="21.0000"
             />
+            <p
+              id="tariff-vatRate-error"
+              class="field-error"
+              role="alert"
+              hidden
+            ></p>
           </div>
         </div>
 
@@ -783,7 +844,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
             id="tariff-dwelling-search"
             type="text"
             data-dwelling-search
-            placeholder={t("Filter by dwelling number...")}
+            placeholder={t("Filter by dwelling number…")}
           />
           <div class="tariff-dwelling-actions">
             <button
@@ -813,6 +874,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               </label>
             ))}
           </div>
+          <p
+            id="tariff-dwelling-ids-error"
+            class="field-error"
+            role="alert"
+            hidden
+          ></p>
         </div>
         <div class="rule-field" data-scope-panel="ONE_TO_ONE" hidden>
           <label for="tariff-dwelling-single">{t("Dwelling")} *</label>
@@ -824,6 +891,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               </option>
             ))}
           </select>
+          <p
+            id="tariff-dwelling-single-error"
+            class="field-error"
+            role="alert"
+            hidden
+          ></p>
         </div>
 
         <h3 class="drawer-section-heading">{t("Validity")}</h3>
@@ -836,6 +909,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               type="date"
               required
             />
+            <p
+              id="tariff-effectiveFrom-error"
+              class="field-error"
+              role="alert"
+              hidden
+            ></p>
           </div>
           <div class="rule-field">
             <label for="tariff-effectiveUntil">{t("Effective until")}</label>
@@ -845,9 +924,15 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
               type="date"
             />
             <p class="rule-field-hint">{t("Leave empty for ongoing.")}</p>
+            <p
+              id="tariff-effectiveUntil-error"
+              class="field-error"
+              role="alert"
+              hidden
+            ></p>
           </div>
         </div>
-        <label class="rule-edit-checkbox">
+        <label class="check-row text-body-sm">
           <input
             type="checkbox"
             id="tariff-enabled"
@@ -867,12 +952,19 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
             type="number"
             step="1"
           />
+          <p
+            id="tariff-sortOrder-error"
+            class="field-error"
+            role="alert"
+            hidden
+          ></p>
         </div>
       </form>
     </div>
     <footer class="context-drawer-footer">
       <button
-        type="button"
+        type="submit"
+        form="archive-tariff-form"
         class="btn-secondary"
         id="tariff-drawer-archive"
         hidden
@@ -897,6 +989,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     method="POST"
     action={actions.billing.archiveRule}
     id="archive-tariff-form"
+    data-confirm-tone="danger"
     data-confirm={t(
       "Archive this tariff? It will no longer be used for new invoices."
     )}
@@ -933,6 +1026,10 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
 <script>
   import { actions, isInputError } from "astro:actions";
   import { navigate } from "astro:transitions/client";
+  import {
+    clearDrawerFieldError,
+    setDrawerFieldError,
+  } from "../../../../../lib/ui/drawer-field-errors";
   import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
 
   interface TariffRule {
@@ -1043,6 +1140,162 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     const unitPriceInput =
       form.querySelector<HTMLInputElement>("#tariff-unitPrice")!;
 
+    const STATIC_TARIFF_FIELDS = [
+      "name",
+      "code",
+      "nameEn",
+      "nameRu",
+      "description",
+      "calculationType",
+      "unit",
+      "meterType",
+      "unitPrice",
+      "vatRate",
+      "effectiveFrom",
+      "effectiveUntil",
+      "sortOrder",
+    ] as const;
+    const KNOWN_TARIFF_FIELDS = new Set<string>([
+      ...STATIC_TARIFF_FIELDS,
+      "dwellingIds",
+    ]);
+
+    const dwellingIdsError = form.querySelector<HTMLElement>(
+      "#tariff-dwelling-ids-error"
+    )!;
+    const dwellingSingleError = form.querySelector<HTMLElement>(
+      "#tariff-dwelling-single-error"
+    )!;
+    const closeButtons = Array.from(
+      dialog.querySelectorAll<HTMLElement>("[data-close-tariff-drawer]")
+    );
+
+    function getFieldValue(control: HTMLElement): string {
+      return (control as unknown as { value?: string }).value ?? "";
+    }
+
+    function resolveChecklistErrorTarget(): HTMLElement {
+      return (
+        dwellingCheckboxes.find((c) => !c.closest("[hidden]")) ?? dwellingSearch
+      );
+    }
+
+    function clearDwellingIdsError() {
+      for (const checkbox of dwellingCheckboxes) {
+        clearDrawerFieldError(checkbox, dwellingIdsError);
+      }
+      clearDrawerFieldError(dwellingSearch, dwellingIdsError);
+    }
+
+    function resolveTariffFieldTarget(fieldName: string): {
+      control: HTMLElement;
+      errorEl: HTMLElement;
+      getValue: () => string;
+    } | null {
+      if (fieldName === "dwellingIds") {
+        const scope = scopeRadios.find((r) => r.checked)?.value ?? "ONE_TO_ALL";
+        if (scope === "ONE_TO_ONE") {
+          const singleCtrl = dwellingSingleSelect as unknown as HTMLElement;
+          return {
+            control: singleCtrl,
+            errorEl: dwellingSingleError,
+            getValue: () => dwellingSingleSelect.value,
+          };
+        }
+        if (scope === "ONE_TO_MANY") {
+          return {
+            control: resolveChecklistErrorTarget(),
+            errorEl: dwellingIdsError,
+            getValue: () =>
+              dwellingCheckboxes
+                .filter((c) => c.checked)
+                .map((c) => c.value)
+                .join(","),
+          };
+        }
+        return null;
+      }
+      const control = form.querySelector<HTMLElement>(`#tariff-${fieldName}`);
+      const errorEl = form.querySelector<HTMLElement>(
+        `#tariff-${fieldName}-error`
+      );
+      if (!control || !errorEl) return null;
+      return {
+        control,
+        errorEl,
+        getValue: () => getFieldValue(control),
+      };
+    }
+
+    function hideFormBanner() {
+      if (errorBanner) {
+        errorBanner.textContent = "";
+        errorBanner.hidden = true;
+      }
+    }
+
+    function clearAllTariffFieldErrors() {
+      for (const fieldName of STATIC_TARIFF_FIELDS) {
+        const control = form.querySelector<HTMLElement>(`#tariff-${fieldName}`);
+        const errorEl = form.querySelector<HTMLElement>(
+          `#tariff-${fieldName}-error`
+        );
+        if (control && errorEl) clearDrawerFieldError(control, errorEl);
+      }
+      const singleCtrl = dwellingSingleSelect as unknown as HTMLElement;
+      clearDrawerFieldError(singleCtrl, dwellingSingleError);
+      clearDwellingIdsError();
+      hideFormBanner();
+    }
+
+    for (const fieldName of STATIC_TARIFF_FIELDS) {
+      const control = form.querySelector<HTMLElement>(`#tariff-${fieldName}`);
+      const errorEl = form.querySelector<HTMLElement>(
+        `#tariff-${fieldName}-error`
+      );
+      if (control && errorEl) {
+        const clear = () => {
+          clearDrawerFieldError(control, errorEl);
+          hideFormBanner();
+        };
+        control.addEventListener("input", clear, { signal: controller.signal });
+        control.addEventListener("change", clear, {
+          signal: controller.signal,
+        });
+      }
+    }
+    dwellingSingleSelect.addEventListener(
+      "change",
+      () => {
+        clearDrawerFieldError(
+          dwellingSingleSelect as unknown as HTMLElement,
+          dwellingSingleError
+        );
+        hideFormBanner();
+      },
+      { signal: controller.signal }
+    );
+
+    let submitEpoch = 0;
+    let saving = false;
+
+    function setSavingState(isSaving: boolean, label?: string) {
+      saving = isSaving;
+      saveButton.disabled = isSaving;
+      if (isSaving) {
+        saveButton.setAttribute("aria-disabled", "true");
+      } else {
+        saveButton.removeAttribute("aria-disabled");
+      }
+      if (label !== undefined) {
+        saveButton.textContent = label;
+      }
+      archiveButton.disabled = isSaving;
+      for (const btn of closeButtons) {
+        if (btn instanceof HTMLButtonElement) btn.disabled = isSaving;
+      }
+    }
+
     function updateMeterTypeVisibility() {
       const isMeter = calculationTypeSelect.value === "METER_CONSUMPTION";
       meterTypeField.hidden = !isMeter;
@@ -1051,10 +1304,20 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       // a previous METER_CONSUMPTION selection would otherwise be saved
       // alongside a FIXED/AREA/etc calculation type (wrong icon on the
       // list, and stale metadata on the row).
-      if (!isMeter) meterTypeSelect.value = "";
+      if (!isMeter) {
+        meterTypeSelect.value = "";
+        const err = form.querySelector<HTMLElement>("#tariff-meterType-error");
+        if (err) {
+          clearDrawerFieldError(meterTypeSelect as unknown as HTMLElement, err);
+        }
+      }
       const isManualAmount = calculationTypeSelect.value === "MANUAL_AMOUNT";
       unitPriceField.hidden = isManualAmount;
-      if (isManualAmount) unitPriceInput.value = "";
+      if (isManualAmount) {
+        unitPriceInput.value = "";
+        const err = form.querySelector<HTMLElement>("#tariff-unitPrice-error");
+        if (err) clearDrawerFieldError(unitPriceInput, err);
+      }
     }
 
     function updateDwellingCount() {
@@ -1072,6 +1335,15 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       for (const [key, panel] of scopePanels) {
         panel.hidden = key !== selected;
       }
+      if (selected !== "ONE_TO_ONE") {
+        clearDrawerFieldError(
+          dwellingSingleSelect as unknown as HTMLElement,
+          dwellingSingleError
+        );
+      }
+      if (selected !== "ONE_TO_MANY") {
+        clearDwellingIdsError();
+      }
     }
 
     for (const radio of scopeRadios) {
@@ -1085,9 +1357,15 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       { signal: controller.signal }
     );
     for (const checkbox of dwellingCheckboxes) {
-      checkbox.addEventListener("change", updateDwellingCount, {
-        signal: controller.signal,
-      });
+      checkbox.addEventListener(
+        "change",
+        () => {
+          updateDwellingCount();
+          clearDwellingIdsError();
+          hideFormBanner();
+        },
+        { signal: controller.signal }
+      );
     }
     dwellingSearch.addEventListener(
       "input",
@@ -1097,6 +1375,17 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
           "[data-dwelling-number]"
         )) {
           row.hidden = q.length > 0 && !row.dataset.dwellingNumber?.includes(q);
+        }
+        if (!dwellingIdsError.hidden) {
+          const activeMessage = dwellingIdsError.textContent ?? "";
+          clearDwellingIdsError();
+          if (activeMessage) {
+            setDrawerFieldError(
+              resolveChecklistErrorTarget(),
+              dwellingIdsError,
+              activeMessage
+            );
+          }
         }
       },
       { signal: controller.signal }
@@ -1112,6 +1401,8 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
           }
         }
         updateDwellingCount();
+        clearDwellingIdsError();
+        hideFormBanner();
       },
       { signal: controller.signal }
     );
@@ -1120,20 +1411,26 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       () => {
         for (const checkbox of dwellingCheckboxes) checkbox.checked = false;
         updateDwellingCount();
+        clearDwellingIdsError();
+        hideFormBanner();
       },
       { signal: controller.signal }
     );
 
     function resetForm() {
+      submitEpoch++;
+      saveButton.disabled = false;
+      saveButton.removeAttribute("aria-disabled");
       form.reset();
       for (const checkbox of dwellingCheckboxes) checkbox.checked = false;
       updateMeterTypeVisibility();
       updateScopeVisibility();
       updateDwellingCount();
-      if (errorBanner) errorBanner.hidden = true;
+      clearAllTariffFieldErrors();
     }
 
     function openCreate() {
+      if (saving) return;
       mode = "create";
       ruleIdField.value = "";
       resetForm();
@@ -1148,6 +1445,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     }
 
     function openEdit(rule: TariffRule) {
+      if (saving) return;
       mode = "edit";
       resetForm();
       ruleIdField.value = rule.id;
@@ -1206,6 +1504,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
 
     // User-initiated close (X, Cancel, Esc): confirm before dropping edits.
     function requestClose() {
+      if (saving) return;
       if (
         snapshotForm() !== openSnapshot &&
         !window.confirm(
@@ -1280,7 +1579,8 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
             "#archive-tariff-ruleId"
           ) as HTMLInputElement
         ).value = ruleIdField.value;
-        archiveForm.requestSubmit();
+        // The button submits the archive form itself (form="…"), so the
+        // confirmation repeats its label.
       },
       { signal: controller.signal }
     );
@@ -1289,14 +1589,16 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
       "submit",
       async (event) => {
         event.preventDefault();
-        const scope = scopeRadios.find((r) => r.checked)?.value ?? "ONE_TO_ALL";
+        if (saving) return;
+        const submittedScope =
+          scopeRadios.find((r) => r.checked)?.value ?? "ONE_TO_ALL";
         const fd = new FormData(form);
         fd.delete("dwellingIds");
-        if (scope === "ONE_TO_MANY") {
+        if (submittedScope === "ONE_TO_MANY") {
           for (const checkbox of dwellingCheckboxes) {
             if (checkbox.checked) fd.append("dwellingIds", checkbox.value);
           }
-        } else if (scope === "ONE_TO_ONE") {
+        } else if (submittedScope === "ONE_TO_ONE") {
           if (dwellingSingleSelect.value) {
             fd.append("dwellingIds", dwellingSingleSelect.value);
           }
@@ -1314,32 +1616,86 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
             : ""
         );
 
-        saveButton.disabled = true;
-        const originalLabel = saveButton.textContent;
-        saveButton.textContent = strings.savingLabel ?? "Saving…";
-        const { error } =
-          mode === "create"
-            ? await actions.billing.createRule(fd)
-            : await actions.billing.updateRule(fd);
-        saveButton.disabled = false;
-        saveButton.textContent = originalLabel;
+        clearAllTariffFieldErrors();
+        const myEpoch = ++submitEpoch;
+        const submittedValues = new Map<string, string>();
+        for (const fieldName of KNOWN_TARIFF_FIELDS) {
+          const target = resolveTariffFieldTarget(fieldName);
+          if (target) submittedValues.set(fieldName, target.getValue());
+        }
 
-        if (error) {
-          if (errorBanner) {
-            const rawMessage = isInputError(error)
-              ? (Object.values(error.fields).flat()[0] ?? error.message)
-              : error.message;
-            // The action client returns the raw English message (Zod
-            // regex message or a domain Error's own text) -- translate it
-            // through the same dictionary the drawer's static labels use,
-            // falling back to the raw string for a message this dictionary
-            // doesn't have an entry for (e.g. a dynamic "code already
-            // exists" conflict, which embeds the submitted code and so
-            // can't be a fixed dictionary key).
-            errorBanner.textContent = strings[rawMessage] ?? rawMessage;
+        const originalLabel = saveButton.textContent ?? undefined;
+        setSavingState(true, strings.savingLabel ?? "Saving…");
+        try {
+          const { error } =
+            mode === "create"
+              ? await actions.billing.createRule(fd)
+              : await actions.billing.updateRule(fd);
+          if (error) {
+            if (!dialog.open || myEpoch !== submitEpoch) return;
+            if (isInputError(error)) {
+              let anyMatchedField = false;
+              const unmapped: string[] = [];
+              const currentScope =
+                scopeRadios.find((r) => r.checked)?.value ?? "ONE_TO_ALL";
+              for (const [fieldName, rawMessages] of Object.entries(
+                error.fields
+              )) {
+                const messages = (rawMessages ?? [])
+                  .map((m) => strings[m] ?? m)
+                  .filter(Boolean);
+                if (messages.length === 0) continue;
+                if (KNOWN_TARIFF_FIELDS.has(fieldName)) {
+                  anyMatchedField = true;
+                  const target = resolveTariffFieldTarget(fieldName);
+                  const scopeStillMatches =
+                    fieldName !== "dwellingIds" ||
+                    currentScope === submittedScope;
+                  if (
+                    target &&
+                    scopeStillMatches &&
+                    !target.control.closest("[hidden]") &&
+                    target.getValue() === submittedValues.get(fieldName)
+                  ) {
+                    setDrawerFieldError(
+                      target.control,
+                      target.errorEl,
+                      messages.join(" ")
+                    );
+                  }
+                } else {
+                  unmapped.push(...messages);
+                }
+              }
+              if ((unmapped.length > 0 || !anyMatchedField) && errorBanner) {
+                errorBanner.textContent =
+                  unmapped.join(" ") || strings[error.message] || error.message;
+                errorBanner.hidden = false;
+              }
+              const firstInvalid = [...KNOWN_TARIFF_FIELDS]
+                .map((name) => resolveTariffFieldTarget(name)?.control ?? null)
+                .find(
+                  (el) =>
+                    el &&
+                    !el.closest("[hidden]") &&
+                    el.getAttribute("aria-invalid") === "true"
+                );
+              firstInvalid?.focus();
+            } else if (errorBanner) {
+              errorBanner.textContent = strings[error.message] ?? error.message;
+              errorBanner.hidden = false;
+            }
+            return;
+          }
+        } catch {
+          if (dialog.open && myEpoch === submitEpoch && errorBanner) {
+            errorBanner.textContent =
+              strings.genericError ?? "Something went wrong. Please try again.";
             errorBanner.hidden = false;
           }
           return;
+        } finally {
+          setSavingState(false, originalLabel);
         }
         closeDrawer();
         await navigate(window.location.pathname + window.location.search);
@@ -1383,31 +1739,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   .rule-icon[data-icon="hot_water"] {
     color: var(--color-meter-hot-text);
   }
-  .rule-field select {
-    padding-inline-end: 2.25rem;
-  }
 </style>
 
 <style>
   .rules-page {
     display: grid;
     gap: 1.25rem;
-  }
-  .settings-help {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .settings-help-icon {
-    display: grid;
-    width: 1.1rem;
-    height: 1.1rem;
-    place-items: center;
-    border-radius: 50%;
-    border: 1.5px solid currentColor;
-    font-size: var(--text-xs);
-    font-weight: 700;
-    line-height: 1;
   }
   .rules-filter-bar {
     display: flex;
@@ -1452,61 +1789,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     justify-content: flex-end;
     gap: 0.5rem;
   }
-  .row-menu {
-    position: relative;
-    display: inline-block;
-  }
-  .rule-edit-checkbox {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: var(--text-sm);
-  }
-  .row-menu summary {
-    display: grid;
-    min-width: 2.25rem;
-    min-height: 2.25rem;
-    place-items: center;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-control);
-    background: var(--color-surface);
-    color: var(--color-muted);
-    list-style: none;
-    cursor: pointer;
-  }
-  @media (pointer: coarse) {
-    .row-menu summary {
-      min-width: var(--control-size-md);
-      min-height: var(--control-size-md);
-    }
-  }
-  .row-menu summary::-webkit-details-marker {
-    display: none;
-  }
-  .row-menu > div {
-    position: absolute;
-    z-index: 20;
-    top: calc(100% + 0.35rem);
-    right: 0;
-    min-width: 9rem;
-    padding: 0.5rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-control);
-    background: var(--color-surface-raised);
-    box-shadow: var(--elevation-overlay);
-  }
-  .row-menu button {
-    display: block;
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--radius-badge);
-    color: var(--color-destructive);
-    font-size: var(--text-sm);
-    text-align: left;
-  }
-  .row-menu button:hover {
-    background: var(--color-surface-hover);
-  }
   .rule-field-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1520,26 +1802,11 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     font-size: var(--text-sm);
     font-weight: 600;
   }
-  .rule-field input,
+  .rule-field input:not([type="checkbox"]):not([type="radio"]),
   .rule-field select {
     width: 100%;
-    padding: 0.75rem 0.75rem;
-    border-radius: var(--radius-control);
-    /* background-color, not the background shorthand -- the shorthand
-       resets background-image to none, wiping out the global select
-       chevron (src/styles/global.css) since this scoped style is
-       unlayered and always wins over that layered default. */
-    background-color: var(--color-surface);
-    color: var(--color-foreground);
     font: inherit;
     font-size: var(--text-sm);
-    box-sizing: border-box;
-  }
-  .rule-field input:focus-visible,
-  .rule-field select:focus-visible {
-    outline: 2px solid var(--color-focus-ring);
-    outline-offset: 2px;
-    border-color: var(--color-primary);
   }
   .rule-field-hint {
     margin-top: 0.5rem;
@@ -1550,10 +1817,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     margin-top: 0.5rem;
     color: var(--color-destructive);
     font-size: var(--text-xs);
-  }
-  .rule-field input[aria-invalid="true"],
-  .rule-field select[aria-invalid="true"] {
-    border-color: var(--color-destructive);
   }
   .rule-form-actions {
     display: flex;
@@ -1571,6 +1834,7 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     gap: 0.75rem;
     padding: 1rem;
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--tone-info-bg);
     color: var(--tone-info-text);
   }
@@ -1598,9 +1862,6 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
   }
   .rule-tips {
     padding: 1.25rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
   }
   .rule-tips h3 {
     font-size: var(--text-sm);
@@ -1678,12 +1939,9 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     display: block;
     width: 100%;
     min-height: 4.5rem;
-    padding: 0.75rem;
-    border-radius: var(--radius-control);
     font-size: var(--text-sm);
     font-family: inherit;
     resize: vertical;
-    box-sizing: border-box;
     margin-top: 0.5rem;
   }
   .tariff-scope-options {
@@ -1751,6 +2009,12 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     padding: 0.375rem 0.5rem;
     border-radius: var(--radius-control);
     font-size: var(--text-sm);
+    cursor: pointer;
+  }
+  @media (pointer: coarse) {
+    label.tariff-dwelling-row {
+      min-height: var(--control-size-md);
+    }
   }
   .tariff-dwelling-row:hover {
     background: var(--color-surface-hover);
@@ -1763,8 +2027,5 @@ const RULE_ICON_NAMES: Record<RuleIcon, IconName> = {
     padding: 0;
     border: none;
     background: none;
-  }
-  .rule-field select {
-    padding-inline-end: 2.25rem;
   }
 </style>

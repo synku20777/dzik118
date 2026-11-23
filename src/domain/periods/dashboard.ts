@@ -13,6 +13,11 @@ import { invoiceDeliveries, invoices } from "../../db/schema/invoices";
 import { paymentAllocations, paymentReversals } from "../../db/schema/accounts";
 import { organizations } from "../../db/schema/organizations";
 import { maxExact, subtractExact, sumExact } from "../../lib/decimal2";
+import { orgLocalDateString } from "../../lib/org-time";
+import {
+  computeDaysLate,
+  computeInvoicePaidAndOutstanding,
+} from "./invoice-balance";
 import {
   listPaymentMatches,
   listUnmatchedTransactions,
@@ -32,8 +37,10 @@ export interface AttentionItem {
   // billing_cases.missing_data JSONB (legacy rows may hold plain strings).
   missingData: unknown[];
   // OVERDUE rows only (null otherwise): what this dwelling still owes on the
-  // period invoice, the invoice due date, and whole days past it.
+  // period invoice, its currency (preserved even across org currency changes),
+  // the invoice due date, and whole days past it.
   overdueAmount: string | null;
+  overdueCurrency: string | null;
   dueDate: string | null;
   daysLate: number | null;
 }
@@ -122,10 +129,14 @@ export async function getDashboardSummary(
 ): Promise<DashboardSummary> {
   const period = await getPeriod(db, organizationId, periodId);
   const [org] = await db
-    .select({ currency: organizations.currency })
+    .select({
+      currency: organizations.currency,
+      timezone: organizations.timezone,
+    })
     .from(organizations)
     .where(eq(organizations.id, organizationId))
     .limit(1);
+  const todayLocal = orgLocalDateString(new Date(), org.timezone);
 
   const allPeriodInvoices = await db
     .select({
@@ -157,8 +168,11 @@ export async function getDashboardSummary(
   const periodInvoices = allPeriodInvoices.filter(
     (i) => i.currency === org.currency
   );
-  const invoiceIds = periodInvoices.map((i) => i.id);
-  const allocations = invoiceIds.length
+  // Query allocations and reversals across all period invoices so overdue rows
+  // keep their true outstanding balance even if their currency predates an
+  // organization currency change, while period totals still count org.currency.
+  const allInvoiceIds = allPeriodInvoices.map((i) => i.id);
+  const allocations = allInvoiceIds.length
     ? await db
         .select({
           invoiceId: paymentAllocations.invoiceId,
@@ -168,11 +182,11 @@ export async function getDashboardSummary(
         .where(
           and(
             eq(paymentAllocations.organizationId, organizationId),
-            inArray(paymentAllocations.invoiceId, invoiceIds)
+            inArray(paymentAllocations.invoiceId, allInvoiceIds)
           )
         )
     : [];
-  const reversals = invoiceIds.length
+  const reversals = allInvoiceIds.length
     ? await db
         .select({
           invoiceId: paymentReversals.invoiceId,
@@ -182,7 +196,7 @@ export async function getDashboardSummary(
         .where(
           and(
             eq(paymentReversals.organizationId, organizationId),
-            inArray(paymentReversals.invoiceId, invoiceIds)
+            inArray(paymentReversals.invoiceId, allInvoiceIds)
           )
         )
     : [];
@@ -208,6 +222,12 @@ export async function getDashboardSummary(
       )
     );
   }
+  const invoiceBalances = new Map(
+    allPeriodInvoices.map((invoice) => [
+      invoice.id,
+      computeInvoicePaidAndOutstanding(invoice, allocatedByInvoice, invoice.id),
+    ])
+  );
   const currentCharges = sumExact(periodInvoices.map((i) => i.currentCharges));
   const carriedOutstanding = sumExact(
     periodInvoices.map((i) => i.previousOutstanding)
@@ -218,28 +238,13 @@ export async function getDashboardSummary(
   const lateFees = sumExact(periodInvoices.map((i) => i.lateFeeApplied));
   const amountDue = sumExact(periodInvoices.map((i) => i.amountDue));
   const totalPaid = sumExact(
-    periodInvoices.map((invoice) => {
-      const allocated = allocatedByInvoice.get(invoice.id) ?? "0.00";
-      return invoice.paidAt && allocated === "0.00"
-        ? invoice.amountDue
-        : allocated;
-    })
+    periodInvoices.map((invoice) => invoiceBalances.get(invoice.id)!.paid)
   );
-  const outstandingByInvoice = new Map(
-    periodInvoices.map((invoice) => [
-      invoice.id,
-      maxExact(
-        subtractExact(
-          invoice.amountDue,
-          invoice.paidAt && !allocatedByInvoice.has(invoice.id)
-            ? invoice.amountDue
-            : (allocatedByInvoice.get(invoice.id) ?? "0.00")
-        ),
-        "0.00"
-      ),
-    ])
+  const totalOutstanding = sumExact(
+    periodInvoices.map(
+      (invoice) => invoiceBalances.get(invoice.id)!.outstanding
+    )
   );
-  const totalOutstanding = sumExact([...outstandingByInvoice.values()]);
   const totalInvoiced = currentCharges;
 
   const readings = await db
@@ -298,7 +303,7 @@ export async function getDashboardSummary(
     billingCaseStatusEnum.enumValues.map((status) => [status, 0])
   ) as CaseStatusCounts;
   const invoiceByCase = new Map(
-    periodInvoices.map((i) => [i.billingCaseId, i])
+    allPeriodInvoices.map((i) => [i.billingCaseId, i])
   );
   const needsAttention: AttentionItem[] = [];
   for (const c of cases) {
@@ -311,16 +316,12 @@ export async function getDashboardSummary(
         dwellingNumber: c.dwellingNumber,
         status: c.status,
         missingData: Array.isArray(c.missingData) ? c.missingData : [],
-        overdueAmount: overdue ? outstandingByInvoice.get(overdue.id)! : null,
-        dueDate: overdue?.dueDate ?? null,
-        daysLate: overdue
-          ? Math.max(
-              0,
-              Math.floor(
-                (Date.now() - Date.parse(overdue.dueDate)) / 86_400_000
-              )
-            )
+        overdueAmount: overdue
+          ? (invoiceBalances.get(overdue.id)?.outstanding ?? null)
           : null,
+        overdueCurrency: overdue?.currency ?? null,
+        dueDate: overdue?.dueDate ?? null,
+        daysLate: overdue ? computeDaysLate(overdue.dueDate, todayLocal) : null,
       });
     }
   }

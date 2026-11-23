@@ -172,7 +172,7 @@ const entryTypeLabel: Record<string, string> = {
     <header class="page-header">
       <div>
         <div class="title-row">
-          <h1 class="font-display">{heading}</h1>
+          <h1>{heading}</h1>
           <StatusBadge status={status} />
         </div>
         <p class="page-description">{subtitle}</p>
@@ -225,7 +225,7 @@ const entryTypeLabel: Record<string, string> = {
     </section>
 
     <div class="trail-grid">
-      <section class="panel p-6" aria-labelledby="history-heading">
+      <section class="box" aria-labelledby="history-heading">
         <h2 id="history-heading">{t("What happened")}</h2>
         <p class="text-body-sm text-muted">
           {t("Every step on this payment, oldest first.")}
@@ -264,7 +264,7 @@ const entryTypeLabel: Record<string, string> = {
                       <li>
                         <span>{changeLabel[c.field]}:</span>{" "}
                         {changeValue(c.field, c.from)}{" "}
-                        <span aria-hidden="true">→</span>
+                        <Icon name="arrow-right" size="xs" class="inline" />
                         <span class="sr-only"> {t("to")} </span>{" "}
                         {changeValue(c.field, c.to)}
                       </li>
@@ -282,7 +282,7 @@ const entryTypeLabel: Record<string, string> = {
         </ol>
       </section>
 
-      <section class="panel p-6" aria-labelledby="split-heading">
+      <section class="box" aria-labelledby="split-heading">
         <h2 id="split-heading">{t("Where the money went")}</h2>
         {live || split.reversed ? (
           <>
@@ -353,14 +353,14 @@ const entryTypeLabel: Record<string, string> = {
     </div>
 
     {entries.length > 0 && (
-      <section class="panel p-6" aria-labelledby="entries-heading">
+      <section class="space-y-2" aria-labelledby="entries-heading">
         <h2 id="entries-heading">{t("Account entries")}</h2>
         <p class="text-body-sm text-muted">
           {t(
             "The ledger lines this payment created. Entries are never edited; a reversal is a new line."
           )}
         </p>
-        <div class="table-wrap stack-table mt-4">
+        <div class="table-wrap stack-table">
           <table class="w-full text-left text-body-sm">
             <caption class="sr-only">{t("Account entries")}</caption>
             <thead>
@@ -438,7 +438,8 @@ const entryTypeLabel: Record<string, string> = {
     gap: 1.5rem;
     align-items: start;
   }
-  .panel h2 {
+  :is(.panel, .box) h2,
+  #entries-heading {
     font-size: var(--text-base);
     font-weight: 700;
   }
@@ -517,7 +518,7 @@ const entryTypeLabel: Record<string, string> = {
   .trail-reason {
     margin-top: 0.375rem;
     padding-left: 0.75rem;
-    border-left: 2px solid var(--color-border);
+    border-left: 1px solid var(--color-border);
     overflow-wrap: anywhere;
   }
   .trail-reason span {

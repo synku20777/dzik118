@@ -11,6 +11,8 @@ export function linkFieldErrors(root: ParentNode = document): HTMLElement[] {
   for (const error of root.querySelectorAll<HTMLElement>(
     '.field-error[id$="-error"]'
   )) {
+    // Static placeholders (hidden or empty) are not errors yet.
+    if (error.hidden || !error.textContent?.trim()) continue;
     const base = error.id.slice(0, -"-error".length);
     const control =
       document.getElementById(base) ??

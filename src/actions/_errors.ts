@@ -26,6 +26,21 @@ export function toActionError(err: unknown): ActionError {
     return new ActionError({ code: "NOT_FOUND", message: err.message });
   }
   if (err instanceof ValidationError) {
+    if (err.fields) {
+      const issues = Object.entries(err.fields).flatMap(([field, messages]) =>
+        messages.map((message) => ({
+          code: "custom",
+          path: [field],
+          message,
+        }))
+      );
+      if (issues.length > 0) {
+        return ActionError.fromJson({
+          type: "AstroActionInputError",
+          issues,
+        });
+      }
+    }
     return new ActionError({ code: "BAD_REQUEST", message: err.message });
   }
   if (err instanceof RateLimitedError) {

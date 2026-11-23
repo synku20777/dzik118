@@ -146,10 +146,13 @@ function auditLayout(page: Page, coarse: boolean): Promise<string[]> {
     // 24px, or no other target within a 24px circle around it.
     const isControl = (el: Element) =>
       el.matches(
-        "button, input, select, textarea, summary, [role=button], a.btn-primary, a.btn-secondary, a.btn-danger, a.btn-ghost, a.icon-btn"
+        "button, input, select, textarea, summary, [role=button], a.btn-primary, a.btn-secondary, a.btn-danger, a.icon-btn"
       );
     const targets = [...document.querySelectorAll(selector)].filter(visible);
     const boxOf = (el: Element) => {
+      // A boxed field's whole frame (label and control) is the target.
+      const frame = el.closest(".field-box");
+      if (frame) return frame.getBoundingClientRect();
       const checkable =
         el instanceof HTMLInputElement &&
         (el.type === "checkbox" || el.type === "radio");
@@ -248,7 +251,8 @@ async function auditFocus(page: Page, stops = 12): Promise<string[]> {
       // Native inner parts (a date field's picker button) draw their own focus.
       if (!el || el === document.body || el.tagName === "IFRAME") return null;
       if (!el.matches(":focus-visible")) return null;
-      const cs = getComputedStyle(el);
+      // A boxed field draws the ring on its frame, not on the control.
+      const cs = getComputedStyle(el.closest(".field-box") ?? el);
       // The outline must be drawn: a style, 2px of width and a visible colour.
       const alpha = Number(cs.outlineColor.match(/[0-9.]+/g)?.[3] ?? 1);
       const outline =

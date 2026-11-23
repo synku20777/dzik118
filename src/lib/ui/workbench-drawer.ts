@@ -10,6 +10,10 @@
 // dwelling's occupant name/billing fields are admin-entered, not
 // hardcoded, so the same discipline applies here.
 import { actions, isInputError } from "astro:actions";
+import {
+  clearDrawerFieldError,
+  setDrawerFieldError,
+} from "./drawer-field-errors";
 import { ICONS, type IconName } from "./icons";
 import { onPageLoad } from "./page-lifecycle";
 
@@ -173,6 +177,53 @@ onPageLoad(() => {
   // drawer visibly goes blank mid-animation.
   const CLOSE_ANIMATION_MS = 220;
 
+  // A refresh replaces the queue, detaching the trigger that had focus.
+  function focusQueueReplacement(
+    params: { kind: DrawerKind; dwellingId: string },
+    focusKey: string | undefined
+  ) {
+    // A successful save replaces the queue, detaching its original trigger.
+    // Prefer its replacement; if the resolved row leaves the current filter,
+    // return to the queue heading rather than dropping focus onto the body.
+    const triggers = [
+      ...document.querySelectorAll<HTMLElement>(
+        "[data-open-drawer][data-dwelling-id]"
+      ),
+    ];
+    const sameDwelling = triggers.filter(
+      (el) => el.dataset.dwellingId === params.dwellingId
+    );
+    const replacement =
+      sameDwelling.find(
+        (el) =>
+          el.dataset.openDrawer === params.kind && el.dataset.focus === focusKey
+      ) ??
+      sameDwelling[0] ??
+      document.querySelector<HTMLElement>(
+        `tr[data-dwelling-id="${CSS.escape(params.dwellingId)}"] .next-action :is(a,button):not(:disabled)`
+      ) ??
+      document.querySelector<HTMLElement>("#queue-heading") ??
+      document.querySelector<HTMLElement>(".dashboard-attention h2") ??
+      document.querySelector<HTMLElement>("h1");
+    if (replacement) {
+      if (replacement.matches("h1,h2,h3")) replacement.tabIndex = -1;
+      replacement.focus();
+    }
+  }
+
+  // After a save outlives its drawer: refresh the queue, and if that detached
+  // the focused trigger (and no new drawer took over), put focus back.
+  async function refreshAfterClosedSave(
+    params: { kind: DrawerKind; dwellingId: string },
+    message: string
+  ) {
+    const active = document.activeElement as HTMLElement | null;
+    await refreshWorkbench(message);
+    if (!dialog.open && active && !document.contains(active)) {
+      focusQueueReplacement(params, active.dataset.focus);
+    }
+  }
+
   function closeDrawer(options: { fromPopstate?: boolean } = {}) {
     if (!dialog.open) return;
     dialog.close();
@@ -186,34 +237,7 @@ onPageLoad(() => {
     if (returnFocusTo && document.contains(returnFocusTo)) {
       returnFocusTo.focus();
     } else if (closedParams) {
-      // A successful save replaces the queue, detaching its original trigger.
-      // Prefer its replacement; if the resolved row leaves the current filter,
-      // return to the queue heading rather than dropping focus onto the body.
-      const triggers = [
-        ...document.querySelectorAll<HTMLElement>(
-          "[data-open-drawer][data-dwelling-id]"
-        ),
-      ];
-      const sameDwelling = triggers.filter(
-        (el) => el.dataset.dwellingId === closedParams.dwellingId
-      );
-      const replacement =
-        sameDwelling.find(
-          (el) =>
-            el.dataset.openDrawer === closedParams.kind &&
-            el.dataset.focus === returnFocusTo?.dataset.focus
-        ) ??
-        sameDwelling[0] ??
-        document.querySelector<HTMLElement>(
-          `tr[data-dwelling-id="${CSS.escape(closedParams.dwellingId)}"] .next-action :is(a,button):not(:disabled)`
-        ) ??
-        document.querySelector<HTMLElement>("#queue-heading") ??
-        document.querySelector<HTMLElement>(".dashboard-attention h2") ??
-        document.querySelector<HTMLElement>("h1");
-      if (replacement) {
-        if (replacement.matches("h1,h2,h3")) replacement.tabIndex = -1;
-        replacement.focus();
-      }
+      focusQueueReplacement(closedParams, returnFocusTo?.dataset.focus);
     }
     returnFocusTo = null;
     window.setTimeout(() => {
@@ -248,7 +272,7 @@ onPageLoad(() => {
     const label = document.createElement("label");
     label.htmlFor = forId;
     label.textContent = text;
-    label.className = "drawer-field-label";
+    label.className = "field-label";
     return label;
   }
 
@@ -262,7 +286,7 @@ onPageLoad(() => {
   function errorNode(id: string): HTMLParagraphElement {
     const p = document.createElement("p");
     p.id = id;
-    p.className = "drawer-field-error";
+    p.className = "field-error";
     p.setAttribute("role", "alert");
     p.hidden = true;
     return p;
@@ -276,10 +300,16 @@ onPageLoad(() => {
   ): HTMLDivElement {
     const row = document.createElement("div");
     row.className = "drawer-field-row";
-    const label = document.createElement("label");
-    label.className = "drawer-field-row-label";
+    let label: HTMLElement;
+    if (forId) {
+      const labelEl = document.createElement("label");
+      labelEl.htmlFor = forId;
+      label = labelEl;
+    } else {
+      label = document.createElement("span");
+    }
+    label.className = "field-label drawer-field-row-label";
     label.textContent = labelText;
-    if (forId) label.htmlFor = forId;
     const controlRow = document.createElement("div");
     controlRow.className = "drawer-field-row-control";
     const unitEl = document.createElement("span");
@@ -348,7 +378,7 @@ onPageLoad(() => {
 
   function renderReadingsBody(data: DrawerData, focus?: string) {
     const banner = document.createElement("div");
-    banner.className = "drawer-info-banner";
+    banner.className = "notice drawer-info-banner";
     const bannerIcon = document.createElement("span");
     bannerIcon.className = "drawer-info-icon";
     bannerIcon.setAttribute("aria-hidden", "true");
@@ -377,6 +407,11 @@ onPageLoad(() => {
     hidden("periodId", config.periodId);
 
     let firstInput: HTMLInputElement | null = null;
+    const formErrorEl = document.createElement("p");
+    formErrorEl.id = "drawer-readings-error";
+    formErrorEl.className = "notice notice-danger mt-4";
+    formErrorEl.setAttribute("role", "alert");
+    formErrorEl.hidden = true;
     for (const meter of data.meters) {
       const meterTypeKey = meter.type.toLowerCase().replace(/_/g, "-");
       const section = document.createElement("section");
@@ -418,7 +453,6 @@ onPageLoad(() => {
       input.required = true;
       input.className = "drawer-input-box";
       input.value = meter.currentValue ?? "";
-      input.setAttribute("aria-describedby", errorId);
       const err = errorNode(errorId);
       const currentRow = fieldRow(
         `${s("currentReading")} *`,
@@ -439,6 +473,9 @@ onPageLoad(() => {
       );
 
       input.addEventListener("input", () => {
+        clearDrawerFieldError(input, err);
+        formErrorEl.textContent = "";
+        formErrorEl.hidden = true;
         const current = Number.parseFloat(input.value);
         const previous = meter.previousValue
           ? Number.parseFloat(meter.previousValue)
@@ -500,8 +537,12 @@ onPageLoad(() => {
       input.required = true;
       input.className = "drawer-input-box";
       input.value = rule.value ?? "";
-      input.setAttribute("aria-describedby", errorId);
       const err = errorNode(errorId);
+      input.addEventListener("input", () => {
+        clearDrawerFieldError(input, err);
+        formErrorEl.textContent = "";
+        formErrorEl.hidden = true;
+      });
       const valueRow = fieldRow(
         `${s("manualInputValue")} *`,
         input,
@@ -518,6 +559,7 @@ onPageLoad(() => {
       if (focus === `rule-${rule.billingRuleId}`) firstInput = input;
     }
 
+    form.appendChild(formErrorEl);
     const residentCard = renderResidentCard(data);
     bodyEl.replaceChildren(
       ...(residentCard ? [residentCard] : []),
@@ -539,7 +581,7 @@ onPageLoad(() => {
     save.textContent = s("saveReadings");
     save.addEventListener("click", (event) => {
       event.preventDefault();
-      void submitReadings(data, form, save);
+      void submitReadings(data, form, save, formErrorEl);
     });
 
     footerEl.replaceChildren(cancel, save);
@@ -549,7 +591,8 @@ onPageLoad(() => {
   async function submitReadings(
     data: DrawerData,
     form: HTMLFormElement,
-    saveButton: HTMLButtonElement
+    saveButton: HTMLButtonElement,
+    formErrorEl: HTMLElement
   ) {
     const sections = [...form.querySelectorAll<HTMLElement>("[data-meter-id]")];
     const ruleSections = [
@@ -558,31 +601,66 @@ onPageLoad(() => {
     saveButton.disabled = true;
     const originalLabel = saveButton.textContent;
     saveButton.textContent = s("saving");
+    formErrorEl.textContent = "";
+    formErrorEl.hidden = true;
     let hadError = false;
+    const formErrors = new Set<string>();
+    // Closing the drawer mid-save must not abandon the rest of the batch:
+    // keep submitting, but stop touching the closed (or replaced) form.
+    const stale = () => currentForm !== form;
+    // Every value as it was at Save: the batch sends these, and a later
+    // difference means the admin edited during the save.
+    const submitted = new Map<HTMLInputElement, string>(
+      [...form.querySelectorAll<HTMLInputElement>("input")].map((input) => [
+        input,
+        input.value,
+      ])
+    );
     for (const section of sections) {
       const meterId = section.dataset.meterId!;
       const input = section.querySelector<HTMLInputElement>(
         'input[name="currentValue"]'
       )!;
-      const errorEl = section.querySelector<HTMLElement>(
-        ".drawer-field-error"
-      )!;
-      errorEl.hidden = true;
+      const errorEl = section.querySelector<HTMLElement>(".field-error")!;
+      clearDrawerFieldError(input, errorEl);
       const meter = data.meters.find((m) => m.meterId === meterId)!;
-      if (input.value === (meter.currentValue ?? "")) continue; // unchanged
+      const submittedValue = submitted.get(input) ?? input.value;
+      if (submittedValue === (meter.currentValue ?? "")) continue; // unchanged
       const fd = new FormData();
       fd.set("organizationId", config.organizationId);
       fd.set("periodId", config.periodId);
       fd.set("meterId", meterId);
-      fd.set("currentValue", input.value);
+      fd.set("currentValue", submittedValue);
       const { error } = await actions.readings.adminSubmit(fd);
-      if (error) {
+      if (error && stale()) hadError = true;
+      else if (error) {
         hadError = true;
-        const message = isInputError(error)
-          ? (error.fields.currentValue?.join(" ") ?? error.message)
-          : error.message;
-        errorEl.textContent = s(message);
-        errorEl.hidden = false;
+        const fieldMessages = isInputError(error)
+          ? (error.fields.currentValue?.map(s).filter(Boolean) ?? [])
+          : [];
+        const isFieldLevel =
+          fieldMessages.length > 0 ||
+          (!isInputError(error) &&
+            // shortcut: matches the English ConflictError text from
+            // domain/periods/readings.ts; give that error a currentValue field
+            // mapping if the message is reworded or localised.
+            /lower than the previous reading/i.test(error.message));
+        if (isFieldLevel) {
+          const message =
+            fieldMessages.join(" ") || s(error.message) || s("genericError");
+          if (input.value === submittedValue) {
+            setDrawerFieldError(input, errorEl, message);
+          }
+        } else {
+          const fallback = isInputError(error)
+            ? Object.values(error.fields)
+                .flat()
+                .map(s)
+                .filter(Boolean)
+                .join(" ")
+            : "";
+          formErrors.add(fallback || s(error.message) || s("genericError"));
+        }
       }
     }
     for (const section of ruleSections) {
@@ -590,33 +668,72 @@ onPageLoad(() => {
       const input = section.querySelector<HTMLInputElement>(
         'input[name="value"]'
       )!;
-      const errorEl = section.querySelector<HTMLElement>(
-        ".drawer-field-error"
-      )!;
-      errorEl.hidden = true;
+      const errorEl = section.querySelector<HTMLElement>(".field-error")!;
+      clearDrawerFieldError(input, errorEl);
       const rule = data.manualRuleInputs.find(
         (r) => r.billingRuleId === billingRuleId
       )!;
-      if (input.value === (rule.value ?? "")) continue; // unchanged
+      const submittedValue = submitted.get(input) ?? input.value;
+      if (submittedValue === (rule.value ?? "")) continue; // unchanged
       const fd = new FormData();
       fd.set("organizationId", config.organizationId);
       fd.set("periodId", config.periodId);
       fd.set("dwellingId", data.dwelling.id);
       fd.set("billingRuleId", billingRuleId);
-      fd.set("value", input.value);
+      fd.set("value", submittedValue);
       const { error } = await actions.readings.adminSubmitManualRuleInput(fd);
-      if (error) {
+      if (error && stale()) hadError = true;
+      else if (error) {
         hadError = true;
-        const message = isInputError(error)
-          ? (error.fields.value?.join(" ") ?? error.message)
-          : error.message;
-        errorEl.textContent = s(message);
-        errorEl.hidden = false;
+        const fieldMessages = isInputError(error)
+          ? (error.fields.value?.map(s).filter(Boolean) ?? [])
+          : [];
+        if (fieldMessages.length > 0) {
+          if (input.value === submittedValue) {
+            setDrawerFieldError(input, errorEl, fieldMessages.join(" "));
+          }
+        } else {
+          const fallback = isInputError(error)
+            ? Object.values(error.fields)
+                .flat()
+                .map(s)
+                .filter(Boolean)
+                .join(" ")
+            : "";
+          formErrors.add(fallback || s(error.message) || s("genericError"));
+        }
       }
+    }
+    if (stale()) {
+      // The queue still has to show what was saved; the drawer is gone.
+      await refreshAfterClosedSave(
+        { kind: "readings", dwellingId: data.dwelling.id },
+        hadError ? "" : s("readingSaved")
+      );
+      return;
     }
     saveButton.disabled = false;
     saveButton.textContent = originalLabel;
-    if (!hadError) {
+    if (formErrors.size > 0) {
+      formErrorEl.textContent = [...formErrors].join(" ");
+      formErrorEl.hidden = false;
+    }
+    if (hadError) {
+      // Don't pull focus away from a field the admin edited during the save.
+      const editedDuringSave = [...submitted].some(
+        ([input, value]) => input.value !== value
+      );
+      if (editedDuringSave) return;
+      const firstStillInvalid = [
+        ...sections.map((sec) =>
+          sec.querySelector<HTMLInputElement>('input[name="currentValue"]')
+        ),
+        ...ruleSections.map((sec) =>
+          sec.querySelector<HTMLInputElement>('input[name="value"]')
+        ),
+      ].find((el) => el?.getAttribute("aria-invalid") === "true");
+      firstStillInvalid?.focus();
+    } else {
       await refreshWorkbenchAndClose(s("readingSaved"));
     }
   }
@@ -642,8 +759,7 @@ onPageLoad(() => {
     const nodes: HTMLElement[] = [];
     if (recipientIncomplete || billingEmailMissing) {
       const banner = document.createElement("div");
-      banner.className = "drawer-info-banner";
-      banner.dataset.tone = "warning";
+      banner.className = "notice notice-warning drawer-info-banner";
       const bannerIcon = document.createElement("span");
       bannerIcon.className = "drawer-info-icon";
       bannerIcon.setAttribute("aria-hidden", "true");
@@ -745,7 +861,18 @@ onPageLoad(() => {
     ];
 
     let firstInput: HTMLInputElement | HTMLTextAreaElement | null = null;
-    const errorEl = errorNode("drawer-billing-error");
+    const fieldControls = new Map<
+      string,
+      {
+        control: HTMLInputElement | HTMLTextAreaElement;
+        errorEl: HTMLParagraphElement;
+      }
+    >();
+    const formErrorEl = document.createElement("p");
+    formErrorEl.id = "drawer-billing-error";
+    formErrorEl.className = "notice notice-danger mt-4";
+    formErrorEl.setAttribute("role", "alert");
+    formErrorEl.hidden = true;
     for (const field of fields) {
       if (field.heading) {
         const heading = document.createElement("h3");
@@ -754,6 +881,7 @@ onPageLoad(() => {
         form.appendChild(heading);
       }
       const inputId = `drawer-${field.name}`;
+      const fieldErr = errorNode(`${inputId}-error`);
       const control: HTMLInputElement | HTMLTextAreaElement = field.multiline
         ? document.createElement("textarea")
         : document.createElement("input");
@@ -764,17 +892,26 @@ onPageLoad(() => {
         : "drawer-input-box";
       if (!field.multiline) {
         (control as HTMLInputElement).type = field.type ?? "text";
+        if (field.type === "email") control.spellcheck = false;
       }
       if (field.placeholderKey) control.placeholder = s(field.placeholderKey);
       control.value = dwelling[field.key] ?? "";
+      control.addEventListener("input", () => {
+        clearDrawerFieldError(control, fieldErr);
+        formErrorEl.textContent = "";
+        formErrorEl.hidden = true;
+      });
+      fieldControls.set(field.name, { control, errorEl: fieldErr });
       const labelText = field.required
         ? `${s(field.labelKey)} *`
         : s(field.labelKey);
-      form.appendChild(fieldWrap(labeled(labelText, inputId), control));
+      form.appendChild(
+        fieldWrap(labeled(labelText, inputId), control, fieldErr)
+      );
       if (!firstInput) firstInput = control;
       if (focus === field.focusKey) firstInput = control;
     }
-    form.appendChild(errorEl);
+    form.appendChild(formErrorEl);
     nodes.push(form);
     bodyEl.replaceChildren(...nodes);
     currentForm = form;
@@ -792,7 +929,7 @@ onPageLoad(() => {
     save.textContent = s("saveChanges");
     save.addEventListener("click", (event) => {
       event.preventDefault();
-      void submitBillingDetails(form, save, errorEl);
+      void submitBillingDetails(form, save, fieldControls, formErrorEl);
     });
 
     footerEl.replaceChildren(cancel, save);
@@ -802,21 +939,79 @@ onPageLoad(() => {
   async function submitBillingDetails(
     form: HTMLFormElement,
     saveButton: HTMLButtonElement,
-    errorEl: HTMLElement
+    fieldControls: Map<
+      string,
+      {
+        control: HTMLInputElement | HTMLTextAreaElement;
+        errorEl: HTMLParagraphElement;
+      }
+    >,
+    formErrorEl: HTMLElement
   ) {
     saveButton.disabled = true;
     const originalLabel = saveButton.textContent;
     saveButton.textContent = s("saving");
-    errorEl.hidden = true;
-    const { error } = await actions.dwellings.update(new FormData(form));
+    for (const { control, errorEl } of fieldControls.values()) {
+      clearDrawerFieldError(control, errorEl);
+    }
+    formErrorEl.textContent = "";
+    formErrorEl.hidden = true;
+    const submittedValues = new Map(
+      [...fieldControls.entries()].map(([fieldName, { control }]) => [
+        fieldName,
+        control.value,
+      ])
+    );
+    const payload = new FormData(form);
+    const { error } = await actions.dwellings.update(payload);
+    if (currentForm !== form) {
+      if (!error) {
+        await refreshAfterClosedSave(
+          {
+            kind: "billing-details",
+            dwellingId: String(payload.get("dwellingId") ?? ""),
+          },
+          s("changesSaved")
+        );
+      }
+      return;
+    }
     saveButton.disabled = false;
     saveButton.textContent = originalLabel;
     if (error) {
-      const message = isInputError(error)
-        ? Object.values(error.fields).flat().join(" ") || error.message
-        : error.message;
-      errorEl.textContent = message;
-      errorEl.hidden = false;
+      if (isInputError(error)) {
+        let anyMatchedField = false;
+        const unmapped: string[] = [];
+        for (const [fieldName, rawMessages] of Object.entries(error.fields)) {
+          const messages = (rawMessages ?? []).map(s).filter(Boolean);
+          if (messages.length === 0) continue;
+          const target = fieldControls.get(fieldName);
+          if (target) {
+            anyMatchedField = true;
+            if (target.control.value === submittedValues.get(fieldName)) {
+              setDrawerFieldError(
+                target.control,
+                target.errorEl,
+                messages.join(" ")
+              );
+            }
+          } else {
+            unmapped.push(...messages);
+          }
+        }
+        if (unmapped.length > 0 || !anyMatchedField) {
+          formErrorEl.textContent =
+            unmapped.join(" ") || s(error.message) || s("genericError");
+          formErrorEl.hidden = false;
+        }
+      } else {
+        formErrorEl.textContent = s(error.message) || s("genericError");
+        formErrorEl.hidden = false;
+      }
+      const firstStillInvalid = [...fieldControls.values()].find(
+        ({ control }) => control.getAttribute("aria-invalid") === "true"
+      )?.control;
+      firstStillInvalid?.focus();
       return;
     }
     await refreshWorkbenchAndClose(s("changesSaved"));
@@ -825,22 +1020,26 @@ onPageLoad(() => {
   async function refreshWorkbenchAndClose(message: string) {
     dirtySnapshot = null; // saved -- no further discard prompt on close
     try {
-      const url = clearedUrl();
-      const response = await fetch(url.pathname + url.search, {
-        headers: { "X-Requested-With": "workbench-drawer" },
-      });
-      const html = await response.text();
-      const fresh = new DOMParser().parseFromString(html, "text/html");
-      for (const selector of config.refreshSelectors) {
-        const current = document.querySelector(selector);
-        const updated = fresh.querySelector(selector);
-        if (current && updated) current.replaceWith(updated);
-      }
-      document.dispatchEvent(new Event("workbench:refreshed"));
-      document.getElementById("workbench-announcer")?.replaceChildren(message);
+      await refreshWorkbench(message);
     } finally {
       closeDrawer();
     }
+  }
+
+  async function refreshWorkbench(message: string) {
+    const url = clearedUrl();
+    const response = await fetch(url.pathname + url.search, {
+      headers: { "X-Requested-With": "workbench-drawer" },
+    });
+    const html = await response.text();
+    const fresh = new DOMParser().parseFromString(html, "text/html");
+    for (const selector of config.refreshSelectors) {
+      const current = document.querySelector(selector);
+      const updated = fresh.querySelector(selector);
+      if (current && updated) current.replaceWith(updated);
+    }
+    document.dispatchEvent(new Event("workbench:refreshed"));
+    document.getElementById("workbench-announcer")?.replaceChildren(message);
   }
 
   function setStatusPill(status: string | null) {

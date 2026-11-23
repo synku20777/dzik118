@@ -1,4 +1,5 @@
 ---
+import Icon from "../../../components/ui/Icon.astro";
 import StatusBadge from "../../../components/ui/StatusBadge.astro";
 import { formatMoney, translate, uiLocale } from "../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
@@ -61,18 +62,19 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
     <div class="space-y-6">
       <a
         href={`/portal/dwellings/${dwellingId}/invoices`}
-        class="text-sm text-muted hover:underline"
+        class="inline-flex items-center gap-1 text-sm text-muted hover:underline"
       >
-        ← {t("Invoices")}
+        <Icon name="arrow-left" size="sm" />
+        {t("Invoices")}
       </a>
 
       <div class="flex flex-wrap items-center justify-between gap-4">
-        <h1 class="text-xl font-bold text-foreground">
-          {invoice.invoiceNumber}
-          <span class="ml-2 text-sm font-normal text-muted">
-            <StatusBadge status={caseStatus} />
-          </span>
-        </h1>
+        <div class="flex flex-wrap items-center gap-2">
+          <h1 class="text-xl font-bold text-foreground">
+            {invoice.invoiceNumber}
+          </h1>
+          <StatusBadge status={caseStatus} />
+        </div>
         <button type="button" class="btn-secondary no-print" id="print-invoice">
           {t("Print")}
         </button>
@@ -80,7 +82,8 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
           <a
             href={pdfHref}
             target="_blank"
-            class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
+            rel="noopener noreferrer"
+            class="btn-secondary no-print"
           >
             {t("Download PDF")}
           </a>
@@ -171,26 +174,6 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
     flex: 0 0 auto;
   }
   .invoice-doc-locale-select {
-    padding: 0.3rem 0.5rem;
     font-size: var(--text-sm);
-    border-radius: var(--radius-control);
-    background-color: var(--color-surface);
-    color: var(--color-foreground);
-  }
-  .invoice-preview-frame-wrap {
-    background: var(--color-surface-hover);
-    border-radius: var(--radius-panel);
-    padding: 1rem;
-  }
-  .invoice-preview-frame {
-    display: block;
-    width: 100%;
-    height: 70vh;
-    background: #fff;
-    border: 1px solid var(--color-border);
-    border-radius: 0.25rem;
-  }
-  .invoice-doc-locale-select {
-    padding-inline-end: 2.25rem;
   }
 </style>

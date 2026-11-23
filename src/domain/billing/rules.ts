@@ -75,14 +75,20 @@ function validateRuleShape(candidate: {
     candidate.calculationType === "METER_CONSUMPTION" &&
     isBlank(candidate.meterType)
   ) {
-    throw new ValidationError("A meter consumption rule requires a meter type");
+    throw new ValidationError(
+      "A meter consumption rule requires a meter type",
+      {
+        field: "meterType",
+      }
+    );
   }
   if (
     candidate.calculationType !== "MANUAL_AMOUNT" &&
     isBlank(candidate.unitPrice)
   ) {
     throw new ValidationError(
-      "This rule requires a unit price (it would otherwise always bill 0)"
+      "This rule requires a unit price (it would otherwise always bill 0)",
+      { field: "unitPrice" }
     );
   }
 }
@@ -105,7 +111,8 @@ async function validateAssignmentTargets(
   }
   if (scope === "ONE_TO_ONE" && unique.length !== 1) {
     throw new ValidationError(
-      "A one-to-one rule must be assigned to exactly one dwelling"
+      "A one-to-one rule must be assigned to exactly one dwelling",
+      { field: "dwellingIds" }
     );
   }
   // ONE_TO_MANY is "explicit dwelling selection", not "zero or more" --
@@ -117,7 +124,8 @@ async function validateAssignmentTargets(
   // correct validation error instead of a silent no-op.
   if (scope === "ONE_TO_MANY" && unique.length === 0) {
     throw new ValidationError(
-      "A selected-dwellings rule must be assigned to at least one dwelling"
+      "A selected-dwellings rule must be assigned to at least one dwelling",
+      { field: "dwellingIds" }
     );
   }
   if (unique.length === 0) return unique;
@@ -132,7 +140,8 @@ async function validateAssignmentTargets(
     );
   if (rows.length !== unique.length) {
     throw new ValidationError(
-      "One or more selected dwellings do not belong to this organization"
+      "One or more selected dwellings do not belong to this organization",
+      { field: "dwellingIds" }
     );
   }
   return unique;

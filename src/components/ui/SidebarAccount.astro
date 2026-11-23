@@ -5,20 +5,20 @@ import Icon from "./Icon.astro";
 import LanguageSwitch from "./LanguageSwitch.astro";
 import ThemeToggle from "./ThemeToggle.astro";
 import { translate, uiLocale } from "../../lib/ui/i18n";
+import { initials } from "../../lib/ui/initials";
 
 interface Props {
   email?: string;
 }
 const { email } = Astro.props;
 const t = (text: string) => translate(uiLocale(Astro.cookies, Astro.url), text);
-const initial = email?.trim().charAt(0).toUpperCase();
 ---
 
 <div class="account" role="group" aria-label={t("Account")}>
   {email && (
     <p class="account-id">
-      <span class="account-avatar" aria-hidden="true">
-        {initial}
+      <span class="avatar" aria-hidden="true">
+        {initials(email)}
       </span>
       <span class="account-email" data-tip={email} data-tip-clipped>
         {email}

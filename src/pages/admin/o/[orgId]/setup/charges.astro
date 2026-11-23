@@ -22,6 +22,7 @@ import { getOrganization } from "../../../../../domain/organizations/organizatio
 import { getFirstBillingPeriod } from "../../../../../domain/periods/periods";
 import { withRequestDb } from "../../../../../lib/db-request";
 import { friendlyActionErrorMessage } from "../../../../../lib/ui/i18n";
+import { fieldErrorAttrs } from "../../../../../lib/ui/field-error-attrs";
 
 const organizationId = Astro.params.orgId!;
 try {
@@ -140,7 +141,7 @@ const presetItems = [
     steps={progress.steps}
   >
     {!firstPeriod ? (
-      <div class="panel p-6 space-y-4">
+      <div class="box space-y-4">
         <p class="notice" role="alert">
           {t("Create the first billing period before you add charges.")}{" "}
           <a
@@ -213,7 +214,7 @@ const presetItems = [
               const isExisting = Boolean(existingRule);
 
               return (
-                <fieldset class="setup-preset panel p-5">
+                <fieldset class="setup-preset box">
                   <legend class="sr-only">{preset.title}</legend>
                   {isExisting ? (
                     <div class="space-y-2">
@@ -244,6 +245,10 @@ const presetItems = [
                           name={`${preset.key}Enabled`}
                           checked={typed(`${preset.key}Enabled`) !== ""}
                           class="mt-1 h-4 w-4 rounded border-(--color-input-border)"
+                          {...fieldErrorAttrs(
+                            result?.error,
+                            `${preset.key}Enabled`
+                          )}
                         />
                         <div>
                           <label
@@ -279,8 +284,11 @@ const presetItems = [
                             pattern="\d{1,10}([.,]\d{1,4})?"
                             value={typed(`${preset.key}Price`)}
                             placeholder="0.00"
-                            aria-describedby={`${preset.key}Price-error`}
-                            class="w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm bg-surface text-foreground"
+                            class="w-full text-body-sm"
+                            {...fieldErrorAttrs(
+                              result?.error,
+                              `${preset.key}Price`
+                            )}
                           />
                           <FieldError
                             name={`${preset.key}Price`}
@@ -302,8 +310,11 @@ const presetItems = [
                             inputmode="decimal"
                             pattern="\d{1,3}([.,]\d{1,4})?"
                             value={typed(`${preset.key}Vat`) || "0"}
-                            aria-describedby={`${preset.key}Vat-error`}
-                            class="w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm bg-surface text-foreground"
+                            class="w-full text-body-sm"
+                            {...fieldErrorAttrs(
+                              result?.error,
+                              `${preset.key}Vat`
+                            )}
                           />
                           <FieldError
                             name={`${preset.key}Vat`}

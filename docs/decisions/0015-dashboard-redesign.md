@@ -237,3 +237,17 @@ Still open:
   strip and the 375 period navigation height (46 px).
 - Native Latvian review of the new strings ("līdz", "Tagad", group titles).
 - A user test.
+
+## Addendum 2026-11-22: production has moved on
+
+The dashboard no longer follows the "next action first" band or the
+two-column 56rem layout above. Production matches the "Admin dashboard"
+section of [DESIGN_SYSTEM.md](../product/DESIGN_SYSTEM.md): setup card when
+setup is unfinished, then the header and period navigation, then the
+collection and readings panels, the month status steps, and the attention
+list, within `--width-content` (94rem).
+
+The badge and eyebrow sizes in this record are also out of date. Status badges
+are 16px (`--text-base`) and eyebrows are 14px (`--text-sm`), set once in
+`global.css`. Where this record and DESIGN_SYSTEM.md disagree, DESIGN_SYSTEM.md
+and `global.css` win.

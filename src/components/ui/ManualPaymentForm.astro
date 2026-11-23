@@ -4,6 +4,7 @@
 // has no open invoice. The page wraps it in its own disclosure.
 import { actions } from "astro:actions";
 import FieldError from "./FieldError.astro";
+import { fieldErrorAttrs } from "../../lib/ui/field-error-attrs";
 import { formatMoney, translate, uiLocale } from "../../lib/ui/i18n";
 
 interface Props {
@@ -30,8 +31,7 @@ const onlyOne = invoices.length + dwellings.length === 1;
 // A new id for every rendered form: a second submit of this same form (double
 // click, reload after the POST) is refused instead of paying twice.
 const submissionId = crypto.randomUUID();
-const field =
-  "mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-1.5 text-sm";
+const field = "mt-1 w-full text-sm";
 const label = "field-label";
 ---
 
@@ -51,7 +51,13 @@ const label = "field-label";
     <label class={label} for={`${id}-target`}>
       {t("Apply to")}
     </label>
-    <select id={`${id}-target`} name="target" required class={field}>
+    <select
+      id={`${id}-target`}
+      name="target"
+      required
+      class={field}
+      {...fieldErrorAttrs(error, "target", { errorId: `${id}-target-error` })}
+    >
       {!onlyOne && (
         <option value="" disabled selected>
           {t("Choose where the payment goes")}
@@ -97,6 +103,7 @@ const label = "field-label";
       inputmode="decimal"
       required
       class={field}
+      {...fieldErrorAttrs(error, "amount", { errorId: `${id}-amount-error` })}
     />
     <FieldError name="amount" id={`${id}-amount-error`} error={error} />
   </div>
@@ -111,6 +118,9 @@ const label = "field-label";
       required
       max={today}
       class={field}
+      {...fieldErrorAttrs(error, "bookingDate", {
+        errorId: `${id}-date-error`,
+      })}
     />
     <FieldError name="bookingDate" id={`${id}-date-error`} error={error} />
   </div>
@@ -118,7 +128,12 @@ const label = "field-label";
     <label class={label} for={`${id}-payer`}>
       {t("Payer")}
     </label>
-    <input id={`${id}-payer`} name="payerName" class={field} />
+    <input
+      id={`${id}-payer`}
+      name="payerName"
+      class={field}
+      {...fieldErrorAttrs(error, "payerName", { errorId: `${id}-payer-error` })}
+    />
     <FieldError name="payerName" id={`${id}-payer-error`} error={error} />
   </div>
   <div>
@@ -129,8 +144,11 @@ const label = "field-label";
       id={`${id}-reference`}
       name="reference"
       maxlength="140"
-      aria-describedby={`${id}-reference-hint`}
       class={field}
+      {...fieldErrorAttrs(error, "reference", {
+        errorId: `${id}-reference-error`,
+        describedBy: `${id}-reference-hint`,
+      })}
     />
     <p id={`${id}-reference-hint`} class="field-hint">
       {t(
@@ -149,6 +167,7 @@ const label = "field-label";
       required
       maxlength="500"
       class={field}
+      {...fieldErrorAttrs(error, "reason", { errorId: `${id}-reason-error` })}
     />
     <FieldError name="reason" id={`${id}-reason-error`} error={error} />
   </div>

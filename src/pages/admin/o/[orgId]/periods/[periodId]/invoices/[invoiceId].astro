@@ -1,4 +1,5 @@
 ---
+import Icon from "../../../../../../../components/ui/Icon.astro";
 // Phase F (Billing) - invoice detail (spec Section 9.2, INV-001/003/004).
 // Renders through the same renderInvoiceHtml() the PDF and the public
 // token link use (Phase G, invoice template editor) -- so what an admin
@@ -213,12 +214,12 @@ const overrideStatuses: string[] = [
   <div class="space-y-6">
     <div class="flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 class="text-xl font-bold text-foreground">
-          {invoice.invoiceNumber}
-          <span class="ml-2 text-sm font-normal text-muted">
-            <StatusBadge status={caseStatus} />
-          </span>
-        </h1>
+        <div class="flex flex-wrap items-center gap-2">
+          <h1 class="text-xl font-bold text-foreground">
+            {invoice.invoiceNumber}
+          </h1>
+          <StatusBadge status={caseStatus} />
+        </div>
         <p class="mt-2 text-sm text-muted">
           {t("Amount due")}:{" "}
           <strong class="text-lg text-foreground">
@@ -233,7 +234,8 @@ const overrideStatuses: string[] = [
             <a
               href={pdfHref}
               target="_blank"
-              class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
+              rel="noopener noreferrer"
+              class="btn-secondary"
             >
               {t("Download PDF")}
             </a>
@@ -316,7 +318,7 @@ const overrideStatuses: string[] = [
                     data-confirm={t(
                       "Send this invoice to the resident again by email?"
                     )}
-                    class="rounded-control border border-border px-4 py-2 text-sm text-foreground hover:bg-surface-hover"
+                    class="btn-secondary"
                   >
                     {t("Resend")}
                   </button>
@@ -337,7 +339,7 @@ const overrideStatuses: string[] = [
                 data-confirm={t(
                   "Revoke the resident's access link? They will no longer be able to open this invoice with it."
                 )}
-                class="rounded-control border border-border px-4 py-2 text-sm text-destructive hover:bg-danger-surface"
+                class="btn-danger"
               >
                 {t("Revoke access link")}
               </button>
@@ -350,11 +352,19 @@ const overrideStatuses: string[] = [
               {t("Paper delivery")}:
             </span>
             {verifiedPaperDispatch ? (
-              <span class="text-sm text-success font-medium">
-                ✓ {t("Paper dispatched")}
+              <span
+                class="text-sm text-success font-medium"
+                data-paper-dispatched
+              >
+                <Icon name="check" size="sm" class="inline align-[-0.125em]" />
+                {t("Paper dispatched")}
               </span>
             ) : (
-              <form method="POST" action={actions.invoices.recordPaperDispatch}>
+              <form
+                method="POST"
+                action={actions.invoices.recordPaperDispatch}
+                class="no-print"
+              >
                 <input
                   type="hidden"
                   name="organizationId"
@@ -366,7 +376,7 @@ const overrideStatuses: string[] = [
                   data-confirm={t(
                     "Record that this invoice was physically posted? This cannot be undone."
                   )}
-                  class="rounded-control border border-border px-3 py-1.5 text-sm text-foreground hover:bg-surface-hover"
+                  class="btn-secondary btn-sm"
                 >
                   {t("Record paper dispatch")}
                 </button>
@@ -381,7 +391,7 @@ const overrideStatuses: string[] = [
       resendResult?.error ||
       revokeResult?.error ||
       recordPaperDispatchResult?.error) && (
-      <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
+      <p class="notice notice-danger" role="alert">
         {prepareResult?.error?.message ??
           sendResult?.error?.message ??
           resendResult?.error?.message ??
@@ -540,16 +550,36 @@ const overrideStatuses: string[] = [
           </h2>
           <ul class="mt-3 space-y-2 text-sm">
             <>
-              <li>
-                {recipientIncomplete ? "!" : "✓"}{" "}
-                {t("Recipient details complete")}
+              <li class="flex items-center gap-2">
+                <Icon
+                  name={recipientIncomplete ? "alert-triangle" : "check"}
+                  size="sm"
+                />
+                {t(
+                  recipientIncomplete
+                    ? "Recipient details incomplete"
+                    : "Recipient details complete"
+                )}
               </li>
-              <li>
-                {organizationIncomplete ? "!" : "✓"}{" "}
-                {t("Issuer and payment details complete")}
+              <li class="flex items-center gap-2">
+                <Icon
+                  name={organizationIncomplete ? "alert-triangle" : "check"}
+                  size="sm"
+                />
+                {t(
+                  organizationIncomplete
+                    ? "Issuer or payment details incomplete"
+                    : "Issuer and payment details complete"
+                )}
               </li>
-              <li>✓ {t("Current charges calculated")}</li>
-              <li>✓ {t("Account balance resolved")}</li>
+              <li class="flex items-center gap-2">
+                <Icon name="check" size="sm" />
+                {t("Current charges calculated")}
+              </li>
+              <li class="flex items-center gap-2">
+                <Icon name="check" size="sm" />
+                {t("Account balance resolved")}
+              </li>
             </>
           </ul>
         </>
@@ -886,27 +916,6 @@ const overrideStatuses: string[] = [
     flex: 0 0 auto;
   }
   .invoice-doc-locale-select {
-    padding: 0.3rem 0.5rem;
     font-size: var(--text-sm);
-    border-radius: var(--radius-control);
-    background-color: var(--color-surface);
-    color: var(--color-foreground);
-  }
-  .invoice-preview-frame-wrap {
-    background: var(--color-surface-hover);
-    border-radius: var(--radius-panel);
-    padding: 1rem;
-  }
-  .invoice-preview-frame {
-    display: block;
-    width: min(210mm, 100%);
-    height: 70vh;
-    margin-inline: auto;
-    background: #fff;
-    border: 1px solid var(--color-border);
-    border-radius: 0.25rem;
-  }
-  .invoice-doc-locale-select {
-    padding-inline-end: 2.25rem;
   }
 </style>

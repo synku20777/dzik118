@@ -1,7 +1,17 @@
 // Phase J (Payments) - payment match lifecycle (spec Section 25,
 // PAY-002/003). Callers must call requireOrganizationAccess() before
 // calling any of these (spec Section 14).
-import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  notExists,
+  sql,
+} from "drizzle-orm";
 import type { Db, DbOrTx } from "../../db/client";
 import { paymentAllocations, paymentReversals } from "../../db/schema/accounts";
 import { billingCases } from "../../db/schema/billing";
@@ -17,6 +27,7 @@ import {
   maxExact,
   minExact,
   subtractExact,
+  sumExact,
 } from "../../lib/decimal2";
 import { ConflictError, NotFoundError } from "../errors";
 import {
@@ -403,6 +414,7 @@ export async function listPaymentMatches(
       createdAt: paymentMatches.createdAt,
       invoiceId: invoices.id,
       invoiceNumber: invoices.invoiceNumber,
+      invoiceCurrency: invoices.currency,
       dwellingId: invoices.dwellingId,
       periodId: invoices.periodId,
       currentCharges: invoices.currentCharges,
@@ -460,6 +472,60 @@ export async function listPaymentMatches(
       "0.00"
     ),
   }));
+}
+
+export async function getPeriodLegacyPaidTotal(
+  db: Db,
+  organizationId: string,
+  periodId: string,
+  currency: string
+): Promise<string> {
+  const rows = await db
+    .select({ amountDue: invoices.amountDue })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.organizationId, organizationId),
+        eq(invoices.periodId, periodId),
+        eq(invoices.currency, currency),
+        isNotNull(invoices.paidAt),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(paymentAllocations)
+            .where(
+              and(
+                eq(paymentAllocations.organizationId, organizationId),
+                eq(paymentAllocations.invoiceId, invoices.id)
+              )
+            )
+        ),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(paymentReversals)
+            .where(
+              and(
+                eq(paymentReversals.organizationId, organizationId),
+                eq(paymentReversals.invoiceId, invoices.id)
+              )
+            )
+        ),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(paymentMatches)
+            .where(
+              and(
+                eq(paymentMatches.organizationId, organizationId),
+                eq(paymentMatches.invoiceId, invoices.id),
+                eq(paymentMatches.status, "CONFIRMED")
+              )
+            )
+        )
+      )
+    );
+  return sumExact(rows.map((r) => maxExact(r.amountDue, "0.00")));
 }
 
 export async function listUnmatchedTransactions(

@@ -1,4 +1,5 @@
 ---
+import Icon from "../../../../components/ui/Icon.astro";
 import ResidentLayout from "../../../../layouts/ResidentLayout.astro";
 import { actions } from "astro:actions";
 import {
@@ -116,8 +117,12 @@ const base = "/portal/dwellings/" + dwellingId;
 <ResidentLayout title={t("Dwelling") + " " + dwelling.number}>
   <div class="space-y-7">
     {(Astro.locals.auth?.dwellingIds.length ?? 0) > 1 && (
-      <a class="text-sm text-primary" href="/portal/dwellings">
-        ← {t("Your dwellings")}
+      <a
+        class="inline-flex items-center gap-1 text-sm text-primary"
+        href="/portal/dwellings"
+      >
+        <Icon name="arrow-left" size="sm" />
+        {t("Your dwellings")}
       </a>
     )}
     <PageHeader
@@ -213,7 +218,8 @@ const base = "/portal/dwellings/" + dwellingId;
                   dwellingId
                 }
               >
-                {t("Review invoice")} →
+                {t("Review invoice")}
+                <Icon name="arrow-right" size="sm" />
               </a>
             </>
           </div>
@@ -249,7 +255,8 @@ const base = "/portal/dwellings/" + dwellingId;
                 </h3>
                 {meter.currentValue !== null && (
                   <span class="status-badge" data-tone="success">
-                    ✓ {t("Reading received")}
+                    <Icon name="check" size="sm" />
+                    {t("Reading received")}
                   </span>
                 )}
               </div>
@@ -275,10 +282,7 @@ const base = "/portal/dwellings/" + dwellingId;
                     <input type="hidden" name="dwellingId" value={dwellingId} />
                     <input type="hidden" name="periodId" value={period.id} />
                     <input type="hidden" name="meterId" value={meter.meterId} />
-                    <label
-                      class="field-label"
-                      for={"reading-" + meter.meterId}
-                    >
+                    <label class="field-label" for={"reading-" + meter.meterId}>
                       {t("Current value")} ({meter.unit})
                     </label>
                     <div class="mt-2 flex flex-col gap-3 sm:flex-row">
@@ -291,7 +295,7 @@ const base = "/portal/dwellings/" + dwellingId;
                         required
                         placeholder="0.000"
                         aria-describedby={"reading-help-" + meter.meterId}
-                        class="w-full rounded-control border border-(--color-input-border) px-3 py-2 sm:w-48"
+                        class="w-full sm:w-48"
                       />
                       <button type="submit" class="btn-primary">
                         {t("Submit reading")}
@@ -366,16 +370,20 @@ const base = "/portal/dwellings/" + dwellingId;
       )}
     </section>
     <a class="btn-secondary w-full justify-between" href={base + "/payments"}>
-      {t("Payment history")} <span aria-hidden="true">→</span>
+      {t("Payment history")} <Icon name="arrow-right" size="sm" />
     </a>
     <a class="btn-secondary w-full justify-between" href={base + "/messages"}>
-      {t("Contact administrator")} <span aria-hidden="true">→</span>
+      {t("Contact administrator")} <Icon name="arrow-right" size="sm" />
     </a>
     <section>
       <div class="mb-4 flex items-center justify-between">
         <h2 class="font-semibold">{t("Recent invoices")}</h2>
-        <a class="text-sm text-primary" href={base + "/invoices"}>
-          {t("View all")} →
+        <a
+          class="inline-flex items-center gap-1 text-sm text-primary"
+          href={base + "/invoices"}
+        >
+          {t("View all")}
+          <Icon name="arrow-right" size="sm" />
         </a>
       </div>
       {recentInvoices.length === 0 ? (

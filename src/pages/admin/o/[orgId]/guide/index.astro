@@ -268,16 +268,16 @@ const statuses = [
         >
           <a class="btn-primary" href="#setup">
             {t("Start here")}
-            <span aria-hidden="true">↓</span>
+            <Icon name="arrow-down" size="sm" />
           </a>
           <a class="btn-secondary" href={`${base}/dashboard`}>
             {t("Open dashboard")}
-            <span aria-hidden="true">→</span>
+            <Icon name="arrow-right" size="sm" />
           </a>
         </PageHeader>
       </div>
 
-      <figure class="guide-shot guide-shot-hero">
+      <figure class="guide-shot guide-shot-hero panel">
         <img
           src="/guide/dashboard.jpg"
           alt={t(
@@ -317,10 +317,13 @@ const statuses = [
                 <p class="guide-ready">
                   <Icon name="check" size="xs" /> {t(step.ready)}
                 </p>
-                <a href={step.href}>{t(step.action)} →</a>
+                <a href={step.href}>
+                  {t(step.action)}
+                  <Icon name="arrow-right" size="xs" class="inline" />
+                </a>
               </div>
               {step.image && (
-                <figure class="guide-shot">
+                <figure class="guide-shot panel">
                   <img
                     src={step.image}
                     alt={t(step.imageAlt)}
@@ -355,10 +358,13 @@ const statuses = [
                 <p class="guide-ready">
                   <Icon name="check" size="xs" /> {t(step.ready)}
                 </p>
-                <a href={step.href}>{t(step.action)} →</a>
+                <a href={step.href}>
+                  {t(step.action)}
+                  <Icon name="arrow-right" size="xs" class="inline" />
+                </a>
               </div>
               {step.image && (
-                <figure class="guide-shot">
+                <figure class="guide-shot panel">
                   <img
                     src={step.image}
                     alt={t(step.imageAlt)}
@@ -449,9 +455,6 @@ const statuses = [
   .guide-shot {
     overflow: hidden;
     margin-top: 1.75rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
     box-shadow: var(--elevation-flat);
   }
 

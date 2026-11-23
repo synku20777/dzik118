@@ -207,7 +207,7 @@ test("The ledger, the dwelling page and the payment trail agree on the money", a
   // ...and it is the same balance the dwelling page shows.
   await page.goto(`${base}/dwellings/${dwellingId}?lang=en`);
   const dwellingBalance = amount(
-    await page.locator(".summary-stat .summary-value").first().textContent()
+    await page.locator(".metric-strip .metric-value").first().textContent()
   );
   expect(Math.abs(dwellingBalance - closing)).toBeLessThan(0.006);
   await page.getByRole("link", { name: "Full statement" }).click();

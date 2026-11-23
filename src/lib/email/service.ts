@@ -58,7 +58,7 @@ export function invoiceEmailSubject(input: SendInvoiceEmailInput): string {
 
 export function invoiceEmailHtml(input: SendInvoiceEmailInput): string {
   return `<!doctype html>
-<html><body style="font-family: Helvetica, Arial, sans-serif; font-size: 14px; color: #171717;">
+<html><body style="font-family: Helvetica, Arial, sans-serif; font-size: 14px; color: #17242b;">
   <p>${escapeHtml(input.organizationName)} has issued invoice <strong>${escapeHtml(input.invoiceNumber)}</strong> for ${escapeHtml(input.periodLabel)}.</p>
   <p>Total: <strong>${escapeHtml(input.total)} ${escapeHtml(input.currency)}</strong><br />Due: ${escapeHtml(input.dueDate)}</p>
   <p><a href="${escapeHtml(input.viewInvoiceUrl)}">View invoice</a></p>
