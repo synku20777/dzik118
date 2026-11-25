@@ -92,8 +92,19 @@ export async function getSetupProgress(
     }
   }
 
+  const issuerMissing = (
+    [
+      ["name", org.name],
+      ["address", org.addressLine1],
+      ["bank name", org.bankName],
+      ["IBAN", org.iban],
+    ] as const
+  )
+    .filter(([, value]) => !value?.trim())
+    .map(([label]) => label);
+
   const steps: Record<SetupStepKey, boolean> = {
-    organization: Boolean(org.name?.trim() && org.addressLine1?.trim()),
+    organization: issuerMissing.length === 0,
     dwellings: activeDwellings.length > 0,
     // Rule and meter changes only recalculate OPEN periods. Every active
     // dwelling must have a case in it, or it gets no first invoice.
@@ -105,17 +116,6 @@ export async function getSetupProgress(
       !blockers.NO_ACTIVE_METER_FOR_RULE &&
       metersWithoutStartingReading === 0,
   };
-
-  const issuerMissing = (
-    [
-      ["name", org.name],
-      ["address", org.addressLine1],
-      ["bank name", org.bankName],
-      ["IBAN", org.iban],
-    ] as const
-  )
-    .filter(([, value]) => !value?.trim())
-    .map(([label]) => label);
 
   const totalBlockers = Object.values(blockers).reduce((a, b) => a + b, 0);
   return {

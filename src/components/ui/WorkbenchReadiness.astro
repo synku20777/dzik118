@@ -1,0 +1,118 @@
+---
+import { plural, type Locale } from "../../lib/ui/i18n";
+import type { WorkbenchProblem } from "../../lib/ui/workbench-problem";
+import Icon from "./Icon.astro";
+
+interface Props {
+  caseId: string;
+  dwellingId: string;
+  problems: WorkbenchProblem[];
+  locale: Locale;
+}
+const { caseId, dwellingId, problems, locale } = Astro.props;
+const shownProblems = problems.slice(0, 2);
+const hiddenProblems = problems.slice(2);
+// Narrowest an item may get: 4ch, or a serial's kept digits plus an ellipsis.
+const itemMinCh = (problem: WorkbenchProblem) =>
+  problem.keepEnd ? problem.keepEnd + 2 : 4;
+---
+
+{/* One line, never a stack: the last named problem is cut
+    at its end, a serial-like name in its middle. "+N" sits
+    outside the clipped part, so it is never cut, and opens
+    a menu with every hidden problem and its own link. Full
+    text is always in the DOM for screen readers. */}
+{problems.length > 0 && (
+  <div class="readiness-line" data-tone={problems[0].tone}>
+    <span class="readiness-icon" aria-hidden="true">
+      <Icon name="alert-triangle" size="xs" />
+    </span>
+    <span
+      class="readiness-items"
+      style={`--items-min:${shownProblems.reduce(
+        (sum, problem) => sum + itemMinCh(problem),
+        // A separator and its two gaps.
+        (shownProblems.length - 1) * 3
+      )}ch`}
+    >
+      {shownProblems.map((problem, index) => {
+        const Tag = problem.href ? "a" : problem.drawer ? "button" : "span";
+        const cut = Boolean(problem.keepEnd);
+        return (
+          <>
+            {index > 0 && (
+              <span class="readiness-separator" aria-hidden="true">
+                ·
+              </span>
+            )}
+            <Tag
+              class="readiness-item"
+              data-tone={problem.tone}
+              data-last={index === shownProblems.length - 1 ? "" : undefined}
+              href={problem.href}
+              type={problem.drawer ? "button" : undefined}
+              data-open-drawer={problem.drawer}
+              data-dwelling-id={problem.drawer ? dwellingId : undefined}
+              data-focus={problem.focus}
+              style={cut ? `min-width:${itemMinCh(problem)}ch` : undefined}
+              data-tip={problem.detail ?? problem.text}
+              data-tip-clipped={problem.detail ? undefined : ""}
+            >
+              {cut ? (
+                <span class="mid-truncate">
+                  <span class="mid-start">
+                    {problem.text.slice(0, -problem.keepEnd!)}
+                  </span>
+                  <span class="mid-end">
+                    {problem.text.slice(-problem.keepEnd!)}
+                  </span>
+                </span>
+              ) : (
+                problem.text
+              )}
+              {problem.detail && <span class="sr-only"> {problem.detail}</span>}
+            </Tag>
+          </>
+        );
+      })}
+    </span>
+    {hiddenProblems.length > 0 && (
+      <>
+        <button
+          type="button"
+          class="readiness-more"
+          popovertarget={`problems-${caseId}`}
+          aria-label={plural(
+            locale,
+            hiddenProblems.length,
+            "{n} more problem",
+            "{n} more problems"
+          )}
+        >
+          +{hiddenProblems.length}
+        </button>
+        <div class="case-menu" id={`problems-${caseId}`} popover="auto">
+          {hiddenProblems.map((problem) => {
+            const Tag = problem.href ? "a" : problem.drawer ? "button" : "span";
+            return (
+              <Tag
+                class="problem-menu-item"
+                data-tone={problem.tone}
+                href={problem.href}
+                type={problem.drawer ? "button" : undefined}
+                data-open-drawer={problem.drawer}
+                data-dwelling-id={problem.drawer ? dwellingId : undefined}
+                data-focus={problem.focus}
+              >
+                {problem.text}
+                {problem.detail && (
+                  <span class="sr-only"> {problem.detail}</span>
+                )}
+              </Tag>
+            );
+          })}
+        </div>
+      </>
+    )}
+  </div>
+)}

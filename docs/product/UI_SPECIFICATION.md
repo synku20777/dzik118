@@ -1,5 +1,12 @@
 # Riga Property Billing — Full UI Specification
 
+> **Superseded for implementation detail.** This is the original design brief.
+> Token names (`--bg-canvas`, `--brand-primary`, `--elevation-0/1/2`), the
+> 12-column grid, 40px controls, the 3px focus halo, the type scale and chip
+> sizes below are historical. The current contract is
+> [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) and `src/styles/global.css`; where they
+> disagree, those win. The principles and tone in this file still apply.
+
 ## 1. UI Design Principles
 
 The interface should be a **contemporary Baltic civic product**: calm, highly functional, structurally rigorous, warm rather than sterile, and visually distinctive without decorative excess.
@@ -403,16 +410,9 @@ Requirements:
 - status/exception icons and text, without left-edge stripes
 - no full-row red/green/blue backgrounds
 
-Example:
-
-```text
-│ Missing data
-│
-│ Dwelling 7
-│ Cold water missing
-```
-
-The narrow status line provides state emphasis without overwhelming dense data.
+Example: the row carries an icon and the words "Missing data · Cold water
+missing" in the status cell. State is never a colored edge or stripe (see
+section 6.1).
 
 ---
 

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("setup wizard: compact phone trail, aligned legends, errors keep input", async ({
+test("setup wizard: compact phone trail and organization errors keep input", async ({
   page,
 }) => {
   await page.goto("/login?lang=en");
@@ -33,27 +33,53 @@ test("setup wizard: compact phone trail, aligned legends, errors keep input", as
     ).toBe(true);
   }
 
-  // The section heading sits above its divider, not on it.
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`${base}/setup/organization?lang=en`);
-  const fieldset = page.locator("fieldset.border-t");
-  const legend = fieldset.locator("legend");
-  expect((await legend.boundingBox())!.y).toBeGreaterThan(
-    (await fieldset.boundingBox())!.y
-  );
+  const form = page.locator("#organization-form");
+  const invoiceDetails = form.getByRole("region", { name: "Invoice details" });
+  const bankName = invoiceDetails.getByLabel("Bank name");
+  const iban = invoiceDetails.getByLabel("IBAN");
+  await expect(bankName).toBeVisible();
+  await expect(iban).toBeVisible();
+  const requiredFields = form.locator("input[required]");
+  expect(
+    await requiredFields.evaluateAll((fields) =>
+      fields.map((field) => field.id)
+    )
+  ).toEqual(["name", "addressLine1", "bankName", "iban"]);
+  for (const field of await requiredFields.all()) {
+    expect(
+      await field.evaluate((input) => {
+        const label = (input as HTMLInputElement).labels![0];
+        const marker = getComputedStyle(label, "::after");
+        return [marker.content, marker.borderRadius];
+      })
+    ).toEqual(['""', "50%"]);
+  }
+  await expect(form.locator(".btn-primary")).toHaveText("Save and continue");
 
-  // A rejected save keeps what was typed and marks the field.
-  await page
-    .locator("#organization-form, main form")
-    .first()
-    .evaluate((f) => {
-      (f as HTMLFormElement).noValidate = true;
-    });
+  await bankName.fill("");
+  expect(
+    await bankName.evaluate(
+      (input: HTMLInputElement) => input.validity.valueMissing
+    )
+  ).toBe(true);
+  // Bypass browser validation to exercise server validation without saving data.
+  await form.evaluate((f) => {
+    (f as HTMLFormElement).noValidate = true;
+  });
+  await bankName.fill("   ");
   await page.locator("#name").fill("Typed name");
   await page.locator("#email").fill("not-an-email");
-  await page.locator("main form button[type=submit]").click();
+  const invalidIban = "A".repeat(51);
+  await iban.fill(invalidIban);
+  await form.getByRole("button", { name: "Save and continue" }).click();
+  await expect(bankName).toHaveAttribute("aria-describedby", "bankName-error");
+  await expect(bankName).toBeFocused();
   await expect(page.locator("#email")).toHaveAttribute("aria-invalid", "true");
-  await expect(page.locator("#email")).toBeFocused();
   await expect(page.locator("#email")).toHaveValue("not-an-email");
   await expect(page.locator("#name")).toHaveValue("Typed name");
+  await expect(iban).toHaveValue(invalidIban);
+  await expect(iban).toHaveAttribute("aria-describedby", "iban-error");
+  await expect(page.locator("#iban-error")).toBeVisible();
 });

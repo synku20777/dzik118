@@ -26,6 +26,7 @@ import {
   type SendInvoiceDeps,
 } from "../../src/domain/billing/sending";
 import { listCasesForPeriod } from "../../src/domain/periods/cases";
+import { getPeriodLegacyPaidTotal } from "../../src/domain/payments/matching";
 import { getDashboardSummary } from "../../src/domain/periods/dashboard";
 import { createSupabaseAdminClient } from "../../src/lib/supabase/admin";
 import type { EmailService } from "../../src/lib/email/service";
@@ -463,9 +464,21 @@ describe("dashboard summary", () => {
       "update invoices set currency = 'USD' where id = $1",
       [invoice.id]
     );
+    await db.$client.query(
+      "update billing_cases set status = 'OVERDUE' where organization_id = $1 and period_id = $2 and dwelling_id = $3",
+      [org.id, period.id, dwelling.id]
+    );
 
     const summary = await getDashboardSummary(db, org.id, period.id);
     expect(summary.totalInvoiced).toBe("0.00");
+    expect(summary.totalOutstanding).toBe("0.00");
+    const overdueRow = summary.needsAttention.find(
+      (item) => item.status === "OVERDUE"
+    )!;
+    expect(overdueRow.overdueAmount).toBe(invoice.amountDue);
+    expect(overdueRow.overdueCurrency).toBe("USD");
+    expect(overdueRow.dueDate).toBe(invoice.dueDate);
+    expect(overdueRow.daysLate).toBeGreaterThanOrEqual(0);
 
     await cleanupOrg(org.id);
   });
@@ -543,6 +556,9 @@ describe("dashboard summary", () => {
     await setSent(paidInvoice.id, true);
 
     let s = await getDashboardSummary(db, org.id, period.id);
+    expect(
+      await getPeriodLegacyPaidTotal(db, org.id, period.id, org.currency)
+    ).toBe(paidInvoice.amountDue);
     // Money: the headline total reconciles with its parts.
     expect(s.amountDue).toBe(
       (
@@ -556,14 +572,20 @@ describe("dashboard summary", () => {
     expect(Number(s.totalPaid) + Number(s.totalOutstanding)).toBeCloseTo(
       Number(s.amountDue)
     );
-    // Overdue row carries what is owed, the due date and the days late.
+    // Overdue row carries what is owed, the currency, the due date and the days late.
     const row = s.needsAttention.find((a) => a.status === "OVERDUE")!;
     expect(row.overdueAmount).toBe(overdueInvoice.amountDue);
+    expect(row.overdueCurrency).toBe(org.currency);
     expect(row.dueDate).toBe(overdueInvoice.dueDate);
     expect(row.daysLate).toBeGreaterThan(0);
     expect(
       s.needsAttention.find((a) => a.status === "MISSING_DATA")
-    ).toMatchObject({ overdueAmount: null, dueDate: null, daysLate: null });
+    ).toMatchObject({
+      overdueAmount: null,
+      overdueCurrency: null,
+      dueDate: null,
+      daysLate: null,
+    });
     expect(s.progress).toEqual({
       dwellingsTotal: 3,
       readingsDone: 2,

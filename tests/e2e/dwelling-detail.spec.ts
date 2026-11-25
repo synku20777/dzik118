@@ -111,7 +111,10 @@ test("Dwelling detail reads as one summary, filters by section and stays readabl
   expect(await covered()).toEqual([]);
   await page.locator("#billingEmail").fill("resident@x");
   await page.locator("#basic-info-form button[type=submit]").click();
-  await expect(page.locator("#editor-basic .notice-danger")).toBeVisible();
+  // Compact form: the error sits under the field group and names the field.
+  await expect(page.locator("#editor-basic .field-error")).toContainText(
+    "Billing email"
+  );
   await expect(page.locator("#billingEmail")).toHaveValue("resident@x");
   await expect(page.locator("#billingEmail")).toHaveAttribute(
     "aria-invalid",

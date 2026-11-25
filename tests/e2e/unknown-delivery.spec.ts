@@ -121,8 +121,9 @@ test("an admin marks an invoice with an unconfirmed email as delivered", async (
   const warning = page.getByText("Delivery outcome could not be confirmed.");
   await expect(warning).toBeVisible();
 
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Mark as delivered" }).click();
+  // data-confirm asks in the app's modal card, not the browser's dialog.
+  await page.locator("#confirm-dialog [data-confirm-ok]").click();
 
   // Redirected back with a GET, carrying the success message.
   await expect(page.getByText("Invoice marked as delivered.")).toBeVisible();

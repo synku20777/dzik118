@@ -1,0 +1,108 @@
+---
+import ManualPaymentForm from "./ManualPaymentForm.astro";
+import PaymentHistoryTable, {
+  type HistoryRow,
+} from "./PaymentHistoryTable.astro";
+
+const sample: HistoryRow = {
+  transactionId: "sample-bank",
+  date: "2026-09-10",
+  dwellingId: "12",
+  dwellingLabel: "12",
+  payer: "Anna Bērziņa",
+  reference: "INV-2026-001",
+  method: "BANK",
+  amount: "33.88",
+  currency: "EUR",
+  status: "CONFIRMED",
+  invoiceId: "sample-invoice",
+  invoiceNumber: "INV-2026-001",
+  periodId: "sample-september",
+  matchId: "sample-match",
+};
+const rows: HistoryRow[] = [
+  sample,
+  {
+    ...sample,
+    transactionId: "sample-cash",
+    matchId: undefined,
+    date: "2026-09-08",
+    dwellingId: "18",
+    dwellingLabel: "18",
+    payer: "Līga Kalniņa",
+    reference: "Receipt 27",
+    method: "CASH",
+    amount: "25.00",
+    status: "REVERSED",
+    invoiceId: undefined,
+    note: "Posted to the dwelling account",
+  },
+];
+---
+
+<div class="app-content space-y-6" data-payments-specimen>
+  <h2 id="payment-history" tabindex="-1">
+    Payment history
+  </h2>
+  <PaymentHistoryTable
+    rows={rows}
+    organizationId="preview"
+    locale="en"
+    preview
+  />
+  <p class="text-sm" data-sample-reversal-status role="status"></p>
+  <details class="disclosure" id="record-payment">
+    <summary>Record a payment</summary>
+    <div class="mt-3">
+      <ManualPaymentForm
+        organizationId="preview"
+        idPrefix="sample-payment"
+        today="2026-09-10"
+        currency="EUR"
+        invoices={[
+          {
+            id: "sample-invoice",
+            invoiceNumber: "INV-2026-002",
+            dwellingNumber: "14",
+            currency: "EUR",
+            remaining: "63.00",
+          },
+        ]}
+        dwellings={[{ id: "21", number: "21" }]}
+        preview
+      />
+      <p class="text-sm mt-3" data-sample-payment-status role="status"></p>
+    </div>
+  </details>
+</div>
+
+<script>
+  const root = document.querySelector<HTMLElement>("[data-payments-specimen]")!;
+  root.addEventListener("submit", (event) => {
+    if (!(event.target instanceof HTMLFormElement)) return;
+    event.preventDefault();
+    const form = event.target;
+    if (form.hasAttribute("data-payment-form")) {
+      root.querySelector("[data-sample-payment-status]")!.textContent =
+        "Sample payment recorded.";
+      return;
+    }
+    const disclosure = form.closest<HTMLDetailsElement>(".reverse")!;
+    const row = form.closest("tr")!;
+    row.dataset.status = "REVERSED";
+    row.querySelector<HTMLElement>('[data-col="amount"]')!.dataset.void =
+      "true";
+    const badge = row.querySelector<HTMLElement>(
+      '[data-col="status"] .status-badge'
+    )!;
+    badge.dataset.tone = "neutral";
+    badge.textContent = "Reversed";
+    const details = row.querySelector<HTMLAnchorElement>(
+      '[data-col="actions"] a'
+    )!;
+    details.focus();
+    disclosure.remove();
+    root.querySelector("[data-sample-reversal-status]")!.textContent =
+      "Sample payment reversed.";
+  });
+</script>

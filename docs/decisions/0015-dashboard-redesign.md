@@ -294,3 +294,10 @@ Consequences:
 - The fold rules in section 10 of
   [DASHBOARD_GUIDELINES.md](../product/DASHBOARD_GUIDELINES.md) are rewritten for
   this order.
+
+## Addendum 2026-11-23: badge and eyebrow sizes
+
+The badge and eyebrow sizes in this record are also out of date. Status badges
+are 16px (`--text-base`) and eyebrows are 14px (`--text-sm`), set once in
+`global.css`. Where this record and DESIGN_SYSTEM.md disagree, DESIGN_SYSTEM.md
+and `global.css` win.

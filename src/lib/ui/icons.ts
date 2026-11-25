@@ -44,6 +44,7 @@ export const ICONS = {
     '<path d="M3 21h18M3 10h18M5 6l7-3l7 3M4 10v11m16-11v11M8 14v3m4-3v3m4-3v3" />',
   coin: '<g><path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0" /><path d="M14.8 9A2 2 0 0 0 13 8h-2a2 2 0 1 0 0 4h2a2 2 0 1 1 0 4h-2a2 2 0 0 1-1.8-1M12 7v10" /></g>',
   search: '<path d="M3 10a7 7 0 1 0 14 0a7 7 0 1 0-14 0m18 11l-6-6" />',
+  mail: '<path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="m3 7l9 6l9-6" />',
   filter:
     '<path d="M4 4h16v2.172a2 2 0 0 1-.586 1.414L15 12v7l-6 2v-8.5L4.52 7.572A2 2 0 0 1 4 6.227z" />',
   pencil:
@@ -64,6 +65,12 @@ export const ICONS = {
   minus: '<path d="M5 12h14" />',
   "arrow-left": '<path d="M5 12h14M5 12l6 6m-6-6l6-6" />',
   "arrow-right": '<path d="M5 12h14m-6 6l6-6m-6-6l6 6" />',
+  "arrow-up": '<path d="M12 5v14m6-8l-6-6m-6 6l6-6" />',
+  "arrow-down": '<path d="M12 5v14m6-6l-6 6m-6-6l6 6" />',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16" />',
+  loader: '<path d="M12 3a9 9 0 1 0 9 9" />',
+  "grip-vertical":
+    '<path d="M8 5a1 1 0 1 0 2 0a1 1 0 1 0-2 0m0 7a1 1 0 1 0 2 0a1 1 0 1 0-2 0m0 7a1 1 0 1 0 2 0a1 1 0 1 0-2 0m6-14a1 1 0 1 0 2 0a1 1 0 1 0-2 0m0 7a1 1 0 1 0 2 0a1 1 0 1 0-2 0m0 7a1 1 0 1 0 2 0a1 1 0 1 0-2 0" />',
   "chevron-right": '<path d="m9 6l6 6l-6 6" />',
   link: '<path d="M9 15l6-6m-4-3l.463-.536a5 5 0 0 1 7.071 7.072L18 13m-5 5l-.397.534a5.07 5.07 0 0 1-7.127 0a4.97 4.97 0 0 1 0-7.071L6 11" />',
   "arrow-back-up": '<path d="M9 14L4 9l5-5m-5 5h11a5.5 5.5 0 0 1 0 11h-4" />',

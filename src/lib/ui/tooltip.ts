@@ -89,8 +89,34 @@ function place(target: Element, box: HTMLElement) {
   // is first placed), so the first tooltip lands where the later ones do.
   const width = box.offsetWidth;
   const height = box.offsetHeight;
-  const above = anchor.top - height - GAP >= MARGIN;
-  const top = above ? anchor.top - height - GAP : anchor.bottom + GAP;
+  // data-tip-placement="left" or "right" sets the tooltip beside its target
+  // when it fits there; otherwise, and by default, above (or below).
+  const side = target.getAttribute("data-tip-placement");
+  const sideLeft =
+    side === "right" ? anchor.right + GAP : anchor.left - width - GAP;
+  if (
+    (side === "left" || side === "right") &&
+    sideLeft >= MARGIN &&
+    sideLeft + width <= window.innerWidth - MARGIN
+  ) {
+    const sideTop = Math.min(
+      Math.max(anchor.top + anchor.height / 2 - height / 2, MARGIN),
+      Math.max(MARGIN, window.innerHeight - height - MARGIN)
+    );
+    box.style.top = `${Math.round(sideTop)}px`;
+    box.style.left = `${Math.round(sideLeft)}px`;
+    box.dataset.placement = side;
+    return;
+  }
+  // Above by default; below when asked or when there is no room above, unless
+  // below has no room either.
+  const roomAbove = anchor.top - height - GAP >= MARGIN;
+  const roomBelow = anchor.bottom + height + GAP <= window.innerHeight - MARGIN;
+  const above = side === "bottom" ? !roomBelow && roomAbove : roomAbove;
+  const top = Math.min(
+    Math.max(above ? anchor.top - height - GAP : anchor.bottom + GAP, MARGIN),
+    Math.max(MARGIN, window.innerHeight - height - MARGIN)
+  );
   const left = Math.min(
     Math.max(anchor.left + anchor.width / 2 - width / 2, MARGIN),
     Math.max(MARGIN, window.innerWidth - width - MARGIN)
@@ -110,6 +136,11 @@ function show(target: Element) {
   if (current && current !== target) release(current);
   current = target;
   box.textContent = text;
+  // data-tip-tone tints the tooltip for a state (info, success, warning,
+  // danger); without it the tooltip is the plain light square.
+  const tone = target.getAttribute("data-tip-tone");
+  if (tone) box.dataset.tone = tone;
+  else delete box.dataset.tone;
   // Elements that already say it in their aria-label need no second reading.
   if (target.getAttribute("aria-label") !== text) {
     target.setAttribute("aria-describedby", box.id);
@@ -158,9 +189,14 @@ function dismiss(also?: Element | null) {
   hide(false);
 }
 
-function schedule(target: Element, delay: number) {
+function schedule(target: Element, delay: number, pointer = false) {
   window.clearTimeout(showTimer);
   if (!textFor(target)) return;
+  // data-tip-delay (milliseconds) holds a tooltip back on a target that is
+  // easy to cross with the pointer; it also skips the warm window. Keyboard
+  // focus still shows it at once.
+  const own = Number(target.getAttribute("data-tip-delay"));
+  if (pointer && own > 0) delay = own;
   if (delay <= 0) show(target);
   else showTimer = window.setTimeout(() => show(target), delay);
 }
@@ -181,7 +217,11 @@ export function installTooltips() {
     // Moving on to another control: close this one now, so the next shows at
     // once (the warm window) instead of the grace timer cancelling it.
     if (current) hide();
-    schedule(target, Date.now() - lastHidden < WARM_WINDOW ? 0 : SHOW_DELAY);
+    schedule(
+      target,
+      Date.now() - lastHidden < WARM_WINDOW ? 0 : SHOW_DELAY,
+      true
+    );
   });
   document.addEventListener("pointerout", (event) => {
     if (event.pointerType !== "mouse") return;

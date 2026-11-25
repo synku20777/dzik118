@@ -1,0 +1,263 @@
+---
+import "../../styles/tariffs.css";
+import Icon from "./Icon.astro";
+import StatusBadge from "./StatusBadge.astro";
+import TariffDrawer from "./TariffDrawer.astro";
+
+const dwellings = [
+  { id: "12", number: "12" },
+  { id: "14", number: "14" },
+  { id: "21", number: "21" },
+];
+---
+
+<div class="rules-page app-content" data-tariff-specimen>
+  <div class="cluster">
+    <button
+      type="button"
+      class="btn-secondary"
+      data-narrow-tariffs
+      aria-pressed="false"
+    >
+      Narrow table
+    </button>
+  </div>
+  <div class="table-wrap table-wrap-visible rules-table-wrap">
+    <table class="rules-table w-full text-left text-sm">
+      <caption class="sr-only">Sample tariffs</caption>
+      <thead>
+        <tr>
+          {[
+            "Tariff",
+            "Calculation",
+            "VAT",
+            "Validity",
+            "Applies to",
+            "Status",
+            "Actions",
+          ].map((label) => (
+            <th scope="col">{label}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="row-link">
+          <td class="tariff-name">
+            <a class="row-link-target" href="#tariffs" data-edit-sample-tariff>
+              Cold water
+            </a>
+            <span class="tariff-code">COLD_WATER</span>
+          </td>
+          <td class="tariff-calculation">
+            <span data-sample-calculation>Meter consumption</span>
+            <span class="tariff-secondary" data-sample-price>
+              €3.00 / m³
+            </span>
+          </td>
+          <td class="tariff-vat" data-sample-vat>
+            21%
+          </td>
+          <td class="tariff-validity">
+            <span class="tariff-date-range" data-sample-validity>
+              1 September 2026 – ongoing
+            </span>
+          </td>
+          <td class="tariff-scope text-muted" data-sample-scope>
+            All dwellings
+          </td>
+          <td class="tariff-status">
+            <StatusBadge status="ACTIVE" locale="en" />
+          </td>
+          <td class="tariff-menu text-right">
+            <details class="row-menu row-link-above" data-dismiss>
+              <summary aria-label="More actions: Sample tariff">
+                <Icon name="dots" size="sm" />
+              </summary>
+              <div>
+                <button type="button" data-edit-sample-tariff>
+                  Edit tariff
+                </button>
+              </div>
+            </details>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p data-tariff-sample-status class="text-sm" role="status"></p>
+  <TariffDrawer
+    organizationId="preview"
+    currency="EUR"
+    locale="en"
+    dwellingOptions={dwellings}
+    preview
+  />
+</div>
+
+<style>
+  [data-tariff-specimen][data-narrow] .rules-table-wrap {
+    max-width: 42rem;
+  }
+</style>
+
+<script>
+  const sample = document.querySelector<HTMLElement>("[data-tariff-specimen]")!;
+  const dialog = sample.querySelector<HTMLDialogElement>("#tariff-drawer")!;
+  const form = sample.querySelector<HTMLFormElement>("#tariff-form")!;
+  const field = (name: string) =>
+    form.elements.namedItem(name) as HTMLInputElement;
+  const result = sample.querySelector("[data-tariff-sample-status]")!;
+  const nameLink = sample.querySelector("[data-edit-sample-tariff]")!;
+  const summary = sample.querySelector("summary")!;
+  const title = dialog.querySelector("#tariff-drawer-title")!;
+  const drawerStatus = dialog.querySelector<HTMLElement>(
+    "#tariff-drawer-status"
+  )!;
+  const defaults = {
+    name: "Cold water",
+    code: "COLD_WATER",
+    calculationType: "METER_CONSUMPTION",
+    meterType: "COLD_WATER",
+    unit: "m3",
+    unitPrice: "3.00",
+    effectiveFrom: "2026-09-01",
+  };
+  for (const [key, value] of Object.entries(defaults)) field(key).value = value;
+  field("code").readOnly = true;
+  let saved = new FormData(form);
+  let opener: HTMLElement | null = null;
+
+  function sync() {
+    const type = field("calculationType").value;
+    const scope = field("applicationScope").value;
+    for (const panel of form.querySelectorAll<HTMLElement>(
+      "[data-scope-panel]"
+    ))
+      panel.hidden = panel.dataset.scopePanel !== scope;
+    form.querySelector<HTMLElement>("[data-meter-type-field]")!.hidden =
+      type !== "METER_CONSUMPTION";
+    form.querySelector<HTMLElement>("[data-unit-price-field]")!.hidden =
+      type === "MANUAL_AMOUNT";
+    const count = form.querySelectorAll(
+      'input[name="dwellingIds"]:checked'
+    ).length;
+    form.querySelector("[data-dwelling-count-label]")!.textContent =
+      `${count} ${count === 1 ? "dwelling" : "dwellings"} selected`;
+    const gross = form.querySelector<HTMLElement>("[data-gross-preview]")!;
+    const number = (name: string) =>
+      Number(field(name).value.replace(",", "."));
+    const amount = number("unitPrice") * (1 + number("vatRate") / 100);
+    gross.hidden =
+      type === "MANUAL_AMOUNT" ||
+      !field("unitPrice").value.trim() ||
+      !Number.isFinite(amount);
+    if (!gross.hidden) gross.textContent = `With VAT: €${amount.toFixed(2)}`;
+  }
+  function restore() {
+    const controls = Array.from(
+      form.querySelectorAll("input[name], select[name], textarea[name]")
+    ) as unknown as Array<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >;
+    for (const input of controls) {
+      if (
+        input instanceof HTMLInputElement &&
+        ["radio", "checkbox"].includes(input.type)
+      )
+        input.checked = saved.getAll(input.name).includes(input.value);
+      else input.value = String(saved.get(input.name) ?? "");
+    }
+    sync();
+  }
+  for (const control of sample.querySelectorAll<HTMLElement>(
+    "[data-edit-sample-tariff]"
+  ))
+    control.addEventListener("click", (event) => {
+      event.preventDefault();
+      const menu = control.closest("details");
+      opener = menu ? summary : control;
+      if (menu) menu.open = false;
+      restore();
+      title.textContent = `Edit tariff · ${field("name").value}`;
+      const enabled = field("enabled").checked;
+      drawerStatus.dataset.tone = enabled ? "success" : "neutral";
+      drawerStatus.textContent = enabled ? "Active" : "Disabled";
+      drawerStatus.hidden = false;
+      dialog.showModal();
+      field("name").focus();
+    });
+  for (const control of dialog.querySelectorAll("[data-close-tariff-drawer]"))
+    control.addEventListener("click", () => dialog.close());
+  dialog.addEventListener("close", () => {
+    if (opener?.getClientRects().length) opener.focus();
+  });
+  window.addEventListener("hashchange", () => {
+    if (sample.closest<HTMLElement>(".ds-topic")?.hidden && dialog.open)
+      dialog.close();
+  });
+  const search = form.querySelector<HTMLInputElement>(
+    "[data-dwelling-search]"
+  )!;
+  const rows = form.querySelectorAll<HTMLElement>("[data-dwelling-number]");
+  search.addEventListener("input", () => {
+    for (const row of rows)
+      row.hidden = !row.dataset.dwellingNumber!.includes(
+        search.value.trim().toLowerCase()
+      );
+  });
+  for (const selector of [
+    "[data-select-all-visible]",
+    "[data-clear-selection]",
+  ]) {
+    form.querySelector(selector)?.addEventListener("click", () => {
+      for (const row of rows)
+        if (selector === "[data-clear-selection]" || !row.hidden)
+          row.querySelector("input")!.checked =
+            selector === "[data-select-all-visible]";
+      sync();
+    });
+  }
+  form.addEventListener("input", sync);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+    saved = new FormData(form);
+    nameLink.textContent = field("name").value;
+    const label = (name: string) =>
+      (form.elements.namedItem(name) as unknown as HTMLSelectElement)
+        .selectedOptions[0]?.label;
+    sample.querySelector("[data-sample-calculation]")!.textContent =
+      label("calculationType") ?? "";
+    sample.querySelector("[data-sample-price]")!.textContent =
+      field("calculationType").value === "MANUAL_AMOUNT"
+        ? ""
+        : `€${field("unitPrice").value} / ${field("unit").value}`;
+    sample.querySelector("[data-sample-vat]")!.textContent =
+      `${field("vatRate").value}%`;
+    sample.querySelector("[data-sample-validity]")!.textContent =
+      `${field("effectiveFrom").value} – ${field("effectiveUntil").value || "ongoing"}`;
+    sample.querySelector("[data-sample-scope]")!.textContent =
+      {
+        ONE_TO_ALL: "All dwellings",
+        ONE_TO_MANY: "Selected dwellings",
+        ONE_TO_ONE: "One dwelling",
+      }[field("applicationScope").value] ?? "";
+    const status = sample.querySelector<HTMLElement>(
+      ".tariff-status .status-badge"
+    )!;
+    const enabled = field("enabled").checked;
+    status.dataset.tone = enabled ? "success" : "neutral";
+    status.textContent = enabled ? "Active" : "Disabled";
+    result.textContent = "Sample tariff saved.";
+    dialog.close();
+  });
+  sample
+    .querySelector("[data-narrow-tariffs]")!
+    .addEventListener("click", (event) => {
+      const narrow = sample.toggleAttribute("data-narrow");
+      (event.currentTarget as HTMLElement).setAttribute(
+        "aria-pressed",
+        String(narrow)
+      );
+    });
+</script>

@@ -1,0 +1,275 @@
+.rules-page {
+  display: grid;
+  gap: var(--gap-section);
+  min-width: 0;
+}
+.rules-archived-toggle {
+  font-size: var(--text-sm);
+}
+.tariff-gross {
+  margin-block-start: calc(var(--gap-field) * -0.5);
+  color: var(--color-foreground);
+  font-variant-numeric: tabular-nums;
+}
+/* The table answers to its own width, not the screen's: the sidebar comes
+   and goes, and Russian labels run long. Inline-size containment also stops
+   the table from pushing the whole page wider than the screen. Overflow,
+   corner radii and row hover tint live on `.table-wrap-visible` in
+   global.css. */
+.rules-table-wrap {
+  container: rules-table / inline-size;
+}
+/* One-line date ranges once the table has room for them (1024px and up). */
+@container rules-table (width >= 60rem) {
+  .tariff-date-range {
+    white-space: nowrap;
+  }
+}
+/* Cell spacing, alignment and the row menu match the Dwellings table. */
+.rules-page .rules-table th {
+  padding: var(--space-3) var(--space-4);
+}
+.rules-page .rules-table td {
+  padding: var(--space-4);
+  vertical-align: middle;
+}
+/* Tighter horizontal padding while all seven columns are still narrow. */
+@container rules-table (50rem <= width < 72rem) {
+  .rules-page .rules-table th,
+  .rules-page .rules-table td {
+    padding-inline: 0.625rem;
+  }
+}
+.tariff-vat {
+  white-space: nowrap;
+}
+.rules-table tr[hidden] {
+  display: none;
+}
+.rules-table tbody tr {
+  border-bottom: 1px solid var(--color-border);
+}
+/* The last *visible* row: the tbody's last child is the hidden "no
+   matches" row, so :last-child never matched a tariff. */
+.rules-table tbody tr:not([hidden]):not(:has(~ tr:not([hidden]))) {
+  border-bottom: 0;
+}
+.tariff-name a {
+  font-weight: 500;
+}
+.tariff-code,
+.tariff-secondary {
+  display: block;
+  margin-block-start: var(--space-1);
+  color: var(--color-muted);
+}
+.tariff-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.rules-help {
+  display: grid;
+  gap: var(--gap-field);
+  padding: var(--pad-panel-compact);
+  font-size: var(--text-sm);
+}
+.rules-help p {
+  max-width: 80ch;
+}
+.rule-field-row {
+  display: grid;
+  gap: var(--gap-field);
+}
+.rule-field {
+  min-width: 0;
+}
+.rule-field input:not([type="radio"]):not([type="checkbox"]),
+.rule-field select,
+.rule-field textarea {
+  width: 100%;
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+.tariff-scope-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.tariff-scope-fieldset > legend {
+  margin-block-end: var(--space-2);
+}
+.context-drawer.tariff-drawer {
+  width: min(40rem, 100vw);
+}
+#tariff-form {
+  display: grid;
+  gap: var(--gap-field);
+}
+.drawer-section-heading {
+  margin-block-start: var(--gap-section);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+.drawer-textarea-box {
+  resize: vertical;
+}
+.tariff-scope-options {
+  display: grid;
+  gap: var(--space-2);
+}
+.rule-field label.tariff-scope-option {
+  display: flex;
+  align-items: start;
+  gap: var(--space-3);
+  min-height: var(--control-size-md);
+  padding-block: var(--space-2);
+  cursor: pointer;
+}
+.tariff-scope-option input {
+  flex: 0 0 auto;
+  margin-block-start: var(--gap-label);
+}
+.tariff-scope-option strong {
+  display: block;
+  font-weight: 600;
+}
+.tariff-scope-option p {
+  color: var(--color-muted);
+  font-weight: 400;
+}
+.tariff-dwelling-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block-start: var(--space-2);
+}
+.tariff-dwelling-actions span {
+  margin-inline-start: auto;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+.tariff-dwelling-list {
+  display: grid;
+  gap: var(--gap-label);
+  max-height: 12rem;
+  margin-block-start: var(--space-3);
+  overflow-y: auto;
+}
+.rule-field label.tariff-dwelling-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-size-md);
+  padding: var(--space-2);
+  font-weight: 400;
+}
+.tariff-dwelling-row:hover {
+  background: var(--color-hover);
+}
+@media (width >= 48rem) {
+  .rule-field-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (width < 40rem) {
+  .rules-archived-toggle {
+    flex-basis: 100%;
+  }
+  .rules-page .page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .rules-page .page-actions {
+    justify-content: start;
+  }
+  .tariff-drawer .context-drawer-footer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #tariff-drawer-save {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+  }
+  .tariff-drawer .context-drawer-footer > [data-close-tariff-drawer] {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  #tariff-drawer-archive,
+  #tariff-drawer-restore {
+    grid-column: 1;
+    grid-row: 1;
+  }
+}
+/* Cards once seven columns no longer fit (phones, and tablets without the
+   sidebar). */
+@container rules-table (width < 50rem) {
+  /* Cards: the row is the box, so it carries the tint and the outer radius. */
+  .rules-table-wrap .rules-table tbody tr:hover {
+    background: var(--color-hover);
+  }
+  .rules-table-wrap .rules-table tbody tr:hover > td {
+    background: transparent;
+  }
+  .rules-table tbody tr:not([hidden]):not(tr:not([hidden]) ~ tr) {
+    border-top-left-radius: var(--radius-panel);
+    border-top-right-radius: var(--radius-panel);
+    corner-shape: squircle;
+  }
+  .rules-table tbody tr:not([hidden]):not(:has(~ tr:not([hidden]))) {
+    border-bottom-left-radius: var(--radius-panel);
+    border-bottom-right-radius: var(--radius-panel);
+    corner-shape: squircle;
+  }
+  .rules-table,
+  .rules-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .rules-page .rules-table thead {
+    display: none;
+  }
+  .rules-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: var(--space-2);
+    padding: var(--pad-panel-compact);
+  }
+  .rules-page .rules-table td {
+    display: block;
+    padding: 0;
+  }
+  .rules-table .tariff-name {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .rules-table .tariff-status {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .rules-table .tariff-menu {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .rules-table .tariff-calculation {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .rules-table .tariff-validity {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .rules-table .tariff-vat,
+  .rules-table .tariff-scope {
+    display: none;
+  }
+  .tariff-calculation .tariff-secondary {
+    display: inline;
+    margin-inline-start: var(--space-2);
+  }
+  #tariff-empty td {
+    grid-column: 1 / -1;
+  }
+}

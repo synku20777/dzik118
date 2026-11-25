@@ -1,0 +1,57 @@
+---
+import Icon from "./Icon.astro";
+import ResidentDetails from "./ResidentDetails.astro";
+import ResidentMeterCard from "./ResidentMeterCard.astro";
+import ResidentReadingForm from "./ResidentReadingForm.astro";
+---
+
+<section class="resident-section" aria-labelledby="specimen-readings-title">
+  <h2 id="specimen-readings-title">Meter readings</h2>
+  <p id="specimen-reading-help" class="resident-line resident-muted">
+    <Icon name="info-circle" />
+    Enter the full number on the meter. Use up to three decimal places.
+  </p>
+  <ResidentMeterCard
+    id="sample-water"
+    type="COLD_WATER"
+    name="Cold water"
+    unit="m³"
+    serialNumber="006742"
+    previousValue="124.100"
+    currentValue={null}
+    locale="en"
+  >
+    <ResidentReadingForm
+      dwellingId="sample-dwelling"
+      periodId="sample-period"
+      meterId="sample-water"
+      name="Cold water"
+      unit="m³"
+      helpId="specimen-reading-help"
+      locale="en"
+    />
+    <p
+      id="specimen-reading-error"
+      class="notice notice-danger form-inline-error"
+      data-sample-reading-error
+      role="alert"
+      hidden
+    >
+      The current reading is lower than the previous reading.
+    </p>
+  </ResidentMeterCard>
+  <ResidentMeterCard
+    id="sample-electricity"
+    type="ELECTRICITY"
+    name="Electricity"
+    unit="kWh"
+    serialNumber="004201"
+    previousValue="388.200"
+    currentValue="402.500"
+    locale="en"
+  />
+</section>
+
+<ResidentDetails label="Consumption history">
+  <p>August 2026 · Cold water · 1.4 m³</p>
+</ResidentDetails>

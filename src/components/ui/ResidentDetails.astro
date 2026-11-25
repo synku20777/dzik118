@@ -1,0 +1,13 @@
+---
+interface Props {
+  label: string;
+}
+const { label } = Astro.props;
+---
+
+<details class="resident-details disclosure">
+  <summary>{label}</summary>
+  <div class="resident-details-body">
+    <slot />
+  </div>
+</details>

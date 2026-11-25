@@ -7,7 +7,9 @@ drizzle/migrations/
 docs/
 # Agent tooling and generated research output
 .agents/
+.claude/skills/
 .codex/
+agent/skills/
 AGENTS.md
 reports/
 research_notes/

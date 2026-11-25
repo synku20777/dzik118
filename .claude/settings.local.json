@@ -1,0 +1,9 @@
+{
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": ["supabase"],
+  "skillOverrides": {
+    "migrate-radix-to-base": "name-only",
+    "shadcn": "name-only",
+    "ste-writing": "name-only"
+  }
+}

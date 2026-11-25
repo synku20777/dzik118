@@ -91,13 +91,15 @@ interface Props {
     nameLength: number;
   };
   hrefBase: string;
-  resetAction: string;
+  resetAction?: string;
+  previewReset?: EntranceInput[];
   labels: BuildingLabels;
   // Translated stage names and their icons, "NONE" for no billing case.
   stages: Record<string, { label: string; icon: IconName }>;
   // Translated names of the non-apartment types, in strip order.
   stripTypes: { type: string; label: string }[];
   legend: { stage: string; icon: IconName; label: string }[];
+  canArrange?: boolean;
 }
 
 const fill = (text: string, values: Record<string, string | number>) =>
@@ -129,6 +131,9 @@ const reducedMotion = () =>
 
 export default function BuildingEditor(props: Props) {
   const { labels, limits, units } = props;
+  const canArrange = props.canArrange ?? true;
+  const preview = props.previewReset !== undefined;
+  const previewSaves = useRef(0);
   const [layout, setLayout] = useState<Layout>(props.initial);
   const [saved, setSaved] = useState(props.saved);
   const [arranging, setArranging] = useState(false);
@@ -149,6 +154,7 @@ export default function BuildingEditor(props: Props) {
   const tiles = useRef(new Map<string, HTMLElement>());
   const before = useRef(new Map<string, DOMRect>());
   const focusAfter = useRef<string | null>(null);
+  const focusModeChange = useRef(false);
   const pending = useRef<Layout | null>(null);
   const inFlight = useRef(false);
   // The dwelling being dragged from this island; any other drop is ignored.
@@ -192,10 +198,18 @@ export default function BuildingEditor(props: Props) {
     pending.current = null;
     inFlight.current = true;
     setStatus("saving");
-    const { error } = await actions.dwellings
-      .saveLayout({ organizationId: props.organizationId, entrances: body })
-      // A lost connection throws instead of returning an error.
-      .catch(() => ({ error: { message: "" } }));
+    let error: { message: string } | undefined;
+    if (preview) {
+      const fail = previewSaves.current++ === 0;
+      await new Promise<void>((resolve) => setTimeout(resolve, 250));
+      if (fail) error = { message: "" };
+    } else {
+      const response = await actions.dwellings
+        .saveLayout({ organizationId: props.organizationId, entrances: body })
+        // A lost connection throws instead of returning an error.
+        .catch(() => ({ error: { message: "" } }));
+      error = response.error;
+    }
     inFlight.current = false;
     if (error) {
       pending.current = pending.current ?? body;
@@ -206,7 +220,7 @@ export default function BuildingEditor(props: Props) {
     setSaved(true);
     if (pending.current) void flush();
     else setStatus("saved");
-  }, [props.organizationId]);
+  }, [preview, props.organizationId]);
 
   // Moves made while a save is on its way merge into the next save: what is
   // saved is always the latest layout.
@@ -254,6 +268,21 @@ export default function BuildingEditor(props: Props) {
       focusAfter.current = null;
     }
   }, [layout]);
+
+  function changeMode(next: boolean) {
+    focusModeChange.current = true;
+    setArranging(next);
+  }
+  useLayoutEffect(() => {
+    if (!focusModeChange.current) return;
+    focusModeChange.current = false;
+    const control = root.current?.querySelector<HTMLElement>(
+      arranging ? ".building-entrance-name-input" : ".building-arrange-start"
+    );
+    (control?.getClientRects().length ? control : root.current)?.focus({
+      preventScroll: true,
+    });
+  }, [arranging]);
 
   const commit = (
     next: Layout,
@@ -333,6 +362,12 @@ export default function BuildingEditor(props: Props) {
   useEffect(() => {
     if (!arranging) return;
     const onKey = (event: globalThis.KeyboardEvent) => {
+      if (
+        preview &&
+        (!root.current?.getClientRects().length ||
+          !root.current.contains(event.target as Node))
+      )
+        return;
       const typing = (event.target as Element).closest?.("input");
       if (resetting) return;
       if (!typing && (event.ctrlKey || event.metaKey) && event.key === "z") {
@@ -351,6 +386,7 @@ export default function BuildingEditor(props: Props) {
   // navigation to the browser (its own prompt may ask again; KNOWN_GAPS).
   // Confirming drops what was not sent, so nothing saves after leaving.
   useEffect(() => {
+    if (preview) return;
     const unsaved = () =>
       inFlight.current || pending.current !== null || status === "error";
     const keep = () => {
@@ -416,7 +452,7 @@ export default function BuildingEditor(props: Props) {
       removeEventListener("beforeunload", onUnload);
       document.removeEventListener("astro:before-preparation", onNavigate);
     };
-  }, [status, labels.discard, arranging]);
+  }, [status, labels.discard, arranging, preview]);
 
   // Leaving the page drops what is still waiting, and stops the tint timer.
   useEffect(
@@ -541,13 +577,7 @@ export default function BuildingEditor(props: Props) {
       >
         <span className="building-unit-number">{unit.number}</span>
         <span className="building-unit-state" aria-hidden="true">
-          {unit.stage === "MISSING_DATA" ? (
-            "?"
-          ) : unit.stage ? (
-            <Svg name={stage.icon} />
-          ) : (
-            "—"
-          )}
+          <Svg name={stage.icon} />
         </span>
       </a>
     );
@@ -568,10 +598,17 @@ export default function BuildingEditor(props: Props) {
     );
   };
 
-  const stepButton = (label: string, icon: IconName, onClick: () => void) => (
+  const stepButton = (
+    label: string,
+    icon: IconName,
+    onClick: () => void,
+    danger = false
+  ) => (
     <button
       type="button"
-      className="icon-btn icon-btn-sm"
+      className={
+        danger ? "icon-btn icon-btn-sm icon-btn-danger" : "icon-btn icon-btn-sm"
+      }
       aria-label={label}
       onClick={onClick}
     >
@@ -589,117 +626,150 @@ export default function BuildingEditor(props: Props) {
       ref={root}
       inert={resetting || undefined}
       className="building"
+      tabIndex={-1}
       data-arranging={arranging ? "" : undefined}
       aria-label={labels.building}
     >
-      <div className="building-toolbar">
-        {!arranging && !saved && !busy && (
-          <p className="building-hint">{labels.hint}</p>
-        )}
-        {/* After Done the status stays while a save is on its way or failed. */}
-        {(arranging || busy) && (
-          <p className="building-status" data-status={status} role="status">
-            {status === "saving" && labels.saving}
-            {status === "saved" && labels.saved}
-            {status === "error" && (
+      {(canArrange || busy) && (
+        <div className="building-toolbar">
+          {canArrange && !arranging && !saved && !busy && (
+            <p className="building-hint">{labels.hint}</p>
+          )}
+          {/* After Done the status stays while a save is on its way or failed. */}
+          {(arranging || busy) && (
+            <p
+              className="building-status"
+              data-status={status}
+              role="status"
+              tabIndex={-1}
+            >
+              {status === "saving" && labels.saving}
+              {status === "saved" && labels.saved}
+              {status === "error" && (
+                <>
+                  {`${labels.failed} ${errorText}`.trim()}{" "}
+                  <button
+                    type="button"
+                    className="inline-undo"
+                    onClick={(event) => {
+                      if (arranging)
+                        event.currentTarget
+                          .closest("p")
+                          ?.focus({ preventScroll: true });
+                      else
+                        root.current
+                          ?.querySelector<HTMLButtonElement>(
+                            ".building-arrange-start"
+                          )
+                          ?.focus({ preventScroll: true });
+                      pending.current = pending.current ?? layoutRef.current;
+                      void flush();
+                    }}
+                  >
+                    {labels.retry}
+                  </button>
+                </>
+              )}
+            </p>
+          )}
+          <div className="building-actions">
+            {arranging && canArrange ? (
               <>
-                {`${labels.failed} ${errorText}`.trim()}{" "}
                 <button
                   type="button"
-                  className="building-retry"
+                  className="btn-secondary"
+                  onClick={undo}
+                  disabled={!canUndo}
+                >
+                  <Svg name="arrow-back-up" />
+                  {labels.undo}
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
                   onClick={() => {
-                    pending.current = pending.current ?? layoutRef.current;
-                    void flush();
+                    const next = addEntrance(
+                      layoutRef.current,
+                      `${labels.entrance} ${String.fromCharCode(65 + layoutRef.current.length)}`,
+                      limits.entrances
+                    );
+                    if (next) commit(next);
                   }}
                 >
-                  {labels.retry}
+                  <Svg name="plus" />
+                  {labels.addEntrance}
+                </button>
+                {saved && (
+                  <form
+                    method={preview ? "dialog" : "POST"}
+                    action={props.resetAction}
+                    // A plain browser POST (not Astro's router): nothing on the
+                    // page, such as a skip link, can cancel it half-way and
+                    // leave the locked editor behind.
+                    data-astro-reload
+                    onSubmit={(event) => {
+                      // Reached only once confirmed (the confirm stops a
+                      // declined submit first). Drop what waits; lock edits.
+                      pending.current = null;
+                      if (props.previewReset) {
+                        event.preventDefault();
+                        history.current = [];
+                        setCanUndo(false);
+                        select(null);
+                        setDrafts({});
+                        setAnnounce("");
+                        capture();
+                        layoutRef.current = props.previewReset;
+                        setLayout(props.previewReset);
+                        setSaved(false);
+                        setStatus("idle");
+                        changeMode(false);
+                        return;
+                      }
+                      setResetting(true);
+                    }}
+                  >
+                    <input
+                      type="hidden"
+                      name="organizationId"
+                      value={props.organizationId}
+                    />
+                    {/* Not while a save is on its way: it could land after the
+                        reset and bring the old layout back. */}
+                    <button
+                      type="submit"
+                      className="btn-secondary"
+                      data-confirm={labels.resetConfirm}
+                      disabled={busy}
+                    >
+                      {labels.reset}
+                    </button>
+                  </form>
+                )}
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => {
+                    select(null);
+                    changeMode(false);
+                  }}
+                >
+                  {labels.done}
                 </button>
               </>
-            )}
-          </p>
-        )}
-        <div className="building-actions">
-          {arranging ? (
-            <>
+            ) : canArrange ? (
               <button
                 type="button"
-                className="btn-secondary"
-                onClick={undo}
-                disabled={!canUndo}
+                className="btn-secondary building-arrange-start"
+                onClick={() => changeMode(true)}
               >
-                <Svg name="arrow-back-up" />
-                {labels.undo}
+                <Svg name="pencil" />
+                {labels.arrange}
               </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => {
-                  const next = addEntrance(
-                    layoutRef.current,
-                    `${labels.entrance} ${String.fromCharCode(65 + layoutRef.current.length)}`,
-                    limits.entrances
-                  );
-                  if (next) commit(next);
-                }}
-              >
-                <Svg name="plus" />
-                {labels.addEntrance}
-              </button>
-              {saved && (
-                <form
-                  method="POST"
-                  action={props.resetAction}
-                  // A plain browser POST (not Astro's router): nothing on the
-                  // page, such as a skip link, can cancel it half-way and
-                  // leave the locked editor behind.
-                  data-astro-reload
-                  onSubmit={() => {
-                    // Reached only once confirmed (the confirm stops a
-                    // declined submit first). Drop what waits; lock edits.
-                    pending.current = null;
-                    setResetting(true);
-                  }}
-                >
-                  <input
-                    type="hidden"
-                    name="organizationId"
-                    value={props.organizationId}
-                  />
-                  {/* Not while a save is on its way: it could land after the
-                      reset and bring the old layout back. */}
-                  <button
-                    type="submit"
-                    className="btn-secondary"
-                    data-confirm={labels.resetConfirm}
-                    disabled={busy}
-                  >
-                    {labels.reset}
-                  </button>
-                </form>
-              )}
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => {
-                  select(null);
-                  setArranging(false);
-                }}
-              >
-                {labels.done}
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="btn-secondary building-arrange-start"
-              onClick={() => setArranging(true)}
-            >
-              <Svg name="pencil" />
-              {labels.arrange}
-            </button>
-          )}
+            ) : null}
+          </div>
         </div>
-      </div>
+      )}
       {arranging && <p className="building-help">{labels.help}</p>}
       <p className="sr-only" aria-live="polite">
         {announce}
@@ -773,11 +843,16 @@ export default function BuildingEditor(props: Props) {
                         if (next) commit(next);
                       })}
                     </span>
-                    {stepButton(labels.removeEntrance, "trash", () => {
-                      const next = removeEntrance(layoutRef.current, index);
-                      if (next) commit(next);
-                      else setAnnounce(labels.entranceBusy);
-                    })}
+                    {stepButton(
+                      labels.removeEntrance,
+                      "trash",
+                      () => {
+                        const next = removeEntrance(layoutRef.current, index);
+                        if (next) commit(next);
+                        else setAnnounce(labels.entranceBusy);
+                      },
+                      true
+                    )}
                   </div>
                 )}
                 <div className="building-floors">
@@ -797,21 +872,27 @@ export default function BuildingEditor(props: Props) {
                           <div
                             className="building-slot"
                             key={slot}
-                            role={unit ? "listitem" : undefined}
+                            role={unit || arranging ? "listitem" : "none"}
                             data-over={over === key ? "" : undefined}
                             {...dropHandlers(target, key)}
-                            {...(unit
-                              ? {}
-                              : placeHandlers(
-                                  target,
-                                  fill(labels.empty, {
-                                    entrance: entrance.name,
-                                    floor: floor + 1,
-                                    place: slot + 1,
-                                  })
-                                ))}
                           >
-                            {unit && renderTile(unit)}
+                            {unit ? (
+                              renderTile(unit)
+                            ) : arranging ? (
+                              <button
+                                type="button"
+                                className="building-empty-slot"
+                                aria-label={fill(labels.empty, {
+                                  entrance: entrance.name,
+                                  floor: floor + 1,
+                                  place: slot + 1,
+                                })}
+                                onClick={() => {
+                                  if (!selected) return;
+                                  move(selected, target, { focus: true });
+                                }}
+                              />
+                            ) : null}
                           </div>
                         );
                       })}
@@ -840,13 +921,7 @@ export default function BuildingEditor(props: Props) {
                 data-stage={item.stage}
                 aria-hidden="true"
               >
-                {item.stage === "MISSING_DATA" ? (
-                  "?"
-                ) : item.stage === "NONE" ? (
-                  "—"
-                ) : (
-                  <Svg name={item.icon} size="xs" />
-                )}
+                <Svg name={item.icon} size="xs" />
               </span>
               {item.label}
             </li>
@@ -857,7 +932,7 @@ export default function BuildingEditor(props: Props) {
       {stripGroups.length > 0 &&
         (arranging ||
           stripGroups.some(({ type }) => trayUnits(type).length > 0)) && (
-          <div className="building-strip">
+          <div className="panel building-strip">
             {stripGroups
               .filter(({ type }) => arranging || trayUnits(type).length > 0)
               .map(({ type, label }) => (
@@ -869,7 +944,7 @@ export default function BuildingEditor(props: Props) {
           </div>
         )}
       {(arranging || apartmentsUnplaced) && (
-        <div className="building-unplaced">
+        <div className="panel building-unplaced">
           <h3>{labels.notPlaced}</h3>
           {renderTray("APARTMENT", labels.notPlaced)}
         </div>

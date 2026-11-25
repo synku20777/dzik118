@@ -11,6 +11,10 @@
 // outright (the `pending` guard below), not merely slowed down.
 import { isInputError, type ActionError } from "astro:actions";
 import {
+  clearDrawerFieldError,
+  setDrawerFieldError,
+} from "./drawer-field-errors";
+import {
   completeMutation,
   confirmMutation,
   createMutationId,
@@ -85,6 +89,67 @@ export function bindMutationForm<T, Optimistic = undefined>(
   let errorEl: HTMLElement | null = null;
   let clientMutationId: string | undefined;
   let logicalMutationId: string | undefined;
+  const activeFieldErrors = new Map<
+    HTMLElement,
+    { errorEl: HTMLElement; created: boolean; cleanup: () => void }
+  >();
+
+  function getNamedControls(): HTMLElement[] {
+    if (typeof form.querySelectorAll !== "function") return [];
+    return Array.from(
+      form.querySelectorAll<HTMLElement>(
+        'input:not([type="hidden"])[name], select[name], textarea[name]'
+      )
+    );
+  }
+
+  function readControlValue(control: HTMLElement): string {
+    const input = control as Partial<HTMLInputElement>;
+    if (input.type === "checkbox" || input.type === "radio") {
+      return input.checked ? "1" : "0";
+    }
+    return input.value ?? "";
+  }
+
+  function isControlVisible(control: HTMLElement): boolean {
+    if ((control as { hidden?: boolean }).hidden) return false;
+    if (typeof control.closest === "function" && control.closest("[hidden]")) {
+      return false;
+    }
+    return true;
+  }
+
+  function clearFieldErrorFor(control: HTMLElement) {
+    const entry = activeFieldErrors.get(control);
+    if (!entry) return;
+    activeFieldErrors.delete(control);
+    entry.cleanup();
+    clearDrawerFieldError(control, entry.errorEl);
+    if (entry.created) entry.errorEl.remove();
+  }
+
+  function clearFieldErrors() {
+    for (const control of [...activeFieldErrors.keys()]) {
+      clearFieldErrorFor(control);
+    }
+    if (typeof form.querySelectorAll !== "function") return;
+    // Also remove any server-rendered <FieldError> elements left from a prior
+    // non-JS POST before starting or reporting a fresh JS submission.
+    for (const stale of Array.from(
+      form.querySelectorAll<HTMLElement>('.field-error[id$="-error"]')
+    )) {
+      const id = stale.id;
+      const matched = getNamedControls().filter((control) =>
+        (control.getAttribute("aria-describedby") ?? "")
+          .split(/\s+/)
+          .includes(id)
+      );
+      for (const control of matched) {
+        clearDrawerFieldError(control, stale);
+      }
+      stale.remove();
+    }
+  }
 
   function releaseForm() {
     pending = false;
@@ -98,10 +163,12 @@ export function bindMutationForm<T, Optimistic = undefined>(
   function clearError() {
     errorEl?.remove();
     errorEl = null;
+    clearFieldErrors();
   }
 
   function showError(message: string) {
-    clearError();
+    errorEl?.remove();
+    errorEl = null;
     if (form.isConnected === false) return;
     const el = document.createElement("p");
     el.className = "notice notice-danger form-inline-error";
@@ -109,6 +176,108 @@ export function bindMutationForm<T, Optimistic = undefined>(
     el.textContent = message;
     form.insertAdjacentElement("beforebegin", el);
     errorEl = el;
+  }
+
+  function applyInputFieldErrors(
+    fields: Record<string, string[] | undefined>,
+    submittedValues: Map<HTMLElement, string>
+  ): { anyMatchedField: boolean; unmapped: string[]; firstMessage?: string } {
+    const controls = getNamedControls();
+    const unmapped: string[] = [];
+    let anyMatchedField = false;
+    let firstMessage: string | undefined;
+    let firstInvalidControl: HTMLElement | undefined;
+
+    // Errors follow the form's field order, not the schema's.
+    const position = (name: string) => {
+      const index = controls.findIndex(
+        (el) =>
+          (el.getAttribute("name") ?? (el as HTMLInputElement).name) === name
+      );
+      return index < 0 ? controls.length : index;
+    };
+    const entries = Object.entries(fields).sort(
+      ([a], [b]) => position(a) - position(b)
+    );
+    for (const [fieldName, rawMessages] of entries) {
+      const messages = (rawMessages ?? []).filter(Boolean);
+      if (messages.length === 0) continue;
+      firstMessage ??= messages[0];
+
+      const control = controls.find(
+        (el) =>
+          (el.getAttribute("name") ?? (el as HTMLInputElement).name) ===
+            fieldName && isControlVisible(el)
+      );
+      if (!control) {
+        unmapped.push(...messages);
+        continue;
+      }
+
+      anyMatchedField = true;
+      if (readControlValue(control) !== submittedValues.get(control)) {
+        continue;
+      }
+
+      clearFieldErrorFor(control);
+      const errorId = control.id
+        ? `${control.id}-error`
+        : `${form.id || "form"}-${fieldName}-error`;
+      const fieldErrorEl = document.createElement("p");
+      fieldErrorEl.className = "field-error";
+      fieldErrorEl.id = errorId;
+      fieldErrorEl.setAttribute("role", "alert");
+
+      // Errors go outside a boxed field's frame and an icon wrapper; in a
+      // compact form (.field-group), under the whole group, naming the field.
+      const closest = (selector: string) =>
+        typeof control.closest === "function"
+          ? control.closest<HTMLElement>(selector)
+          : null;
+      const group = closest(".field-group");
+      const wrapper = group ?? closest(".field-box, .input-icon") ?? control;
+      const parent = wrapper.parentElement;
+      let anchor: HTMLElement =
+        parent &&
+        typeof parent.classList?.contains === "function" &&
+        parent.classList.contains("flex") &&
+        typeof parent.insertAdjacentElement === "function"
+          ? parent
+          : wrapper;
+      // Under a group, after the errors already there: field order holds.
+      while (
+        group &&
+        anchor.nextElementSibling?.classList.contains("field-error")
+      ) {
+        anchor = anchor.nextElementSibling as HTMLElement;
+      }
+      anchor.insertAdjacentElement("afterend", fieldErrorEl);
+
+      const label = group
+        ? (control as HTMLInputElement).labels?.[0]?.textContent?.trim()
+        : undefined;
+      const text = messages.join(" ");
+      setDrawerFieldError(
+        control,
+        fieldErrorEl,
+        label ? `${label}: ${text}` : text
+      );
+      const onEdit = () => clearFieldErrorFor(control);
+      control.addEventListener?.("input", onEdit);
+      control.addEventListener?.("change", onEdit);
+      activeFieldErrors.set(control, {
+        errorEl: fieldErrorEl,
+        created: true,
+        cleanup: () => {
+          control.removeEventListener?.("input", onEdit);
+          control.removeEventListener?.("change", onEdit);
+        },
+      });
+      firstInvalidControl ??= control;
+    }
+
+    firstInvalidControl?.focus?.();
+    return { anyMatchedField, unmapped, firstMessage };
   }
 
   // The server saved the change but the page could not show it. The save stays
@@ -140,6 +309,11 @@ export function bindMutationForm<T, Optimistic = undefined>(
       submitButton.disabled = true;
       submitButton.setAttribute("aria-disabled", "true");
       submitButton.textContent = savingLabel;
+    }
+
+    const submittedValues = new Map<HTMLElement, string>();
+    for (const control of getNamedControls()) {
+      submittedValues.set(control, readControlValue(control));
     }
 
     const formData = new FormData(form);
@@ -203,13 +377,28 @@ export function bindMutationForm<T, Optimistic = undefined>(
           // an input error). Only a genuine non-input ActionError (thrown
           // by the domain layer, already a safe human sentence -- see
           // src/actions/_errors.ts) uses `.message` directly.
-          const message = isInputError(error)
-            ? (Object.values(error.fields)[0]?.[0] ?? fallbackErrorMessage)
-            : error.message;
-          const safeMessage = message
-            ? (config.translateError?.(message) ?? message)
-            : fallbackErrorMessage;
-          showError(safeMessage);
+          const translate = (message: string) =>
+            config.translateError?.(message) ?? message;
+          let safeMessage: string;
+          if (isInputError(error)) {
+            const fields = Object.fromEntries(
+              Object.entries(error.fields).map(([name, messages]) => [
+                name,
+                messages?.map(translate),
+              ])
+            );
+            const { anyMatchedField, unmapped, firstMessage } =
+              applyInputFieldErrors(fields, submittedValues);
+            safeMessage = firstMessage || fallbackErrorMessage;
+            if (unmapped.length > 0 || !anyMatchedField) {
+              showError(unmapped.join(" ") || safeMessage);
+            }
+          } else {
+            safeMessage = error.message
+              ? translate(error.message)
+              : fallbackErrorMessage;
+            showError(safeMessage);
+          }
           config.onError?.(error, form, optimistic);
           if (mutationId && descriptor) {
             failMutation(mutationId, safeMessage, descriptor.errorLabel);

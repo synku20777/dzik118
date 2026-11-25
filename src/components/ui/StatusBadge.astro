@@ -1,12 +1,13 @@
 ---
 import Icon from "./Icon.astro";
 import { invoiceStatusBadge } from "../../lib/ui/invoice-status";
-import { translate, uiLocale } from "../../lib/ui/i18n";
+import { translate, uiLocale, type Locale } from "../../lib/ui/i18n";
 interface Props {
   status: string;
+  locale?: Locale;
 }
 const { status } = Astro.props;
-const locale = uiLocale(Astro.cookies, Astro.url);
+const locale = Astro.props.locale ?? uiLocale(Astro.cookies, Astro.url);
 const { label, tone, icon } = invoiceStatusBadge(status);
 ---
 

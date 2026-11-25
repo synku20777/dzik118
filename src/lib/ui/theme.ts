@@ -45,13 +45,25 @@ export function setTheme(theme: "light" | "dark") {
   } catch (err) {
     void err;
   }
-  const meta = document.querySelector<HTMLMetaElement>(
+  syncThemeMeta(document, theme);
+  updateToggleButtons(theme);
+}
+
+// --color-canvas in each theme, for the browser chrome (theme-color).
+const CANVAS = { light: "#eee8de", dark: "#0e1517" } as const;
+
+// A stored theme overrides the OS: point color-scheme and both media-scoped
+// theme-color metas at it.
+export function syncThemeMeta(doc: Document, theme: "light" | "dark") {
+  const scheme = doc.querySelector<HTMLMetaElement>(
     'meta[name="color-scheme"]'
   );
-  if (meta) {
-    meta.content = theme;
+  if (scheme) scheme.content = theme;
+  for (const meta of doc.querySelectorAll<HTMLMetaElement>(
+    'meta[name="theme-color"]'
+  )) {
+    meta.content = CANVAS[theme];
   }
-  updateToggleButtons(theme);
 }
 
 export function updateToggleButtons(theme?: "light" | "dark") {
@@ -123,6 +135,9 @@ export function initTheme() {
       if (!theme) return;
       const { newDocument } = event as unknown as { newDocument: Document };
       newDocument.documentElement.setAttribute("data-theme", theme);
+      if (theme === "light" || theme === "dark") {
+        syncThemeMeta(newDocument, theme);
+      }
     });
   }
 }

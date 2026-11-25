@@ -20,11 +20,13 @@ The app follows the site's specification.
   fallback. Switzer has Latin only, so Russian text uses Overused Grotesk.
 - **Display: Fraunces** (variable) with the axes `SOFT` 40 and `WONK` 0. The
   browser sets `opsz` from the rendered size (`font-optical-sizing: auto`).
-- **Fraunces weight follows size:** 700 above 36px, 600 at 36px or below.
-  - `h1.font-display` in `.page-header` and `.app-content` is 29.6px to 40px. It
-    is 700 from a viewport width of 1125px (70.3125rem).
-  - The period workbench heading is 32px to 44px. It is 700 from 900px
-    (56.25rem).
+- **Fraunces weight follows size, set by breakpoint:** a heading that can grow
+  past 36px is 700 from a viewport width of 70rem and 600 below it; a heading
+  capped at 36px is always 600.
+  - `h1.font-display` in `.page-header` and `.app-content` is 29.6px to 40px
+    (`3.2vw`). It is 700 from 70rem (1120px at the default text size, where it
+    is about 35.8px). The period workbench heading uses the same size and rule.
+  - The dashboard month heading is at most 36px (`--text-display-md`). It is 600.
   - The Organization heading is at most 33.6px. It is 600.
 - **Size-specific sans spacing** (updated 2026-11-07): body and controls use
   neutral `--tracking-sans: 0`; caption/label roles use
@@ -48,9 +50,9 @@ The app follows the site's specification.
   display spacing on `.font-display`, and sans headings use their own
   `--tracking-heading` token.
 - An explicit `letter-spacing` or `tracking-*` still wins, as the specification
-  says. The app keeps its existing values: eyebrows (0.02em) and uppercase breadcrumbs
-  (0.08em), and the large sans numbers on the dashboard and the
-  resident invoice (-0.025em and -0.03em).
+  says. The app keeps its existing values: eyebrows (0.02em), and the large
+  sans numbers on the dashboard and the resident invoice (-0.025em and
+  -0.03em).
 - The app has no `.text-display` class and no large Fraunces numbers.
 - The fonts are copied files, not an npm package. `npm install` of the package
   fails in this repository, because of an existing conflict between TypeScript

@@ -256,7 +256,7 @@ const hasErrors =
           .
           <a
             href={`/admin/o/${organizationId}/dwellings`}
-            class="underline hover:text-foreground ml-1"
+            class="link link-underlined ml-1"
           >
             {t("View all dwellings")}
           </a>
@@ -265,7 +265,7 @@ const hasErrors =
           <span>{t("Have a spreadsheet?")}</span>
           <a
             href={`/admin/o/${organizationId}/dwellings/import`}
-            class="underline hover:text-foreground"
+            class="link link-underlined"
           >
             {t("Upload a CSV file")}
           </a>
@@ -275,7 +275,7 @@ const hasErrors =
           <a
             href={`/admin/o/${organizationId}/setup/templates/dwellings.csv`}
             download
-            class="underline hover:text-foreground"
+            class="link link-underlined"
           >
             {t("Download the CSV template")}
           </a>
@@ -296,7 +296,7 @@ const hasErrors =
     )}
 
     {step === "range" && (
-      <form method="POST" class="panel space-y-6 p-6">
+      <form method="POST" class="box space-y-6">
         <input type="hidden" name="step" value="preview" />
         <p class="setup-required-note">{t("Fields marked * are required.")}</p>
 
@@ -313,7 +313,7 @@ const hasErrors =
             required
             rows="4"
             aria-describedby="numbers-help"
-            class="mt-2 w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-body-sm"
+            class="mt-2 w-full text-body-sm"
             set:text={numbersInput}
           />
         </div>
@@ -330,7 +330,7 @@ const hasErrors =
               <select
                 id="defaultType"
                 name="defaultType"
-                class="mt-1 w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-body-sm"
+                class="mt-1 w-full text-body-sm"
               >
                 {DWELLING_TYPES.map((typeVal) => (
                   <option
@@ -354,7 +354,7 @@ const hasErrors =
                 inputmode="decimal"
                 value={defaultAreaInput}
                 placeholder="0.00"
-                class="mt-1 w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-body-sm"
+                class="mt-1 w-full text-body-sm"
               />
             </div>
 
@@ -369,7 +369,7 @@ const hasErrors =
                 inputmode="numeric"
                 value={defaultResidentsInput}
                 placeholder="0"
-                class="mt-1 w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-body-sm"
+                class="mt-1 w-full text-body-sm"
               />
             </div>
           </div>
@@ -443,7 +443,7 @@ const hasErrors =
                           row.errors.length > 0 ? `row-err-${index}` : undefined
                         }
                         aria-invalid={row.errors.length > 0 || undefined}
-                        class="w-full min-w-20 rounded-control border border-(--color-input-border) bg-surface px-3 py-1.5 text-body-sm"
+                        class="w-full min-w-20 text-body-sm"
                       />
                     </td>
                     <td class="px-4 py-2">
@@ -453,7 +453,7 @@ const hasErrors =
                       <select
                         id={`row-type-${index}`}
                         name="type"
-                        class="w-full min-w-28 rounded-control border border-(--color-input-border) bg-surface px-3 py-1.5 text-body-sm"
+                        class="w-full min-w-28 text-body-sm"
                       >
                         {DWELLING_TYPES.map((typeVal) => (
                           <option
@@ -475,7 +475,7 @@ const hasErrors =
                         inputmode="decimal"
                         name="areaM2"
                         value={row.areaM2}
-                        class="w-full min-w-20 rounded-control border border-(--color-input-border) bg-surface px-3 py-1.5 text-body-sm"
+                        class="w-full min-w-20 text-body-sm"
                       />
                     </td>
                     <td class="px-4 py-2">
@@ -488,7 +488,7 @@ const hasErrors =
                         inputmode="numeric"
                         name="residentCount"
                         value={row.residentCount}
-                        class="w-full min-w-20 rounded-control border border-(--color-input-border) bg-surface px-3 py-1.5 text-body-sm"
+                        class="w-full min-w-20 text-body-sm"
                       />
                     </td>
                     <td class="px-4 py-2 text-destructive">
@@ -531,7 +531,7 @@ const hasErrors =
           </button>
           <a
             href={`/admin/o/${organizationId}/setup/dwellings`}
-            class="ml-2 text-body-sm text-muted hover:underline"
+            class="link ml-2 text-body-sm"
           >
             {t("Back to range entry")}
           </a>
@@ -540,7 +540,7 @@ const hasErrors =
     )}
 
     {step === "result" && (
-      <div class="panel space-y-4 p-6">
+      <div class="box space-y-4">
         {replayedMessage ? (
           <p class="notice notice-warning" role="status">
             {replayedMessage}

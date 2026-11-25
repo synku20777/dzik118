@@ -1,4 +1,7 @@
 import type { AstroCookies } from "astro";
+import { fill } from "./fill";
+
+export { fill } from "./fill";
 
 export type Locale = "en" | "lv" | "ru";
 
@@ -350,9 +353,9 @@ const lv: Record<string, string> = {
   "Unit (e.g. m3, month, person)": "Mērvienība (piem., m3, mēnesis, persona)",
   "Effective until (optional)": "Spēkā līdz (neobligāti)",
   Mode: "Režīms",
-  "Create only (default) -- existing numbers become errors":
+  "Create only (default) — existing numbers become errors":
     "Tikai izveidot (noklusējums) — esošie numuri rada kļūdas",
-  "Update -- existing numbers are updated":
+  "Update — existing numbers are updated":
     "Atjaunināt — esošie numuri tiek atjaunināti",
   "Back to dwellings": "Atpakaļ uz īpašumiem",
   "Back to payments": "Atpakaļ uz maksājumiem",
@@ -423,6 +426,7 @@ const lv: Record<string, string> = {
   "Add admin": "Pievienot administratoru",
   "Admin users": "Administratori",
   "Your organizations": "Jūsu organizācijas",
+  Organizations: "Organizācijas",
   "Create organization": "Izveidot organizāciju",
   Create: "Izveidot",
   Account: "Konts",
@@ -589,7 +593,7 @@ const lv: Record<string, string> = {
   "Previous overpayment": "Iepriekšējā pārmaksa",
   "Late fees": "Nokavējuma nauda",
   "Total to pay": "Kopā jāmaksā",
-  "Received in payments": "Saņemts maksājumos",
+  "Paid on invoices": "Apmaksāts rēķinos",
   "Still unpaid": "Vēl neapmaksāts",
   "Sum of issued invoices": "Izrakstīto rēķinu summa",
   "Includes invoices that are not sent yet.":
@@ -696,6 +700,9 @@ const lv: Record<string, string> = {
     "Nav droši, ka korekcija tika saglabāta. Pārlādējiet lapu un pārbaudiet konta ierakstus, pirms pievienojat to vēlreiz.",
   // Zod's own message for a malformed email (z.email()).
   "Invalid email address": "Nederīga e-pasta adrese",
+  "Enter an occupant name.": "Ievadiet iemītnieka vārdu.",
+  "The current reading is lower than the previous reading.":
+    "Pašreizējais rādījums ir mazāks par iepriekšējo.",
   "Portal access": "Portāla piekļuve",
   "Discard unsaved changes?": "Atmest nesaglabātās izmaiņas?",
   "Add this adjustment? The balance changes right away.":
@@ -731,6 +738,11 @@ const lv: Record<string, string> = {
   "Search dwelling…": "Meklēt īpašumu…",
   "Clear filters": "Notīrīt filtrus",
   selected: "izvēlēti",
+  "{n} invoices selected|one": "Izvēlēts {n} rēķins",
+  "{n} invoices selected|other": "Izvēlēti {n} rēķini",
+  "{selection}. Ready to prepare: {prepare}. Ready to send: {send}.":
+    "{selection}. Sagatavošanai gatavi: {prepare}. Nosūtīšanai gatavi: {send}.",
+  "Selection cleared.": "Atlase notīrīta.",
   "eligible to prepare": "var sagatavot",
   "eligible to send": "var nosūtīt",
   "Prepare eligible": "Sagatavot atbilstošos",
@@ -821,6 +833,7 @@ const lv: Record<string, string> = {
   Previous: "Iepriekšējā",
   Next: "Nākamā",
   Page: "Lapa",
+  Pagination: "Lapu navigācija",
   "Import bank statement": "Importēt bankas izrakstu",
   "Bank imports": "Bankas importi",
   Imports: "Importi",
@@ -1003,11 +1016,12 @@ const lv: Record<string, string> = {
   "Show earlier changes ({count})": "Rādīt agrākās izmaiņas ({count})",
   "{count} still to enter": "Jāievada vēl: {count}",
   "All readings are in": "Visi rādījumi ievadīti",
+  "No dwellings in this period": "Šajā periodā nav īpašumu",
   "Dwelling, invoice, payer or reference":
     "Īpašums, rēķins, maksātājs vai atsauce",
   "{done} of {total} dwellings": "{done} no {total} īpašumiem",
   "Payment actions": "Maksājumu darbības",
-  "{share} of {total} received": "{share} no {total} saņemti",
+  "{share} of {total} paid": "Apmaksāti {share} no {total}",
   "{count} more missing items": "Vēl trūkstošo: {count}",
   Setup: "Iestatīšana",
   "+{count} more": "+{count} vēl",
@@ -1125,6 +1139,14 @@ const lv: Record<string, string> = {
   "{n} payments|one": "{n} maksājums",
   "{n} payments|other": "{n} maksājumi",
   "{total} received": "{total} saņemti",
+  "{total} matched to invoices for {period}":
+    "{total} piesaistīti rēķiniem par {period}",
+  "{amount} paid on invoices without a direct payment match.":
+    "{amount} apmaksāti rēķinos bez tieši piesaistīta maksājuma.",
+  "View paid invoices": "Skatīt apmaksātos rēķinus",
+  "All periods": "Visi periodi",
+  "Unavailable period": "Nepieejams periods",
+  "{currency} only": "tikai {currency}",
   "{count} payments · {total} received": "{count} maksājumi · {total} saņemti",
   "{suggested} suggested · {unmatched} unmatched":
     "{suggested} ieteikti · {unmatched} nesaistīti",
@@ -1848,12 +1870,12 @@ const lv: Record<string, string> = {
   "e.g. John Smith or Company Ltd": "piem., Jānis Bērziņš vai SIA Uzņēmums",
 
   // Added: translation coverage pass (settings/rules/billing/messages/guide/dashboard)
-  "-- none --": "-- nav --",
+  "— none —": "— nav —",
   "A descriptive name for this rule.": "Šī noteikuma aprakstošais nosaukums.",
   "English invoice label": "Angļu valodas nosaukums rēķinā",
   "Russian invoice label": "Krievu valodas nosaukums rēķinā",
-  "Optional -- falls back to the Latvian name":
-    "Neobligāti -- ja nav norādīts, tiek izmantots latviešu nosaukums",
+  "Optional — falls back to the Latvian name":
+    "Neobligāti — ja nav norādīts, tiek izmantots latviešu nosaukums",
   "Add a new tariff or billing rule. Fill in the details below.":
     "Pievienojiet jaunu tarifu vai norēķinu noteikumu. Aizpildiet informāciju zemāk.",
   "Add a note about this dwelling…": "Pievienojiet piezīmi par šo īpašumu…",
@@ -1969,7 +1991,7 @@ const lv: Record<string, string> = {
     "Dienu skaits no apmaksas termiņa līdz nokavējuma maksas piemērošanai.",
   "Number of days after the invoice date.":
     "Dienu skaits pēc rēķina izrakstīšanas datuma.",
-  "Number, occupant, address...": "Numurs, iedzīvotājs, adrese...",
+  "Number, occupant, address…": "Numurs, iedzīvotājs, adrese…",
   "Only for meter consumption rules.": "Tikai skaitītāja patēriņa noteikumiem.",
   "Open dwelling": "Atvērt īpašumu",
   "Organization summary": "Organizācijas kopsavilkums",
@@ -1982,10 +2004,9 @@ const lv: Record<string, string> = {
   "Rule summary": "Noteikuma kopsavilkums",
   "Rules applied to future late-fee calculations. Existing invoices keep their original financial snapshot.":
     "Noteikumi tiek piemēroti turpmākajiem nokavējuma maksas aprēķiniem. Esošie rēķini saglabā sākotnējos finanšu datus.",
-  "Search messages by subject or content...":
-    "Meklēt ziņas pēc tēmas vai satura...",
-  "Search rules by name or code...":
-    "Meklēt noteikumus pēc nosaukuma vai koda...",
+  "Search messages by subject or content…":
+    "Meklēt ziņas pēc tēmas vai satura…",
+  "Search rules by name or code…": "Meklēt noteikumus pēc nosaukuma vai koda…",
   "Select a conversation to view it here.":
     "Izvēlieties sarunu, lai to skatītu šeit.",
   "Send message": "Sūtīt ziņu",
@@ -2006,7 +2027,7 @@ const lv: Record<string, string> = {
     "Šī informācija tiek izmantota rēķinos un oficiālajā saziņā.",
   "This is how your organization details appear on invoices.":
     "Tā jūsu organizācijas dati tiks attēloti rēķinos.",
-  "Type your reply...": "Ierakstiet savu atbildi...",
+  "Type your reply…": "Ierakstiet savu atbildi…",
   "Unique identifier (e.g. cold_water).":
     "Unikāls identifikators (piem., cold_water).",
   "Unit of measurement.": "Mērvienība.",
@@ -2221,14 +2242,14 @@ const lv: Record<string, string> = {
   "Sending in progress…": "Notiek nosūtīšana…",
   "Record paper dispatch": "Reģistrēt nosūtīšanu papīra formātā",
   "Paper dispatched": "Nosūtīts papīra formātā",
-  "This invoice was delivered by email previously. A later attempt's outcome could not be confirmed -- verify the recipient mailbox or provider logs before resending.":
-    "Šis rēķins iepriekš tika nosūtīts pa e-pastu. Vēlākā mēģinājuma rezultātu neizdevās apstiprināt -- pirms atkārtotas nosūtīšanas pārbaudiet saņēmēja pastkasti vai pakalpojumu sniedzēja žurnālus.",
-  "This invoice was delivered by email previously. The most recent resend failed -- use Resend to try again.":
-    'Šis rēķins iepriekš tika nosūtīts pa e-pastu. Jaunākais atkārtotas nosūtīšanas mēģinājums neizdevās -- izmantojiet "Nosūtīt atkārtoti", lai mēģinātu vēlreiz.',
+  "This invoice was delivered by email previously. A later attempt's outcome could not be confirmed — verify the recipient mailbox or provider logs before resending.":
+    "Šis rēķins iepriekš tika nosūtīts pa e-pastu. Vēlākā mēģinājuma rezultātu neizdevās apstiprināt — pirms atkārtotas nosūtīšanas pārbaudiet saņēmēja pastkasti vai pakalpojumu sniedzēja žurnālus.",
+  "This invoice was delivered by email previously. The most recent resend failed — use Resend to try again.":
+    'Šis rēķins iepriekš tika nosūtīts pa e-pastu. Jaunākais atkārtotas nosūtīšanas mēģinājums neizdevās — izmantojiet "Nosūtīt atkārtoti", lai mēģinātu vēlreiz.',
   "Paper (unverified legacy record)":
     "Papīra formāts (nepārbaudīts vēsturisks ieraksts)",
-  "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch.":
-    "Automātiski reģistrēts iepriekšējā piegādes darbplūsmā -- tas neapstiprina manuālu nosūtīšanu papīra formātā.",
+  "Recorded automatically under the old delivery workflow — not a confirmed manual physical dispatch.":
+    "Automātiski reģistrēts iepriekšējā piegādes darbplūsmā — tas neapstiprina manuālu nosūtīšanu papīra formātā.",
 
   // Recurring tariffs (Tariffs & rules + dwelling read-only view).
   "Recurring tariffs": "Regulārie tarifi",
@@ -2264,9 +2285,9 @@ const lv: Record<string, string> = {
   "Applies only to the dwellings you choose. New dwellings are not included automatically.":
     "Attiecas tikai uz jūsu izvēlētajiem īpašumiem. Jauni īpašumi netiek pievienoti automātiski.",
   "Search dwellings": "Meklēt īpašumus",
-  "Filter by dwelling number...": "Filtrēt pēc īpašuma numura...",
+  "Filter by dwelling number…": "Filtrēt pēc īpašuma numura…",
   "Select all visible": "Atlasīt visus redzamos",
-  "-- select a dwelling --": "-- izvēlieties īpašumu --",
+  "— select a dwelling —": "— izvēlieties īpašumu —",
   Validity: "Derīgums",
   Advanced: "Papildu",
   "Sort order": "Kārtošanas secība",
@@ -2388,6 +2409,10 @@ const lv: Record<string, string> = {
   "Back to review": "Atpakaļ uz pārskatu",
   "Skip for now": "Pagaidām izlaist",
   "Fields marked * are required.": "Lauki ar * ir obligāti.",
+  "Name and address": "Nosaukums un adrese",
+  "Contact details": "Kontaktinformācija",
+  "Red dots mark required fields.": "Sarkani punkti apzīmē obligātos laukus.",
+  "Continue without saving": "Turpināt bez saglabāšanas",
   "Address line 1": "Adreses 1. rinda",
   "Address line 2": "Adreses 2. rinda",
   "Needed before invoices are prepared":
@@ -2931,9 +2956,9 @@ const ru: Record<string, string> = {
     "Единица измерения (напр. м³, месяц, человек)",
   "Effective until (optional)": "Действует до (необязательно)",
   Mode: "Режим",
-  "Create only (default) -- existing numbers become errors":
+  "Create only (default) — existing numbers become errors":
     "Только создание (по умолчанию) — существующие номера вызовут ошибку",
-  "Update -- existing numbers are updated":
+  "Update — existing numbers are updated":
     "Обновление — существующие номера обновляются",
   "Back to dwellings": "Назад к помещениям",
   "Back to payments": "Назад к платежам",
@@ -3007,6 +3032,7 @@ const ru: Record<string, string> = {
   "Add admin": "Добавить администратора",
   "Admin users": "Администраторы",
   "Your organizations": "Ваши организации",
+  Organizations: "Организации",
   "Create organization": "Создать организацию",
   Create: "Создать",
   Account: "Аккаунт",
@@ -3188,7 +3214,7 @@ const ru: Record<string, string> = {
   "Previous overpayment": "Прежняя переплата",
   "Late fees": "Пени",
   "Total to pay": "Всего к оплате",
-  "Received in payments": "Получено платежами",
+  "Paid on invoices": "Оплачено по счетам",
   "Still unpaid": "Ещё не оплачено",
   "Sum of issued invoices": "Сумма выставленных счетов",
   "Includes invoices that are not sent yet.":
@@ -3312,6 +3338,9 @@ const ru: Record<string, string> = {
     "Нет уверенности, что корректировка сохранена. Обновите страницу и проверьте записи счёта, прежде чем добавлять её снова.",
   // Zod's own message for a malformed email (z.email()).
   "Invalid email address": "Неверный адрес электронной почты",
+  "Enter an occupant name.": "Введите имя жильца.",
+  "The current reading is lower than the previous reading.":
+    "Текущее показание ниже предыдущего.",
   "Portal access": "Доступ к порталу",
   "Discard unsaved changes?": "Отменить несохранённые изменения?",
   "Add this adjustment? The balance changes right away.":
@@ -3347,6 +3376,13 @@ const ru: Record<string, string> = {
   "Search dwelling…": "Поиск помещения…",
   "Clear filters": "Сбросить фильтры",
   selected: "выбрано",
+  "{n} invoices selected|one": "Выбран {n} счёт",
+  "{n} invoices selected|few": "Выбрано {n} счёта",
+  "{n} invoices selected|many": "Выбрано {n} счетов",
+  "{n} invoices selected|other": "Выбрано {n} счёта",
+  "{selection}. Ready to prepare: {prepare}. Ready to send: {send}.":
+    "{selection}. К подготовке: {prepare}. К отправке: {send}.",
+  "Selection cleared.": "Выбор снят.",
   "eligible to prepare": "можно подготовить",
   "eligible to send": "можно отправить",
   "Prepare eligible": "Подготовить подходящие",
@@ -3438,6 +3474,7 @@ const ru: Record<string, string> = {
   Previous: "Предыдущая",
   Next: "Следующая",
   Page: "Страница",
+  Pagination: "Навигация по страницам",
   "Import bank statement": "Импортировать банковскую выписку",
   "Bank imports": "Импорт из банка",
   Imports: "Импорт",
@@ -3620,11 +3657,12 @@ const ru: Record<string, string> = {
   "Show earlier changes ({count})": "Показать более ранние изменения ({count})",
   "{count} still to enter": "Осталось ввести: {count}",
   "All readings are in": "Все показания введены",
+  "No dwellings in this period": "В этом периоде нет помещений",
   "Dwelling, invoice, payer or reference":
     "Помещение, счёт, плательщик или назначение",
   "{done} of {total} dwellings": "{done} из {total} помещений",
   "Payment actions": "Действия с платежами",
-  "{share} of {total} received": "{share} из {total} получено",
+  "{share} of {total} paid": "Оплачено {share} из {total}",
   "{count} more missing items": "Ещё недостающих: {count}",
   Setup: "Настройка",
   "+{count} more": "ещё +{count}",
@@ -3744,6 +3782,14 @@ const ru: Record<string, string> = {
   "{n} payments|many": "{n} платежей",
   "{n} payments|other": "{n} платежа",
   "{total} received": "{total} получено",
+  "{total} matched to invoices for {period}":
+    "{total} сопоставлено со счетами за {period}",
+  "{amount} paid on invoices without a direct payment match.":
+    "{amount} оплачено по счетам без прямой привязки платежа.",
+  "View paid invoices": "Посмотреть оплаченные счета",
+  "All periods": "Все периоды",
+  "Unavailable period": "Недоступный период",
+  "{currency} only": "только {currency}",
   "{count} payments · {total} received": "{count} платежей · {total} получено",
   "{suggested} suggested · {unmatched} unmatched":
     "{suggested} предложено · {unmatched} не сопоставлено",
@@ -4475,12 +4521,12 @@ const ru: Record<string, string> = {
   "e.g. John Smith or Company Ltd": "напр., Иван Иванов или ООО Компания",
 
   // Added: translation coverage pass (settings/rules/billing/messages/guide/dashboard)
-  "-- none --": "-- нет --",
+  "— none —": "— нет —",
   "A descriptive name for this rule.": "Понятное название этого правила.",
   "English invoice label": "Английское название в счёте",
   "Russian invoice label": "Русское название в счёте",
-  "Optional -- falls back to the Latvian name":
-    "Необязательно -- если не указано, используется латышское название",
+  "Optional — falls back to the Latvian name":
+    "Необязательно — если не указано, используется латышское название",
   "Add a new tariff or billing rule. Fill in the details below.":
     "Добавьте новый тариф или правило расчёта. Заполните данные ниже.",
   "Add a note about this dwelling…": "Добавьте примечание об этом помещении…",
@@ -4594,7 +4640,7 @@ const ru: Record<string, string> = {
     "Количество дней после срока оплаты до начисления платы за просрочку.",
   "Number of days after the invoice date.":
     "Количество дней после даты выставления счёта.",
-  "Number, occupant, address...": "Номер, жилец, адрес...",
+  "Number, occupant, address…": "Номер, жилец, адрес…",
   "Only for meter consumption rules.": "Только для правил расхода по счётчику.",
   "Open dwelling": "Открыть помещение",
   "Organization summary": "Сводка по организации",
@@ -4607,9 +4653,9 @@ const ru: Record<string, string> = {
   "Rule summary": "Сводка по правилу",
   "Rules applied to future late-fee calculations. Existing invoices keep their original financial snapshot.":
     "Правила применяются к будущим расчётам платы за просрочку. Существующие счета сохраняют исходные финансовые данные.",
-  "Search messages by subject or content...":
-    "Поиск сообщений по теме или содержанию...",
-  "Search rules by name or code...": "Поиск правил по названию или коду...",
+  "Search messages by subject or content…":
+    "Поиск сообщений по теме или содержанию…",
+  "Search rules by name or code…": "Поиск правил по названию или коду…",
   "Select a conversation to view it here.":
     "Выберите переписку, чтобы просмотреть её здесь.",
   "Send message": "Отправить сообщение",
@@ -4630,7 +4676,7 @@ const ru: Record<string, string> = {
     "Эта информация используется в счетах и в официальной переписке.",
   "This is how your organization details appear on invoices.":
     "Так данные вашей организации будут отображаться в счетах.",
-  "Type your reply...": "Введите ответ...",
+  "Type your reply…": "Введите ответ…",
   "Unique identifier (e.g. cold_water).":
     "Уникальный идентификатор (например, cold_water).",
   "Unit of measurement.": "Единица измерения.",
@@ -4844,14 +4890,14 @@ const ru: Record<string, string> = {
   "Sending in progress…": "Выполняется отправка…",
   "Record paper dispatch": "Зафиксировать отправку бумажного экземпляра",
   "Paper dispatched": "Бумажный экземпляр отправлен",
-  "This invoice was delivered by email previously. A later attempt's outcome could not be confirmed -- verify the recipient mailbox or provider logs before resending.":
-    "Этот счёт ранее был доставлен по электронной почте. Результат более поздней попытки не удалось подтвердить -- проверьте почтовый ящик получателя или логи провайдера перед повторной отправкой.",
-  "This invoice was delivered by email previously. The most recent resend failed -- use Resend to try again.":
-    "Этот счёт ранее был доставлен по электронной почте. Последняя повторная отправка не удалась -- используйте «Отправить повторно», чтобы попробовать снова.",
+  "This invoice was delivered by email previously. A later attempt's outcome could not be confirmed — verify the recipient mailbox or provider logs before resending.":
+    "Этот счёт ранее был доставлен по электронной почте. Результат более поздней попытки не удалось подтвердить — проверьте почтовый ящик получателя или логи провайдера перед повторной отправкой.",
+  "This invoice was delivered by email previously. The most recent resend failed — use Resend to try again.":
+    "Этот счёт ранее был доставлен по электронной почте. Последняя повторная отправка не удалась — используйте «Отправить повторно», чтобы попробовать снова.",
   "Paper (unverified legacy record)":
     "Бумажный экземпляр (непроверенная историческая запись)",
-  "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch.":
-    "Зафиксировано автоматически в рамках прежнего процесса доставки -- это не подтверждает отправку бумажного экземпляра вручную.",
+  "Recorded automatically under the old delivery workflow — not a confirmed manual physical dispatch.":
+    "Зафиксировано автоматически в рамках прежнего процесса доставки — это не подтверждает отправку бумажного экземпляра вручную.",
 
   // Recurring tariffs (Tariffs & rules + dwelling read-only view).
   "Recurring tariffs": "Регулярные тарифы",
@@ -4887,9 +4933,9 @@ const ru: Record<string, string> = {
   "Applies only to the dwellings you choose. New dwellings are not included automatically.":
     "Применяется только к выбранным вами помещениям. Новые помещения не добавляются автоматически.",
   "Search dwellings": "Поиск помещений",
-  "Filter by dwelling number...": "Фильтр по номеру помещения...",
+  "Filter by dwelling number…": "Фильтр по номеру помещения…",
   "Select all visible": "Выбрать все видимые",
-  "-- select a dwelling --": "-- выберите помещение --",
+  "— select a dwelling —": "— выберите помещение —",
   Validity: "Срок действия",
   Advanced: "Дополнительно",
   "Sort order": "Порядок сортировки",
@@ -5015,6 +5061,11 @@ const ru: Record<string, string> = {
   "Back to review": "Назад к обзору",
   "Skip for now": "Пока пропустить",
   "Fields marked * are required.": "Поля со знаком * обязательны.",
+  "Name and address": "Название и адрес",
+  "Contact details": "Контактные данные",
+  "Red dots mark required fields.":
+    "Обязательные поля отмечены красными точками.",
+  "Continue without saving": "Продолжить без сохранения",
   "Address line 1": "Строка адреса 1",
   "Address line 2": "Строка адреса 2",
   "Needed before invoices are prepared": "Необходимо до подготовки счетов",
@@ -5254,16 +5305,6 @@ export function translate(locale: Locale, text: string): string {
   return text;
 }
 
-// "{done} of {total}" -> "3 of 5". Values are shown as given.
-export function fill(
-  text: string,
-  values: Record<string, string | number>
-): string {
-  return text.replace(/\{(\w+)\}/g, (m, k) =>
-    k in values ? String(values[k]) : m
-  );
-}
-
 // Count-dependent sentence. English picks `one` for 1, else `other`. Latvian
 // and Russian look up `${other}|${category}` (CLDR via Intl.PluralRules; Latvian
 // "zero" uses the "|other" entry), so "21 dienu" / "11 dienām" come out right.
@@ -5273,15 +5314,52 @@ export function plural(
   one: string,
   other: string
 ): string {
-  let text = n === 1 ? one : other;
+  const category = new Intl.PluralRules(locale).select(n);
+  return fill(pluralTemplate(locale, category, n === 1 ? one : other, other), {
+    n: formatNumber(n, locale),
+  });
+}
+
+function pluralTemplate(
+  locale: Locale,
+  category: Intl.LDMLPluralRule,
+  fallback: string,
+  other: string
+): string {
+  let text = fallback;
   if (locale !== "en") {
-    const category = new Intl.PluralRules(locale).select(n);
     const forms = [`${other}|${category}`, `${other}|other`];
     text = translate(locale, forms[0]);
     if (text === forms[0]) text = translate(locale, forms[1]);
     if (text === forms[1]) text = translate(locale, other);
   }
-  return fill(text, { n: formatNumber(n, locale) });
+  return text;
+}
+
+export function workbenchSelectionCopy(locale: Locale) {
+  return {
+    locale,
+    selected: Object.fromEntries(
+      new Intl.PluralRules(locale)
+        .resolvedOptions()
+        .pluralCategories.map((category) => [
+          category,
+          pluralTemplate(
+            locale,
+            category,
+            category === "one"
+              ? "{n} invoice selected"
+              : "{n} invoices selected",
+            "{n} invoices selected"
+          ),
+        ])
+    ),
+    summary: translate(
+      locale,
+      "{selection}. Ready to prepare: {prepare}. Ready to send: {send}."
+    ),
+    cleared: translate(locale, "Selection cleared."),
+  };
 }
 
 // Shared by every page rendering an Astro Action's error: never shows raw

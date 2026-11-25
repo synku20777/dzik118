@@ -281,16 +281,16 @@ const statuses = [
         >
           <a class="btn-primary" href="#setup">
             {t("Start here")}
-            <span aria-hidden="true">↓</span>
+            <Icon name="arrow-down" size="sm" />
           </a>
           <a class="btn-secondary" href={`${base}/dashboard`}>
             {t("Open dashboard")}
-            <span aria-hidden="true">→</span>
+            <Icon name="arrow-right" size="sm" />
           </a>
         </PageHeader>
       </div>
 
-      <figure class="guide-shot guide-shot-hero">
+      <figure class="guide-shot guide-shot-hero panel">
         <img
           src="/guide/dashboard.jpg"
           alt={t(
@@ -316,7 +316,7 @@ const statuses = [
             )}{" "}
             <a
               href={`${base}/setup`}
-              class="font-semibold text-primary underline"
+              class="link link-underlined font-semibold"
             >
               {t("Open the setup")}
             </a>
@@ -332,10 +332,13 @@ const statuses = [
                 <p class="guide-ready">
                   <Icon name="check" size="xs" /> {t(step.ready)}
                 </p>
-                <a href={step.href}>{t(step.action)} →</a>
+                <a href={step.href} class="link link-underlined">
+                  {t(step.action)}
+                  <Icon name="arrow-right" size="xs" class="inline" />
+                </a>
               </div>
               {step.image && (
-                <figure class="guide-shot">
+                <figure class="guide-shot panel">
                   <img
                     src={step.image}
                     alt={t(step.imageAlt)}
@@ -370,10 +373,13 @@ const statuses = [
                 <p class="guide-ready">
                   <Icon name="check" size="xs" /> {t(step.ready)}
                 </p>
-                <a href={step.href}>{t(step.action)} →</a>
+                <a href={step.href} class="link link-underlined">
+                  {t(step.action)}
+                  <Icon name="arrow-right" size="xs" class="inline" />
+                </a>
               </div>
               {step.image && (
-                <figure class="guide-shot">
+                <figure class="guide-shot panel">
                   <img
                     src={step.image}
                     alt={t(step.imageAlt)}
@@ -424,20 +430,34 @@ const statuses = [
 
     <nav class="guide-toc" aria-label={t("On this page")}>
       <p class="eyebrow">{t("On this page")}</p>
-      <a href="#setup">{t("Initial setup")}</a>
-      {setupSteps.map((step, index) => (
-        <a class="guide-toc-child" href={`#setup-step-${index + 1}`}>
-          {t(step.title)}
-        </a>
-      ))}
-      <a href="#monthly">{t("Monthly billing cycle")}</a>
-      {monthlySteps.map((step, index) => (
-        <a class="guide-toc-child" href={`#monthly-step-${index + 1}`}>
-          {t(step.title)}
-        </a>
-      ))}
-      <a href="#statuses">{t("Invoice status guide")}</a>
-      <a href="#faq">{t("Frequently asked questions")}</a>
+      <ul class="menu-list">
+        <li>
+          <a href="#setup">{t("Initial setup")}</a>
+        </li>
+        {setupSteps.map((step, index) => (
+          <li>
+            <a class="guide-toc-child" href={`#setup-step-${index + 1}`}>
+              {t(step.title)}
+            </a>
+          </li>
+        ))}
+        <li>
+          <a href="#monthly">{t("Monthly billing cycle")}</a>
+        </li>
+        {monthlySteps.map((step, index) => (
+          <li>
+            <a class="guide-toc-child" href={`#monthly-step-${index + 1}`}>
+              {t(step.title)}
+            </a>
+          </li>
+        ))}
+        <li>
+          <a href="#statuses">{t("Invoice status guide")}</a>
+        </li>
+        <li>
+          <a href="#faq">{t("Frequently asked questions")}</a>
+        </li>
+      </ul>
     </nav>
   </div>
 </AdminLayout>
@@ -464,9 +484,6 @@ const statuses = [
   .guide-shot {
     overflow: hidden;
     margin-top: 1.75rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
     box-shadow: var(--elevation-flat);
   }
 
@@ -547,7 +564,6 @@ const statuses = [
   .guide-copy > a {
     display: inline-block;
     margin-top: 1rem;
-    color: var(--color-primary);
     font-size: var(--text-sm);
     font-weight: 650;
   }
@@ -600,32 +616,24 @@ const statuses = [
       top: 2rem;
       display: flex;
       flex-direction: column;
-      gap: 0.1rem;
+      gap: 0.25rem;
       max-height: calc(100vh - 4rem);
       overflow-y: auto;
       padding-left: 1rem;
       border-left: 1px solid var(--color-border);
     }
 
-    .guide-toc a {
-      padding: 0.5rem 0;
-      color: var(--color-muted);
-      font-size: var(--text-sm);
-      line-height: 1.35;
+    .guide-toc li:has(> a:not(.guide-toc-child)):not(:first-child) {
+      margin-top: 0.5rem;
     }
 
     .guide-toc a:not(.guide-toc-child) {
-      margin-top: 0.75rem;
-      color: var(--color-foreground);
       font-weight: 650;
     }
 
     .guide-toc .guide-toc-child {
-      padding-left: 0.75rem;
-    }
-
-    .guide-toc a:hover {
-      color: var(--color-primary);
+      padding-left: 1.5rem;
+      color: var(--color-muted);
     }
   }
 </style>

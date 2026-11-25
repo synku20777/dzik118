@@ -3,23 +3,28 @@
 // to where its money went. Actions (confirm, reject, match, reverse, record)
 // are unchanged from before; the layout separates the work queue from history.
 import PageHeader from "../../../../../components/ui/PageHeader.astro";
-import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
 import EmptyState from "../../../../../components/ui/EmptyState.astro";
 import ButtonGroup from "../../../../../components/ui/ButtonGroup.astro";
 import { listDwellings } from "../../../../../domain/organizations/dwellings";
 import {
   translate,
   uiLocale,
+  fill,
   formatMoney,
   formatDate,
+  formatPeriod,
   plural,
   friendlyActionErrorMessage,
 } from "../../../../../lib/ui/i18n";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import Icon from "../../../../../components/ui/Icon.astro";
 import { actions } from "astro:actions";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
+import { listPeriods } from "../../../../../domain/periods/periods";
+import { effectiveConfirmedAllocation } from "../../../../../domain/periods/invoice-balance";
 import { listBankImports } from "../../../../../domain/payments/bank-import";
 import {
+  getPeriodLegacyPaidTotal,
   listPaymentMatches,
   listUnmatchedTransactions,
 } from "../../../../../domain/payments/matching";
@@ -29,10 +34,17 @@ import {
   getPaymentFlowTotals,
   getReceivables,
 } from "../../../../../domain/payments/trail";
+import PaymentHistoryTable, {
+  type HistoryRow,
+} from "../../../../../components/ui/PaymentHistoryTable.astro";
 import ManualPaymentForm from "../../../../../components/ui/ManualPaymentForm.astro";
 import { compareExact, sumExact } from "../../../../../lib/decimal2";
 import { parseDateInput } from "../../../../../lib/date-input";
 import { orgLocalDateString } from "../../../../../lib/org-time";
+import {
+  resolvePeriodFilter,
+  summarizePeriodPayments,
+} from "../../../../../lib/ui/dashboard-collection";
 import { withRequestDb } from "../../../../../lib/db-request";
 
 const locale = uiLocale(Astro.cookies, Astro.url);
@@ -50,8 +62,12 @@ const reverseDwellingResult = Astro.getActionResult(
 const editResult = Astro.getActionResult(actions.payments.editUnmatched);
 
 const base = `/admin/o/${organizationId}`;
+const rawPeriodId = Astro.url.searchParams.get("periodId");
 const {
   organization,
+  periods,
+  periodFilter,
+  legacyPaidTotal,
   dwellingDirectory,
   rawImports,
   proposedMatches,
@@ -65,9 +81,23 @@ const {
   receivables,
 } = await withRequestDb(async (db) => {
   const organization = await getOrganization(db, organizationId);
+  const periods = await listPeriods(db, organizationId);
+  const periodFilter = resolvePeriodFilter(periods, rawPeriodId);
+  const legacyPaidTotal =
+    periodFilter.kind === "selected"
+      ? await getPeriodLegacyPaidTotal(
+          db,
+          organizationId,
+          periodFilter.period.id,
+          organization.currency
+        )
+      : "0.00";
   const today = orgLocalDateString(new Date(), organization.timezone);
   return {
     organization,
+    periods,
+    periodFilter,
+    legacyPaidTotal,
     dwellingDirectory: await listDwellings(db, organizationId, {
       includeArchived: true,
       limit: 2147483647,
@@ -151,24 +181,6 @@ const unmatchedMoney = sumExact(
 
 // ---- history: one list for every payment ------------------------------------
 type Status = "CONFIRMED" | "REVERSED" | "REJECTED";
-interface HistoryRow {
-  transactionId: string;
-  date: string;
-  dwellingId: string | null;
-  dwellingLabel: string;
-  payer: string | null;
-  reference: string | null;
-  method: "BANK" | "CASH";
-  amount: string;
-  currency: string;
-  status: Status;
-  invoiceId?: string;
-  invoiceNumber?: string;
-  periodId?: string;
-  matchId?: string;
-  directReversible?: boolean;
-  note?: string;
-}
 
 const matchRows = (list: typeof confirmedMatches, status: Status) =>
   list.map((m): HistoryRow => ({
@@ -180,7 +192,11 @@ const matchRows = (list: typeof confirmedMatches, status: Status) =>
     reference: m.transactionReference,
     method: m.transactionPaymentMethod,
     amount: m.transactionAmount,
+    allocatedAmount:
+      status === "CONFIRMED" ? effectiveConfirmedAllocation(m) : undefined,
     currency: m.transactionCurrency,
+    invoiceCurrency: m.invoiceCurrency,
+    invoiceAmountDue: m.amountDue,
     status,
     invoiceId: m.invoiceId,
     invoiceNumber: m.invoiceNumber,
@@ -243,11 +259,20 @@ const statusLabels = {
 
 const rawQ = Astro.url.searchParams.get("q")?.trim();
 const q = rawQ ? rawQ.slice(0, 100) : undefined;
+const billingPeriods = periods.filter((p) => !p.openingReadings);
+const selectedPeriod = periodFilter.period;
+const selectablePeriods =
+  selectedPeriod && selectedPeriod.openingReadings
+    ? [selectedPeriod, ...billingPeriods]
+    : billingPeriods;
 const from = parseDateInput(Astro.url.searchParams.get("from"));
 const to = parseDateInput(Astro.url.searchParams.get("to"));
 
 const rows = allRows.filter((r) => {
   if (statusKey && r.status !== statusFilters[statusKey]) return false;
+  if (periodFilter.kind === "unknown") return false;
+  if (periodFilter.kind === "selected" && r.periodId !== periodFilter.period.id)
+    return false;
   if (from && r.date < from) return false;
   if (to && r.date > to) return false;
   if (!q) return true;
@@ -261,15 +286,20 @@ const rows = allRows.filter((r) => {
     `${t("Dwelling")} ${r.dwellingLabel}`,
   ].some((v) => v?.toLowerCase().includes(needle));
 });
-const filtered = Boolean(statusKey || q || from || to);
-// Totals never mix currencies: with more than one in view, count only.
-const mixedCurrency = rows.some((r) => r.currency !== organization.currency);
-const receivedRows = rows.filter((r) => r.status === "CONFIRMED");
-const receivedTotal = sumExact(
-  receivedRows
-    .filter((r) => r.currency === organization.currency)
-    .map((r) => r.amount)
+const filtered = Boolean(
+  statusKey || periodFilter.kind !== "all" || q || from || to
 );
+const showConfirmedTotals = !statusKey || statusKey === "received";
+// Totals never mix currencies: org-wide lists suppress sums when mixed, while
+// period drill-downs keep the organization-currency subtotal with a badge.
+const paymentSummary = summarizePeriodPayments(rows, organization.currency);
+const showLegacyPaidNote =
+  periodFilter.kind === "selected" &&
+  showConfirmedTotals &&
+  !q &&
+  !from &&
+  !to &&
+  compareExact(legacyPaidTotal, "0.00") > 0;
 const imports = [...rawImports].reverse();
 ---
 
@@ -288,9 +318,13 @@ const imports = [...rawImports].reverse();
       display
     >
       <ButtonGroup label={t("Payment actions")}>
-        <details class="edit-disclosure" open={!!recordManualResult?.error}>
+        <details
+          class="edit-disclosure"
+          data-dismiss
+          open={!!recordManualResult?.error}
+        >
           <summary class="btn-secondary">{t("Record a payment")}</summary>
-          <div class="edit-disclosure-panel">
+          <div class="edit-disclosure-panel box box-floating">
             <ManualPaymentForm
               organizationId={organizationId}
               invoices={openInvoices}
@@ -406,9 +440,11 @@ const imports = [...rawImports].reverse();
         <div class="space-y-6">
           {proposedMatches.length > 0 && (
             <div>
-              <h3 class="queue-title">
+              <h3 class="section-title flex items-center gap-2 mb-1">
                 {t("Suggested matches")}
-                <span class="count">{proposedMatches.length}</span>
+                <span class="status-badge" data-tone="warning">
+                  {proposedMatches.length}
+                </span>
               </h3>
               <p class="text-body-sm text-muted">
                 {t("Confirming applies the payment to the invoice right away.")}
@@ -490,7 +526,7 @@ const imports = [...rawImports].reverse();
                               />
                               <button
                                 type="submit"
-                                class="btn-primary"
+                                class="btn-secondary btn-sm"
                                 data-confirm={t(
                                   "Confirm this payment? The invoice balance will be updated."
                                 )}
@@ -512,7 +548,10 @@ const imports = [...rawImports].reverse();
                                 name="matchId"
                                 value={m.id}
                               />
-                              <button type="submit" class="btn-secondary">
+                              <button
+                                type="submit"
+                                class="btn-secondary btn-sm"
+                              >
                                 {t("Reject")}
                               </button>
                             </form>
@@ -528,9 +567,11 @@ const imports = [...rawImports].reverse();
 
           {unmatchedTransactions.length > 0 && (
             <div>
-              <h3 class="queue-title">
+              <h3 class="section-title flex items-center gap-2 mb-1">
                 {t("Unmatched payments")}
-                <span class="count">{unmatchedTransactions.length}</span>
+                <span class="status-badge" data-tone="warning">
+                  {unmatchedTransactions.length}
+                </span>
               </h3>
               <p class="text-body-sm text-muted">
                 {t(
@@ -621,7 +662,7 @@ const imports = [...rawImports].reverse();
                               </select>
                               <button
                                 type="submit"
-                                class="btn-primary"
+                                class="btn-secondary btn-sm"
                                 data-confirm={t(
                                   "Match this payment to the chosen invoice? The payment is applied right away."
                                 )}
@@ -654,7 +695,10 @@ const imports = [...rawImports].reverse();
                                   value={tx.id}
                                 />
                                 <div>
-                                  <label for={`edit-amount-${tx.id}`}>
+                                  <label
+                                    class="field-label"
+                                    for={`edit-amount-${tx.id}`}
+                                  >
                                     {t("Amount")}
                                   </label>
                                   <input
@@ -666,7 +710,10 @@ const imports = [...rawImports].reverse();
                                   />
                                 </div>
                                 <div>
-                                  <label for={`edit-date-${tx.id}`}>
+                                  <label
+                                    class="field-label"
+                                    for={`edit-date-${tx.id}`}
+                                  >
                                     {t("Date")}
                                   </label>
                                   <input
@@ -679,7 +726,10 @@ const imports = [...rawImports].reverse();
                                   />
                                 </div>
                                 <div>
-                                  <label for={`edit-payer-${tx.id}`}>
+                                  <label
+                                    class="field-label"
+                                    for={`edit-payer-${tx.id}`}
+                                  >
                                     {t("Payer")}
                                   </label>
                                   <input
@@ -690,7 +740,10 @@ const imports = [...rawImports].reverse();
                                   />
                                 </div>
                                 <div>
-                                  <label for={`edit-reference-${tx.id}`}>
+                                  <label
+                                    class="field-label"
+                                    for={`edit-reference-${tx.id}`}
+                                  >
                                     {t("Reference")}
                                   </label>
                                   <input
@@ -701,7 +754,10 @@ const imports = [...rawImports].reverse();
                                   />
                                 </div>
                                 <div class="sm:col-span-2">
-                                  <label for={`edit-reason-${tx.id}`}>
+                                  <label
+                                    class="field-label"
+                                    for={`edit-reason-${tx.id}`}
+                                  >
                                     {t("Reason for the change")}
                                   </label>
                                   <input
@@ -735,20 +791,27 @@ const imports = [...rawImports].reverse();
       <h2 id="history-heading" class="section-title">
         {t("Payment history")}
       </h2>
-      <form method="GET" class="filters" action="#history">
+      <form method="GET" class="filter-bar mb-4" action="#history">
         <div>
-          <label for="payments-q">{t("Search")}</label>
-          <input
-            type="search"
-            id="payments-q"
-            name="q"
-            value={q ?? ""}
-            placeholder={t("Dwelling, invoice, payer or reference")}
-          />
+          <label class="field-label" for="payments-q">
+            {t("Search")}
+          </label>
+          <div class="input-icon mt-1">
+            <Icon name="search" size="sm" />
+            <input
+              type="search"
+              id="payments-q"
+              name="q"
+              value={q ?? ""}
+              placeholder={`${t("Dwelling, invoice, payer or reference")}…`}
+            />
+          </div>
         </div>
         <div>
-          <label for="payments-status">{t("Status")}</label>
-          <select id="payments-status" name="status">
+          <label class="field-label" for="payments-status">
+            {t("Status")}
+          </label>
+          <select id="payments-status" name="status" class="mt-1">
             <option value="">{t("All")}</option>
             {(Object.keys(statusFilters) as (keyof typeof statusFilters)[]).map(
               (k) => (
@@ -760,23 +823,52 @@ const imports = [...rawImports].reverse();
           </select>
         </div>
         <div>
-          <label for="payments-from">{t("From date")}</label>
+          <label class="field-label" for="payments-period">
+            {t("Period")}
+          </label>
+          <select id="payments-period" name="periodId" class="mt-1">
+            {periodFilter.kind === "unknown" && (
+              <option value={rawPeriodId!} selected>
+                {t("Unavailable period")}
+              </option>
+            )}
+            <option value="">{t("All periods")}</option>
+            {selectablePeriods.map((p) => (
+              <option value={p.id} selected={p.id === selectedPeriod?.id}>
+                {formatPeriod(p.year, p.month, locale)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label class="field-label" for="payments-from">
+            {t("From date")}
+          </label>
           <input
             type="date"
             id="payments-from"
             name="from"
+            class="mt-1"
             value={from ?? ""}
           />
         </div>
         <div>
-          <label for="payments-to">{t("To date")}</label>
-          <input type="date" id="payments-to" name="to" value={to ?? ""} />
+          <label class="field-label" for="payments-to">
+            {t("To date")}
+          </label>
+          <input
+            type="date"
+            id="payments-to"
+            name="to"
+            class="mt-1"
+            value={to ?? ""}
+          />
         </div>
-        <button type="submit" class="btn-primary filter-submit">
+        <button type="submit" class="btn-secondary filter-submit">
           {t("Apply")}
         </button>
         {filtered && (
-          <a class="clear-filters" href="?#history">
+          <a class="btn-ghost btn-sm clear-filters" href="?#history">
             {t("Clear filters")}
           </a>
         )}
@@ -790,11 +882,27 @@ const imports = [...rawImports].reverse();
               : t("No payments yet.")
           }
           description={
-            filtered
-              ? undefined
-              : t("Import a bank statement or record a payment to begin.")
+            showLegacyPaidNote
+              ? fill(
+                  t(
+                    "{amount} paid on invoices without a direct payment match."
+                  ),
+                  { amount: money(legacyPaidTotal) }
+                )
+              : filtered
+                ? undefined
+                : t("Import a bank statement or record a payment to begin.")
           }
-        />
+        >
+          {showLegacyPaidNote && (
+            <a
+              class="btn-secondary"
+              href={`${base}/periods/${selectedPeriod!.id}?status=PAID`}
+            >
+              {t("View paid invoices")}
+            </a>
+          )}
+        </EmptyState>
       ) : (
         <>
           <p class="result-note" role="status">
@@ -804,164 +912,57 @@ const imports = [...rawImports].reverse();
               "{n} payment",
               "{n} payments"
             )}
-            {!mixedCurrency && (
-              <>
-                {" "}
-                ·{" "}
-                {t("{total} received").replace("{total}", money(receivedTotal))}
-              </>
-            )}
+            {showConfirmedTotals &&
+              (selectedPeriod
+                ? (!paymentSummary.mixedCurrency ||
+                    paymentSummary.orgCurrencyConfirmedCount > 0) && (
+                    <>
+                      {" "}
+                      ·{" "}
+                      {fill(t("{total} matched to invoices for {period}"), {
+                        total: money(paymentSummary.appliedTotal),
+                        period: formatPeriod(
+                          selectedPeriod.year,
+                          selectedPeriod.month,
+                          locale
+                        ),
+                      })}
+                      {paymentSummary.hasOverpaymentDifference &&
+                        ` (${t("{total} received").replace("{total}", money(paymentSummary.receivedTotal))})`}
+                      {paymentSummary.mixedCurrency &&
+                        ` · ${fill(t("{currency} only"), { currency: organization.currency })}`}
+                    </>
+                  )
+                : !paymentSummary.mixedCurrency && (
+                    <>
+                      {" "}
+                      ·{" "}
+                      {t("{total} received").replace(
+                        "{total}",
+                        money(paymentSummary.receivedTotal)
+                      )}
+                    </>
+                  ))}
           </p>
-          <div class="table-wrap stack-table">
-            <table class="history-table w-full text-left text-body-sm">
-              <caption class="sr-only">{t("Payment history")}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t("Date")}</th>
-                  <th scope="col">{t("Dwelling")}</th>
-                  <th scope="col">{t("From")}</th>
-                  <th scope="col" class="text-right">
-                    {t("Amount")}
-                  </th>
-                  <th scope="col">{t("Applied to")}</th>
-                  <th scope="col">{t("Status")}</th>
-                  <th scope="col">{t("Actions")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr data-status={r.status}>
-                    <td
-                      class="whitespace-nowrap"
-                      data-col="date"
-                      data-label={t("Date")}
-                    >
-                      {formatDate(r.date, locale)}
-                    </td>
-                    <td data-col="dwelling" data-label={t("Dwelling")}>
-                      {r.dwellingId ? (
-                        <a
-                          class="link font-semibold"
-                          href={`${base}/payments/ledger?dwelling=${r.dwellingId}`}
-                        >
-                          {r.dwellingLabel}
-                        </a>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td data-col="from" data-label={t("From")}>
-                      <div>{r.payer ?? "—"}</div>
-                      <small class="text-muted">
-                        {r.method === "CASH" ? t("Cash") : t("Bank transfer")}
-                        {r.reference ? ` · ${r.reference}` : ""}
-                      </small>
-                    </td>
-                    <td
-                      data-col="amount"
-                      class="text-right whitespace-nowrap font-medium"
-                      data-label={t("Amount")}
-                      data-void={r.status !== "CONFIRMED" ? "true" : undefined}
-                    >
-                      {money(r.amount, r.currency)}
-                    </td>
-                    <td data-col="applied" data-label={t("Applied to")}>
-                      {r.invoiceId && r.periodId ? (
-                        <a
-                          class="link"
-                          href={`${base}/periods/${r.periodId}/invoices/${r.invoiceId}`}
-                        >
-                          {r.invoiceNumber}
-                        </a>
-                      ) : (
-                        t("Dwelling account")
-                      )}
-                      {r.note && (
-                        <small class="block text-muted">{r.note}</small>
-                      )}
-                    </td>
-                    <td data-col="status" data-label={t("Status")}>
-                      <StatusBadge status={r.status} />
-                    </td>
-                    <td data-col="actions" data-label={t("Actions")}>
-                      <div class="row-actions">
-                        <a
-                          class="link"
-                          href={`${base}/payments/${r.transactionId}`}
-                        >
-                          {t("Details")}
-                        </a>
-                        {r.status === "CONFIRMED" && (
-                          <details class="reverse">
-                            <summary class="link chevron-toggle">
-                              {t("Reverse")}
-                            </summary>
-                            <form
-                              method="POST"
-                              action={
-                                r.directReversible
-                                  ? actions.payments.reverseDwellingPayment
-                                  : actions.payments.reverseMatch
-                              }
-                              class="mt-2 space-y-2"
-                            >
-                              <input
-                                type="hidden"
-                                name="organizationId"
-                                value={organizationId}
-                              />
-                              {r.directReversible ? (
-                                <input
-                                  type="hidden"
-                                  name="transactionId"
-                                  value={r.transactionId}
-                                />
-                              ) : (
-                                <input
-                                  type="hidden"
-                                  name="matchId"
-                                  value={r.matchId}
-                                />
-                              )}
-                              <div>
-                                <label
-                                  for={`reverse-reason-${r.matchId ?? r.transactionId}`}
-                                >
-                                  {t("Reason for reversal")}
-                                </label>
-                                <input
-                                  type="text"
-                                  id={`reverse-reason-${r.matchId ?? r.transactionId}`}
-                                  name="reason"
-                                  required
-                                  maxlength="500"
-                                />
-                              </div>
-                              <button
-                                type="submit"
-                                class="btn-secondary"
-                                data-confirm={
-                                  r.directReversible
-                                    ? t(
-                                        "Reverse this payment? The original payment stays in the history and a cancelling entry is added. The dwelling account goes back to its balance before the payment."
-                                      )
-                                    : t(
-                                        "Reverse this payment? The original payment stays in the history and a cancelling entry is added. The invoice becomes unpaid again."
-                                      )
-                                }
-                              >
-                                {t("Reverse payment")}
-                              </button>
-                            </form>
-                          </details>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {showLegacyPaidNote && (
+            <p class="result-note">
+              {fill(
+                t("{amount} paid on invoices without a direct payment match."),
+                { amount: money(legacyPaidTotal) }
+              )}{" "}
+              <a
+                class="link link-underlined"
+                href={`${base}/periods/${selectedPeriod!.id}?status=PAID`}
+              >
+                {t("View paid invoices")}
+              </a>
+            </p>
+          )}
+          <PaymentHistoryTable
+            rows={rows}
+            organizationId={organizationId}
+            locale={locale}
+          />
         </>
       )}
     </section>
@@ -1028,15 +1029,10 @@ const imports = [...rawImports].reverse();
   }
   .edit-disclosure-panel {
     position: absolute;
-    z-index: 15;
+    z-index: var(--z-popover);
     top: calc(100% + 0.5rem);
     right: 0;
     width: min(28rem, 90vw);
-    padding: 1.25rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-    box-shadow: var(--elevation-flat);
   }
   .calm {
     padding: 1.25rem 1.5rem;
@@ -1044,59 +1040,15 @@ const imports = [...rawImports].reverse();
   .calm p:first-child {
     font-weight: 600;
   }
-  .queue-title {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: var(--text-base);
-    font-weight: 700;
-  }
-  .count {
-    min-width: 1.25rem;
-    padding: 0 0.375rem;
-    border-radius: 999px;
-    background: var(--tone-warning-bg);
-    color: var(--tone-warning-text);
-    font-size: var(--text-xs);
-    font-variant-numeric: tabular-nums;
-    line-height: 1.25rem;
-    text-align: center;
-  }
-  .filters {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: end;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-  }
-  .filters label,
-  td label {
-    display: block;
-    margin-bottom: 0.25rem;
-    font-size: var(--text-sm);
-    font-weight: 500;
-  }
-  .filters :is(select, input) {
-    min-width: 9rem;
-  }
   /* A fixed width: a percentage cannot resolve inside a shrink-wrapped flex
      item. On a phone the field takes the whole row instead (see below). */
-  .filters input[type="search"] {
+  .filter-bar input[type="search"] {
     min-width: 22rem;
-  }
-  .clear-filters,
-  .link {
-    color: var(--color-primary);
-    font-size: inherit;
   }
   a.link {
     display: inline-block;
     min-width: 1.5rem;
     min-height: 1.5rem;
-  }
-  .clear-filters:hover,
-  .link:hover {
-    text-decoration: underline;
   }
   summary.link {
     cursor: pointer;
@@ -1110,118 +1062,11 @@ const imports = [...rawImports].reverse();
   th.text-right {
     font-variant-numeric: tabular-nums;
   }
-  /* A reversed or rejected payment is history, not money: it stays legible but
-     reads as struck through. */
-  td[data-void="true"] {
-    color: var(--color-muted);
-    text-decoration: line-through;
-  }
-  .row-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.25rem 1rem;
-  }
-  .reverse summary {
-    list-style: none;
-  }
-  .reverse summary::-webkit-details-marker {
-    display: none;
-  }
-  /* Phone card for the payment history. The money leads (dwelling and amount),
-     then who paid and the status, then what it paid and when; actions close
-     the card. Labels are dropped: the content explains itself, except
-     "Applied to", which has no unit to say what it is. */
   @media (width < 40rem) {
-    .history-table tr[data-status] {
-      display: grid !important;
-      grid-template-columns: minmax(0, 1fr) auto;
-      grid-template-areas:
-        "dwelling amount"
-        "from status"
-        "applied date"
-        "actions actions";
-      align-items: start;
-      gap: 0.375rem 0.75rem;
-      padding: 0.875rem 1rem !important;
-    }
-    .history-table td {
-      display: block !important;
-      width: auto !important;
-      padding: 0 !important;
-      text-align: left;
-    }
-    .history-table td::before {
-      display: none !important;
-    }
-    .history-table td[data-col="dwelling"] {
-      grid-area: dwelling;
-      font-size: var(--text-base);
-    }
-    /* "Dwelling 4", not a bare 4: the label is the only thing saying what the
-       number is. */
-    .history-table td[data-col="dwelling"]::before {
-      display: inline !important;
-      content: attr(data-label) " ";
-      font-size: inherit;
-      font-weight: 700;
-      color: inherit;
-    }
-    .history-table td[data-col="status"] :global(.status-badge) {
-      font-size: var(--text-xs);
-    }
-    .history-table td[data-col="amount"] {
-      grid-area: amount;
-      justify-self: end;
-      font-size: var(--text-lg);
-      font-weight: 700;
-    }
-    .history-table td[data-col="from"] {
-      grid-area: from;
-    }
-    .history-table td[data-col="status"] {
-      grid-area: status;
-      justify-self: end;
-    }
-    .history-table td[data-col="applied"] {
-      grid-area: applied;
-      color: var(--color-muted);
-      font-size: var(--text-sm);
-    }
-    .history-table td[data-col="applied"]::before {
-      display: inline !important;
-      content: attr(data-label) " ";
-      font-size: inherit;
-      font-weight: 400;
-    }
-    .history-table td[data-col="date"] {
-      grid-area: date;
-      justify-self: end;
-      color: var(--color-muted);
-      font-size: var(--text-sm);
-    }
-    .history-table td[data-col="actions"] {
-      grid-area: actions;
-      margin-top: 0.25rem;
-      padding-top: 0.625rem !important;
-      border-top: 1px solid var(--color-border) !important;
-    }
-  }
-  /* On a phone the filters are a form: fields take the full row, the two dates
-     share one, and Apply spans. */
-  @media (width < 40rem) {
-    .filters > div {
-      flex: 1 1 100%;
-    }
-    .filters > div:has(input[type="date"]) {
-      flex: 1 1 8rem;
-    }
-    .filters :is(select, input),
-    .filters input[type="search"] {
-      width: 100%;
+    .filter-bar input[type="search"] {
       min-width: 0;
     }
-    .filters .btn-primary {
+    .filter-bar .filter-submit {
       width: 100%;
     }
   }

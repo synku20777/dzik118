@@ -6,7 +6,12 @@
 // -- there's exactly one dwelling's data to show at a time, fetched on
 // demand (spec section 28: "if data is not already in workbench payload,
 // show a compact loading state").
-import { entityLabel, translate, uiLocale } from "../../lib/ui/i18n";
+import {
+  entityLabel,
+  translate,
+  uiLocale,
+  type Locale,
+} from "../../lib/ui/i18n";
 import Icon from "./Icon.astro";
 import { invoiceStatusBadge } from "../../lib/ui/invoice-status";
 
@@ -16,6 +21,7 @@ interface Props {
   periodStatus: string;
   periodName: string;
   workbenchPath: string;
+  preview?: Locale;
   // Selectors re-fetched and swapped in after a drawer save. Defaults to the
   // monthly workbench's own sections; pages embedding this drawer elsewhere
   // (e.g. the dashboard's "Needs attention" list) pass their own so a saved
@@ -28,6 +34,7 @@ const {
   periodStatus,
   periodName,
   workbenchPath,
+  preview,
   refreshSelectors = [
     ".workflow-overview",
     ".financial-summary",
@@ -35,7 +42,7 @@ const {
   ],
 } = Astro.props;
 
-const locale = uiLocale(Astro.cookies, Astro.url);
+const locale = preview ?? uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 
 const METER_TYPES = [
@@ -95,6 +102,11 @@ const config = {
     "Enter a valid value, for example 12.3456. Use up to 4 decimal places.": t(
       "Enter a valid value, for example 12.3456. Use up to 4 decimal places."
     ),
+    "The current reading is lower than the previous reading.": t(
+      "The current reading is lower than the previous reading."
+    ),
+    "Enter an occupant name.": t("Enter an occupant name."),
+    "Invalid email address": t("Invalid email address"),
     occupantName: t("Occupant name"),
     billingName: t("Billing name"),
     billingEmail: t("Billing email"),
@@ -143,8 +155,10 @@ const config = {
 <dialog
   id="admin-context-drawer"
   class="context-drawer"
+  lang={locale}
   aria-labelledby="context-drawer-title"
   data-config={JSON.stringify(config)}
+  data-workbench-preview={preview ? "" : undefined}
 >
   <header class="context-drawer-header">
     <div class="context-drawer-heading">
@@ -161,7 +175,7 @@ const config = {
     </div>
     <button
       type="button"
-      class="icon-btn context-drawer-close"
+      class="icon-btn icon-btn-ghost context-drawer-close"
       data-close-drawer
       aria-label={t("Close")}
     >
@@ -171,7 +185,12 @@ const config = {
   <div class="context-drawer-body" id="context-drawer-body"></div>
   <footer class="context-drawer-footer" id="context-drawer-footer"></footer>
 </dialog>
-<div id="workbench-announcer" class="sr-only" aria-live="polite"></div>
+<div
+  id="workbench-announcer"
+  class="sr-only"
+  lang={locale}
+  aria-live="polite"
+></div>
 <script>
   import "../../lib/ui/workbench-drawer";
 </script>
@@ -198,24 +217,17 @@ const config = {
   .drawer-info-banner {
     display: flex;
     gap: 0.75rem;
-    padding: 1rem;
     margin-bottom: 1.25rem;
-    border-radius: var(--radius-panel);
-    background: var(--tone-info-bg);
-    color: var(--tone-info-text);
   }
+  /* The icon takes the notice's own tone (info or warning). */
   .drawer-info-icon {
     display: grid;
     flex: 0 0 auto;
-    width: 1.5rem;
-    height: 1.5rem;
     place-items: center;
-    border-radius: 50%;
-    background: var(--color-primary);
-    color: var(--color-on-primary);
-    font-size: var(--text-xs);
-    font-weight: 700;
-    font-style: italic;
+  }
+  .drawer-info-icon svg {
+    width: var(--icon-size-md);
+    height: var(--icon-size-md);
   }
   .drawer-info-title {
     font-weight: 650;
@@ -225,13 +237,6 @@ const config = {
     margin-top: 0.25rem;
     font-size: var(--text-sm);
     opacity: 0.85;
-  }
-  .drawer-info-banner[data-tone="warning"] {
-    background: var(--tone-warning-bg);
-    color: var(--tone-warning-text);
-  }
-  .drawer-info-banner[data-tone="warning"] .drawer-info-icon {
-    background: var(--color-warning);
   }
   .drawer-blockers {
     display: flex;
@@ -243,6 +248,7 @@ const config = {
     padding: 1.25rem;
     border: var(--panel-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--color-canvas);
   }
   .drawer-meter + .drawer-meter {
@@ -254,19 +260,7 @@ const config = {
     gap: 0.75rem;
     margin-bottom: 1rem;
   }
-  .drawer-meter-icon {
-    display: grid;
-    width: 2.75rem;
-    height: 2.75rem;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: var(--radius-panel);
-    font-size: var(--text-xl);
-  }
-  .drawer-meter-icon svg {
-    width: 1.25rem;
-    height: 1.25rem;
-  }
+  /* The tile itself is .icon-tile; only the per-meter-type tones live here. */
   .drawer-meter-icon[data-meter-type="COLD_WATER"] {
     background: var(--color-meter-cold-bg);
     color: var(--color-meter-cold-text);
@@ -287,15 +281,6 @@ const config = {
     background: var(--color-meter-heat-bg);
     color: var(--color-meter-heat-text);
   }
-  .drawer-meter-icon[data-meter-type="OTHER"] {
-    background: var(--tone-neutral-bg);
-  }
-  /* Manual billing-rule input row (workbench-drawer.ts renderReadingsBody) --
-     reuses the meter-row icon chip shape for visual consistency, neutral
-     since there's no per-rule color the way there is per meter type. */
-  .drawer-meter-icon[data-meter-type="MANUAL"] {
-    background: var(--tone-neutral-bg);
-  }
   .drawer-meter-name {
     font-size: var(--text-base);
     font-weight: 700;
@@ -314,6 +299,7 @@ const config = {
     margin-bottom: 1.25rem;
     border: var(--panel-border);
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--color-canvas);
   }
   .drawer-resident-main {
@@ -321,20 +307,6 @@ const config = {
     align-items: center;
     gap: 0.75rem;
     min-width: 0;
-  }
-  .drawer-resident-icon {
-    display: grid;
-    width: 2.5rem;
-    height: 2.5rem;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: var(--radius-panel);
-    background: var(--tone-neutral-bg);
-    color: var(--color-muted);
-  }
-  .drawer-resident-icon svg {
-    width: 1.15rem;
-    height: 1.15rem;
   }
   .drawer-resident-eyebrow {
     color: var(--color-muted);
@@ -356,13 +328,6 @@ const config = {
   .drawer-field-row:first-of-type {
     margin-top: 0;
   }
-  .drawer-field-row-label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--color-muted);
-  }
   .drawer-field-row-control {
     display: flex;
     align-items: center;
@@ -373,58 +338,44 @@ const config = {
     color: var(--color-muted);
     font-size: var(--text-sm);
   }
-  .drawer-readonly-box,
-  .drawer-input-box {
+  .drawer-field-row-control > .field-box {
     flex: 1 1 auto;
     min-width: 0;
-    width: 100%;
-    padding: 0.75rem 0.75rem;
-    border-width: 1px;
-    border-style: solid;
-    border-radius: var(--radius-control);
+  }
+  /* A calculated value: the field's own frame draws the border. */
+  .field-box:has(> .drawer-readonly-box) {
+    background: var(--color-surface-hover);
+  }
+  .drawer-readonly-box {
+    min-height: 2rem;
+    padding: var(--space-1) var(--space-3) var(--space-2);
+    color: var(--color-muted);
     font-size: var(--text-sm);
     font-variant-numeric: tabular-nums;
     font-family: inherit;
     box-sizing: border-box;
   }
-  .drawer-readonly-box {
-    border-color: var(--color-border);
-    background: var(--color-surface-hover);
-    color: var(--color-muted);
-  }
-  .drawer-input-box,
-  .drawer-textarea-box {
-    background: var(--color-surface);
-    color: var(--color-foreground);
+  .drawer-input-box {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    font-family: inherit;
   }
   .drawer-textarea-box {
     display: block;
     width: 100%;
     min-height: 5.5rem;
-    padding: 0.75rem 0.75rem;
-    border-radius: var(--radius-control);
     font-size: var(--text-sm);
     font-family: inherit;
     resize: vertical;
-    box-sizing: border-box;
   }
   .drawer-field {
     margin-top: 1.25rem;
   }
   .drawer-field:first-of-type {
     margin-top: 0;
-  }
-  .drawer-field-label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--color-foreground);
-  }
-  .drawer-field-error {
-    margin-top: 0.5rem;
-    color: var(--color-destructive);
-    font-size: var(--text-sm);
   }
   .drawer-section-heading {
     margin-top: 1.5rem;

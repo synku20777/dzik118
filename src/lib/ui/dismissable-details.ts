@@ -8,10 +8,23 @@ export function installDismissableDetails(): void {
   installed = true;
   document.addEventListener("click", (event) => {
     const target = event.target as Node | null;
+    // Picking an item in a dropdown closes it too. If focus would be left in
+    // the hidden panel (the item did not move it), it goes back to the summary.
+    const item =
+      target instanceof Element
+        ? target.closest(".dropdown-panel :is(a, button)")
+        : null;
     for (const details of document.querySelectorAll<HTMLDetailsElement>(
       "details[data-dismiss][open]"
     )) {
-      if (!target || !details.contains(target)) details.open = false;
+      if (!target || !details.contains(target)) {
+        details.open = false;
+      } else if (item && details.contains(item)) {
+        details.open = false;
+        if (details.contains(document.activeElement)) {
+          details.querySelector("summary")?.focus();
+        }
+      }
     }
   });
   document.addEventListener("keydown", (event) => {

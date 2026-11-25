@@ -4,13 +4,18 @@ Checked 23 October 2026. This is an evaluation, not a decision to replace the cu
 
 ## Selected local typography
 
-Medeo Sans is the selected UI face for local development as of 27 October 2026, replacing Neue Montreal. The regular and italic files are in `src/fonts/`. The comparison dropdown, file picker and alternate-family options remain removed.
+Medeo Sans is kept in `src/fonts/` as an optional local development preview family, replacing Neue Montreal as of 27 October 2026. The comparison dropdown, file picker and alternate-family options remain removed.
 
 - Regular text: weight **400**.
 - Tracking: **0** (normal spacing).
 - Existing medium/semibold/bold hierarchy and display typography remain.
 
-`npm run dev` loads `src/fonts/MedeoSansVariable.woff2` and its italic companion automatically. Production keeps the existing fonts; the development preview does not change production typography. Medeo's license has not been reviewed here.
+`npm run dev` renders Switzer by default so local development matches production typography across all layouts. To preview Medeo Sans locally, opt in explicitly in development (`src/fonts/MedeoSansVariable.woff2` and `src/fonts/MedeoSansVariable-Italic.woff2` load only in `AdminLayout` during Astro's `dev` command):
+
+- PowerShell: `$env:PUBLIC_FONT_PREVIEW = 'medeo'` followed by `npm run dev`
+- bash/zsh: `PUBLIC_FONT_PREVIEW=medeo npm run dev`
+
+The preview is gated at compile time on Astro's `dev` command (not `NODE_ENV`), so `astro build` always serves Switzer even if `NODE_ENV=development` is set in the shell. Medeo's license has not been reviewed here.
 
 Test Latvian diacritics, Cyrillic, euro signs, decimal commas, small labels, bold headings and narrow tables. Retain the Cyrillic fallback until the actual font version's coverage has been checked: a current product page can describe a newer version than an existing trial file.
 

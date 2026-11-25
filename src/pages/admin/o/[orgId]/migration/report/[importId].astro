@@ -1,10 +1,15 @@
 ---
-import { translate, uiLocale } from "../../../../../../lib/ui/i18n";
+import {
+  formatMoney,
+  translate,
+  uiLocale,
+} from "../../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 // Reconciliation report of an opening balance import (ADR 0013): the totals of
 // the file against the totals rebuilt from the ledger entries of this import.
 import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
+import PageHeader from "../../../../../../components/ui/PageHeader.astro";
 import { NotFoundError } from "../../../../../../domain/errors";
 import { getOrganization } from "../../../../../../domain/organizations/organizations";
 import { getBalanceReport } from "../../../../../../domain/migration/balances";
@@ -30,12 +35,12 @@ try {
 const { organization, report } = loaded;
 const base = `/admin/o/${organizationId}/migration`;
 // The currency of the import, not the organization's current one.
-const money = (value: string) => `${value} ${report.currency}`;
+const money = (value: string) => formatMoney(value, report.currency, locale);
 const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
 ---
 
 <AdminLayout
-  title={`Opening balance report - ${organization.name}`}
+  title={`${t("Opening balance report")} – ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[
@@ -48,14 +53,10 @@ const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
   ]}
 >
   <div class="space-y-6">
-    <h1 class="font-display text-h2 text-foreground">
-      {t("Opening balance report")}
-    </h1>
-
-    <p class="text-body-sm text-muted">
-      {report.filename} · {t("Balance date")}:{" "}
-      {dateFormat.format(new Date(`${report.balanceDate}T00:00:00Z`))}
-    </p>
+    <PageHeader
+      title={t("Opening balance report")}
+      description={`${report.filename} · ${t("Balance date")}: ${dateFormat.format(new Date(`${report.balanceDate}T00:00:00Z`))}`}
+    />
 
     <p
       class={report.matches ? "notice" : "notice notice-danger"}
@@ -74,10 +75,10 @@ const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
             <th scope="col" class="px-4 py-2">
               {t("Totals")}
             </th>
-            <th scope="col" class="px-4 py-2">
+            <th scope="col" class="px-4 py-2 text-right">
               {t("In the file")}
             </th>
-            <th scope="col" class="px-4 py-2">
+            <th scope="col" class="px-4 py-2 text-right">
               {t("In the ledger")}
             </th>
           </tr>
@@ -87,10 +88,16 @@ const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
             <td class="px-4 py-2" data-label={t("Totals")}>
               {t("Total debt")}
             </td>
-            <td class="px-4 py-2" data-label={t("In the file")}>
+            <td
+              class="px-4 py-2 text-right tabular-nums whitespace-nowrap"
+              data-label={t("In the file")}
+            >
               {money(report.fileDebit)}
             </td>
-            <td class="px-4 py-2" data-label={t("In the ledger")}>
+            <td
+              class="px-4 py-2 text-right tabular-nums whitespace-nowrap"
+              data-label={t("In the ledger")}
+            >
               {money(report.ledgerDebit)}
             </td>
           </tr>
@@ -98,10 +105,16 @@ const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
             <td class="px-4 py-2" data-label={t("Totals")}>
               {t("Total credit")}
             </td>
-            <td class="px-4 py-2" data-label={t("In the file")}>
+            <td
+              class="px-4 py-2 text-right tabular-nums whitespace-nowrap"
+              data-label={t("In the file")}
+            >
               {money(report.fileCredit)}
             </td>
-            <td class="px-4 py-2" data-label={t("In the ledger")}>
+            <td
+              class="px-4 py-2 text-right tabular-nums whitespace-nowrap"
+              data-label={t("In the ledger")}
+            >
               {money(report.ledgerCredit)}
             </td>
           </tr>
@@ -130,10 +143,10 @@ const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
             <th scope="col" class="px-4 py-2">
               {t("Type")}
             </th>
-            <th scope="col" class="px-4 py-2">
+            <th scope="col" class="px-4 py-2 text-right">
               {t("Amount")}
             </th>
-            <th scope="col" class="px-4 py-2">
+            <th scope="col" class="px-4 py-2 text-right">
               {t("Balance now")}
             </th>
           </tr>
@@ -147,10 +160,16 @@ const dateFormat = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
               <td class="px-4 py-2" data-label={t("Type")}>
                 {line.direction === "DEBIT" ? t("Debt") : t("Credit")}
               </td>
-              <td class="px-4 py-2" data-label={t("Amount")}>
+              <td
+                class="px-4 py-2 text-right tabular-nums whitespace-nowrap"
+                data-label={t("Amount")}
+              >
                 {money(line.amount)}
               </td>
-              <td class="px-4 py-2" data-label={t("Balance now")}>
+              <td
+                class="px-4 py-2 text-right tabular-nums whitespace-nowrap"
+                data-label={t("Balance now")}
+              >
                 {money(line.balanceNow)}
               </td>
             </tr>

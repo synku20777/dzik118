@@ -62,6 +62,11 @@ test("admin can reset a forgotten password", async ({ page }) => {
         [uid, role, mail]
       );
     }
+    // Admin capability is an organization membership, not the role alone.
+    await db.$client.query(
+      "insert into organization_memberships (organization_id, user_id) select id, $1 from organizations limit 1",
+      [id]
+    );
 
     const requestReset = async (mail: string) => {
       await page.goto("/forgot-password?lang=en");
@@ -168,6 +173,10 @@ test("admin can reset a forgotten password", async ({ page }) => {
     await page.getByRole("button", { name: "Continue" }).click();
     await expect(page).toHaveURL(/\/forgot-password\?error=1/);
   } finally {
+    await db.$client.query(
+      "delete from organization_memberships where user_id = $1",
+      [id]
+    );
     for (const uid of [id, residentId]) {
       await db.$client.query("delete from app_users where id = $1", [uid]);
       await admin.auth.admin.deleteUser(uid);

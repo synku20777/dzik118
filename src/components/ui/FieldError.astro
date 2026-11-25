@@ -6,13 +6,16 @@ interface Props {
   // Override when the control's id is not the action field name (for example
   // a form rendered twice on one page); the id must be "<control id>-error".
   id?: string;
+  // In a compact form the errors sit under the whole group, so each one
+  // names its field: "Billing email: …".
+  label?: string;
 }
-const { error, name, id } = Astro.props;
+const { error, name, id, label } = Astro.props;
 const messages = isInputError(error) ? error.fields[name] : undefined;
 ---
 
 {messages && messages.length > 0 && (
   <p id={id ?? name + "-error"} class="field-error" role="alert">
-    {messages.join(" ")}
+    {label ? `${label}: ${messages.join(" ")}` : messages.join(" ")}
   </p>
 )}

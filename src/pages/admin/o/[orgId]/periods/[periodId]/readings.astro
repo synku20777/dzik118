@@ -1,4 +1,6 @@
 ---
+import Icon from "../../../../../../components/ui/Icon.astro";
+import PageHeader from "../../../../../../components/ui/PageHeader.astro";
 import {
   entityLabel,
   formatPeriod,
@@ -97,11 +99,7 @@ function getInitialConsumption(
     data-label-no-changes={t("No changed readings to save.")}
     data-label-generic-error={t("An error occurred while saving readings.")}
   >
-    <header class="space-y-1">
-      <h1 class="font-display text-h2 text-foreground">
-        {t("Meter readings")} — {periodName}
-      </h1>
-    </header>
+    <PageHeader title={`${t("Meter readings")} — ${periodName}`} display />
 
     {isLocked && (
       <p class="notice" role="status">
@@ -125,7 +123,7 @@ function getInitialConsumption(
     </nav>
 
     {visibleRows.length === 0 ? (
-      <div class="rounded-panel contained bg-surface p-6 text-center text-muted text-body-sm">
+      <div class="box text-center text-muted text-body-sm">
         <p>
           {filter === "missing"
             ? t("No missing readings.")
@@ -170,7 +168,7 @@ function getInitialConsumption(
                   <td class="px-4 py-2 font-medium" data-label={t("Dwelling")}>
                     <a
                       href={`/admin/o/${organizationId}/dwellings/${row.dwellingId}`}
-                      class="text-foreground hover:underline"
+                      class="link link-ghost"
                     >
                       {row.dwellingNumber}
                     </a>
@@ -207,13 +205,13 @@ function getInitialConsumption(
                           value={row.currentValue ?? ""}
                           disabled={isLocked}
                           aria-describedby={`err-${row.meterId}`}
-                          class="rounded-control border border-(--color-input-border) px-3 py-1.5 text-body-sm tabular-nums w-32"
+                          class="text-body-sm tabular-nums w-32"
                         />
                         <span
                           class="reading-saved-indicator hidden text-success font-semibold"
                           aria-hidden="true"
                         >
-                          ✓
+                          <Icon name="check" size="sm" />
                         </span>
                       </div>
                       <p

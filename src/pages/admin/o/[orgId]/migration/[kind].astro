@@ -8,6 +8,7 @@ const t = (text: string) => translate(locale, text);
 // re-checks the mapping, and the import validates everything again inside its
 // own transaction. Nothing is stored until the last step.
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import {
   ForbiddenError,
   requireActiveOrganization,
@@ -390,7 +391,7 @@ const badge = (source: MappingSource, field: string | null) =>
 ---
 
 <AdminLayout
-  title={`${balances ? "Import opening balances" : metersKind ? "Import meter readings" : "Import dwellings"} - ${organization.name}`}
+  title={`${t(balances ? "Import opening balances" : metersKind ? "Import meter readings" : "Import dwellings")} – ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[
@@ -409,13 +410,15 @@ const badge = (source: MappingSource, field: string | null) =>
   ]}
 >
   <div class="space-y-6">
-    <h1 class="font-display text-h2 text-foreground">
-      {balances
-        ? t("Import opening balances")
-        : metersKind
-          ? t("Import meter readings")
-          : t("Import dwellings")}
-    </h1>
+    <PageHeader
+      title={
+        balances
+          ? t("Import opening balances")
+          : metersKind
+            ? t("Import meter readings")
+            : t("Import dwellings")
+      }
+    />
 
     {needsPeriod && (
       <div class="notice max-w-2xl space-y-2">
@@ -440,7 +443,7 @@ const badge = (source: MappingSource, field: string | null) =>
       <form
         method="POST"
         enctype="multipart/form-data"
-        class="max-w-2xl space-y-4 rounded-panel contained bg-surface p-6"
+        class="box max-w-2xl space-y-4"
       >
         <input type="hidden" name="step" value="upload" />
         <p class="text-body-sm text-muted">
@@ -482,18 +485,14 @@ const badge = (source: MappingSource, field: string | null) =>
             id="pasted"
             name="pasted"
             rows="6"
-            class="mt-1 w-full rounded-control border border-(--color-input-border) px-3 py-2 font-mono text-body-sm"
+            class="mt-1 w-full font-mono text-body-sm"
           />
         </div>
         <div>
           <label class="field-label" for="encoding">
             {t("File encoding")}
           </label>
-          <select
-            id="encoding"
-            name="encoding"
-            class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-          >
+          <select id="encoding" name="encoding" class="mt-1 text-body-sm">
             <option value="auto">{t("Detect automatically")}</option>
             {SUPPORTED_ENCODINGS.map((e) => (
               <option value={e}>{e}</option>
@@ -589,7 +588,7 @@ const badge = (source: MappingSource, field: string | null) =>
                     <select
                       id={`field_${i}`}
                       name={`field_${i}`}
-                      class="rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                      class="text-body-sm"
                     >
                       <option value="" selected={fieldOf(i) == null}>
                         {t("Ignore this column")}
@@ -618,11 +617,7 @@ const badge = (source: MappingSource, field: string | null) =>
             <label class="field-label" for="mode">
               {t("Mode")}
             </label>
-            <select
-              id="mode"
-              name="mode"
-              class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-            >
+            <select id="mode" name="mode" class="mt-1 text-body-sm">
               <option value="create" selected={mode === "create"}>
                 {t("Create only. Existing numbers stay unchanged.")}
               </option>
@@ -647,7 +642,7 @@ const badge = (source: MappingSource, field: string | null) =>
                 required
                 max={today}
                 value={balanceDate}
-                class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
+                class="mt-1 text-body-sm"
               />
               <p class="mt-1 text-body-sm text-muted">
                 {t(
@@ -659,11 +654,7 @@ const badge = (source: MappingSource, field: string | null) =>
               <label class="field-label" for="sign">
                 {t("Positive amounts mean")}
               </label>
-              <select
-                id="sign"
-                name="sign"
-                class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-              >
+              <select id="sign" name="sign" class="mt-1 text-body-sm">
                 <option
                   value="POSITIVE_OWES"
                   selected={sign === "POSITIVE_OWES"}

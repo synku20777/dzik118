@@ -78,6 +78,22 @@ export const organizations = {
     },
   }),
 
+  saveSetupDetails: orgAction({
+    accept: "form",
+    input: z.object({
+      organizationId: z.uuid(),
+      ...organizationFields,
+      name: organizationFields.name.trim().min(1),
+      addressLine1: organizationFields.addressLine1.trim().min(1),
+      bankName: organizationFields.bankName.unwrap().trim().min(1),
+      iban: organizationFields.iban.unwrap().trim().min(1),
+    }),
+    handler: async ({ organizationId, ...input }, { locals }) =>
+      withDb((db) =>
+        updateOrganization(db, organizationId, input, locals.auth!.userId)
+      ),
+  }),
+
   addAdminMember: orgAction({
     accept: "form",
     input: z.object({

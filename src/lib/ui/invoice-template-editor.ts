@@ -34,6 +34,13 @@
 // <details>/<summary> popover (zero extra JS, keyboard accessible by
 // default) holding that row's Spacing control.
 import Sortable from "sortablejs";
+import { ICONS, type IconName } from "./icons";
+
+// Same geometry as Icon.astro, for icons this script builds. Static registry
+// markup (icons.ts), not user input.
+function iconMarkup(name: IconName): string {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: var(--icon-size-sm); height: var(--icon-size-sm); stroke-width: var(--icon-stroke)">${ICONS[name]}</svg>`;
+}
 import { actions } from "astro:actions";
 import { onPageLoad } from "./page-lifecycle";
 import {
@@ -76,7 +83,7 @@ interface SampleRow {
   label: string;
 }
 
-interface EditorBootstrap {
+export interface EditorBootstrap {
   headerText: string;
   footerText: string;
   paymentInstructions: string;
@@ -90,6 +97,7 @@ interface EditorBootstrap {
 onPageLoad(() => {
   const root = document.querySelector<HTMLElement>("#template-editor");
   if (!root) return;
+  const preview = root.hasAttribute("data-editor-preview");
   const controller = new AbortController();
   const bootstrapEl = document.querySelector<HTMLScriptElement>(
     "#template-editor-bootstrap"
@@ -253,7 +261,7 @@ onPageLoad(() => {
   window.addEventListener(
     "beforeunload",
     (event) => {
-      if (!isDirty()) return;
+      if (preview || !isDirty()) return;
       event.preventDefault();
     },
     { signal: controller.signal }
@@ -401,49 +409,50 @@ onPageLoad(() => {
       label: line.description,
     }));
   let currentPeriodId = periodSelect?.value ?? "";
-  periodSelect?.addEventListener(
-    "change",
-    async () => {
-      const select = periodSelect;
-      const periodId = select.value;
-      periodError.hidden = true;
-      select.disabled = true;
-      try {
-        const { data, error } = await actions.invoiceTemplates.previewLines({
-          organizationId,
-          periodId,
-        });
-        if (error || !data) throw error ?? new Error("previewLines");
-        bootstrap.sampleLines = data.sampleLines;
-        sampleRows = sampleRowsFor(data.sampleLines);
-        bootstrap.sampleInvoice = {
-          ...bootstrap.sampleInvoice,
-          issueDate: data.issueDate,
-          dueDate: data.dueDate,
-          subtotal: data.totals.subtotal,
-          vatTotal: data.totals.vatTotal,
-          currentCharges: data.totals.currentCharges,
-          amountDue: data.totals.currentCharges,
-        };
-        currentPeriodId = periodId;
-        const url = new URL(location.href);
-        url.searchParams.set("previewPeriodId", periodId);
-        history.replaceState(null, "", url);
-        renderBlockList();
-        renderPreviewNow();
-      } catch {
-        select.value = currentPeriodId;
-        periodError.textContent = s(
-          "Could not load the sample charges. Try again."
-        );
-        periodError.hidden = false;
-      } finally {
-        select.disabled = false;
-        select.focus();
-      }
-    },
-    { signal: controller.signal }
-  );
+  if (!preview)
+    periodSelect?.addEventListener(
+      "change",
+      async () => {
+        const select = periodSelect;
+        const periodId = select.value;
+        periodError.hidden = true;
+        select.disabled = true;
+        try {
+          const { data, error } = await actions.invoiceTemplates.previewLines({
+            organizationId,
+            periodId,
+          });
+          if (error || !data) throw error ?? new Error("previewLines");
+          bootstrap.sampleLines = data.sampleLines;
+          sampleRows = sampleRowsFor(data.sampleLines);
+          bootstrap.sampleInvoice = {
+            ...bootstrap.sampleInvoice,
+            issueDate: data.issueDate,
+            dueDate: data.dueDate,
+            subtotal: data.totals.subtotal,
+            vatTotal: data.totals.vatTotal,
+            currentCharges: data.totals.currentCharges,
+            amountDue: data.totals.currentCharges,
+          };
+          currentPeriodId = periodId;
+          const url = new URL(location.href);
+          url.searchParams.set("previewPeriodId", periodId);
+          history.replaceState(null, "", url);
+          renderBlockList();
+          renderPreviewNow();
+        } catch {
+          select.value = currentPeriodId;
+          periodError.textContent = s(
+            "Could not load the sample charges. Try again."
+          );
+          periodError.hidden = false;
+        } finally {
+          select.disabled = false;
+          select.focus();
+        }
+      },
+      { signal: controller.signal }
+    );
 
   // --- Phone: one column at a time -------------------------------------------
   const viewButtons = [
@@ -475,7 +484,7 @@ onPageLoad(() => {
     if (undo) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "tpl-undo";
+      button.className = "inline-undo";
       button.textContent = s("Undo");
       button.addEventListener("click", () => {
         clearStatus();
@@ -500,7 +509,11 @@ onPageLoad(() => {
     control: HTMLInputElement | HTMLSelectElement
   ): HTMLLabelElement {
     const label = document.createElement("label");
-    label.className = "tpl-control";
+    // A checkbox label is its whole 44px hit target (.check-row).
+    label.className =
+      control instanceof HTMLInputElement && control.type === "checkbox"
+        ? "tpl-control check-row"
+        : "tpl-control";
     // appendChild, not append(): this project's TS program resolves
     // Element.append()'s overloads incorrectly (see workbench-drawer.ts's
     // identical note -- @cloudflare/workers-types' ambient globals collide
@@ -533,10 +546,10 @@ onPageLoad(() => {
     onChange: (checked: boolean) => void
   ): HTMLLabelElement {
     const label = document.createElement("label");
-    label.className = "tpl-toggle";
+    label.className = "toggle-switch";
     const input = document.createElement("input");
     input.type = "checkbox";
-    input.className = "tpl-toggle-input";
+    input.setAttribute("role", "switch");
     input.setAttribute("aria-label", ariaLabel);
     input.checked = checked;
     input.addEventListener("change", () => {
@@ -545,9 +558,10 @@ onPageLoad(() => {
       refreshPreview();
     });
     const track = document.createElement("span");
-    track.className = "tpl-toggle-track";
+    track.className = "toggle-switch-track";
+    track.setAttribute("aria-hidden", "true");
     const thumb = document.createElement("span");
-    thumb.className = "tpl-toggle-thumb";
+    thumb.className = "toggle-switch-thumb";
     track.appendChild(thumb);
     label.appendChild(input);
     label.appendChild(track);
@@ -600,10 +614,15 @@ onPageLoad(() => {
     return input;
   }
 
-  function iconButton(label: string, onClick: () => void): HTMLButtonElement {
+  function actionButton(
+    label: string,
+    onClick: () => void,
+    options?: { className?: string; move?: "up" | "down" }
+  ): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "tpl-icon-button";
+    button.className = options?.className ?? "btn-secondary btn-sm";
+    if (options?.move) button.dataset.move = options.move;
     // The label is the visible text, so there is nothing for a tooltip to add.
     button.textContent = label;
     button.addEventListener("click", onClick);
@@ -630,12 +649,10 @@ onPageLoad(() => {
     const li = blockListEl.querySelector<HTMLElement>(
       `[data-block-id="${blockId}"]`
     );
-    const label = direction === -1 ? s("Move up") : s("Move down");
-    const button = li
-      ? [...li.querySelectorAll<HTMLButtonElement>(".tpl-icon-button")].find(
-          (b) => b.getAttribute("aria-label") === label
-        )
-      : undefined;
+    const move = direction === -1 ? "up" : "down";
+    const button = li?.querySelector<HTMLButtonElement>(
+      `button[data-move="${move}"]`
+    );
     button?.focus();
   }
 
@@ -692,11 +709,11 @@ onPageLoad(() => {
 
     const overflow = document.createElement("details");
     overflow.className = "tpl-row-overflow";
+    overflow.setAttribute("data-dismiss", "");
     const summary = document.createElement("summary");
-    summary.className = "tpl-overflow-btn tpl-icon-button";
+    summary.className = "icon-btn icon-btn-sm tpl-overflow-btn";
     summary.setAttribute("aria-label", s("More options"));
-    summary.dataset.tip = s("More options");
-    summary.textContent = "⋯";
+    summary.innerHTML = iconMarkup("dots");
     overflow.appendChild(summary);
     const popover = document.createElement("div");
     popover.className = "tpl-popover";
@@ -871,7 +888,7 @@ onPageLoad(() => {
     const handle = document.createElement("span");
     handle.className = "tpl-drag-handle";
     handle.setAttribute("aria-hidden", "true");
-    handle.textContent = "⋮⋮";
+    handle.innerHTML = iconMarkup("grip-vertical");
     header.appendChild(handle);
 
     const num = document.createElement("span");
@@ -902,11 +919,21 @@ onPageLoad(() => {
 
     const accordionBtn = document.createElement("button");
     accordionBtn.type = "button";
-    accordionBtn.className = "tpl-accordion-btn";
-    const chevron = document.createElement("span");
-    chevron.className = "tpl-chevron-icon";
+    accordionBtn.className = "icon-btn icon-btn-sm tpl-accordion-btn";
+    const chevron = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "svg"
+    );
+    chevron.setAttribute("class", "tpl-chevron-icon");
+    chevron.setAttribute("viewBox", "0 0 24 24");
+    chevron.setAttribute("width", "16");
+    chevron.setAttribute("height", "16");
+    chevron.setAttribute("fill", "none");
+    chevron.setAttribute("stroke", "currentColor");
+    chevron.setAttribute("stroke-linecap", "round");
+    chevron.setAttribute("stroke-linejoin", "round");
     chevron.setAttribute("aria-hidden", "true");
-    chevron.textContent = "›";
+    chevron.innerHTML = ICONS["chevron-right"];
     accordionBtn.appendChild(chevron);
     headerActions.appendChild(accordionBtn);
 
@@ -1027,17 +1054,21 @@ onPageLoad(() => {
     const actions = document.createElement("div");
     actions.className = "tpl-block-actions";
     actions.appendChild(
-      iconButton(s("Move up"), () => moveBlock(block.id, -1))
+      actionButton(s("Move up"), () => moveBlock(block.id, -1), { move: "up" })
     );
     actions.appendChild(
-      iconButton(s("Move down"), () => moveBlock(block.id, 1))
+      actionButton(s("Move down"), () => moveBlock(block.id, 1), {
+        move: "down",
+      })
     );
     if (block.type === "text") {
       actions.appendChild(
-        iconButton(s("Duplicate"), () => duplicateTextBlock(block.id))
+        actionButton(s("Duplicate"), () => duplicateTextBlock(block.id))
       );
       actions.appendChild(
-        iconButton(s("Delete"), () => deleteTextBlock(block.id))
+        actionButton(s("Delete"), () => deleteTextBlock(block.id), {
+          className: "btn-secondary btn-sm",
+        })
       );
     }
     detail.appendChild(actions);
@@ -1233,7 +1264,9 @@ onPageLoad(() => {
       data.set("defaultNote", state.defaultNote);
       data.set("config", JSON.stringify(state.config));
       try {
-        const { error } = await actions.invoiceTemplates.update(data);
+        const error = preview
+          ? undefined
+          : (await actions.invoiceTemplates.update(data)).error;
         if (error) {
           saveFailed = true;
         } else {
@@ -1261,6 +1294,7 @@ onPageLoad(() => {
     "keydown",
     (event) => {
       if (
+        (preview && !root.getClientRects().length) ||
         !(event.ctrlKey || event.metaKey) ||
         event.key.toLowerCase() !== "s"
       ) {

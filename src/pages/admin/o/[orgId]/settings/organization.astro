@@ -4,6 +4,7 @@ const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 // Phase D (Organizations/dwellings) - legal/bank/contact settings (spec
 // Section 9.2, 27, ORG-002).
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import FieldError from "../../../../../components/ui/FieldError.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
@@ -11,6 +12,7 @@ import { actions } from "astro:actions";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { friendlyActionErrorMessage } from "../../../../../lib/ui/i18n";
 import { withRequestDb } from "../../../../../lib/db-request";
+import { fieldErrorAttrs } from "../../../../../lib/ui/field-error-attrs";
 
 const organizationId = Astro.params.orgId!;
 
@@ -30,7 +32,7 @@ const cityLine = [organization.city, organization.postalCode]
 ---
 
 <AdminLayout
-  title={`Organization settings - ${organization.name}`}
+  title={`${t("Organization")} – ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
   archived={!!organization.archivedAt}
@@ -40,20 +42,18 @@ const cityLine = [organization.city, organization.postalCode]
   ]}
 >
   <div class="org-settings-page">
-    <header class="org-settings-header">
-      <div>
-        <h1 class="font-display">{t("Organization")}</h1>
-        <p class="page-description">
-          {t("Manage legal, contact, and bank details for this organization.")}
-        </p>
-      </div>
-      <a href={`${base}/guide`} class="btn-secondary settings-help">
-        <span class="settings-help-icon" aria-hidden="true">
-          ?
-        </span>
+    <PageHeader
+      title={t("Organization")}
+      description={t(
+        "Manage legal, contact, and bank details for this organization."
+      )}
+      display
+    >
+      <a href={`${base}/guide`} class="btn-secondary">
+        <Icon name="help-circle" size="sm" />
         {t("Need help?")}
       </a>
-    </header>
+    </PageHeader>
 
     {updateResult?.error && (
       <p class="notice notice-danger" role="alert">
@@ -70,7 +70,7 @@ const cityLine = [organization.city, organization.postalCode]
       <form
         method="POST"
         action={actions.organizations.update}
-        class="org-settings-form"
+        class="org-settings-form box"
       >
         <input type="hidden" name="organizationId" value={organizationId} />
         {
@@ -92,9 +92,13 @@ const cityLine = [organization.city, organization.postalCode]
           ))
         }
 
-        <div class="org-info-banner">
-          <span class="org-info-icon" aria-hidden="true">
-            i
+        <div class="org-info-banner notice">
+          <span
+            class="icon-tile icon-tile-sm"
+            data-tone="info"
+            aria-hidden="true"
+          >
+            <Icon name="info-circle" />
           </span>
           <p>
             {t(
@@ -112,25 +116,29 @@ const cityLine = [organization.city, organization.postalCode]
           </p>
 
           <div class="org-field">
-            <label for="name">{t("Name")}</label>
+            <label class="field-label" for="name">
+              {t("Name")}
+            </label>
             <input
               id="name"
               name="name"
-              aria-describedby="name-error"
               value={organization.name}
               required
+              {...fieldErrorAttrs(updateResult?.error, "name")}
             />
             <FieldError name="name" error={updateResult?.error} />
           </div>
 
           <div class="org-field-row">
             <div class="org-field">
-              <label for="registrationNumber">{t("Registration number")}</label>
+              <label class="field-label" for="registrationNumber">
+                {t("Registration number")}
+              </label>
               <input
                 id="registrationNumber"
                 name="registrationNumber"
-                aria-describedby="registrationNumber-error"
                 value={organization.registrationNumber ?? ""}
+                {...fieldErrorAttrs(updateResult?.error, "registrationNumber")}
               />
               <FieldError
                 name="registrationNumber"
@@ -138,46 +146,54 @@ const cityLine = [organization.city, organization.postalCode]
               />
             </div>
             <div class="org-field">
-              <label for="vatNumber">{t("VAT number")}</label>
+              <label class="field-label" for="vatNumber">
+                {t("VAT number")}
+              </label>
               <input
                 id="vatNumber"
                 name="vatNumber"
-                aria-describedby="vatNumber-error"
                 value={organization.vatNumber ?? ""}
+                {...fieldErrorAttrs(updateResult?.error, "vatNumber")}
               />
               <FieldError name="vatNumber" error={updateResult?.error} />
             </div>
           </div>
           <div class="org-field">
-            <label for="addressLine1">{t("Address")}</label>
+            <label class="field-label" for="addressLine1">
+              {t("Address")}
+            </label>
             <input
               id="addressLine1"
               name="addressLine1"
-              aria-describedby="addressLine1-error"
               value={organization.addressLine1}
               required
+              {...fieldErrorAttrs(updateResult?.error, "addressLine1")}
             />
             <FieldError name="addressLine1" error={updateResult?.error} />
           </div>
 
           <div class="org-field-row">
             <div class="org-field">
-              <label for="city">{t("City")}</label>
+              <label class="field-label" for="city">
+                {t("City")}
+              </label>
               <input
                 id="city"
                 name="city"
-                aria-describedby="city-error"
                 value={organization.city ?? ""}
+                {...fieldErrorAttrs(updateResult?.error, "city")}
               />
               <FieldError name="city" error={updateResult?.error} />
             </div>
             <div class="org-field">
-              <label for="postalCode">{t("Postal code")}</label>
+              <label class="field-label" for="postalCode">
+                {t("Postal code")}
+              </label>
               <input
                 id="postalCode"
                 name="postalCode"
-                aria-describedby="postalCode-error"
                 value={organization.postalCode ?? ""}
+                {...fieldErrorAttrs(updateResult?.error, "postalCode")}
               />
               <FieldError name="postalCode" error={updateResult?.error} />
             </div>
@@ -185,23 +201,31 @@ const cityLine = [organization.city, organization.postalCode]
 
           <div class="org-field-row">
             <div class="org-field">
-              <label for="email">{t("Email")}</label>
-              <input
-                id="email"
-                name="email"
-                aria-describedby="email-error"
-                type="email"
-                value={organization.email ?? ""}
-              />
+              <label class="field-label" for="email">
+                {t("Email")}
+              </label>
+              <div class="input-icon">
+                <Icon name="mail" size="sm" />
+                <input
+                  spellcheck="false"
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={organization.email ?? ""}
+                  {...fieldErrorAttrs(updateResult?.error, "email")}
+                />
+              </div>
               <FieldError name="email" error={updateResult?.error} />
             </div>
             <div class="org-field">
-              <label for="phone">{t("Phone")}</label>
+              <label class="field-label" for="phone">
+                {t("Phone")}
+              </label>
               <input
                 id="phone"
                 name="phone"
-                aria-describedby="phone-error"
                 value={organization.phone ?? ""}
+                {...fieldErrorAttrs(updateResult?.error, "phone")}
               />
               <FieldError name="phone" error={updateResult?.error} />
             </div>
@@ -216,34 +240,45 @@ const cityLine = [organization.city, organization.postalCode]
 
           <div class="org-field-row">
             <div class="org-field">
-              <label for="bankName">{t("Bank name")}</label>
+              <label class="field-label" for="bankName">
+                {t("Bank name")}
+              </label>
               <input
                 id="bankName"
                 name="bankName"
-                aria-describedby="bankName-error"
                 value={organization.bankName ?? ""}
+                {...fieldErrorAttrs(updateResult?.error, "bankName")}
               />
               <FieldError name="bankName" error={updateResult?.error} />
             </div>
             <div class="org-field">
-              <label for="iban">IBAN</label>
-              <input
-                id="iban"
-                name="iban"
-                aria-describedby="iban-error"
-                value={organization.iban ?? ""}
-              />
+              <label class="field-label" for="iban">
+                IBAN
+              </label>
+              <div class="input-icon">
+                <Icon name="building-bank" size="sm" />
+                <input
+                  spellcheck="false"
+                  id="iban"
+                  name="iban"
+                  value={organization.iban ?? ""}
+                  {...fieldErrorAttrs(updateResult?.error, "iban")}
+                />
+              </div>
               <FieldError name="iban" error={updateResult?.error} />
             </div>
           </div>
 
           <div class="org-field">
-            <label for="bic">BIC</label>
+            <label class="field-label" for="bic">
+              BIC
+            </label>
             <input
+              spellcheck="false"
               id="bic"
               name="bic"
-              aria-describedby="bic-error"
               value={organization.bic ?? ""}
+              {...fieldErrorAttrs(updateResult?.error, "bic")}
             />
             <FieldError name="bic" error={updateResult?.error} />
           </div>
@@ -260,10 +295,10 @@ const cityLine = [organization.city, organization.postalCode]
       </form>
 
       <aside class="org-settings-sidebar">
-        <div class="org-summary-card">
+        <div class="org-summary-card box">
           <div class="org-summary-head">
-            <span class="org-summary-icon" aria-hidden="true">
-              <Icon name="building" size="lg" />
+            <span class="icon-tile" aria-hidden="true">
+              <Icon name="building" />
             </span>
             <div>
               <h2>{t("Organization summary")}</h2>
@@ -308,7 +343,7 @@ const cityLine = [organization.city, organization.postalCode]
           </dl>
         </div>
 
-        <div class="org-summary-card">
+        <div class="org-summary-card box">
           <h2>{t("Archive organization")}</h2>
           {archiveResult?.error && (
             <p class="notice notice-danger mt-3" role="alert">
@@ -355,7 +390,9 @@ const cityLine = [organization.city, organization.postalCode]
                   value={organizationId}
                 />
                 <div class="org-field">
-                  <label for="archive-reason">{t("Reason")}</label>
+                  <label class="field-label" for="archive-reason">
+                    {t("Reason")}
+                  </label>
                   <input
                     id="archive-reason"
                     name="reason"
@@ -365,7 +402,8 @@ const cityLine = [organization.city, organization.postalCode]
                 </div>
                 <button
                   type="submit"
-                  class="btn-danger"
+                  class="btn-secondary"
+                  data-confirm-tone="danger"
                   data-confirm={t(
                     "Archive this organization? Residents cannot sign in until you restore it."
                   )}
@@ -377,9 +415,9 @@ const cityLine = [organization.city, organization.postalCode]
           )}
         </div>
 
-        <div class="org-tip-card">
-          <span class="org-tip-icon" aria-hidden="true">
-            <Icon name="bulb" size="lg" />
+        <div class="org-tip-card notice">
+          <span class="icon-tile" data-tone="info" aria-hidden="true">
+            <Icon name="bulb" />
           </span>
           <div>
             <h3>{t("Good to know")}</h3>
@@ -400,38 +438,6 @@ const cityLine = [organization.city, organization.postalCode]
     display: grid;
     gap: 1.25rem;
   }
-  .org-settings-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-  }
-  .org-settings-header h1 {
-    font-size: var(--text-display-md);
-    font-weight: 600;
-  }
-  .org-settings-header .page-description {
-    margin-top: 0.5rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .settings-help {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .settings-help-icon {
-    display: grid;
-    width: 1.1rem;
-    height: 1.1rem;
-    place-items: center;
-    border-radius: 50%;
-    border: 1.5px solid currentColor;
-    font-size: var(--text-xs);
-    font-weight: 700;
-    line-height: 1;
-  }
   .org-settings-split {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
@@ -441,36 +447,11 @@ const cityLine = [organization.city, organization.postalCode]
   .org-settings-form {
     display: grid;
     gap: 1.5rem;
-    padding: 1.5rem;
-    border: var(--panel-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-    box-shadow: var(--elevation-flat);
   }
   .org-info-banner {
     display: flex;
+    align-items: center;
     gap: 0.75rem;
-    padding: 1rem;
-    border-radius: var(--radius-panel);
-    background: var(--tone-info-bg);
-    color: var(--tone-info-text);
-  }
-  .org-info-icon {
-    display: grid;
-    flex: 0 0 auto;
-    width: 1.5rem;
-    height: 1.5rem;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--color-primary);
-    color: var(--color-on-primary);
-    font-size: var(--text-xs);
-    font-weight: 700;
-    font-style: italic;
-  }
-  .org-info-banner p {
-    font-size: var(--text-sm);
-    line-height: 1.5;
   }
   .org-settings-section {
     display: grid;
@@ -496,21 +477,11 @@ const cityLine = [organization.city, organization.postalCode]
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1rem;
   }
-  .org-field label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-size: var(--text-sm);
-    font-weight: 600;
-  }
+  /* Border, radius, padding and the state fills come from the base layer. */
   .org-field input {
     width: 100%;
-    padding: 0.75rem 0.75rem;
-    border-radius: var(--radius-control);
-    background-color: var(--color-surface);
-    color: var(--color-foreground);
     font: inherit;
     font-size: var(--text-sm);
-    box-sizing: border-box;
   }
   .org-settings-actions {
     display: flex;
@@ -523,30 +494,9 @@ const cityLine = [organization.city, organization.postalCode]
     display: grid;
     gap: 1.25rem;
   }
-  .org-summary-card {
-    padding: 1.5rem;
-    border: var(--panel-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-    box-shadow: var(--elevation-flat);
-  }
   .org-summary-head {
     display: flex;
     gap: 0.75rem;
-  }
-  .org-summary-icon {
-    display: grid;
-    width: 3rem;
-    height: 3rem;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--tone-neutral-bg);
-    color: var(--color-foreground);
-  }
-  .org-summary-icon svg {
-    width: 1.5rem;
-    height: 1.5rem;
   }
   .org-summary-head h2 {
     font-size: var(--text-base);
@@ -577,23 +527,6 @@ const cityLine = [organization.city, organization.postalCode]
   .org-tip-card {
     display: flex;
     gap: 0.75rem;
-    padding: 1.25rem;
-    border-radius: var(--radius-panel);
-    background: var(--tone-info-bg);
-    color: var(--tone-info-text);
-  }
-  .org-tip-icon {
-    display: grid;
-    flex: 0 0 auto;
-    width: 2.25rem;
-    height: 2.25rem;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--color-surface);
-  }
-  .org-tip-icon svg {
-    width: 1.15rem;
-    height: 1.15rem;
   }
   .org-tip-card h3 {
     font-size: var(--text-sm);
@@ -601,8 +534,6 @@ const cityLine = [organization.city, organization.postalCode]
   }
   .org-tip-card p {
     margin-top: 0.25rem;
-    font-size: var(--text-sm);
-    line-height: 1.5;
   }
 
   @media (width < 48rem) {

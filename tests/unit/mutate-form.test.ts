@@ -445,6 +445,348 @@ describe("bindMutationForm", () => {
     expect(buttonDisabledAtSettled).toBe(false);
     expect(button.disabled).toBe(false);
   });
+
+  describe("per-field ARIA validation for isInputError", () => {
+    function makeInteractiveControl(opts: {
+      name: string;
+      id?: string;
+      value?: string;
+      hidden?: boolean;
+      inFlexRow?: boolean;
+    }) {
+      const attrs = new Map<string, string>([["name", opts.name]]);
+      if (opts.id) attrs.set("id", opts.id);
+      const listeners = new Map<string, Array<() => void>>();
+      let focusCount = 0;
+      const insertedAfter: Array<Record<string, unknown>> = [];
+
+      const parentElement = opts.inFlexRow
+        ? {
+            classList: {
+              contains: (c: string) => c === "flex",
+            },
+            insertedAfter,
+            insertAdjacentElement: vi.fn(
+              (_pos: string, el: Record<string, unknown>) => {
+                insertedAfter.push(el);
+              }
+            ),
+          }
+        : null;
+
+      return {
+        tagName: "INPUT",
+        type: "text",
+        name: opts.name,
+        id: opts.id ?? "",
+        value: opts.value ?? "",
+        hidden: opts.hidden ?? false,
+        parentElement,
+        insertedAfter,
+        get focusCount() {
+          return focusCount;
+        },
+        setAttribute: vi.fn((k: string, v: string) => {
+          attrs.set(k, v);
+        }),
+        getAttribute: vi.fn((k: string) => attrs.get(k) ?? null),
+        removeAttribute: vi.fn((k: string) => {
+          attrs.delete(k);
+        }),
+        hasAttribute: vi.fn((k: string) => attrs.has(k)),
+        closest: vi.fn((sel: string) =>
+          sel === "[hidden]" && opts.hidden ? {} : null
+        ),
+        insertAdjacentElement: vi.fn(
+          (_pos: string, el: Record<string, unknown>) => {
+            insertedAfter.push(el);
+          }
+        ),
+        addEventListener: vi.fn((ev: string, fn: () => void) => {
+          const list = listeners.get(ev) ?? [];
+          list.push(fn);
+          listeners.set(ev, list);
+        }),
+        removeEventListener: vi.fn((ev: string, fn: () => void) => {
+          const list = listeners.get(ev) ?? [];
+          listeners.set(
+            ev,
+            list.filter((f) => f !== fn)
+          );
+        }),
+        dispatch(ev: string) {
+          for (const fn of [...(listeners.get(ev) ?? [])]) fn();
+        },
+        focus: vi.fn(() => {
+          focusCount++;
+        }),
+      };
+    }
+
+    function makeDomForm(
+      button: ReturnType<typeof makeButton>,
+      controls: ReturnType<typeof makeInteractiveControl>[]
+    ) {
+      let submitHandler:
+        ((event: { preventDefault: () => void }) => void) | null = null;
+      const formTopErrors: Array<Record<string, unknown>> = [];
+      return {
+        id: "test-form",
+        formTopErrors,
+        querySelector: vi.fn(() => button),
+        querySelectorAll: vi.fn((selector: string) => {
+          if (selector.includes("name")) return controls;
+          return [];
+        }),
+        addEventListener: vi.fn(
+          (event: string, handler: typeof submitHandler) => {
+            if (event === "submit") submitHandler = handler;
+          }
+        ),
+        insertAdjacentElement: vi.fn(
+          (_pos: string, el: Record<string, unknown>) => {
+            formTopErrors.push(el);
+          }
+        ),
+        triggerSubmit() {
+          submitHandler?.({ preventDefault: vi.fn() });
+        },
+      };
+    }
+
+    it("attaches .field-error, sets aria-invalid/aria-describedby, focuses control, skips banner, and clears on input", async () => {
+      const button = makeButton();
+      const emailCtrl = makeInteractiveControl({
+        name: "billingEmail",
+        id: "billingEmail",
+        value: "not-an-email",
+      });
+      const form = makeDomForm(button, [emailCtrl]);
+      const action = vi.fn().mockResolvedValue({
+        error: {
+          message: 'Failed to validate: [{"path":["billingEmail"]}]',
+          fields: { billingEmail: ["Invalid email"] },
+        },
+      });
+
+      bindMutationForm({
+        form: form as never,
+        action,
+        savingLabel: "Saving…",
+        onSuccess: vi.fn(),
+        fallbackErrorMessage: "Something went wrong.",
+      });
+
+      form.triggerSubmit();
+      await vi.waitFor(() => expect(button.disabled).toBe(false));
+
+      expect(form.formTopErrors).toEqual([]);
+      expect(emailCtrl.getAttribute("aria-invalid")).toBe("true");
+      expect(emailCtrl.getAttribute("aria-describedby")).toBe(
+        "billingEmail-error"
+      );
+      expect(emailCtrl.focusCount).toBe(1);
+      expect(emailCtrl.insertedAfter).toHaveLength(1);
+      expect(emailCtrl.insertedAfter[0].textContent).toBe("Invalid email");
+      expect(emailCtrl.insertedAfter[0].id).toBe("billingEmail-error");
+
+      emailCtrl.value = "anna@example.com";
+      emailCtrl.dispatch("input");
+      expect(emailCtrl.hasAttribute("aria-invalid")).toBe(false);
+      expect(emailCtrl.hasAttribute("aria-describedby")).toBe(false);
+      expect(
+        emailCtrl.insertedAfter[0].remove as ReturnType<typeof vi.fn>
+      ).toHaveBeenCalledTimes(1);
+    });
+
+    it("falls back to top-level notice for unmapped field errors without leaking raw JSON", async () => {
+      const button = makeButton();
+      const emailCtrl = makeInteractiveControl({
+        name: "billingEmail",
+        id: "billingEmail",
+        value: "ok@example.com",
+      });
+      const form = makeDomForm(button, [emailCtrl]);
+      const action = vi.fn().mockResolvedValue({
+        error: {
+          message: 'Failed to validate: [{"path":["dwellingId"]}]',
+          fields: { dwellingId: ["Invalid dwelling"] },
+        },
+      });
+
+      bindMutationForm({
+        form: form as never,
+        action,
+        savingLabel: "Saving…",
+        onSuccess: vi.fn(),
+        fallbackErrorMessage: "Something went wrong.",
+      });
+
+      form.triggerSubmit();
+      await vi.waitFor(() => expect(button.disabled).toBe(false));
+
+      expect(emailCtrl.hasAttribute("aria-invalid")).toBe(false);
+      expect(form.formTopErrors).toHaveLength(1);
+      expect(form.formTopErrors[0].textContent).toBe("Invalid dwelling");
+    });
+
+    it("ignores stale field errors and skips focus if the user edited the field while saving", async () => {
+      const button = makeButton();
+      const unitCtrl = makeInteractiveControl({
+        name: "unit",
+        id: "unit",
+        value: "",
+      });
+      const form = makeDomForm(button, [unitCtrl]);
+      let resolveSave!: (value: { data?: unknown; error?: unknown }) => void;
+      const action = vi.fn(
+        () =>
+          new Promise<{ data?: unknown; error?: unknown }>((resolve) => {
+            resolveSave = resolve;
+          }) as Promise<never>
+      );
+
+      bindMutationForm({
+        form: form as never,
+        action,
+        savingLabel: "Saving…",
+        onSuccess: vi.fn(),
+        fallbackErrorMessage: "Something went wrong.",
+      });
+
+      form.triggerSubmit();
+      unitCtrl.value = "m3";
+      resolveSave({
+        error: {
+          message: 'Failed to validate: [{"path":["unit"]}]',
+          fields: { unit: ["Unit is required"] },
+        },
+      });
+
+      await vi.waitFor(() => expect(button.disabled).toBe(false));
+      expect(unitCtrl.hasAttribute("aria-invalid")).toBe(false);
+      expect(unitCtrl.focusCount).toBe(0);
+      expect(unitCtrl.insertedAfter).toHaveLength(0);
+    });
+
+    it("places .field-error after a .flex wrapper for flex-row forms such as #resident-form", async () => {
+      const button = makeButton();
+      const emailCtrl = makeInteractiveControl({
+        name: "email",
+        id: "resident-email",
+        value: "bad",
+        inFlexRow: true,
+      });
+      const form = makeDomForm(button, [emailCtrl]);
+      const action = vi.fn().mockResolvedValue({
+        error: {
+          message: 'Failed to validate: [{"path":["email"]}]',
+          fields: { email: ["Enter a valid email"] },
+        },
+      });
+
+      bindMutationForm({
+        form: form as never,
+        action,
+        savingLabel: "Saving…",
+        onSuccess: vi.fn(),
+        fallbackErrorMessage: "Something went wrong.",
+      });
+
+      form.triggerSubmit();
+      await vi.waitFor(() => expect(button.disabled).toBe(false));
+
+      expect(emailCtrl.insertAdjacentElement).not.toHaveBeenCalled();
+      expect(
+        emailCtrl.parentElement!.insertAdjacentElement
+      ).toHaveBeenCalledTimes(1);
+      expect(emailCtrl.insertedAfter[0].id).toBe("resident-email-error");
+      expect(emailCtrl.getAttribute("aria-describedby")).toBe(
+        "resident-email-error"
+      );
+    });
+
+    it("places a compact-form error under the .field-group and names the field", async () => {
+      const button = makeButton();
+      const emailCtrl = makeInteractiveControl({
+        name: "billingEmail",
+        id: "billingEmail",
+        value: "bad",
+      });
+      const groupInserted: Array<Record<string, unknown>> = [];
+      const group = {
+        parentElement: { classList: { contains: () => false } },
+        insertAdjacentElement: vi.fn(
+          (_pos: string, el: Record<string, unknown>) => {
+            groupInserted.push(el);
+          }
+        ),
+      };
+      Object.assign(emailCtrl, {
+        closest: vi.fn((sel: string) =>
+          sel === ".field-group" ? group : null
+        ),
+        labels: [{ textContent: " Billing email " }],
+      });
+      const form = makeDomForm(button, [emailCtrl]);
+      const action = vi.fn().mockResolvedValue({
+        error: {
+          message: 'Failed to validate: [{"path":["billingEmail"]}]',
+          fields: { billingEmail: ["Enter a valid email"] },
+        },
+      });
+
+      bindMutationForm({
+        form: form as never,
+        action,
+        savingLabel: "Saving…",
+        onSuccess: vi.fn(),
+        fallbackErrorMessage: "Something went wrong.",
+      });
+
+      form.triggerSubmit();
+      await vi.waitFor(() => expect(button.disabled).toBe(false));
+
+      expect(emailCtrl.insertAdjacentElement).not.toHaveBeenCalled();
+      expect(group.insertAdjacentElement).toHaveBeenCalledTimes(1);
+      expect(groupInserted[0].id).toBe("billingEmail-error");
+      expect(groupInserted[0].textContent).toBe(
+        "Billing email: Enter a valid email"
+      );
+    });
+
+    it("lists errors in the form's field order, not the schema's", async () => {
+      const button = makeButton();
+      const unitCtrl = makeInteractiveControl({ name: "unit", id: "unit" });
+      const serialCtrl = makeInteractiveControl({
+        name: "serialNumber",
+        id: "serialNumber",
+      });
+      const form = makeDomForm(button, [unitCtrl, serialCtrl]);
+      const action = vi.fn().mockResolvedValue({
+        error: {
+          message: "Failed to validate",
+          fields: { serialNumber: ["Too long"], unit: ["Required"] },
+        },
+      });
+
+      bindMutationForm({
+        form: form as never,
+        action,
+        savingLabel: "Saving…",
+        onSuccess: vi.fn(),
+        fallbackErrorMessage: "Something went wrong.",
+      });
+
+      form.triggerSubmit();
+      await vi.waitFor(() => expect(button.disabled).toBe(false));
+
+      const unitAt = unitCtrl.insertAdjacentElement.mock.invocationCallOrder[0];
+      const serialAt =
+        serialCtrl.insertAdjacentElement.mock.invocationCallOrder[0];
+      expect(unitAt).toBeLessThan(serialAt);
+    });
+  });
 });
 
 describe("copyAstroScope", () => {

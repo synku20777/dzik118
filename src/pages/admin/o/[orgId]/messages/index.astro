@@ -1,4 +1,5 @@
 ---
+import "../../../../../styles/admin-messages.css";
 // Phase K (Messaging) - admin inbox (spec Section 13.19, 35 MSG-001/002).
 // This single page replaces the old separate list + [conversationId] pages
 // with a two-pane inbox: the list on the left always renders, the right
@@ -10,6 +11,7 @@ import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
 import FieldError from "../../../../../components/ui/FieldError.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
 import PageHeader from "../../../../../components/ui/PageHeader.astro";
+import PaginationBar from "../../../../../components/ui/PaginationBar.astro";
 import { invoiceStatusBadge } from "../../../../../lib/ui/invoice-status";
 import {
   translate,
@@ -32,6 +34,9 @@ import {
   markConversationRead,
 } from "../../../../../domain/messaging/conversations";
 import { withRequestDb } from "../../../../../lib/db-request";
+import { resolvePaginationLinks } from "../../../../../lib/ui/pagination";
+import { fieldErrorAttrs } from "../../../../../lib/ui/field-error-attrs";
+import { initials } from "../../../../../lib/ui/initials";
 import { rethrowUnexpected } from "../../../../../domain/errors";
 
 const organizationId = Astro.params.orgId!;
@@ -180,6 +185,16 @@ function filterHref(overrides: Record<string, string | undefined> = {}) {
   const query = params.toString();
   return query ? `${Astro.url.pathname}?${query}` : Astro.url.pathname;
 }
+const { previousHref, nextHref } = resolvePaginationLinks({
+  page,
+  hasNext: page < totalPages,
+  buildHref: (targetPage) =>
+    filterHref({
+      page: String(targetPage),
+      conversationId: undefined,
+      new: undefined,
+    }),
+});
 
 function senderLabel(
   message: { senderRole: string },
@@ -239,35 +254,38 @@ const conversationStatusMap = Object.fromEntries(
     {dwellingIdFilter && (
       <p class="notice">
         {t("Showing conversations for one dwelling only.")}{" "}
-        <a href={`/admin/o/${organizationId}/messages`} class="clear-filters">
+        <a
+          href={`/admin/o/${organizationId}/messages`}
+          class="link link-underlined"
+        >
           {t("Clear")}
         </a>
       </p>
     )}
 
     <form method="GET" class="filter-bar" data-instant-filter>
-      <div>
+      <div class="w-full sm:w-96">
         <label class="field-label" for="search">
           {t("Search")}
         </label>
-        <input
-          id="search"
-          name="search"
-          value={search}
-          placeholder={t("Search messages by subject or content...")}
-          autocomplete="off"
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-1.5 text-body-sm"
-        />
+        <div class="input-icon mt-1 inline-block w-full align-top">
+          <Icon name="search" size="sm" />
+          <input
+            id="search"
+            name="search"
+            type="search"
+            value={search}
+            placeholder={t("Search messages by subject or content…")}
+            autocomplete="off"
+            class="text-body-sm"
+          />
+        </div>
       </div>
       <div>
         <label class="field-label" for="status-filter">
           {t("Status")}
         </label>
-        <select
-          id="status-filter"
-          name="status"
-          class="mt-1 rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm"
-        >
+        <select id="status-filter" name="status" class="mt-1 text-body-sm">
           <option value="">{t("All statuses")}</option>
           <option value="OPEN" selected={statusFilter === "OPEN"}>
             {t("Open")}
@@ -277,7 +295,7 @@ const conversationStatusMap = Object.fromEntries(
           </option>
         </select>
       </div>
-      <label class="flex items-center gap-2 pb-2 text-body-sm text-foreground">
+      <label class="check-row text-body-sm text-foreground">
         <input
           id="unread-only"
           type="checkbox"
@@ -294,14 +312,14 @@ const conversationStatusMap = Object.fromEntries(
             status: undefined,
             unread: undefined,
           })}
-          class="clear-filters"
+          class="btn-ghost btn-sm"
         >
           {t("Clear filters")}
         </a>
       )}
     </form>
 
-    <nav class="messages-tabs" aria-label={t("Filter by status")}>
+    <nav class="tabs" aria-label={t("Filter by status")}>
       <a
         href={filterHref({ status: undefined })}
         aria-current={!statusFilter ? "page" : undefined}
@@ -324,7 +342,7 @@ const conversationStatusMap = Object.fromEntries(
 
     <div class="messages-split">
       <div class="space-y-3">
-        <div class="messages-list-pane">
+        <div class="messages-list-pane panel">
           {pagedConversations.map((c) => (
             <a
               href={filterHref({
@@ -366,37 +384,16 @@ const conversationStatusMap = Object.fromEntries(
           )}
         </div>
         {totalPages > 1 && (
-          <div class="flex justify-between text-sm text-muted">
-            <a
-              href={filterHref({
-                page: String(Math.max(1, page - 1)),
-                conversationId: undefined,
-                new: undefined,
-              })}
-              class:list={{ "pointer-events-none opacity-40": page <= 1 }}
-            >
-              ← {t("Previous")}
-            </a>
-            <span>
-              {t("Page")} {page} {t("of")} {totalPages}
-            </span>
-            <a
-              href={filterHref({
-                page: String(page + 1),
-                conversationId: undefined,
-                new: undefined,
-              })}
-              class:list={{
-                "pointer-events-none opacity-40": page >= totalPages,
-              }}
-            >
-              {t("Next")} →
-            </a>
-          </div>
+          <PaginationBar
+            page={page}
+            totalPages={totalPages}
+            previousHref={previousHref}
+            nextHref={nextHref}
+          />
         )}
       </div>
 
-      <div class="messages-detail-pane">
+      <div class="messages-detail-pane panel">
         {showNewForm ? (
           <div class="messages-new">
             <h2>{t("New message")}</h2>
@@ -419,7 +416,12 @@ const conversationStatusMap = Object.fromEntries(
                 <label class="field-label" for="new-dwelling">
                   {t("Dwelling")}
                 </label>
-                <select id="new-dwelling" name="dwellingId" required>
+                <select
+                  id="new-dwelling"
+                  name="dwellingId"
+                  required
+                  {...fieldErrorAttrs(createResult?.error, "dwellingId")}
+                >
                   {dwellingsForNewMessage.map((d) => (
                     <option value={d.id}>
                       {d.number} — {d.occupantName ?? t("No resident")}
@@ -437,6 +439,7 @@ const conversationStatusMap = Object.fromEntries(
                   name="subject"
                   required
                   maxlength="200"
+                  {...fieldErrorAttrs(createResult?.error, "subject")}
                 />
                 <FieldError name="subject" error={createResult?.error} />
               </div>
@@ -444,7 +447,13 @@ const conversationStatusMap = Object.fromEntries(
                 <label class="field-label" for="new-body">
                   {t("Message")}
                 </label>
-                <textarea id="new-body" name="body" required rows={5} />
+                <textarea
+                  id="new-body"
+                  name="body"
+                  required
+                  rows={5}
+                  {...fieldErrorAttrs(createResult?.error, "body")}
+                />
                 <FieldError name="body" error={createResult?.error} />
               </div>
               <div class="messages-reply-actions">
@@ -464,8 +473,10 @@ const conversationStatusMap = Object.fromEntries(
               <span id="detail-status-badge">
                 <StatusBadge status={selectedConversation.status} />
               </span>
-              <details class="row-menu">
-                <summary aria-label={t("More actions")}>•••</summary>
+              <details class="row-menu" data-dismiss>
+                <summary aria-label={t("More actions")}>
+                  <Icon name="dots" size="sm" />
+                </summary>
                 <div>
                   <a
                     href={`/admin/o/${organizationId}/dwellings/${selectedConversation.dwellingId}`}
@@ -476,8 +487,8 @@ const conversationStatusMap = Object.fromEntries(
               </details>
             </div>
 
-            <div class="messages-dwelling-card">
-              <span class="messages-dwelling-icon" aria-hidden="true">
+            <div class="messages-dwelling-card box box-well">
+              <span class="icon-tile" aria-hidden="true">
                 <Icon name="building" />
               </span>
               <div>
@@ -499,6 +510,7 @@ const conversationStatusMap = Object.fromEntries(
                 <p
                   id="conversation-occupant-name"
                   class="messages-dwelling-card-title"
+                  data-occupant-name={selectedConversation.occupantName ?? ""}
                 >
                   {selectedConversation.occupantName ?? t("No resident")}
                 </p>
@@ -518,7 +530,8 @@ const conversationStatusMap = Object.fromEntries(
                 class="btn-secondary btn-sm"
                 href={`/admin/o/${organizationId}/dwellings/${selectedConversation.dwellingId}`}
               >
-                <span aria-hidden="true">↗</span> {t("Open dwelling")}
+                <Icon name="external-link" size="sm" />
+                {t("Open dwelling")}
               </a>
             </div>
 
@@ -543,12 +556,8 @@ const conversationStatusMap = Object.fromEntries(
                   data-message-id={m.id}
                   data-mine={m.senderRole === "ADMIN" ? "true" : "false"}
                 >
-                  <span
-                    class="message-avatar"
-                    data-role={m.senderRole}
-                    aria-hidden="true"
-                  >
-                    {m.senderRole === "ADMIN" ? "A" : "R"}
+                  <span class="avatar" aria-hidden="true">
+                    {initials(senderLabel(m, selectedConversation))}
                   </span>
                   <div class="message-col">
                     <p class="message-meta">
@@ -572,7 +581,9 @@ const conversationStatusMap = Object.fromEntries(
               class="messages-reply"
               hidden={selectedConversation.status === "RESOLVED"}
             >
-              <h3>{t("Reply")}</h3>
+              <label class="field-label" for="reply-body">
+                {t("Reply")}
+              </label>
               <form
                 id="reply-form"
                 method="POST"
@@ -586,10 +597,11 @@ const conversationStatusMap = Object.fromEntries(
                 <input type="hidden" name="sentAs" value="ADMIN" />
               </form>
               <textarea
+                id="reply-body"
                 name="body"
                 form="reply-form"
                 required
-                placeholder={t("Type your reply...")}
+                placeholder={t("Type your reply…")}
               />
               <form
                 id="resolve-form"
@@ -638,6 +650,8 @@ const conversationStatusMap = Object.fromEntries(
   import { actions, isInputError } from "astro:actions";
   import { ICONS, type IconName } from "../../../../../lib/ui/icons";
   import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
+  import { bindInstantFilter } from "../../../../../lib/ui/instant-filter";
+  import { initials } from "../../../../../lib/ui/initials";
 
   // Static, developer-authored path data only (never user input) -- see
   // the equivalent helper in lib/ui/workbench-drawer.ts.
@@ -659,18 +673,9 @@ const conversationStatusMap = Object.fromEntries(
     const filterForm = document.querySelector<HTMLFormElement>(
       "[data-instant-filter]"
     );
-    const searchInput = document.querySelector<HTMLInputElement>("#search");
-    const statusSelect = document.querySelector("#status-filter");
-    const unreadCheckbox = document.querySelector("#unread-only");
-    let searchTimer: number | undefined;
-    searchInput?.addEventListener("input", () => {
-      window.clearTimeout(searchTimer);
-      searchTimer = window.setTimeout(() => filterForm?.requestSubmit(), 300);
-    });
-    statusSelect?.addEventListener("change", () => filterForm?.requestSubmit());
-    unreadCheckbox?.addEventListener("change", () =>
-      filterForm?.requestSubmit()
-    );
+    const stopInstantFilter = filterForm
+      ? bindInstantFilter(filterForm)
+      : () => {};
 
     // Live thread + status updates for the open conversation. Polling (not a
     // websocket/Supabase Realtime subscription) because this app has no
@@ -691,7 +696,8 @@ const conversationStatusMap = Object.fromEntries(
     const occupantNameEl = document.querySelector<HTMLElement>(
       "#conversation-occupant-name"
     );
-    let occupantName = occupantNameEl?.textContent?.trim() || null;
+    // The element shows "No resident" when there is none; the name is data.
+    let occupantName = occupantNameEl?.dataset.occupantName || null;
     let knownStatus = threadEl?.dataset.status;
     const knownMessageIds = new Set(
       [...document.querySelectorAll<HTMLElement>("[data-message-id]")].map(
@@ -751,10 +757,11 @@ const conversationStatusMap = Object.fromEntries(
       row.dataset.messageId = message.id;
       row.dataset.mine = isAdmin ? "true" : "false";
       const avatar = document.createElement("span");
-      avatar.className = "message-avatar";
-      avatar.dataset.role = message.senderRole;
+      avatar.className = "avatar";
       avatar.setAttribute("aria-hidden", "true");
-      avatar.textContent = isAdmin ? "A" : "R";
+      avatar.textContent = initials(
+        isAdmin ? adminLabel : (occupantName ?? residentLabel)
+      );
       const col = document.createElement("div");
       col.className = "message-col";
       const meta = document.createElement("p");
@@ -841,372 +848,8 @@ const conversationStatusMap = Object.fromEntries(
       applyStatus("RESOLVED");
     });
     return () => {
-      window.clearTimeout(searchTimer);
+      stopInstantFilter();
       if (pollTimer !== undefined) window.clearInterval(pollTimer);
     };
   });
 </script>
-
-<style>
-  .messages-page {
-    display: grid;
-    gap: 1.25rem;
-  }
-  .messages-tabs {
-    display: flex;
-    gap: 0.5rem;
-    border-bottom: 1px solid var(--color-border);
-  }
-  .messages-tabs a {
-    padding: 0.75rem 1rem;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--color-muted);
-    border-radius: var(--radius-control);
-  }
-  .messages-tabs a[aria-current="page"] {
-    color: var(--color-primary);
-    background: var(--color-nav-active-bg);
-  }
-  .messages-split {
-    display: grid;
-    /* The list takes a share of the width instead of a fixed 380px, so it
-       grows on wide screens and never squeezes the thread below 18rem. */
-    grid-template-columns: minmax(18rem, 32%) minmax(0, 1fr);
-    gap: 1.25rem;
-    align-items: start;
-  }
-  .messages-list-pane {
-    display: grid;
-    gap: 0;
-    border: var(--panel-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-    overflow: hidden;
-  }
-  .messages-list-item {
-    display: block;
-    padding: 1rem 1rem;
-    border-bottom: 1px solid var(--color-border);
-    color: var(--color-foreground);
-  }
-  .messages-list-item:last-child {
-    border-bottom: 0;
-  }
-  .messages-list-item:hover {
-    background: var(--color-hover);
-  }
-  .messages-list-item[aria-current="true"] {
-    background: var(--color-nav-active-bg);
-  }
-  .messages-list-item-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.25rem 0.5rem;
-  }
-  .messages-list-item-title {
-    display: flex;
-    align-items: center;
-    min-width: 0;
-    gap: 0.5rem;
-    font-weight: 650;
-    font-size: var(--text-sm);
-  }
-  .messages-house-icon {
-    width: 1rem;
-    height: 1rem;
-    flex-shrink: 0;
-    color: var(--color-muted);
-  }
-  .unread-dot {
-    width: 0.45rem;
-    height: 0.45rem;
-    border-radius: 50%;
-    background: var(--color-primary);
-    flex-shrink: 0;
-  }
-  .messages-list-item-subject {
-    margin-top: 0.5rem;
-    font-weight: 650;
-    font-size: var(--text-sm);
-  }
-  .messages-list-item-occupant {
-    margin-top: 0.25rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .messages-list-item-foot {
-    display: grid;
-    gap: 0.25rem;
-    margin-top: 0.5rem;
-  }
-  /* Two lines of preview, then an ellipsis. The date has its own line, so a
-     long date (Latvian, Russian) no longer eats the preview width. */
-  .messages-list-item-preview {
-    min-width: 0;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    overflow-wrap: anywhere;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .messages-list-item-date {
-    color: var(--color-muted);
-    font-size: var(--text-xs);
-  }
-  .messages-empty {
-    padding: 3rem 1.5rem;
-    text-align: center;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .messages-detail-pane {
-    display: grid;
-    gap: 1rem;
-    padding: 1.5rem;
-    border: var(--panel-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-    min-width: 0;
-  }
-  .messages-detail-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-  .messages-detail-header h2 {
-    font-size: var(--text-lg);
-    font-weight: 700;
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  .messages-dwelling-card {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem 1.25rem;
-    border: var(--panel-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface-hover);
-    flex-wrap: wrap;
-  }
-  .messages-dwelling-icon {
-    display: grid;
-    width: 2.5rem;
-    height: 2.5rem;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: var(--radius-panel);
-    background: var(--tone-neutral-bg);
-    color: var(--color-muted);
-  }
-  .messages-dwelling-icon svg {
-    width: 1.15rem;
-    height: 1.15rem;
-  }
-  .messages-dwelling-card-title {
-    font-size: var(--text-sm);
-    font-weight: 650;
-  }
-  .messages-dwelling-card-sub {
-    margin-top: 0.25rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .messages-actions {
-    display: flex;
-    gap: 0.75rem;
-  }
-  .messages-thread {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-  .messages-reply {
-    display: grid;
-    gap: 0.75rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--color-border);
-  }
-  .messages-reply h3 {
-    font-size: var(--text-sm);
-    font-weight: 700;
-  }
-  .messages-reply textarea {
-    width: 100%;
-    min-height: 6rem;
-    padding: 0.75rem 0.75rem;
-    border-radius: var(--radius-control);
-    font: inherit;
-    font-size: var(--text-sm);
-    resize: vertical;
-    box-sizing: border-box;
-  }
-  .messages-reply-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-  }
-  .messages-resolved-notice {
-    padding-top: 1rem;
-    border-top: 1px solid var(--color-border);
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .messages-new {
-    display: grid;
-    gap: 1rem;
-  }
-  .messages-new h2 {
-    font-size: var(--text-lg);
-    font-weight: 700;
-  }
-  .messages-new-form {
-    display: grid;
-    gap: 1rem;
-  }
-  .messages-new-form label {
-    margin-bottom: 0.5rem;
-  }
-  .messages-new-form select,
-  .messages-new-form input,
-  .messages-new-form textarea {
-    width: 100%;
-    padding: 0.75rem 0.75rem;
-    border-radius: var(--radius-control);
-    font: inherit;
-    font-size: var(--text-sm);
-    box-sizing: border-box;
-  }
-  .messages-new-form textarea {
-    resize: vertical;
-  }
-  .row-menu {
-    position: relative;
-    display: inline-block;
-  }
-  .row-menu summary {
-    display: grid;
-    min-width: 2.25rem;
-    min-height: 2.25rem;
-    place-items: center;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-control);
-    background: var(--color-surface);
-    color: var(--color-muted);
-    list-style: none;
-    cursor: pointer;
-  }
-  @media (pointer: coarse) {
-    .row-menu summary {
-      min-width: var(--control-size-md);
-      min-height: var(--control-size-md);
-    }
-  }
-  .row-menu summary::-webkit-details-marker {
-    display: none;
-  }
-  .row-menu > div {
-    position: absolute;
-    z-index: 20;
-    top: calc(100% + 0.35rem);
-    right: 0;
-    min-width: 10rem;
-    padding: 0.5rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-control);
-    background: var(--color-surface-raised);
-    box-shadow: var(--elevation-overlay);
-  }
-  .row-menu a {
-    display: block;
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--radius-badge);
-    color: var(--color-foreground);
-    font-size: var(--text-sm);
-    text-align: left;
-  }
-  .row-menu a:hover {
-    background: var(--color-hover);
-  }
-
-  @media (width < 48rem) {
-    .messages-split {
-      grid-template-columns: 1fr;
-    }
-  }
-  .messages-new-form select {
-    padding-inline-end: 2.25rem;
-  }
-</style>
-
-<style is:global>
-  /* Astro scopes component styles by adding a data-astro-cid attribute
-     that only elements written directly in this template receive --
-     message rows appended by the polling/reply script in this page's
-     <script> block are created via document.createElement and never get
-     that attribute, so their styling must live here instead of the
-     scoped <style> block above (same reasoning as AdminContextDrawer's
-     drawer-* classes). */
-  .message-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-  }
-  .message-row[data-mine="true"] {
-    flex-direction: row-reverse;
-  }
-  .message-avatar {
-    display: grid;
-    width: 2rem;
-    height: 2rem;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--tone-neutral-bg);
-    color: var(--color-muted);
-    font-size: var(--text-xs);
-    font-weight: 700;
-  }
-  .message-avatar[data-role="ADMIN"] {
-    background: var(--color-primary);
-    color: var(--color-on-primary);
-  }
-  .message-col {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    max-width: 75%;
-    min-width: 0;
-  }
-  .message-row[data-mine="true"] .message-col {
-    align-items: flex-end;
-  }
-  .message-meta {
-    display: flex;
-    gap: 0.5rem;
-    font-size: var(--text-xs);
-    color: var(--color-muted);
-  }
-  .message-bubble {
-    padding: 0.75rem 1rem;
-    border-radius: var(--radius-panel);
-    background: var(--color-surface-hover);
-    font-size: var(--text-sm);
-    line-height: 1.55;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .message-row[data-mine="true"] .message-bubble {
-    background: var(--color-nav-active-bg);
-  }
-  .messages-new-form select {
-    padding-inline-end: 2.25rem;
-  }
-</style>

@@ -16,6 +16,7 @@ import { getOrganization } from "../../../../../domain/organizations/organizatio
 import { getSetupProgress } from "../../../../../domain/onboarding/progress";
 import { withRequestDb } from "../../../../../lib/db-request";
 import { friendlyActionErrorMessage } from "../../../../../lib/ui/i18n";
+import { fieldErrorAttrs } from "../../../../../lib/ui/field-error-attrs";
 
 const organizationId = Astro.params.orgId!;
 try {
@@ -27,7 +28,7 @@ try {
   throw err;
 }
 
-const result = Astro.getActionResult(actions.organizations.update);
+const result = Astro.getActionResult(actions.organizations.saveSetupDetails);
 if (result?.data) {
   return Astro.redirect(`/admin/o/${organizationId}/setup/dwellings`);
 }
@@ -41,7 +42,7 @@ if (result?.error) {
     submitted = null;
   }
 }
-const val = (name: string, fallback: string | number) =>
+const val = (name: string, fallback: string) =>
   submitted ? String(submitted.get(name) ?? "") : fallback;
 
 const { organization, progress } = await withRequestDb(async (db) => {
@@ -51,6 +52,119 @@ const { organization, progress } = await withRequestDb(async (db) => {
     progress: await getSetupProgress(db, organizationId, organization),
   };
 });
+
+interface SetupField {
+  name: string;
+  label: string;
+  value: string | null;
+  type?: "email" | "tel";
+  autocomplete?: string;
+  spellcheck?: boolean;
+  required?: boolean;
+  fullWidth?: boolean;
+}
+
+const invoiceFields: SetupField[] = [
+  {
+    name: "bankName",
+    label: "Bank name",
+    value: organization.bankName,
+    required: true,
+  },
+  { name: "bic", label: "BIC", value: organization.bic, spellcheck: false },
+  {
+    name: "iban",
+    label: "IBAN",
+    value: organization.iban,
+    spellcheck: false,
+    required: true,
+    fullWidth: true,
+  },
+  {
+    name: "registrationNumber",
+    label: "Registration number",
+    value: organization.registrationNumber,
+  },
+  {
+    name: "vatNumber",
+    label: "VAT number",
+    value: organization.vatNumber,
+  },
+];
+
+const groups: {
+  id: string;
+  title: string;
+  fields: SetupField[];
+}[] = [
+  {
+    id: "organization-address",
+    title: "Name and address",
+    fields: [
+      {
+        name: "name",
+        label: "Name",
+        value: organization.name,
+        autocomplete: "organization",
+        required: true,
+        fullWidth: true,
+      },
+      {
+        name: "addressLine1",
+        label: "Address line 1",
+        value: organization.addressLine1,
+        autocomplete: "address-line1",
+        required: true,
+        fullWidth: true,
+      },
+      {
+        name: "addressLine2",
+        label: "Address line 2",
+        value: organization.addressLine2,
+        autocomplete: "address-line2",
+        fullWidth: true,
+      },
+      {
+        name: "city",
+        label: "City",
+        value: organization.city,
+        autocomplete: "address-level2",
+      },
+      {
+        name: "postalCode",
+        label: "Postal code",
+        value: organization.postalCode,
+        autocomplete: "postal-code",
+      },
+    ],
+  },
+  {
+    id: "organization-invoice",
+    title: "Invoice details",
+    fields: invoiceFields,
+  },
+  {
+    id: "organization-contacts",
+    title: "Contact details",
+    fields: [
+      {
+        name: "email",
+        label: "Email",
+        value: organization.email,
+        type: "email",
+        autocomplete: "work email",
+        spellcheck: false,
+      },
+      {
+        name: "phone",
+        label: "Phone",
+        value: organization.phone,
+        type: "tel",
+        autocomplete: "work tel",
+      },
+    ],
+  },
+];
 ---
 
 <AdminLayout
@@ -65,7 +179,7 @@ const { organization, progress } = await withRequestDb(async (db) => {
   <SetupLayout
     title={t("Organization details")}
     description={t(
-      "Start with your organization’s name and address. Add payment details now or before preparing invoices."
+      "This information is used on invoices and for official communication."
     )}
     organizationId={organizationId}
     current="organization"
@@ -78,254 +192,71 @@ const { organization, progress } = await withRequestDb(async (db) => {
     )}
 
     <form
+      id="organization-form"
       method="POST"
-      action={actions.organizations.update}
-      class="panel p-6 space-y-6"
+      action={actions.organizations.saveSetupDetails}
+      class="organization-form panel"
     >
       <input type="hidden" name="organizationId" value={organizationId} />
-      {(
-        [
-          "autoGenerateEnabled",
-          "autoSendEnabled",
-          "carryForwardReadingsEnabled",
-        ] as const
-      ).map((name) => (
-        <input type="hidden" name={name} value={String(organization[name])} />
-      ))}
 
-      <p class="setup-required-note">{t("Fields marked * are required.")}</p>
-
-      <fieldset class="space-y-4">
-        <legend class="text-base font-semibold text-foreground">
-          {t("Organization")}
-        </legend>
-
-        <div>
-          <label for="name" class="field-label">
-            {t("Name")}
-          </label>
-          <input
-            id="name"
-            name="name"
-            type="text"
-            required
-            aria-describedby="name-error"
-            value={val("name", organization.name)}
-            class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
-          />
-          <FieldError name="name" error={result?.error} />
-        </div>
-
-        <div>
-          <label for="addressLine1" class="field-label">
-            {t("Address line 1")}
-          </label>
-          <input
-            id="addressLine1"
-            name="addressLine1"
-            type="text"
-            required
-            aria-describedby="addressLine1-error"
-            value={val("addressLine1", organization.addressLine1)}
-            class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
-          />
-          <FieldError name="addressLine1" error={result?.error} />
-        </div>
-
-        <div>
-          <label for="addressLine2" class="field-label">
-            {t("Address line 2")}
-          </label>
-          <input
-            id="addressLine2"
-            name="addressLine2"
-            type="text"
-            aria-describedby="addressLine2-error"
-            value={val("addressLine2", organization.addressLine2 ?? "")}
-            class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
-          />
-          <FieldError name="addressLine2" error={result?.error} />
-        </div>
-
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label for="city" class="field-label">
-              {t("City")}
-            </label>
-            <input
-              id="city"
-              name="city"
-              type="text"
-              aria-describedby="city-error"
-              value={val("city", organization.city ?? "")}
-              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
-            />
-            <FieldError name="city" error={result?.error} />
-          </div>
-
-          <div>
-            <label for="postalCode" class="field-label">
-              {t("Postal code")}
-            </label>
-            <input
-              id="postalCode"
-              name="postalCode"
-              type="text"
-              aria-describedby="postalCode-error"
-              value={val("postalCode", organization.postalCode ?? "")}
-              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
-            />
-            <FieldError name="postalCode" error={result?.error} />
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label for="email" class="field-label">
-              {t("Email")}
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              aria-describedby="email-error"
-              value={val("email", organization.email ?? "")}
-              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
-            />
-            <FieldError name="email" error={result?.error} />
-          </div>
-
-          <div>
-            <label for="phone" class="field-label">
-              {t("Phone")}
-            </label>
-            <input
-              id="phone"
-              name="phone"
-              type="tel"
-              aria-describedby="phone-error"
-              value={val("phone", organization.phone ?? "")}
-              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
-            />
-            <FieldError name="phone" error={result?.error} />
-          </div>
-        </div>
-      </fieldset>
-
-      <fieldset class="space-y-4 pt-4 border-t border-border">
-        <legend class="text-base font-semibold text-foreground">
-          {t("Needed before invoices are prepared")}
-        </legend>
-        <p class="text-muted text-body-sm">
-          {t(
-            "Invoices show these details. You can add them later, but you cannot prepare an invoice without the bank name and IBAN."
+      {groups.map((group) => (
+        <section class="organization-form-section" aria-labelledby={group.id}>
+          <h2 class="text-h3" id={group.id}>
+            {t(group.title)}
+          </h2>
+          {group.id === "organization-address" && (
+            <p class="setup-required-note">
+              {t("Red dots mark required fields.")}
+            </p>
           )}
-        </p>
-
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label for="registrationNumber" class="field-label">
-              {t("Registration number")}
-            </label>
-            <input
-              id="registrationNumber"
-              name="registrationNumber"
-              type="text"
-              aria-describedby="registrationNumber-error"
-              value={val(
-                "registrationNumber",
-                organization.registrationNumber ?? ""
-              )}
-              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
-            />
-            <FieldError name="registrationNumber" error={result?.error} />
+          <div class="field-group">
+            {group.fields.map((field) => (
+              <div
+                class:list={[
+                  "field-box",
+                  {
+                    "field-span": field.fullWidth,
+                    "is-required": field.required,
+                  },
+                ]}
+              >
+                <label for={field.name}>{t(field.label)}</label>
+                <input
+                  id={field.name}
+                  name={field.name}
+                  type={field.type ?? "text"}
+                  autocomplete={
+                    field.autocomplete &&
+                    `section-organization ${field.autocomplete}`
+                  }
+                  spellcheck={field.spellcheck}
+                  required={field.required}
+                  value={val(field.name, field.value ?? "")}
+                  {...fieldErrorAttrs(result?.error, field.name)}
+                />
+              </div>
+            ))}
           </div>
-
-          <div>
-            <label for="vatNumber" class="field-label">
-              {t("VAT number")}
-            </label>
-            <input
-              id="vatNumber"
-              name="vatNumber"
-              type="text"
-              aria-describedby="vatNumber-error"
-              value={val("vatNumber", organization.vatNumber ?? "")}
-              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
-            />
-            <FieldError name="vatNumber" error={result?.error} />
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label for="bankName" class="field-label">
-              {t("Bank name")}
-            </label>
-            <input
-              id="bankName"
-              name="bankName"
-              type="text"
-              aria-describedby="bankName-error"
-              value={val("bankName", organization.bankName ?? "")}
-              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
-            />
-            <FieldError name="bankName" error={result?.error} />
-          </div>
-
-          <div>
-            <label for="iban" class="field-label">
-              {t("IBAN")}
-            </label>
-            <input
-              id="iban"
-              name="iban"
-              type="text"
-              aria-describedby="iban-error"
-              value={val("iban", organization.iban ?? "")}
-              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
-            />
-            <FieldError name="iban" error={result?.error} />
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label for="bic" class="field-label">
-              {t("BIC")}
-            </label>
-            <input
-              id="bic"
-              name="bic"
-              type="text"
-              aria-describedby="bic-error"
-              value={val("bic", organization.bic ?? "")}
-              class="mt-1 block w-full rounded-control border border-(--color-input-border) bg-surface px-3 py-2 text-sm text-foreground"
-            />
-            <FieldError name="bic" error={result?.error} />
-          </div>
-        </div>
-      </fieldset>
+          {group.fields.map(({ name, label }) => (
+            <FieldError name={name} label={t(label)} error={result?.error} />
+          ))}
+        </section>
+      ))}
 
       <div class="setup-actions">
         <a href={`/admin/o/${organizationId}/setup`} class="btn-secondary">
           {t("Back")}
         </a>
-        <div class="flex items-center gap-3">
-          <a
-            href={`/admin/o/${organizationId}/setup/dwellings`}
-            class={
-              progress.steps.organization ? "btn-primary" : "btn-secondary"
-            }
-          >
-            {t(progress.steps.organization ? "Continue" : "Skip for now")}
-          </a>
-          <button
-            type="submit"
-            class={
-              progress.steps.organization ? "btn-secondary" : "btn-primary"
-            }
-          >
+        <div>
+          {progress.steps.organization && (
+            <a
+              href={`/admin/o/${organizationId}/setup/dwellings`}
+              class="btn-secondary"
+            >
+              {t("Continue without saving")}
+            </a>
+          )}
+          <button type="submit" class="btn-primary">
             {t("Save and continue")}
           </button>
         </div>
@@ -333,3 +264,22 @@ const { organization, progress } = await withRequestDb(async (db) => {
     </form>
   </SetupLayout>
 </AdminLayout>
+
+<style>
+  .organization-form {
+    display: grid;
+    gap: var(--gap-section);
+    padding: var(--pad-panel-compact);
+  }
+  .organization-form-section {
+    min-width: 0;
+  }
+  .organization-form-section > :is(h2, .setup-required-note) {
+    margin-block-end: var(--space-2);
+  }
+  @media (width >= 40rem) {
+    .organization-form {
+      padding: var(--pad-panel);
+    }
+  }
+</style>

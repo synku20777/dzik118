@@ -1,6 +1,7 @@
 ---
 import { actions } from "astro:actions";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import EmptyState from "../../../../../components/ui/EmptyState.astro";
 import { listSuppressedEmails } from "../../../../../domain/email/suppression";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
@@ -34,12 +35,12 @@ const reasonLabel = { BOUNCE: "Bounce", COMPLAINT: "Complaint" } as const;
     { label: t("Suppressed email addresses") },
   ]}
 >
-  <h1 class="text-h2 text-foreground">{t("Suppressed email addresses")}</h1>
-  <p class="mt-2 max-w-2xl text-body-sm text-muted">
-    {t(
+  <PageHeader
+    title={t("Suppressed email addresses")}
+    description={t(
       "Invoices are not sent to these addresses. The email provider reported a permanent bounce or a complaint. Remove an address after you fix the problem."
     )}
-  </p>
+  />
 
   {removeResult?.error && (
     <p class="notice notice-danger mt-4" role="alert">

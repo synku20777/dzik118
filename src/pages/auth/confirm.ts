@@ -57,7 +57,7 @@ export const GET: APIRoute = ({ url, redirect, cookies }) => {
         type,
         lang: code,
       });
-      return `<a href="?${escapeHtml(query.toString())}" lang="${code}" style="color: #58666C; margin-left: 0.5rem;">${code.toUpperCase()}</a>`;
+      return `<a href="?${escapeHtml(query.toString())}" lang="${code}" style="display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; color: #58666C;">${code.toUpperCase()}</a>`;
     })
     .join(" ")}</nav>`;
 
@@ -66,17 +66,18 @@ export const GET: APIRoute = ({ url, redirect, cookies }) => {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
     <title>${escapeHtml(heading)} - ${escapeHtml(t("Namkopa"))}</title>
   </head>
   <body style="font-family: 'Switzer', 'Overused Grotesk', 'Segoe UI', sans-serif; display: flex; min-height: 100vh; align-items: center; justify-content: center; margin: 0; background: #EEE8DE; color: #17242B;">
     ${languageNav}
-    <div style="max-width: 28rem; width: 100%; padding: 2rem; background: #FFFCF7; border: 1px solid #D5CEC2; border-radius: 0.625rem;">
+    <div style="max-width: 28rem; width: 100%; padding: 2rem; background: #FFFCF7; border: 1px solid #D5CEC2; border-radius: 1rem; corner-shape: squircle;">
       <h1 style="margin: 0 0 0.5rem; font-family: Georgia, 'Times New Roman', serif; font-weight: 600;">${escapeHtml(heading)}</h1>
       <p style="color: #58666C;">${escapeHtml(intro)}</p>
       <form method="POST">
         <input type="hidden" name="token_hash" value="${escapeHtml(tokenHash)}" />
         <input type="hidden" name="type" value="${type}" />
-        <button type="submit" style="width: 100%; min-height: 40px; padding: 0.6rem 1rem; background: #274B5B; color: #FFFCF7; border: 1px solid #274B5B; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 600; cursor: pointer;">
+        <button type="submit" style="width: 100%; min-height: 44px; padding: 0.6rem 1rem; background: #274B5B; color: #FFFCF7; border: 1px solid #274B5B; border-radius: 0.75rem; font-size: 1rem; font-weight: 600; cursor: pointer;">
           ${escapeHtml(button)}
         </button>
       </form>

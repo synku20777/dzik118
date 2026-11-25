@@ -117,7 +117,7 @@ const readyToPrepareAndSend =
     current="review"
     steps={progress.steps}
   >
-    <section class="setup-next panel p-6" aria-labelledby="setup-next-title">
+    <section class="setup-next box" aria-labelledby="setup-next-title">
       <div class="space-y-2">
         <p class="text-body-sm text-muted">
           {t(nextStep ? "Next step" : "Review")}
@@ -141,14 +141,14 @@ const readyToPrepareAndSend =
         {t(
           "The first billing period is locked. Reopen it on the period page before you change charges or meters."
         )}{" "}
-        <a href={firstPeriodHref} class="underline font-medium">
+        <a href={firstPeriodHref} class="link link-underlined font-medium">
           {t("Open the first billing period")}
         </a>
       </p>
     )}
 
     <!-- Readiness panel -->
-    <section class="panel p-6 space-y-4" aria-labelledby="readiness-title">
+    <section class="box space-y-4" aria-labelledby="readiness-title">
       <h2 id="readiness-title" class="text-h3 font-semibold text-foreground">
         {t("Readiness")}
       </h2>
@@ -190,7 +190,7 @@ const readyToPrepareAndSend =
             <ul class="space-y-1.5 pl-5 list-disc text-body-sm text-muted">
               {generationBlockers.map((blocker) => (
                 <li>
-                  <a href={blocker.href} class="text-primary hover:underline">
+                  <a href={blocker.href} class="link">
                     {blocker.count} {blocker.label}
                   </a>
                 </li>
@@ -220,7 +220,7 @@ const readyToPrepareAndSend =
                 <li>
                   <a
                     href={`/admin/o/${organizationId}/setup/organization`}
-                    class="text-primary hover:underline"
+                    class="link"
                   >
                     {t(field)}
                   </a>
@@ -228,10 +228,7 @@ const readyToPrepareAndSend =
               ))}
               {progress.recipientsIncomplete > 0 && (
                 <li>
-                  <a
-                    href={`/admin/o/${organizationId}/dwellings`}
-                    class="text-primary hover:underline"
-                  >
+                  <a href={`/admin/o/${organizationId}/dwellings`} class="link">
                     {progress.recipientsIncomplete}{" "}
                     {t("Dwellings without a recipient name or address")}
                   </a>
@@ -239,10 +236,7 @@ const readyToPrepareAndSend =
               )}
               {progress.billingEmailsMissing > 0 && (
                 <li>
-                  <a
-                    href={`/admin/o/${organizationId}/dwellings`}
-                    class="text-primary hover:underline"
-                  >
+                  <a href={`/admin/o/${organizationId}/dwellings`} class="link">
                     {progress.billingEmailsMissing}{" "}
                     {t("Dwellings without a billing email")}
                   </a>
@@ -265,7 +259,53 @@ const readyToPrepareAndSend =
       )}
     </footer>
   </SetupLayout>
+  {!nextStep && progress.readyToGenerate && (
+    <dialog
+      id="setup-done"
+      class="modal-full"
+      aria-labelledby="setup-done-title"
+      aria-describedby="setup-done-text"
+      data-organization-id={organizationId}
+    >
+      <form method="dialog">
+        <button class="icon-btn icon-btn-ghost" aria-label={t("Close")}>
+          <Icon name="x" size="sm" />
+        </button>
+      </form>
+      <div class="modal-full-body">
+        <h2 id="setup-done-title" class="font-display text-display-lg">
+          {t("Setup complete")}
+        </h2>
+        <p id="setup-done-text">
+          {t(
+            "The setup never sends invoices. You generate, prepare, and send them on the period page."
+          )}
+        </p>
+        <a href={firstPeriodHref} class="btn-primary">
+          {t("Open the first billing period")}
+        </a>
+      </div>
+    </dialog>
+  )}
 </AdminLayout>
+
+<script>
+  import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
+  // The first time an organization's setup is complete, it gets the full
+  // stop; afterwards the review page alone says so.
+  onPageLoad(() => {
+    const dialog = document.querySelector<HTMLDialogElement>("#setup-done");
+    if (!dialog) return;
+    const key = `setup-done:${dialog.dataset.organizationId}`;
+    try {
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, "1");
+    } catch {
+      return; // No storage, no way to show it only once: skip it.
+    }
+    dialog.showModal();
+  });
+</script>
 
 <style>
   .setup-next {

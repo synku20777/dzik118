@@ -365,24 +365,24 @@ export function renderInvoiceHtml(
 <meta charset="UTF-8" />
 <title>${escapeHtml(invoice.invoiceNumber)}</title>
 <style>
-  body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #171717; margin: 2rem; }
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #17242b; margin: 2rem; }
   h1 { font-size: 18px; margin: 0 0 4px; }
-  .meta { color: #525252; margin-bottom: 1.5rem; }
+  .meta { color: #58666c; margin-bottom: 1.5rem; }
   .header-text { margin-bottom: 1rem; }
   .parties { display: flex; justify-content: space-between; margin-bottom: 1.5rem; }
   .parties div { max-width: 45%; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
-  th, td { padding: 6px 8px; border-bottom: 1px solid #e5e5e5; text-align: left; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid #d5cec2; text-align: left; }
   .num { text-align: right; }
-  tfoot td { border-top: 2px solid #171717; border-bottom: none; font-weight: bold; }
+  tfoot td { border-top: 2px solid #17242b; border-bottom: none; font-weight: bold; }
   .summary { width: 52%; margin-left: auto; }
-  .payment { margin-top: 1.5rem; color: #525252; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 1.5rem; }
+  .payment { margin-top: 1.5rem; color: #58666c; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 1.5rem; }
   .payment-text { flex: 1 1 12rem; min-width: 0; }
   .payment-qr { flex: 0 0 auto; text-align: center; }
   .payment-qr svg { display: block; }
-  .qr-caption { margin: 4px 0 0; font-size: 10px; color: #737373; }
-  .note { margin-top: 0.75rem; color: #525252; }
-  .footer-text { margin-top: 2rem; padding-top: 0.75rem; border-top: 1px solid #e5e5e5; color: #525252; }
+  .qr-caption { margin: 4px 0 0; font-size: 10px; color: #58666c; }
+  .note { margin-top: 0.75rem; color: #58666c; }
+  .footer-text { margin-top: 2rem; padding-top: 0.75rem; border-top: 1px solid #d5cec2; color: #58666c; }
   .custom-text { margin-top: 0.75rem; }
   thead { display: table-header-group; }
   tr, .parties, .payment, .summary { break-inside: avoid; }

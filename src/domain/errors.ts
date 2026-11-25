@@ -11,7 +11,22 @@ export class ForbiddenError extends Error {
 }
 export class NotFoundError extends Error {}
 export class ConflictError extends Error {}
-export class ValidationError extends Error {}
+export class ValidationError extends Error {
+  readonly fields?: Record<string, string[]>;
+
+  constructor(
+    message: string,
+    options?: { field?: string; fields?: Record<string, string[]> }
+  ) {
+    super(message);
+    this.name = "ValidationError";
+    if (options?.fields) {
+      this.fields = options.fields;
+    } else if (options?.field) {
+      this.fields = { [options.field]: [message] };
+    }
+  }
+}
 // Thrown by the CSV imports (dwellings, bank, opening readings) for a problem
 // with the file as a whole. Its message is safe to show an admin verbatim.
 export class ImportHeaderError extends Error {}

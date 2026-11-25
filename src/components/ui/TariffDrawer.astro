@@ -1,0 +1,410 @@
+---
+import Icon from "./Icon.astro";
+import { formatTrimmed, translate, type Locale } from "../../lib/ui/i18n";
+import {
+  calculationTypes,
+  tariffCalculationLabels,
+} from "../../lib/ui/tariff-options";
+
+interface Props {
+  organizationId: string;
+  currency: string;
+  locale: Locale;
+  dwellingOptions: Array<{ id: string; number: string }>;
+  editRuleJson?: string;
+  openPeriodsJson?: string;
+  stringsJson?: string;
+  preview?: boolean;
+}
+
+const {
+  organizationId,
+  currency,
+  locale,
+  dwellingOptions,
+  editRuleJson,
+  openPeriodsJson,
+  stringsJson,
+  preview,
+} = Astro.props;
+const t = (message: string) => translate(locale, message);
+const calculationTypeLabels = tariffCalculationLabels(locale);
+const unitOptions = [
+  { value: "m3", label: "m³" },
+  { value: "m2", label: "m²" },
+  { value: "kWh", label: "kWh" },
+  {
+    value: "month",
+    label: locale === "lv" ? "mēnesis" : locale === "ru" ? "месяц" : "month",
+  },
+  {
+    value: "person",
+    label: locale === "lv" ? "persona" : locale === "ru" ? "человек" : "person",
+  },
+  { value: "dwelling", label: t("Dwelling").toLowerCase() },
+];
+---
+
+<dialog
+  id="tariff-drawer"
+  class="context-drawer tariff-drawer"
+  aria-labelledby="tariff-drawer-title"
+  data-deep-link-rule={editRuleJson ?? ""}
+  data-locale={locale}
+  data-open-periods={openPeriodsJson ?? "[]"}
+  data-currency={currency}
+  data-strings={stringsJson ?? "{}"}
+>
+  <header class="context-drawer-header">
+    <div class="context-drawer-heading">
+      <div class="context-drawer-title-row">
+        <h2 class="context-drawer-title" id="tariff-drawer-title"></h2>
+        <span
+          class="status-badge"
+          id="tariff-drawer-status"
+          data-tone="neutral"
+          hidden
+        ></span>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="icon-btn icon-btn-ghost context-drawer-close"
+      data-close-tariff-drawer
+      aria-label={t("Close")}
+    >
+      <Icon name="x" size="sm" />
+    </button>
+  </header>
+  <div class="context-drawer-body">
+    <p
+      class="notice notice-danger"
+      role="alert"
+      tabindex="-1"
+      data-tariff-drawer-error
+      hidden
+    ></p>
+    <form id="tariff-form" method={preview ? "dialog" : undefined} novalidate>
+      <div>
+        <label class="check-row">
+          <input
+            type="checkbox"
+            id="tariff-enabled"
+            name="enabled"
+            value="1"
+            aria-describedby="tariff-enabled-hint"
+            checked
+          />
+          {t("Enabled")}
+        </label>
+        <p class="field-hint" id="tariff-enabled-hint">
+          {t("A tariff that is off is not added to invoices.")}
+        </p>
+      </div>
+      <input type="hidden" name="organizationId" value={organizationId} />
+      <input type="hidden" name="ruleId" id="tariff-ruleId" />
+
+      <div class="rule-field-row">
+        <div class="rule-field">
+          <label class="field-label" for="tariff-name">
+            {t("Name")}
+          </label>
+          <input id="tariff-name" name="name" type="text" required />
+        </div>
+        <div class="rule-field">
+          <label class="field-label" for="tariff-code">
+            {t("Code")}
+          </label>
+          <input
+            id="tariff-code"
+            name="code"
+            type="text"
+            maxlength="50"
+            required
+            aria-describedby="tariff-code-hint"
+          />
+          <p id="tariff-code-readonly" class="font-mono" hidden></p>
+          <p class="field-hint" id="tariff-code-hint">
+            {t(
+              "Used to match invoice row styling. It cannot be changed after the tariff is created."
+            )}
+          </p>
+        </div>
+      </div>
+      <div class="rule-field">
+        <label class="field-label" for="tariff-description">
+          {t("Description")}
+        </label>
+        <textarea
+          id="tariff-description"
+          name="description"
+          class="drawer-textarea-box"
+          rows="2"
+        ></textarea>
+      </div>
+
+      <h3 class="drawer-section-heading">{t("Calculation")}</h3>
+      <div class="rule-field-row">
+        <div class="rule-field">
+          <label class="field-label" for="tariff-calculationType">
+            {t("Type")}
+          </label>
+          <select id="tariff-calculationType" name="calculationType">
+            {calculationTypes.map((type) => (
+              <option value={type}>{calculationTypeLabels[type]}</option>
+            ))}
+          </select>
+        </div>
+        <div class="rule-field" data-meter-type-field>
+          <label class="field-label" for="tariff-meterType">
+            {t("Meter type")}
+          </label>
+          <select id="tariff-meterType" name="meterType">
+            <option value="">{t("— none —")}</option>
+            <option value="COLD_WATER">{t("Cold water")}</option>
+            <option value="HOT_WATER">{t("Hot water")}</option>
+            <option value="ELECTRICITY">{t("Electricity")}</option>
+            <option value="GAS">{t("Gas")}</option>
+            <option value="HEAT">{t("Heat")}</option>
+            <option value="OTHER">{t("Other")}</option>
+          </select>
+        </div>
+        <div class="rule-field">
+          <label class="field-label" for="tariff-unit">
+            {t("Unit")}
+          </label>
+          <input
+            id="tariff-unit"
+            name="unit"
+            type="text"
+            required
+            list="tariff-unit-options"
+            placeholder={unitOptions
+              .slice(0, 4)
+              .map(({ label }) => label)
+              .join(", ")}
+          />
+          <datalist id="tariff-unit-options">
+            {unitOptions.map(({ value, label }) => (
+              <option value={value} label={label} />
+            ))}
+          </datalist>
+        </div>
+
+        <div class="rule-field" data-unit-price-field>
+          <label class="field-label" for="tariff-unitPrice">
+            {t("Unit price")}
+          </label>
+          <input
+            id="tariff-unitPrice"
+            name="unitPrice"
+            type="text"
+            placeholder={locale === "en" ? "0.00" : "0,00"}
+            inputmode="decimal"
+            aria-describedby="tariff-price-hint"
+          />
+          <p class="field-hint" id="tariff-price-hint">
+            {t("A price of 0.00 is valid and will show on the invoice.")}
+          </p>
+        </div>
+        <div class="rule-field">
+          <label class="field-label" for="tariff-vatRate">
+            {t("VAT %")}
+          </label>
+          <input
+            id="tariff-vatRate"
+            name="vatRate"
+            type="text"
+            value={formatTrimmed("21", locale, 0)}
+            inputmode="decimal"
+          />
+        </div>
+      </div>
+      <p class="field-hint tariff-gross" data-gross-preview hidden></p>
+
+      <p
+        class="notice notice-warning"
+        data-price-warning
+        role="status"
+        hidden
+      ></p>
+      <fieldset class="rule-field tariff-scope-fieldset">
+        <legend class="drawer-section-heading">{t("Applies to")}</legend>
+        <div class="tariff-scope-options">
+          <label class="tariff-scope-option">
+            <input
+              type="radio"
+              name="applicationScope"
+              value="ONE_TO_ALL"
+              checked
+            />
+            <span>
+              <strong>{t("All dwellings")}</strong>
+              <p>{t("Applies to every current and future dwelling.")}</p>
+            </span>
+          </label>
+          <label class="tariff-scope-option">
+            <input type="radio" name="applicationScope" value="ONE_TO_MANY" />
+            <span>
+              <strong>{t("Selected dwellings")}</strong>
+              <p>
+                {t(
+                  "Applies only to the dwellings you choose. New dwellings are not included automatically."
+                )}{" "}
+              </p>
+            </span>
+          </label>
+          <label class="tariff-scope-option">
+            <input type="radio" name="applicationScope" value="ONE_TO_ONE" />
+            <span>
+              <strong>{t("One dwelling")}</strong>
+              <p>{t("Applies to exactly one dwelling.")}</p>
+            </span>
+          </label>
+        </div>
+      </fieldset>
+      <div class="rule-field" data-scope-panel="ONE_TO_MANY" hidden>
+        <label class="field-label" for="tariff-dwelling-search">
+          {t("Search dwellings")}
+        </label>
+        <input
+          id="tariff-dwelling-search"
+          type="text"
+          data-dwelling-search
+          placeholder={t("Filter by dwelling number…")}
+        />
+        <div class="tariff-dwelling-actions">
+          <button
+            type="button"
+            class="btn-secondary btn-sm"
+            data-select-all-visible
+          >
+            {t("Select all visible")}
+          </button>
+          <button
+            type="button"
+            class="btn-secondary btn-sm"
+            data-clear-selection
+          >
+            {t("Clear selection")}
+          </button>
+          <span data-dwelling-count-label>{t("0 dwellings selected")}</span>
+        </div>
+        <div class="tariff-dwelling-list" data-dwelling-checklist>
+          {dwellingOptions.map((d) => (
+            <label
+              class="tariff-dwelling-row"
+              data-dwelling-number={d.number.toLowerCase()}
+            >
+              <input type="checkbox" name="dwellingIds" value={d.id} />
+              {t("Dwelling")} {d.number}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div class="rule-field" data-scope-panel="ONE_TO_ONE" hidden>
+        <label class="field-label" for="tariff-dwelling-single">
+          {t("Dwelling")}
+        </label>
+        <select id="tariff-dwelling-single" name="dwellingIdSingle">
+          <option value="">{t("— select a dwelling —")}</option>
+          {dwellingOptions.map((d) => (
+            <option value={d.id}>
+              {t("Dwelling")} {d.number}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <h3 class="drawer-section-heading">{t("Validity")}</h3>
+      <div class="rule-field-row">
+        <div class="rule-field">
+          <label class="field-label" for="tariff-effectiveFrom">
+            {t("Effective from")}
+          </label>
+          <input
+            id="tariff-effectiveFrom"
+            name="effectiveFrom"
+            type="date"
+            required
+          />
+        </div>
+        <div class="rule-field">
+          <label class="field-label" for="tariff-effectiveUntil">
+            {t("Effective until")}
+          </label>
+          <input
+            id="tariff-effectiveUntil"
+            name="effectiveUntil"
+            type="date"
+            aria-describedby="tariff-until-hint"
+          />
+          <p class="field-hint" id="tariff-until-hint">
+            {t("Leave empty for ongoing.")}
+          </p>
+        </div>
+      </div>
+
+      <h3 class="drawer-section-heading">{t("On the invoice")}</h3>
+      <div class="rule-field-row">
+        <div class="rule-field">
+          <label class="field-label" for="tariff-nameEn">
+            {t("English invoice label")}
+          </label>
+          <input id="tariff-nameEn" name="nameEn" type="text" maxlength="200" />
+        </div>
+        <div class="rule-field">
+          <label class="field-label" for="tariff-nameRu">
+            {t("Russian invoice label")}
+          </label>
+          <input id="tariff-nameRu" name="nameRu" type="text" maxlength="200" />
+        </div>
+      </div>
+
+      <div class="rule-field">
+        <label class="field-label" for="tariff-sortOrder">
+          {t("Order on the invoice")}
+        </label>
+        <input
+          id="tariff-sortOrder"
+          name="sortOrder"
+          type="number"
+          step="1"
+          aria-describedby="tariff-order-hint"
+        />
+        <p class="field-hint" id="tariff-order-hint">
+          {t("Lower numbers come first on the invoice.")}
+        </p>
+      </div>
+    </form>
+  </div>
+  <footer class="context-drawer-footer">
+    <button
+      type="button"
+      class="btn-secondary"
+      id="tariff-drawer-archive"
+      hidden
+    >
+      {t("Archive")}
+    </button>
+    <button
+      type="button"
+      class="btn-secondary"
+      id="tariff-drawer-restore"
+      hidden
+    >
+      {t("Restore")}
+    </button>
+    <button type="button" class="btn-secondary" data-close-tariff-drawer>
+      {t("Close")}
+    </button>
+    <button
+      type="submit"
+      form="tariff-form"
+      class="btn-primary"
+      id="tariff-drawer-save"
+    >
+      {t("Save changes")}
+    </button>
+  </footer>
+</dialog>

@@ -54,7 +54,7 @@ const mutationGlobals = globalThis as MutationGlobals;
 const mutations = (mutationGlobals.__dzik118Mutations ??= new Map());
 const listeners = (mutationGlobals.__dzik118MutationListeners ??= new Set());
 const recoveries = (mutationGlobals.__dzik118MutationRecoveries ??= new Map());
-const SUCCESS_VISIBLE_MS = 8_000;
+export const MUTATION_SUCCESS_VISIBLE_MS = 8_000;
 const RECOVERY_STORAGE_KEY = "dzik118:mutations:v1";
 const RECOVERY_MAX_AGE_MS = 10 * 60_000;
 export const RECOVERY_DELAYS_MS = [0, 1_000, 2_000, 4_000, 8_000, 15_000];
@@ -254,7 +254,7 @@ export function completeMutation(id: string, label?: string): void {
       mutations.delete(id);
       emit();
     }
-  }, SUCCESS_VISIBLE_MS);
+  }, MUTATION_SUCCESS_VISIBLE_MS);
 }
 
 export function failMutation(id: string, error: string, label?: string): void {

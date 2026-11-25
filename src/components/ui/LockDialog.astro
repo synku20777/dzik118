@@ -1,0 +1,47 @@
+---
+import Icon from "./Icon.astro";
+
+interface Props {
+  id: string;
+  title: string;
+  description: string;
+  cancelLabel: string;
+}
+
+const { id, title, description, cancelLabel } = Astro.props;
+---
+
+<dialog
+  class="lock-dialog"
+  id={id}
+  aria-labelledby={`${id}-title`}
+  aria-describedby={`${id}-description`}
+>
+  <div class="dialog-body">
+    <div
+      class="dialog-icon icon-tile icon-tile-sm"
+      data-tone="warning"
+      aria-hidden="true"
+    >
+      <slot name="icon">
+        <Icon name="alert-triangle" size="sm" />
+      </slot>
+    </div>
+    <div>
+      <h2 id={`${id}-title`}>{title}</h2>
+      <p id={`${id}-description`}>{description}</p>
+    </div>
+  </div>
+  <div class="dialog-actions">
+    <form method="dialog">
+      <button class="btn-secondary" value="cancel" autofocus>
+        {cancelLabel}
+      </button>
+    </form>
+    <slot />
+  </div>
+</dialog>
+
+<script>
+  import "../../lib/ui/lock-dialog";
+</script>

@@ -3,6 +3,7 @@ import { translate, uiLocale } from "../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import {
   ForbiddenError,
   requireActiveOrganization,
@@ -110,7 +111,7 @@ if (Astro.request.method === "POST") {
 ---
 
 <AdminLayout
-  title={`Import bank statement - ${organization.name}`}
+  title={`${t("Import bank statement")} – ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[
@@ -119,13 +120,13 @@ if (Astro.request.method === "POST") {
   ]}
 >
   <div class="space-y-6">
-    <h1 class="text-h2 text-foreground">{t("Import bank statement")}</h1>
+    <PageHeader title={t("Import bank statement")} />
 
     {step === "upload" && (
       <form
         method="POST"
         enctype="multipart/form-data"
-        class="max-w-lg space-y-3 rounded-panel contained bg-surface p-6"
+        class="box max-w-lg space-y-3"
       >
         <div>
           <label class="field-label" for="file">
@@ -147,7 +148,7 @@ if (Astro.request.method === "POST") {
     )}
 
     {step === "preview" && headerError && (
-      <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
+      <p class="notice notice-danger" role="alert">
         {headerError}
       </p>
     )}
@@ -155,7 +156,7 @@ if (Astro.request.method === "POST") {
     {step === "preview" && !headerError && (
       <div class="space-y-4">
         {isDuplicateFile && (
-          <p class="rounded-control bg-danger-surface p-3 text-body-sm text-destructive">
+          <p class="notice notice-danger" role="alert">
             {t(
               "This exact file has already been imported for this organization. Importing it again will be blocked."
             )}
@@ -194,7 +195,9 @@ if (Astro.request.method === "POST") {
                 <tr>
                   <td class="px-4 py-2">{row.rowNumber}</td>
                   <td class="px-4 py-2">{row.bookingDate || "—"}</td>
-                  <td class="px-4 py-2">{row.amount || "—"}</td>
+                  <td class="px-4 py-2 text-right tabular-nums whitespace-nowrap">
+                    {row.amount || "—"}
+                  </td>
                   <td class="px-4 py-2">{row.currency || "—"}</td>
                   <td class="px-4 py-2">
                     <span
@@ -221,7 +224,7 @@ if (Astro.request.method === "POST") {
           (skipped).
         </p>
         {confirmError && (
-          <p class="rounded-control bg-danger-surface p-3 text-sm text-destructive">
+          <p class="notice notice-danger" role="alert">
             {confirmError}
           </p>
         )}
@@ -243,7 +246,7 @@ if (Astro.request.method === "POST") {
     )}
 
     {step === "result" && result && (
-      <div class="rounded-panel contained bg-surface p-6">
+      <div class="box">
         <p class="text-sm text-foreground">
           Imported {result.imported} transaction(s), skipped {result.errored}{" "}
           row(s) with errors, proposed {result.proposed} exact match(es).

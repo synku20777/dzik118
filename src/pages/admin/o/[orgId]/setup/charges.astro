@@ -22,6 +22,7 @@ import { getOrganization } from "../../../../../domain/organizations/organizatio
 import { getFirstBillingPeriod } from "../../../../../domain/periods/periods";
 import { withRequestDb } from "../../../../../lib/db-request";
 import { friendlyActionErrorMessage } from "../../../../../lib/ui/i18n";
+import { fieldErrorAttrs } from "../../../../../lib/ui/field-error-attrs";
 
 const organizationId = Astro.params.orgId!;
 try {
@@ -139,7 +140,7 @@ const presetItems = [
     steps={progress.steps}
   >
     {!firstPeriod ? (
-      <div class="panel p-6 space-y-4">
+      <div class="box space-y-4">
         <p class="notice" role="alert">
           {t("Create the first billing period before you add charges.")}{" "}
           <a
@@ -212,7 +213,7 @@ const presetItems = [
               const isExisting = Boolean(existingRule);
 
               return (
-                <fieldset class="setup-preset panel p-5">
+                <fieldset class="setup-preset box">
                   <legend class="sr-only">{preset.title}</legend>
                   {isExisting ? (
                     <div class="space-y-2">
@@ -236,29 +237,27 @@ const presetItems = [
                     </div>
                   ) : (
                     <div class="setup-charge-row">
-                      <div class="setup-charge-choice">
-                        <input
-                          type="checkbox"
-                          id={`${preset.key}Enabled`}
-                          name={`${preset.key}Enabled`}
-                          checked={typed(`${preset.key}Enabled`) !== ""}
-                          class="mt-1 h-4 w-4 rounded border-(--color-input-border)"
-                        />
-                        <div>
-                          <label
-                            for={`${preset.key}Enabled`}
-                            class="text-h3 font-semibold text-foreground cursor-pointer"
-                          >
-                            {preset.title}
-                          </label>
-                          <p class="text-body-sm text-muted mt-0.5">
-                            {preset.example}
-                          </p>
-                          <FieldError
+                      <div>
+                        <label class="check-row text-h3 font-semibold text-foreground cursor-pointer">
+                          <input
+                            type="checkbox"
+                            id={`${preset.key}Enabled`}
                             name={`${preset.key}Enabled`}
-                            error={result?.error}
+                            checked={typed(`${preset.key}Enabled`) !== ""}
+                            {...fieldErrorAttrs(
+                              result?.error,
+                              `${preset.key}Enabled`
+                            )}
                           />
-                        </div>
+                          {preset.title}
+                        </label>
+                        <p class="text-body-sm text-muted mt-0.5">
+                          {preset.example}
+                        </p>
+                        <FieldError
+                          name={`${preset.key}Enabled`}
+                          error={result?.error}
+                        />
                       </div>
 
                       <fieldset class="setup-preset-fields grid grid-cols-2 gap-3">
@@ -278,8 +277,11 @@ const presetItems = [
                             pattern="\d{1,10}([.,]\d{1,4})?"
                             value={typed(`${preset.key}Price`)}
                             placeholder="0.00"
-                            aria-describedby={`${preset.key}Price-error`}
-                            class="w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm bg-surface text-foreground"
+                            class="w-full text-body-sm"
+                            {...fieldErrorAttrs(
+                              result?.error,
+                              `${preset.key}Price`
+                            )}
                           />
                           <FieldError
                             name={`${preset.key}Price`}
@@ -301,8 +303,11 @@ const presetItems = [
                             inputmode="decimal"
                             pattern="\d{1,3}([.,]\d{1,4})?"
                             value={typed(`${preset.key}Vat`) || "0"}
-                            aria-describedby={`${preset.key}Vat-error`}
-                            class="w-full rounded-control border border-(--color-input-border) px-3 py-2 text-body-sm bg-surface text-foreground"
+                            class="w-full text-body-sm"
+                            {...fieldErrorAttrs(
+                              result?.error,
+                              `${preset.key}Vat`
+                            )}
                           />
                           <FieldError
                             name={`${preset.key}Vat`}
@@ -331,7 +336,7 @@ const presetItems = [
         <p class="text-body-sm text-muted">
           <a
             href={`/admin/o/${organizationId}/settings/rules`}
-            class="text-primary hover:underline font-medium"
+            class="link link-underlined font-medium"
           >
             {t("Need a different charge? Open the full charges page.")}
           </a>
@@ -365,20 +370,6 @@ const presetItems = [
 </script>
 
 <style>
-  .setup-charge-choice {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
-    gap: 0.75rem;
-  }
-  /* On touch the title is the checkbox's 44px target. */
-  @media (pointer: coarse) {
-    .setup-charge-choice label {
-      display: inline-flex;
-      align-items: center;
-      min-height: var(--control-size-md);
-    }
-  }
   .setup-charge-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(12rem, 0.8fr);

@@ -32,6 +32,17 @@ const tabs: [string, string, IconName][] = [
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <!-- --color-canvas per theme; theme.ts keeps these in step with a stored theme. -->
+    <meta
+      name="theme-color"
+      content="#eee8de"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#0e1517"
+      media="(prefers-color-scheme: dark)"
+    />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script is:inline>
       (function () {
@@ -41,6 +52,11 @@ const tabs: [string, string, IconName][] = [
             document.documentElement.setAttribute("data-theme", stored);
             const meta = document.querySelector('meta[name="color-scheme"]');
             if (meta) meta.content = stored;
+            document
+              .querySelectorAll('meta[name="theme-color"]')
+              .forEach(function (m) {
+                m.content = stored === "dark" ? "#0e1517" : "#eee8de";
+              });
           }
         } catch (e) {
           void e;
@@ -49,7 +65,12 @@ const tabs: [string, string, IconName][] = [
     </script>
     <title>{title}</title>
   </head>
-  <body class="resident-portal" data-working-label={t("Working…")}>
+  <body
+    class="resident-portal"
+    data-working-label={t("Working…")}
+    data-confirm-label={t("Confirm")}
+    data-cancel-label={t("Cancel")}
+  >
     <a class="skip-link" href="#main-content">
       {t("Skip to content")}
     </a>
@@ -63,7 +84,7 @@ const tabs: [string, string, IconName][] = [
           <ThemeToggle />
           <LanguageSwitch fullNames />
         </div>
-        <div class="resident-account">
+        <div class="resident-account menu-list">
           {(auth?.organizationIds.length ?? 0) > 0 && (
             <a href="/admin" class="resident-header-link">
               {t("Switch to admin view")}
@@ -78,7 +99,7 @@ const tabs: [string, string, IconName][] = [
             {t("Profile")}
           </a>
           <form method="POST" action="/logout">
-            <button type="submit" class="resident-header-link">
+            <button type="submit" class="btn-secondary">
               <Icon name="logout" />
               {t("Sign out")}
             </button>
@@ -88,7 +109,7 @@ const tabs: [string, string, IconName][] = [
     </header>
     <main id="main-content" tabindex="-1" class="resident-content app-content">
       {dwellingId && (
-        <nav class="resident-nav" aria-label={t("Navigation")}>
+        <nav class="resident-nav tabs" aria-label={t("Navigation")}>
           {tabs.map(([href, label, icon]) => (
             <a
               href={href}
@@ -108,8 +129,12 @@ const tabs: [string, string, IconName][] = [
       <slot />
       {dwellingId && (
         <footer class="resident-help">
-          <a href={base + "/messages"}>{t("Contact administrator")}</a>
-          <a href={base + "/payments"}>{t("Payment history")}</a>
+          <a class="link link-underlined" href={base + "/messages"}>
+            {t("Contact administrator")}
+          </a>
+          <a class="link link-underlined" href={base + "/payments"}>
+            {t("Payment history")}
+          </a>
         </footer>
       )}
     </main>

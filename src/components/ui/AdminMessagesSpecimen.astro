@@ -1,0 +1,213 @@
+---
+import "../../styles/admin-messages.css";
+import Icon from "./Icon.astro";
+import StatusBadge from "./StatusBadge.astro";
+
+const conversations = [
+  {
+    id: "12",
+    status: "OPEN",
+    unread: true,
+    subject: "Water meter replacement",
+    name: "Anna Bērziņa",
+    message: "The new meter was installed on Tuesday.",
+  },
+  {
+    id: "18",
+    status: "RESOLVED",
+    unread: false,
+    subject: "September invoice",
+    name: "Līga Kalniņa",
+    message: "I received the invoice. Thank you.",
+  },
+];
+---
+
+<div class="messages-page" data-messages-specimen>
+  <form method="dialog" class="filter-bar" data-instant-filter>
+    <div>
+      <label class="field-label" for="sample-message-search">
+        Search
+      </label>
+      <div class="input-icon mt-1">
+        <Icon name="search" size="sm" />
+        <input
+          type="search"
+          name="search"
+          id="sample-message-search"
+          autocomplete="off"
+          placeholder="Search by subject or content…"
+        />
+      </div>
+    </div>
+    <div>
+      <label class="field-label" for="sample-message-status">
+        Status
+      </label>
+      <select name="status" id="sample-message-status" class="mt-1">
+        <option value="">All statuses</option>
+        <option value="OPEN">Open</option>
+        <option value="RESOLVED">Resolved</option>
+      </select>
+    </div>
+    <label class="check-row">
+      <input name="unread" type="checkbox" value="1" /> Show unread only
+    </label>
+  </form>
+  <div class="messages-split">
+    <section class="messages-list-pane panel" aria-label="Conversations">
+      {conversations.map((item, index) => (
+        <a
+          class="messages-list-item"
+          href={`#sample-conversation-${item.id}`}
+          aria-current={index === 0 ? "true" : undefined}
+          data-conversation={item.id}
+          data-status={item.status}
+          data-unread={String(item.unread)}
+        >
+          <div class="messages-list-item-head">
+            <span class="messages-list-item-title">
+              {item.unread && <span class="unread-dot" aria-label="Unread" />}
+              <Icon name="building" class="messages-house-icon" /> Dwelling{" "}
+              {item.id}
+            </span>
+            <StatusBadge status={item.status} locale="en" />
+          </div>
+          <p class="messages-list-item-subject">{item.subject}</p>
+          <p class="messages-list-item-occupant">{item.name}</p>
+          <div class="messages-list-item-foot">
+            <span class="messages-list-item-preview" data-tip-clipped>
+              {item.message}
+            </span>
+          </div>
+        </a>
+      ))}
+      <p class="messages-empty" data-empty-conversations role="status" hidden>
+        No conversations match these filters.
+      </p>
+    </section>
+    {conversations.map((item, index) => (
+      <section
+        class="messages-detail-pane panel"
+        id={`sample-conversation-${item.id}`}
+        data-thread={item.id}
+        hidden={index !== 0}
+      >
+        <div class="messages-detail-header">
+          <h2>{item.subject}</h2>
+          <StatusBadge status={item.status} locale="en" />
+        </div>
+        <div class="messages-thread">
+          <div class="message-row" data-mine="false">
+            <span class="avatar" aria-hidden="true">
+              {item.name
+                .split(" ")
+                .map((word) => word[0])
+                .join("")}
+            </span>
+            <div class="message-col">
+              <p class="message-meta">
+                <strong>{item.name}</strong>
+              </p>
+              <div class="message-bubble">{item.message}</div>
+            </div>
+          </div>
+        </div>
+        {item.status === "OPEN" ? (
+          <form class="messages-reply" data-sample-reply method="dialog">
+            <label class="field-label" for="sample-reply">
+              Reply
+            </label>
+            <textarea
+              id="sample-reply"
+              name="body"
+              rows="3"
+              required
+            ></textarea>
+            <div class="messages-reply-actions">
+              <button class="btn-primary" type="submit">
+                Send sample reply
+              </button>
+            </div>
+            <p role="status" data-reply-status></p>
+          </form>
+        ) : (
+          <p class="messages-resolved-notice">This conversation is resolved.</p>
+        )}
+      </section>
+    ))}
+  </div>
+  <template data-admin-reply>
+    <div class="message-row" data-mine="true">
+      <span class="avatar" aria-hidden="true">
+        AD
+      </span>
+      <div class="message-col">
+        <p class="message-meta">
+          <strong>Admin</strong>
+        </p>
+        <div class="message-bubble"></div>
+      </div>
+    </div>
+  </template>
+</div>
+
+<script>
+  import { bindInstantFilter } from "../../lib/ui/instant-filter";
+  const root = document.querySelector<HTMLElement>("[data-messages-specimen]")!;
+  const filter = root.querySelector<HTMLFormElement>("[data-instant-filter]")!;
+  const links = [
+    ...root.querySelectorAll<HTMLAnchorElement>("[data-conversation]"),
+  ];
+  const threads = root.querySelectorAll<HTMLElement>("[data-thread]");
+  bindInstantFilter(filter);
+  function select(id?: string) {
+    for (const link of links)
+      if (link.dataset.conversation === id)
+        link.setAttribute("aria-current", "true");
+      else link.removeAttribute("aria-current");
+    for (const thread of threads) thread.hidden = thread.dataset.thread !== id;
+  }
+  for (const link of links)
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      select(link.dataset.conversation);
+    });
+  filter.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const data = new FormData(filter);
+    const search = String(data.get("search") ?? "")
+      .trim()
+      .toLowerCase();
+    const status = data.get("status");
+    const unread = data.has("unread");
+    for (const link of links)
+      link.hidden =
+        !link.textContent!.toLowerCase().includes(search) ||
+        Boolean(status && link.dataset.status !== status) ||
+        (unread && link.dataset.unread !== "true");
+    const first = links.find((link) => !link.hidden);
+    root.querySelector<HTMLElement>("[data-empty-conversations]")!.hidden =
+      Boolean(first);
+    if (
+      !links.some((link) => !link.hidden && link.hasAttribute("aria-current"))
+    )
+      select(first?.dataset.conversation);
+  });
+  root
+    .querySelector<HTMLFormElement>("[data-sample-reply]")!
+    .addEventListener("submit", (event) => {
+      event.preventDefault();
+      const form = event.currentTarget as HTMLFormElement;
+      const body = String(new FormData(form).get("body") ?? "").trim();
+      if (!body) return;
+      const template =
+        root.querySelector<HTMLTemplateElement>("[data-admin-reply]")!;
+      const message = template.content.cloneNode(true) as DocumentFragment;
+      message.querySelector(".message-bubble")!.textContent = body;
+      form.previousElementSibling!.appendChild(message);
+      form.reset();
+      form.querySelector("[data-reply-status]")!.textContent =
+        "Sample reply added.";
+    });
+</script>

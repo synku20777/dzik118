@@ -1,4 +1,6 @@
 ---
+import ResidentBack from "../../../components/ui/ResidentBack.astro";
+import InvoicePreviewFrame from "../../../components/ui/InvoicePreviewFrame.astro";
 import StatusBadge from "../../../components/ui/StatusBadge.astro";
 import Icon from "../../../components/ui/Icon.astro";
 import {
@@ -99,10 +101,10 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
 
 <ResidentLayout title={invoice.invoiceNumber}>
   <div>
-    <a class="resident-back" href={`/portal/dwellings/${dwellingId}/invoices`}>
-      <Icon name="arrow-left" />
-      {t("All invoices")}
-    </a>
+    <ResidentBack
+      href={`/portal/dwellings/${dwellingId}/invoices`}
+      label={t("All invoices")}
+    />
     <header class="resident-title">
       <h1 class="font-display">
         {t(needsPayment ? "Pay by bank transfer" : "Invoice")}
@@ -112,7 +114,11 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
         {formatDate(invoice.dueDate, locale)}
       </p>
     </header>
-    <section class="resident-section" aria-labelledby="invoice-balance">
+    <section
+      class="resident-section"
+      aria-labelledby="invoice-balance"
+      data-copy-scope
+    >
       <div class="resident-row">
         <h2 id="invoice-balance">
           {t(isLatestInvoice ? "Amount still due" : "Invoice total due")}
@@ -159,17 +165,18 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
                     : t("Not available")}
                 </dd>
                 {value && (
-                  <button
-                    type="button"
-                    class="btn-secondary"
-                    data-copy-value={value}
-                    data-copied-label={t("Copied")}
-                    aria-label={`${t("Copy")}: ${t(label)}`}
-                    hidden
-                  >
-                    <Icon name="copy" />
-                    <span>{t("Copy")}</span>
-                  </button>
+                  <dd class="resident-payment-action" hidden>
+                    <button
+                      type="button"
+                      class="btn-secondary"
+                      data-copy-value={value}
+                      data-copied-label={t("Copied")}
+                      aria-label={`${t("Copy")}: ${t(label)}`}
+                    >
+                      <Icon name="copy" />
+                      <span>{t("Copy")}</span>
+                    </button>
+                  </dd>
                 )}
               </div>
             ))}
@@ -194,7 +201,7 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
               "Check the recipient, amount and payment reference in your bank before you confirm. This portal does not make the transfer."
             )}
           </p>
-          <p class="resident-line resident-hint">
+          <p class="resident-line resident-muted">
             <Icon name="info-circle" />
             {t(
               "If you have already paid, do not pay again. Your payment appears after the administrator records it."
@@ -208,24 +215,21 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
             </p>
           )}
           {qrSvg && (
-            <details class="resident-details">
-              <summary>
+            <details class="resident-payment-qr">
+              <summary class="chevron-toggle link link-ghost">
                 {t("Pay with a banking app QR code")}
-                <Icon name="chevron-right" size="lg" />
               </summary>
-              <div class="resident-details-body">
-                <p>
-                  {t(
-                    "If your banking app supports it, scan this code from another screen. Check the payment details before confirming in your bank."
-                  )}
-                </p>
-                <div
-                  class="resident-qr"
-                  role="img"
-                  aria-label={t("Bank transfer QR code")}
-                  set:html={qrSvg}
-                />
-              </div>
+              <p>
+                {t(
+                  "If your banking app supports it, scan this code from another screen. Check the payment details before confirming in your bank."
+                )}
+              </p>
+              <div
+                class="resident-qr"
+                role="img"
+                aria-label={t("Bank transfer QR code")}
+                set:html={qrSvg}
+              />
             </details>
           )}
         </>
@@ -271,7 +275,7 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
           )}
         </div>
       </div>
-      <div class="invoice-doc-locale-bar">
+      <div class="resident-row">
         <p class="resident-muted">
           {t(
             "Latvian is the canonical invoice document. English and Russian are optional translated copies of the same invoice — not separate invoices."
@@ -279,14 +283,10 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
         </p>
         <form method="GET" class="invoice-doc-locale-form">
           <input type="hidden" name="dwellingId" value={dwellingId} />
-          <label for="doc-locale-select" class="text-sm text-muted">
+          <label for="doc-locale-select" class="field-label mb-0">
             {t("Document language")}
           </label>
-          <select
-            id="doc-locale-select"
-            name="docLocale"
-            class="invoice-doc-locale-select"
-          >
+          <select id="doc-locale-select" name="docLocale">
             {INVOICE_LOCALES.map((l) => (
               <option value={l} selected={l === docLocale}>
                 {localeNames[l]}
@@ -299,88 +299,41 @@ const localeNames: Record<(typeof INVOICE_LOCALES)[number], string> = {
         </form>
       </div>
 
-      <div class="invoice-preview-frame-wrap">
-        <iframe
-          id="invoice-preview-frame"
-          class="invoice-preview-frame"
-          title={t("Invoice")}
-          srcdoc={invoiceHtml}
-        ></iframe>
-      </div>
+      <InvoicePreviewFrame
+        id="invoice-preview-frame"
+        title={t("Invoice")}
+        html={invoiceHtml}
+      />
     </section>
   </div>
 </ResidentLayout>
 
 <script>
-  for (const button of document.querySelectorAll<HTMLButtonElement>(
-    "[data-copy-value]"
-  )) {
-    if (!navigator.clipboard?.writeText) continue;
-    button.hidden = false;
-    const label = button.querySelector("span")!;
-    const copyLabel = label.textContent;
-    let reset: ReturnType<typeof setTimeout> | undefined;
-    button.addEventListener("click", async () => {
-      const status = document.querySelector<HTMLElement>("[data-copy-status]")!;
-      try {
-        await navigator.clipboard.writeText(button.dataset.copyValue!);
-        status.textContent = status.dataset.copied!;
-        // The button itself confirms, next to the value that was copied.
-        button.toggleAttribute("data-copied", true);
-        label.textContent = button.dataset.copiedLabel!;
-        clearTimeout(reset);
-        reset = setTimeout(() => {
-          button.removeAttribute("data-copied");
-          label.textContent = copyLabel;
-        }, 2000);
-      } catch {
-        status.textContent = status.dataset.copyFailed!;
-      }
-    });
-  }
-  document.querySelector("#print-invoice")?.addEventListener("click", () => {
-    const frame = document.querySelector<HTMLIFrameElement>(
-      "#invoice-preview-frame"
+  import { onPageLoad } from "../../../lib/ui/page-lifecycle";
+  import { initCopyButtons } from "../../../lib/ui/copy-field";
+
+  onPageLoad(() => {
+    const controller = new AbortController();
+    initCopyButtons(document, { signal: controller.signal });
+    document.querySelector("#print-invoice")?.addEventListener(
+      "click",
+      () => {
+        const frame = document.querySelector<HTMLIFrameElement>(
+          "#invoice-preview-frame"
+        );
+        frame?.contentWindow?.print();
+      },
+      { signal: controller.signal }
     );
-    frame?.contentWindow?.print();
+    return () => controller.abort();
   });
 </script>
 
 <style>
-  .invoice-doc-locale-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
   .invoice-doc-locale-form {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     flex-wrap: wrap;
-  }
-  .invoice-doc-locale-select {
-    padding: 0.3rem 0.5rem;
-    font-size: var(--text-base);
-    border-radius: var(--radius-control);
-    background-color: var(--color-surface);
-    color: var(--color-foreground);
-  }
-  .invoice-preview-frame-wrap {
-    background: var(--color-surface-hover);
-    border-radius: var(--radius-panel);
-    padding: 1rem;
-  }
-  .invoice-preview-frame {
-    display: block;
-    width: 100%;
-    height: 70vh;
-    background: #fff;
-    border: 1px solid var(--color-border);
-    border-radius: 0.25rem;
-  }
-  .invoice-doc-locale-select {
-    padding-inline-end: 2.25rem;
   }
 </style>

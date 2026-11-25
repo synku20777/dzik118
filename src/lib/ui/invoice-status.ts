@@ -30,6 +30,8 @@ const statuses: Record<string, [string, string, IconName]> = {
   FAILED: ["Failed", "danger", "alert-triangle"],
 };
 
+export const invoiceStatusCodes = Object.keys(statuses);
+
 export function invoiceStatusBadge(status: string) {
   const [label, tone, icon] = statuses[status] ?? [
     status,

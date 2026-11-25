@@ -1,9 +1,15 @@
 ---
+import DwellingSummary from "../../../../../components/ui/DwellingSummary.astro";
+import "../../../../../styles/item-list.css";
 // Phase D (Organizations/dwellings) - dwelling detail (spec Section 9.2, 27
 // "Dwellings: Detail").
 import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
+import LockDialog from "../../../../../components/ui/LockDialog.astro";
 import EmptyState from "../../../../../components/ui/EmptyState.astro";
+import FieldError from "../../../../../components/ui/FieldError.astro";
+import { fieldErrorAttrs } from "../../../../../lib/ui/field-error-attrs";
+import { initials } from "../../../../../lib/ui/initials";
 import {
   translate,
   uiLocale,
@@ -367,7 +373,7 @@ function meterCaption(
         {subtitle && <p class="page-description">{subtitle}</p>}
       </div>
       <div class="page-actions">
-        <details class="more-menu" data-dismiss>
+        <details class="more-menu more-menu-wide" data-dismiss>
           <summary class="btn-secondary">
             <Icon name="dots" size="sm" />
             {t("More actions")}
@@ -392,7 +398,8 @@ function meterCaption(
             {!dwelling.archivedAt && (
               <button
                 type="button"
-                data-open-archive-dialog
+                aria-haspopup="dialog"
+                data-open-lock-dialog="archive-dialog"
                 class="menu-danger"
               >
                 {t("Archive dwelling")}
@@ -409,32 +416,19 @@ function meterCaption(
       </p>
     )}
 
-    <section class="dwelling-summary" aria-label={t("Summary")}>
-      <div class="summary-stat" data-tone={balanceKpiTone}>
-        <span class="summary-label">
-          {isCredit ? t("Account credit") : t("Outstanding balance")}
-        </span>
-        <strong class="summary-value">
-          {formatMoney(balanceForDisplay, organization.currency, locale)}
-        </strong>
-      </div>
-      <div class="summary-stat" data-kpi="area">
-        <span class="summary-label">{t("Area")}</span>
-        <p class="summary-value">{dwelling.areaM2} m²</p>
-      </div>
-      <div class="summary-stat" data-kpi="resident-count">
-        <span class="summary-label">{t("Resident count")}</span>
-        <p class="summary-value">{dwelling.residentCount}</p>
-      </div>
-      <div class="summary-stat" data-kpi="invoice-delivery">
-        <span class="summary-label">{t("Invoice delivery")}</span>
-        <p class="summary-value summary-value-text">
-          {deliveryMethods.length > 0 ? deliveryMethods.join(", ") : t("None")}
-        </p>
-      </div>
-    </section>
+    <DwellingSummary
+      balance={formatMoney(balanceForDisplay, organization.currency, locale)}
+      balanceKpiTone={balanceKpiTone}
+      isCredit={isCredit}
+      area={dwelling.areaM2}
+      residentCount={dwelling.residentCount}
+      delivery={
+        deliveryMethods.length > 0 ? deliveryMethods.join(", ") : t("None")
+      }
+      locale={locale}
+    />
 
-    <nav class="dwelling-tabs" role="tablist" aria-label={t("Sections")}>
+    <nav class="tabs dwelling-tabs" role="tablist" aria-label={t("Sections")}>
       {(
         [
           ["overview", t("Overview"), null],
@@ -475,11 +469,7 @@ function meterCaption(
       data-tabpanel="overview"
       hidden={activeTab !== "overview"}
     >
-      <section
-        id="basic-info"
-        class="panel p-6"
-        aria-labelledby="basic-info-title"
-      >
+      <section id="basic-info" class="box" aria-labelledby="basic-info-title">
         <div class="card-header">
           <h2 id="basic-info-title">{t("Basic information")}</h2>
           <a
@@ -508,7 +498,7 @@ function meterCaption(
             method="POST"
             action={actions.dwellings.update}
             id="basic-info-form"
-            class="editor-grid"
+            class="editor-stack"
             data-saving-label={t("Saving…")}
             data-pending-label={t("Saving dwelling information…")}
             data-success-label={t("Changes saved")}
@@ -518,106 +508,137 @@ function meterCaption(
           >
             <input type="hidden" name="organizationId" value={organizationId} />
             <input type="hidden" name="dwellingId" value={dwellingId} />
-            <div>
-              <label class="field-label" for="occupantName">
-                {t("Occupant name")}
-              </label>
-              <input
-                id="occupantName"
-                name="occupantName"
-                maxlength="200"
-                value={dwelling.occupantName ?? ""}
-                class="mt-1 w-full"
-              />
+            <div class="field-group">
+              <div class="field-box">
+                <label for="occupantName">{t("Occupant name")}</label>
+                <input
+                  id="occupantName"
+                  name="occupantName"
+                  maxlength="200"
+                  value={dwelling.occupantName ?? ""}
+                  {...fieldErrorAttrs(updateResult?.error, "occupantName")}
+                />
+              </div>
+              <div class="field-box">
+                <label for="billingName">{t("Billing name")}</label>
+                <input
+                  id="billingName"
+                  name="billingName"
+                  maxlength="200"
+                  value={dwelling.billingName ?? ""}
+                  {...fieldErrorAttrs(updateResult?.error, "billingName")}
+                />
+              </div>
+              <div class="field-box">
+                <label for="billingEmail">{t("Billing email")}</label>
+                <input
+                  id="billingEmail"
+                  name="billingEmail"
+                  maxlength="320"
+                  type="email"
+                  spellcheck="false"
+                  value={dwelling.billingEmail ?? ""}
+                  {...fieldErrorAttrs(updateResult?.error, "billingEmail")}
+                />
+              </div>
+              <div class="field-box">
+                <label for="billingAddress">{t("Billing address")}</label>
+                <input
+                  id="billingAddress"
+                  name="billingAddress"
+                  maxlength="300"
+                  value={dwelling.billingAddress ?? ""}
+                  {...fieldErrorAttrs(updateResult?.error, "billingAddress")}
+                />
+              </div>
+              <div class="field-box">
+                <label for="areaM2">{t("Area (m²)")}</label>
+                <input
+                  id="areaM2"
+                  name="areaM2"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={dwelling.areaM2}
+                  {...fieldErrorAttrs(updateResult?.error, "areaM2")}
+                />
+              </div>
+              <div class="field-box">
+                <label for="residentCount">{t("Resident count")}</label>
+                <input
+                  id="residentCount"
+                  name="residentCount"
+                  type="number"
+                  min="0"
+                  value={dwelling.residentCount}
+                  {...fieldErrorAttrs(updateResult?.error, "residentCount")}
+                />
+              </div>
+              <div class="field-box">
+                <label for="dwelling-type">{t("Type")}</label>
+                <select
+                  id="dwelling-type"
+                  name="type"
+                  {...fieldErrorAttrs(updateResult?.error, "type")}
+                >
+                  {dwellingTypeOptions.map((dt) => (
+                    <option value={dt} selected={dwelling.type === dt}>
+                      {entityLabel(dt, locale)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div class="field-box field-span">
+                <label for="notes">{t("Notes")}</label>
+                <textarea
+                  id="notes"
+                  name="notes"
+                  maxlength="2000"
+                  rows="3"
+                  {...fieldErrorAttrs(updateResult?.error, "notes")}
+                >{dwelling.notes ?? ""}</textarea>
+              </div>
             </div>
-            <div>
-              <label class="field-label" for="billingName">
-                {t("Billing name")}
-              </label>
-              <input
-                id="billingName"
-                name="billingName"
-                maxlength="200"
-                value={dwelling.billingName ?? ""}
-                class="mt-1 w-full"
-              />
-            </div>
-            <div>
-              <label class="field-label" for="billingEmail">
-                {t("Billing email")}
-              </label>
-              <input
-                id="billingEmail"
-                name="billingEmail"
-                maxlength="320"
-                type="email"
-                value={dwelling.billingEmail ?? ""}
-                class="mt-1 w-full"
-              />
-            </div>
-            <div>
-              <label class="field-label" for="billingAddress">
-                {t("Billing address")}
-              </label>
-              <input
-                id="billingAddress"
-                name="billingAddress"
-                maxlength="300"
-                value={dwelling.billingAddress ?? ""}
-                class="mt-1 w-full"
-              />
-            </div>
-            <div>
-              <label class="field-label" for="areaM2">
-                {t("Area (m²)")}
-              </label>
-              <input
-                id="areaM2"
-                name="areaM2"
-                type="number"
-                step="0.01"
-                min="0"
-                value={dwelling.areaM2}
-                class="mt-1 w-full"
-              />
-            </div>
-            <div>
-              <label class="field-label" for="residentCount">
-                {t("Resident count")}
-              </label>
-              <input
-                id="residentCount"
-                name="residentCount"
-                type="number"
-                min="0"
-                value={dwelling.residentCount}
-                class="mt-1 w-full"
-              />
-            </div>
-            <div>
-              <label class="field-label" for="dwelling-type">
-                {t("Type")}
-              </label>
-              <select id="dwelling-type" name="type" class="mt-1 w-full">
-                {dwellingTypeOptions.map((dt) => (
-                  <option value={dt} selected={dwelling.type === dt}>
-                    {entityLabel(dt, locale)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div class="editor-wide">
-              <label class="field-label" for="notes">
-                {t("Notes")}
-              </label>
-              <textarea
-                id="notes"
-                name="notes"
-                maxlength="2000"
-                rows="3"
-                class="mt-1 w-full"
-              >{dwelling.notes ?? ""}</textarea>
-            </div>
+            <FieldError
+              name="occupantName"
+              label={t("Occupant name")}
+              error={updateResult?.error}
+            />
+            <FieldError
+              name="billingName"
+              label={t("Billing name")}
+              error={updateResult?.error}
+            />
+            <FieldError
+              name="billingEmail"
+              label={t("Billing email")}
+              error={updateResult?.error}
+            />
+            <FieldError
+              name="billingAddress"
+              label={t("Billing address")}
+              error={updateResult?.error}
+            />
+            <FieldError
+              name="areaM2"
+              label={t("Area (m²)")}
+              error={updateResult?.error}
+            />
+            <FieldError
+              name="residentCount"
+              label={t("Resident count")}
+              error={updateResult?.error}
+            />
+            <FieldError
+              name="type"
+              label={t("Type")}
+              error={updateResult?.error}
+            />
+            <FieldError
+              name="notes"
+              label={t("Notes")}
+              error={updateResult?.error}
+            />
             <div class="editor-actions">
               <button type="submit" class="btn-primary">
                 {t("Save")}
@@ -689,7 +710,7 @@ function meterCaption(
       <div class="overview-side">
         <section
           id="invoice-delivery"
-          class="panel p-6"
+          class="box"
           aria-labelledby="invoice-delivery-title"
         >
           <h2 id="invoice-delivery-title">{t("Invoice delivery")}</h2>
@@ -720,16 +741,11 @@ function meterCaption(
             <ul class="delivery-list">
               <li>
                 <label class="delivery-option">
-                  <span class="check-toggle">
-                    <input
-                      type="checkbox"
-                      name="invoiceByEmail"
-                      checked={dwelling.invoiceByEmail}
-                    />
-                    <span class="check-icon" aria-hidden="true">
-                      <Icon name="check" size="sm" />
-                    </span>
-                  </span>
+                  <input
+                    type="checkbox"
+                    name="invoiceByEmail"
+                    checked={dwelling.invoiceByEmail}
+                  />
                   <span class="delivery-option-text">
                     <strong>{t("Email")}</strong>
                     <span data-email-destination>
@@ -742,16 +758,11 @@ function meterCaption(
               </li>
               <li>
                 <label class="delivery-option">
-                  <span class="check-toggle">
-                    <input
-                      type="checkbox"
-                      name="invoiceByPaper"
-                      checked={dwelling.invoiceByPaper}
-                    />
-                    <span class="check-icon" aria-hidden="true">
-                      <Icon name="check" size="sm" />
-                    </span>
-                  </span>
+                  <input
+                    type="checkbox"
+                    name="invoiceByPaper"
+                    checked={dwelling.invoiceByPaper}
+                  />
                   <span class="delivery-option-text">
                     <strong>{t("Paper")}</strong>
                     <span>{t("Send a printed copy by mail")}</span>
@@ -769,7 +780,7 @@ function meterCaption(
 
         <section
           id="portal-access"
-          class="panel p-6"
+          class="box"
           aria-labelledby="portal-access-title"
         >
           <div class="card-header">
@@ -832,13 +843,25 @@ function meterCaption(
                 <label class="field-label" for="resident-email">
                   {t("Email")}
                 </label>
-                <input
-                  id="resident-email"
+                <div class="input-icon mt-1">
+                  <Icon name="mail" size="sm" />
+                  <input
+                    id="resident-email"
+                    name="email"
+                    type="email"
+                    required
+                    autocomplete="off"
+                    spellcheck="false"
+                    class="w-full"
+                    {...fieldErrorAttrs(assignResult?.error, "email", {
+                      errorId: "resident-email-error",
+                    })}
+                  />
+                </div>
+                <FieldError
                   name="email"
-                  type="email"
-                  required
-                  autocomplete="off"
-                  class="mt-1 w-full"
+                  id="resident-email-error"
+                  error={assignResult?.error}
                 />
               </div>
               <div class="editor-actions">
@@ -870,9 +893,9 @@ function meterCaption(
             <ul class="item-list" hidden={residents.length === 0}>
               {residents.map((r) => (
                 <li class="resident-row" data-user-id={r.userId}>
-                  <div class="item-avatar" aria-hidden="true">
-                    {(r.displayName ?? r.email).charAt(0).toUpperCase()}
-                  </div>
+                  <span class="avatar avatar-lg" aria-hidden="true">
+                    {initials(r.displayName ?? r.email)}
+                  </span>
                   <div class="item-body">
                     <strong>{r.displayName ?? r.email}</strong>
                     {r.displayName && <span>{r.email}</span>}
@@ -883,7 +906,7 @@ function meterCaption(
                   <div class="item-actions">
                     <a
                       href={`/api/v1/admin/o/${organizationId}/residents/${r.userId}/export`}
-                      class="item-action"
+                      class="link"
                       download
                     >
                       {t("Export data")}
@@ -905,7 +928,8 @@ function meterCaption(
                       />
                       <button
                         type="submit"
-                        class="item-action"
+                        class="btn-ghost btn-sm"
+                        data-confirm-tone="danger"
                         data-confirm={
                           r.disabledAt
                             ? undefined
@@ -938,7 +962,8 @@ function meterCaption(
                       <input type="hidden" name="userId" value={r.userId} />
                       <button
                         type="submit"
-                        class="item-action item-action-danger"
+                        class="btn-secondary btn-sm"
+                        data-confirm-tone="danger"
                         data-confirm={`${t("Remove")} ${r.email}?`}
                       >
                         {t("Remove")}
@@ -967,7 +992,7 @@ function meterCaption(
     >
       <section
         id="account-balance"
-        class="panel p-6"
+        class="box"
         aria-labelledby="account-balance-title"
       >
         <div class="card-header">
@@ -1040,14 +1065,16 @@ function meterCaption(
             error={recordPaymentResult?.error}
             idPrefix="dwelling-payment"
             currency={organization.currency}
-          />
-          <a
-            class="btn-secondary editor-cancel-below"
-            href={tabHref("account-balance")}
-            data-editor-cancel
           >
-            {t("Cancel")}
-          </a>
+            <a
+              slot="actions"
+              class="btn-secondary"
+              href={tabHref("account-balance")}
+              data-editor-cancel
+            >
+              {t("Cancel")}
+            </a>
+          </ManualPaymentForm>
         </div>
         <div
           id="editor-adjustment"
@@ -1168,16 +1195,16 @@ function meterCaption(
             </div>
           </form>
         </div>
-        <dl class="balance-summary">
-          <div>
-            <dt>{t("Total debits")}</dt>
-            <dd>
+        <dl class="metric-strip box-well mt-5" style="--metrics: 2">
+          <div class="metric">
+            <dt class="metric-label">{t("Total debits")}</dt>
+            <dd class="metric-value">
               {formatMoney(String(totals.debit), organization.currency, locale)}
             </dd>
           </div>
-          <div>
-            <dt>{t("Total credits")}</dt>
-            <dd>
+          <div class="metric">
+            <dt class="metric-label">{t("Total credits")}</dt>
+            <dd class="metric-value">
               {formatMoney(
                 String(totals.credit),
                 organization.currency,
@@ -1267,7 +1294,7 @@ function meterCaption(
       data-tabpanel="meters"
       hidden={activeTab !== "meters"}
     >
-      <section id="meters" class="panel p-6" aria-labelledby="meters-title">
+      <section id="meters" class="box" aria-labelledby="meters-title">
         <div class="card-header">
           <h2 id="meters-title">{t("Meters")}</h2>
           {!dwelling.archivedAt && (
@@ -1298,7 +1325,7 @@ function meterCaption(
             method="POST"
             action={actions.meters.create}
             id="meter-form"
-            class="editor-grid"
+            class="editor-stack"
             data-saving-label={t("Saving…")}
             data-pending-label={t("Adding meter…")}
             data-added-message={t("Meter added")}
@@ -1319,51 +1346,69 @@ function meterCaption(
           >
             <input type="hidden" name="organizationId" value={organizationId} />
             <input type="hidden" name="dwellingId" value={dwellingId} />
-            <div>
-              <label class="field-label" for="type">
-                {t("Type")}
-              </label>
-              <select id="type" name="type" class="mt-1 w-full">
-                {meterTypeOptions.map((mt) => (
-                  <option value={mt}>{entityLabel(mt, locale)}</option>
-                ))}
-              </select>
+            <div class="field-group">
+              <div class="field-box">
+                <label for="type">{t("Type")}</label>
+                <select
+                  id="type"
+                  name="type"
+                  {...fieldErrorAttrs(meterCreateResult?.error, "type")}
+                >
+                  {meterTypeOptions.map((mt) => (
+                    <option value={mt}>{entityLabel(mt, locale)}</option>
+                  ))}
+                </select>
+              </div>
+              <div class="field-box is-required">
+                <label for="unit">{t("Unit")}</label>
+                <input
+                  id="unit"
+                  name="unit"
+                  maxlength="20"
+                  required
+                  placeholder="m3"
+                  {...fieldErrorAttrs(meterCreateResult?.error, "unit")}
+                />
+              </div>
+              <div class="field-box">
+                <label for="serialNumber">{t("Serial number")}</label>
+                <input
+                  id="serialNumber"
+                  name="serialNumber"
+                  maxlength="100"
+                  {...fieldErrorAttrs(meterCreateResult?.error, "serialNumber")}
+                />
+              </div>
+              <div class="field-box">
+                <label for="label">{t("Label")}</label>
+                <input
+                  id="label"
+                  name="label"
+                  maxlength="100"
+                  {...fieldErrorAttrs(meterCreateResult?.error, "label")}
+                />
+              </div>
             </div>
-            <div>
-              <label class="field-label" for="unit">
-                {t("Unit")}
-              </label>
-              <input
-                id="unit"
-                name="unit"
-                maxlength="20"
-                required
-                placeholder="m3"
-                class="mt-1 w-full"
-              />
-            </div>
-            <div>
-              <label class="field-label" for="serialNumber">
-                {t("Serial number")}
-              </label>
-              <input
-                id="serialNumber"
-                name="serialNumber"
-                maxlength="100"
-                class="mt-1 w-full"
-              />
-            </div>
-            <div>
-              <label class="field-label" for="label">
-                {t("Label")}
-              </label>
-              <input
-                id="label"
-                name="label"
-                maxlength="100"
-                class="mt-1 w-full"
-              />
-            </div>
+            <FieldError
+              name="type"
+              label={t("Type")}
+              error={meterCreateResult?.error}
+            />
+            <FieldError
+              name="unit"
+              label={t("Unit")}
+              error={meterCreateResult?.error}
+            />
+            <FieldError
+              name="serialNumber"
+              label={t("Serial number")}
+              error={meterCreateResult?.error}
+            />
+            <FieldError
+              name="label"
+              label={t("Label")}
+              error={meterCreateResult?.error}
+            />
             <div class="editor-actions">
               <button type="submit" class="btn-primary">
                 {t("Add meter")}
@@ -1378,18 +1423,16 @@ function meterCaption(
             </div>
           </form>
         </div>
-        <div class="meter-filters" role="group" aria-label={t("Filter meters")}>
-          <button
-            type="button"
-            class="btn-secondary btn-sm"
-            data-meter-filter="active"
-            aria-pressed="true"
-          >
+        <div
+          class="meter-filters toggle-tabs"
+          role="group"
+          aria-label={t("Filter meters")}
+        >
+          <button type="button" data-meter-filter="active" aria-pressed="true">
             {t("Active")}
           </button>
           <button
             type="button"
-            class="btn-secondary btn-sm"
             data-meter-filter="archived"
             aria-pressed="false"
           >
@@ -1441,7 +1484,7 @@ function meterCaption(
                 {!m.archivedAt && (
                   <div class="item-actions" data-meter-actions>
                     <a
-                      class="item-action"
+                      class="link"
                       href={editHref(`meter-${m.id}`)}
                       data-editor-open={`meter-${m.id}`}
                       aria-controls={`editor-meter-${m.id}`}
@@ -1462,7 +1505,8 @@ function meterCaption(
                       <input type="hidden" name="meterId" value={m.id} />
                       <button
                         type="submit"
-                        class="item-action item-action-danger"
+                        class="btn-secondary btn-sm"
+                        data-confirm-tone="danger"
                         data-confirm={fill(
                           t(
                             "Archive {meter}? It is no longer read or billed. Its past readings stay."
@@ -1485,7 +1529,7 @@ function meterCaption(
                     <form
                       method="POST"
                       action={actions.meters.update}
-                      class="editor-grid"
+                      class="editor-stack"
                       data-meter-edit-form
                     >
                       <input
@@ -1494,57 +1538,50 @@ function meterCaption(
                         value={organizationId}
                       />
                       <input type="hidden" name="meterId" value={m.id} />
-                      <div>
-                        <label class="field-label" for={`meter-serial-${m.id}`}>
-                          {t("Serial number")}
-                        </label>
-                        <input
-                          id={`meter-serial-${m.id}`}
-                          name="serialNumber"
-                          maxlength="100"
-                          value={m.serialNumber ?? ""}
-                          class="mt-1 w-full"
-                        />
-                      </div>
-                      <div>
-                        <label class="field-label" for={`meter-label-${m.id}`}>
-                          {t("Label")}
-                        </label>
-                        <input
-                          id={`meter-label-${m.id}`}
-                          name="label"
-                          maxlength="100"
-                          value={m.label ?? ""}
-                          class="mt-1 w-full"
-                        />
-                      </div>
-                      <div>
-                        <label class="field-label" for={`meter-unit-${m.id}`}>
-                          {t("Unit")}
-                        </label>
-                        <input
-                          id={`meter-unit-${m.id}`}
-                          name="unit"
-                          maxlength="20"
-                          required
-                          value={m.unit}
-                          class="mt-1 w-full"
-                        />
-                      </div>
-                      <div>
-                        <label
-                          class="field-label"
-                          for={`meter-installed-${m.id}`}
-                        >
-                          {t("Installed on")}
-                        </label>
-                        <input
-                          type="date"
-                          id={`meter-installed-${m.id}`}
-                          name="installedAt"
-                          value={m.installedAt ?? ""}
-                          class="mt-1 w-full"
-                        />
+                      <div class="field-group">
+                        <div class="field-box">
+                          <label for={`meter-serial-${m.id}`}>
+                            {t("Serial number")}
+                          </label>
+                          <input
+                            id={`meter-serial-${m.id}`}
+                            name="serialNumber"
+                            maxlength="100"
+                            value={m.serialNumber ?? ""}
+                          />
+                        </div>
+                        <div class="field-box">
+                          <label for={`meter-label-${m.id}`}>
+                            {t("Label")}
+                          </label>
+                          <input
+                            id={`meter-label-${m.id}`}
+                            name="label"
+                            maxlength="100"
+                            value={m.label ?? ""}
+                          />
+                        </div>
+                        <div class="field-box is-required">
+                          <label for={`meter-unit-${m.id}`}>{t("Unit")}</label>
+                          <input
+                            id={`meter-unit-${m.id}`}
+                            name="unit"
+                            maxlength="20"
+                            required
+                            value={m.unit}
+                          />
+                        </div>
+                        <div class="field-box">
+                          <label for={`meter-installed-${m.id}`}>
+                            {t("Installed on")}
+                          </label>
+                          <input
+                            type="date"
+                            id={`meter-installed-${m.id}`}
+                            name="installedAt"
+                            value={m.installedAt ?? ""}
+                          />
+                        </div>
                       </div>
                       <div class="editor-actions">
                         <button type="submit" class="btn-primary">
@@ -1580,7 +1617,7 @@ function meterCaption(
       data-tabpanel="tariffs"
       hidden={activeTab !== "tariffs"}
     >
-      <section id="tariffs" class="panel p-6" aria-labelledby="tariffs-title">
+      <section id="tariffs" class="box" aria-labelledby="tariffs-title">
         <div class="card-header">
           <h2 id="tariffs-title">{t("Recurring tariffs")}</h2>
           <a href={`${base}/settings/rules`} class="btn-secondary">
@@ -1607,7 +1644,7 @@ function meterCaption(
                       </div>
                       <a
                         href={`${base}/settings/rules?edit=${rule.id}`}
-                        class="item-action"
+                        class="link"
                       >
                         {t("Edit tariff")}
                       </a>
@@ -1633,7 +1670,7 @@ function meterCaption(
                       </div>
                       <a
                         href={`${base}/settings/rules?edit=${rule.id}`}
-                        class="item-action"
+                        class="link"
                       >
                         {t("Edit tariff")}
                       </a>
@@ -1656,7 +1693,7 @@ function meterCaption(
       data-tabpanel="messages"
       hidden={activeTab !== "messages"}
     >
-      <section id="messages" class="panel p-6" aria-labelledby="messages-title">
+      <section id="messages" class="box" aria-labelledby="messages-title">
         <div class="card-header">
           <h2 id="messages-title">{t("Recent messages")}</h2>
           <a
@@ -1694,7 +1731,7 @@ function meterCaption(
     >
       <section
         id="period-history"
-        class="panel p-6"
+        class="box"
         aria-labelledby="period-history-title"
       >
         <h2 id="period-history-title">{t("Period history")}</h2>
@@ -1704,16 +1741,10 @@ function meterCaption(
               <caption class="sr-only">{t("Period history")}</caption>
               <thead>
                 <tr>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Period")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Status")}
-                  </th>
-                  <th scope="col" class="px-4 py-2">
-                    {t("Invoice")}
-                  </th>
-                  <th scope="col" class="px-4 py-2 text-right">
+                  <th scope="col">{t("Period")}</th>
+                  <th scope="col">{t("Status")}</th>
+                  <th scope="col">{t("Invoice")}</th>
+                  <th scope="col" class="text-right">
                     {t("Amount due")}
                   </th>
                 </tr>
@@ -1721,30 +1752,27 @@ function meterCaption(
               <tbody class="divide-y divide-border">
                 {caseHistory.map((c) => (
                   <tr>
-                    <td class="px-4 py-2">
+                    <td>
                       {c.periodYear}-{String(c.periodMonth).padStart(2, "0")}
                     </td>
-                    <td class="px-4 py-2">
+                    <td>
                       <StatusBadge status={c.status} />
                     </td>
-                    <td class="px-4 py-2">
+                    <td>
                       {c.invoiceId ? (
                         <a
                           href={`${base}/periods/${c.periodId}/invoices/${c.invoiceId}`}
-                          class="text-primary hover:underline"
+                          class="link"
                         >
                           {c.invoiceNumber}
                         </a>
                       ) : (
-                        <a
-                          href={`${base}/periods/${c.periodId}`}
-                          class="text-primary hover:underline"
-                        >
+                        <a href={`${base}/periods/${c.periodId}`} class="link">
                           {t("Open workbench")}
                         </a>
                       )}
                     </td>
-                    <td class="px-4 py-2 text-right">
+                    <td class="text-right">
                       {c.invoiceAmountDue
                         ? formatMoney(
                             c.invoiceAmountDue,
@@ -1765,7 +1793,7 @@ function meterCaption(
 
       <section
         id="audit-history"
-        class="panel p-6"
+        class="box"
         aria-labelledby="audit-history-title"
       >
         <h2 id="audit-history-title">{t("Audit history")}</h2>
@@ -1823,40 +1851,22 @@ function meterCaption(
     </div>
 
     {!dwelling.archivedAt && (
-      <dialog
-        class="lock-dialog"
+      <LockDialog
         id="archive-dialog"
-        aria-labelledby="archive-dialog-title"
-        aria-describedby="archive-dialog-description"
+        title={t("Archive this dwelling?")}
+        description={t(
+          "Archiving hides it from new periods and active lists. Past invoices and readings remain intact."
+        )}
+        cancelLabel={t("Cancel")}
       >
-        <div class="dialog-body">
-          <div class="dialog-icon" aria-hidden="true">
-            !
-          </div>
-          <div>
-            <h2 id="archive-dialog-title">{t("Archive this dwelling?")}</h2>
-            <p id="archive-dialog-description">
-              {t(
-                "Archiving hides it from new periods and active lists. Past invoices and readings remain intact."
-              )}
-            </p>
-          </div>
-        </div>
-        <div class="dialog-actions">
-          <form method="dialog">
-            <button class="btn-secondary" value="cancel">
-              {t("Cancel")}
-            </button>
-          </form>
-          <form method="POST" action={actions.dwellings.archive}>
-            <input type="hidden" name="organizationId" value={organizationId} />
-            <input type="hidden" name="dwellingId" value={dwellingId} />
-            <button type="submit" class="btn-danger">
-              {t("Archive dwelling")}
-            </button>
-          </form>
-        </div>
-      </dialog>
+        <form method="POST" action={actions.dwellings.archive}>
+          <input type="hidden" name="organizationId" value={organizationId} />
+          <input type="hidden" name="dwellingId" value={dwellingId} />
+          <button type="submit" class="btn-danger">
+            {t("Archive dwelling")}
+          </button>
+        </form>
+      </LockDialog>
     )}
   </div>
 </AdminLayout>
@@ -1868,11 +1878,9 @@ function meterCaption(
     copyAstroScope,
     type MutationDescriptor,
   } from "../../../../../lib/ui/mutate-form";
-  import {
-    meterListVisibility,
-    type MeterFilter,
-  } from "../../../../../lib/ui/meter-list";
+  import { bindMeterList } from "../../../../../lib/ui/meter-list";
   import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
+  import { initials } from "../../../../../lib/ui/initials";
 
   onPageLoad(() => {
     const page = document.querySelector<HTMLElement>("[data-dwelling-detail]");
@@ -2543,19 +2551,11 @@ function meterCaption(
 
     function bindMeters(root: HTMLElement) {
       const meterForm = root.querySelector<HTMLFormElement>("#meter-form");
-      const region = root.querySelector<HTMLElement>("#meters-list-region");
-      const list = region?.querySelector<HTMLUListElement>(".item-list");
-      const empty = region?.querySelector<HTMLElement>("#meters-empty-state");
-      const filterButtons = [
-        ...root.querySelectorAll<HTMLButtonElement>("[data-meter-filter]"),
-      ];
-      let filter: MeterFilter = "active";
-
-      // Counts include only confirmed meters: a row still saving, or whose
-      // outcome is unknown, is shown marked but not counted.
-      function reconcile() {
-        if (!list || !empty) return;
-        const rows = [...list.querySelectorAll<HTMLLIElement>(".meter-row")];
+      const list = root.querySelector<HTMLUListElement>(
+        "#meters-list-region .item-list"
+      );
+      const reconcile = bindMeterList(root, signal, (rows) => {
+        // Pending meters do not count until the save has been confirmed.
         const count = page!.querySelector('[data-tab-count="meters"]');
         if (count)
           count.textContent = String(
@@ -2563,39 +2563,7 @@ function meterCaption(
               (row) => row.dataset.archived !== "true" && !row.dataset.pending
             ).length
           );
-        const visibility = meterListVisibility(
-          rows.map((row) => row.dataset.archived === "true"),
-          filter
-        );
-        rows.forEach((row, index) => {
-          row.hidden = !visibility.rows[index];
-        });
-        list.hidden = visibility.empty;
-        empty.hidden = !visibility.empty;
-        const title = empty.querySelector<HTMLElement>(".text-h3");
-        if (title)
-          title.textContent =
-            filter === "archived"
-              ? (region?.dataset.emptyArchived ?? "No archived meters.")
-              : (region?.dataset.emptyActive ?? "No active meters.");
-        for (const button of filterButtons)
-          button.setAttribute(
-            "aria-pressed",
-            button.dataset.meterFilter === filter ? "true" : "false"
-          );
-      }
-      for (const button of filterButtons)
-        button.addEventListener(
-          "click",
-          () => {
-            const next = button.dataset.meterFilter;
-            if (next === "active" || next === "archived") {
-              filter = next;
-              reconcile();
-            }
-          },
-          { signal }
-        );
+      });
 
       function buildRow(meter: CreatedMeter): HTMLLIElement {
         const option = meterForm?.querySelector<HTMLOptionElement>(
@@ -2843,10 +2811,10 @@ function meterCaption(
             li.className = "resident-row";
             li.dataset.userId = `client:resident:${mutationId.split(":").at(-1)}`;
             li.dataset.pending = "true";
-            const avatar = document.createElement("div");
-            avatar.className = "item-avatar";
+            const avatar = document.createElement("span");
+            avatar.className = "avatar avatar-lg";
             avatar.setAttribute("aria-hidden", "true");
-            avatar.textContent = email.charAt(0).toUpperCase();
+            avatar.textContent = initials(email);
             const body = document.createElement("div");
             body.className = "item-body";
             const strong = document.createElement("strong");
@@ -2928,7 +2896,9 @@ function meterCaption(
               row.previousElementSibling) as HTMLElement | null;
             row.remove();
             reconcile();
-            const next = neighbour?.querySelector<HTMLElement>(".item-action");
+            const next = neighbour?.querySelector<HTMLElement>(
+              ".item-actions :is(a, button)"
+            );
             if (next) next.focus();
             else focusTrigger("resident");
           },
@@ -2948,27 +2918,6 @@ function meterCaption(
       const root = page.querySelector<HTMLElement>(`#${id}`);
       if (root) bind(root);
     }
-
-    // ---- Archive dwelling
-    const archiveDialog =
-      document.querySelector<HTMLDialogElement>("#archive-dialog");
-    page
-      .querySelector<HTMLButtonElement>("[data-open-archive-dialog]")
-      ?.addEventListener(
-        "click",
-        () => {
-          page.querySelector(".more-menu")?.removeAttribute("open");
-          archiveDialog?.showModal();
-        },
-        { signal }
-      );
-    archiveDialog?.addEventListener(
-      "click",
-      (event) => {
-        if (event.target === archiveDialog) archiveDialog.close();
-      },
-      { signal }
-    );
 
     return () => controller.abort();
   });
@@ -2997,132 +2946,23 @@ function meterCaption(
     min-width: 0;
     overflow-wrap: anywhere;
   }
-  .more-menu {
-    position: relative;
-  }
-  .more-menu summary {
-    list-style: none;
-    cursor: pointer;
-  }
-  .more-menu summary::-webkit-details-marker {
-    display: none;
-  }
-  .more-menu > div {
-    position: absolute;
-    z-index: 20;
-    top: calc(100% + 0.35rem);
-    right: 0;
-    display: flex;
-    flex-direction: column;
-    min-width: 13rem;
-    padding: 0.5rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-control);
-    background: var(--color-surface-raised);
-    box-shadow: var(--elevation-raised);
-  }
-  .more-menu > div > a,
-  .more-menu > div > button {
-    display: block;
-    width: 100%;
-    min-height: 2.25rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--radius-badge);
-    color: var(--color-foreground);
-    font-size: var(--text-sm);
-    text-align: left;
-  }
-  .more-menu > div > a:hover,
-  .more-menu > div > button:hover {
-    background: var(--color-hover);
-  }
-  @media (pointer: coarse) {
-    .more-menu > div > a,
-    .more-menu > div > button {
-      min-height: var(--control-size-md);
-    }
-  }
-  .more-menu .menu-danger {
-    color: var(--color-destructive);
-  }
-  .more-menu .menu-disabled {
-    padding: 0.5rem 0.75rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  /* Same single-surface strip as the Current Month finances, so the two
-     pages read as one product. The balance leads; the rest is reference. */
-  .dwelling-summary {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    border: var(--panel-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-  }
-  .summary-stat {
-    display: grid;
-    align-content: start;
-    gap: 0.375rem;
-    min-width: 0;
-    padding: 1.25rem 1.5rem;
-  }
-  .summary-stat + .summary-stat {
-    border-left: 1px solid var(--color-border);
-  }
-  .summary-label {
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-    font-weight: 550;
-  }
-  .summary-value {
-    margin: 0;
-    font-size: var(--text-display-sm);
-    font-weight: 600;
-    line-height: 1.2;
-    font-variant-numeric: tabular-nums;
-    overflow-wrap: anywhere;
-  }
-  .summary-value-text {
-    font-size: var(--text-xl);
-    line-height: 1.6;
-  }
-  .summary-stat[data-tone="success"] .summary-value {
-    color: var(--color-success);
-  }
-  .summary-stat[data-tone="warning"] .summary-value {
-    color: var(--color-warning);
-  }
-  /* Underline tabs. They wrap to a second row rather than scroll, so no
-     section is ever out of view. */
+  /* Underline tabs come from global `.tabs`; map role="tab" selection here. */
   .dwelling-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0 0.25rem;
-    border-bottom: 1px solid var(--color-border);
+    margin: 0;
   }
   .dwelling-tabs a {
-    display: inline-flex;
-    align-items: center;
     gap: 0.375rem;
-    min-height: 2.75rem;
-    padding: 0.5rem 0.75rem;
-    border-bottom: 2px solid transparent;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-    font-weight: 600;
     white-space: nowrap;
-    text-decoration: none;
-  }
-  .dwelling-tabs a:hover {
-    color: var(--color-foreground);
-  }
-  .dwelling-tabs a:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: -2px;
   }
   .dwelling-tabs a[aria-selected="true"] {
-    border-bottom-color: var(--color-primary);
     color: var(--color-foreground);
+    font-weight: 600;
+    box-shadow: inset 0 -2px 0 var(--color-primary);
+  }
+  @media (forced-colors: active) {
+    .dwelling-tabs a[aria-selected="true"] {
+      border-bottom: 2px solid Highlight;
+    }
   }
   .tab-count {
     color: var(--color-muted);
@@ -3165,7 +3005,7 @@ function meterCaption(
     flex-wrap: wrap;
     gap: 0.5rem;
   }
-  [data-dwelling-detail] .panel h2 {
+  [data-dwelling-detail] :is(.panel, .box) h2 {
     font-size: var(--text-base);
     font-weight: 700;
   }
@@ -3173,6 +3013,14 @@ function meterCaption(
      below it down; nothing floats over other controls. */
   .inline-editor {
     margin-top: 1rem;
+  }
+  /* A compact form (.field-group) with its errors and actions under it. */
+  .editor-stack {
+    display: grid;
+    gap: var(--space-3);
+  }
+  .editor-stack > .editor-actions {
+    margin-top: var(--space-1);
   }
   .editor-grid {
     display: grid;
@@ -3187,9 +3035,6 @@ function meterCaption(
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-  }
-  .editor-cancel-below {
-    margin-top: 0.5rem;
   }
   .inline-editor :global(.form-inline-error),
   .inline-editor > .notice-danger {
@@ -3232,32 +3077,6 @@ function meterCaption(
        wrap inside its column instead of widening the page on a phone. */
     overflow-wrap: anywhere;
   }
-  .balance-summary {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-top: 1.25rem;
-    border-block: 1px solid var(--color-border);
-  }
-  .balance-summary > div {
-    display: grid;
-    gap: 0.25rem;
-    padding: 0.875rem 0 0.875rem 1.25rem;
-  }
-  .balance-summary > div:first-child {
-    padding-left: 0;
-  }
-  .balance-summary > div + div {
-    border-left: 1px solid var(--color-border);
-  }
-  .balance-summary dt {
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .balance-summary dd {
-    font-size: var(--text-lg);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
   .ledger-table {
     width: 100%;
     font-size: var(--text-sm);
@@ -3265,6 +3084,11 @@ function meterCaption(
   [data-dwelling-detail] td.text-right {
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+  }
+  [data-dwelling-detail] td a.link {
+    display: inline-block;
+    min-width: 1.5rem;
+    min-height: 1.5rem;
   }
   [data-dwelling-detail] :global(.empty-state) {
     padding: 1.5rem 1rem;
@@ -3356,190 +3180,12 @@ function meterCaption(
     font-size: var(--text-sm);
     overflow-wrap: anywhere;
   }
-  .check-toggle {
-    position: relative;
-    display: inline-grid;
-    width: 1.35rem;
-    height: 1.35rem;
-    flex: 0 0 auto;
-    margin-top: 0.1rem;
-  }
-  .check-toggle input {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    opacity: 0;
-    cursor: pointer;
-  }
-  .check-icon {
-    display: grid;
-    width: 1.35rem;
-    height: 1.35rem;
-    place-items: center;
-    border-radius: var(--radius-badge);
-    border: 1px solid var(--color-input-border);
-    color: var(--color-on-primary);
-    pointer-events: none;
-  }
-  .check-icon :global(svg) {
-    opacity: 0;
-  }
-  .check-toggle input:checked ~ .check-icon {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
-  }
-  .check-toggle input:checked ~ .check-icon :global(svg) {
-    opacity: 1;
-  }
-  .check-toggle input:disabled ~ .check-icon {
-    opacity: 0.45;
-  }
-  .check-toggle input:focus-visible ~ .check-icon {
-    outline: 2px solid var(--color-focus-ring);
-    outline-offset: 2px;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .check-icon :global(svg) {
-      transition: opacity var(--duration-fast) ease;
-    }
-  }
   .meter-filters {
-    display: flex;
-    gap: 0.5rem;
     margin-top: 1rem;
-  }
-  .meter-filters button[aria-pressed="true"] {
-    background: var(--color-nav-active-bg);
-    color: var(--color-primary);
   }
   /* People, meters and tariffs share one list: a mark, the item, its
      actions. Rows are divided by a rule, not boxed. */
-  .item-list {
-    display: grid;
-    margin-top: 1rem;
-  }
-  .item-list > li {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem 0.75rem;
-    padding: 0.75rem 0;
-    border-top: 1px solid var(--color-border);
-  }
-  .item-list > li:first-child {
-    border-top: 0;
-  }
-  .item-list > li[data-pending] {
-    opacity: 0.7;
-  }
-  .item-avatar {
-    display: grid;
-    width: 2rem;
-    height: 2rem;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--tone-neutral-bg);
-    color: var(--tone-neutral-text);
-    font-size: var(--text-sm);
-    font-weight: 700;
-  }
-  /* The tile carries the meter's unit (m³, kWh): it says something about
-     the meter and needs no icon. */
-  .item-icon {
-    display: grid;
-    min-width: 2.5rem;
-    max-width: 4.5rem;
-    height: 2rem;
-    flex: 0 0 auto;
-    padding: 0 0.5rem;
-    place-items: center;
-    overflow: hidden;
-    border-radius: var(--radius-control);
-    font-size: var(--text-xs);
-    font-weight: 700;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .item-icon[data-meter-type="COLD_WATER"] {
-    background: var(--color-meter-cold-bg);
-    color: var(--color-meter-cold-text);
-  }
-  .item-icon[data-meter-type="HOT_WATER"] {
-    background: var(--color-meter-hot-bg);
-    color: var(--color-meter-hot-text);
-  }
-  .item-icon[data-meter-type="ELECTRICITY"] {
-    background: var(--color-meter-electricity-bg);
-    color: var(--color-meter-electricity-text);
-  }
-  .item-icon[data-meter-type="GAS"] {
-    background: var(--color-meter-gas-bg);
-    color: var(--color-meter-gas-text);
-  }
-  .item-icon[data-meter-type="HEAT"] {
-    background: var(--color-meter-heat-bg);
-    color: var(--color-meter-heat-text);
-  }
-  .item-icon[data-meter-type="OTHER"] {
-    background: var(--tone-neutral-bg);
-    color: var(--tone-neutral-text);
-  }
-  .item-body {
-    flex: 1 1 12rem;
-    min-width: 0;
-    font-size: var(--text-sm);
-    overflow-wrap: anywhere;
-  }
-  .item-body strong {
-    display: block;
-    font-weight: 600;
-  }
-  .item-body span {
-    display: block;
-    margin-top: 0.125rem;
-    color: var(--color-muted);
-  }
-  .item-body .item-note {
-    color: var(--color-warning);
-  }
-  .item-body .optimistic-status {
-    color: var(--color-primary);
-    font-weight: 600;
-  }
-  .item-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.25rem 1rem;
-    margin-left: auto;
-  }
-  /* Text actions: each a 24px target with a 1rem gap (WCAG 2.5.8); only
-     removal and archiving are destructive. */
-  .item-action {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.5rem;
-    color: var(--color-primary);
-    font-size: var(--text-sm);
-    font-weight: 550;
-    white-space: nowrap;
-    text-decoration: none;
-  }
-  .item-action:hover {
-    text-decoration: underline;
-    text-underline-offset: 0.2em;
-  }
-  .item-action-danger {
-    color: var(--color-destructive);
-  }
-  @media (pointer: coarse) {
-    .item-action {
-      min-height: var(--control-size-md);
-    }
-  }
+
   .tariff-group-heading {
     margin-top: 1.25rem;
     color: var(--color-muted);
@@ -3552,89 +3198,8 @@ function meterCaption(
   .tariff-group-heading + .item-list {
     margin-top: 0.25rem;
   }
-  .lock-dialog {
-    width: min(30rem, calc(100vw - 2rem));
-    margin: auto;
-    padding: 0;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface-raised);
-    color: var(--color-foreground);
-    box-shadow: var(--elevation-modal);
-  }
-  .lock-dialog::backdrop {
-    background: var(--color-backdrop);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .lock-dialog {
-      opacity: 0;
-      transition:
-        opacity 180ms ease,
-        overlay 180ms allow-discrete,
-        display 180ms allow-discrete;
-    }
-    .lock-dialog[open] {
-      opacity: 1;
-    }
-    @starting-style {
-      .lock-dialog[open] {
-        opacity: 0;
-      }
-    }
-  }
-  .dialog-body {
-    display: flex;
-    gap: 1rem;
-    padding: 1.5rem;
-  }
-  .dialog-icon {
-    display: grid;
-    width: 2.25rem;
-    height: 2.25rem;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--tone-warning-bg);
-    color: var(--tone-warning-text);
-    font-weight: 800;
-  }
-  .dialog-body h2 {
-    font-size: var(--text-lg);
-    font-weight: 700;
-  }
-  .dialog-body p {
-    margin-top: 0.5rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-    line-height: 1.6;
-  }
-  .dialog-actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 0.75rem;
-    padding: 1rem 1.5rem;
-    border-top: 1px solid var(--color-border);
-  }
 
-  @media (width < 48rem) {
-    .dwelling-summary {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .summary-stat:nth-child(odd) {
-      border-left: 0;
-    }
-    .summary-stat:nth-child(n + 3) {
-      border-top: 1px solid var(--color-border);
-    }
-  }
   @media (width < 40rem) {
-    .summary-stat {
-      padding: 1rem;
-    }
-    .balance-summary > div {
-      padding-left: 0.75rem;
-    }
     /* Phones: a ledger entry is the date and description on one line, the
        three amounts under it, each with its label. */
     .ledger-table thead {

@@ -162,7 +162,7 @@ const entryTypeLabel: Record<string, string> = {
     <header class="page-header">
       <div>
         <div class="title-row">
-          <h1 class="font-display">{heading}</h1>
+          <h1>{heading}</h1>
           <StatusBadge status={status} />
         </div>
         <p class="page-description">{subtitle}</p>
@@ -215,7 +215,7 @@ const entryTypeLabel: Record<string, string> = {
     </section>
 
     <div class="trail-grid">
-      <section class="panel p-6" aria-labelledby="history-heading">
+      <section class="box" aria-labelledby="history-heading">
         <h2 id="history-heading">{t("What happened")}</h2>
         <p class="text-body-sm text-muted">
           {t("Every step on this payment, oldest first.")}
@@ -230,12 +230,16 @@ const entryTypeLabel: Record<string, string> = {
                 <p class="trail-title">
                   {e.invoiceId && e.periodId ? (
                     <a
+                      class="link"
                       href={`${base}/periods/${e.periodId}/invoices/${e.invoiceId}`}
                     >
                       {eventTitle(e)}
                     </a>
                   ) : e.importId ? (
-                    <a href={`${base}/payments/imports/${e.importId}`}>
+                    <a
+                      class="link"
+                      href={`${base}/payments/imports/${e.importId}`}
+                    >
                       {eventTitle(e)}
                     </a>
                   ) : (
@@ -254,7 +258,7 @@ const entryTypeLabel: Record<string, string> = {
                       <li>
                         <span>{changeLabel[c.field]}:</span>{" "}
                         {changeValue(c.field, c.from)}{" "}
-                        <span aria-hidden="true">→</span>
+                        <Icon name="arrow-right" size="xs" class="inline" />
                         <span class="sr-only"> {t("to")} </span>{" "}
                         {changeValue(c.field, c.to)}
                       </li>
@@ -272,7 +276,7 @@ const entryTypeLabel: Record<string, string> = {
         </ol>
       </section>
 
-      <section class="panel p-6" aria-labelledby="split-heading">
+      <section class="box" aria-labelledby="split-heading">
         <h2 id="split-heading">{t("Where the money went")}</h2>
         {live || split.reversed ? (
           <>
@@ -306,6 +310,7 @@ const entryTypeLabel: Record<string, string> = {
                 <li data-reversed={i.reversed ? "true" : undefined}>
                   <span class="split-key split-invoice" aria-hidden="true" />
                   <a
+                    class="link"
                     href={`${base}/periods/${i.periodId}/invoices/${i.invoiceId}`}
                   >
                     {t("Invoice")} {i.invoiceNumber}
@@ -336,21 +341,23 @@ const entryTypeLabel: Record<string, string> = {
         ) : (
           <p class="text-body-sm text-muted mt-3">
             {t("This payment has not been applied yet.")}{" "}
-            <a href={`${base}/payments#review`}>{t("Review it on Payments")}</a>
+            <a class="link link-underlined" href={`${base}/payments#review`}>
+              {t("Review it on Payments")}
+            </a>
           </p>
         )}
       </section>
     </div>
 
     {entries.length > 0 && (
-      <section class="panel p-6" aria-labelledby="entries-heading">
+      <section class="space-y-2" aria-labelledby="entries-heading">
         <h2 id="entries-heading">{t("Account entries")}</h2>
         <p class="text-body-sm text-muted">
           {t(
             "The ledger lines this payment created. Entries are never edited; a reversal is a new line."
           )}
         </p>
-        <div class="table-wrap stack-table mt-4">
+        <div class="table-wrap stack-table">
           <table class="w-full text-left text-body-sm">
             <caption class="sr-only">{t("Account entries")}</caption>
             <thead>
@@ -428,7 +435,8 @@ const entryTypeLabel: Record<string, string> = {
     gap: 1.5rem;
     align-items: start;
   }
-  .panel h2 {
+  :is(.panel, .box) h2,
+  #entries-heading {
     font-size: var(--text-base);
     font-weight: 700;
   }
@@ -473,7 +481,7 @@ const entryTypeLabel: Record<string, string> = {
   }
   .trail > li[data-kind="REVERSED"] .trail-icon,
   .trail > li[data-kind="REJECTED"] .trail-icon {
-    background: var(--color-danger-surface);
+    background: var(--tone-danger-bg);
     color: var(--color-destructive);
   }
   .trail-meta {
@@ -489,11 +497,11 @@ const entryTypeLabel: Record<string, string> = {
   .trail-title {
     font-weight: 600;
   }
-  .trail-title a {
-    color: var(--color-primary);
-  }
-  .trail-title a:hover {
-    text-decoration: underline;
+  .trail-title a.link,
+  .split-list a.link {
+    display: inline-block;
+    min-width: 1.5rem;
+    min-height: 1.5rem;
   }
   .trail li[data-kind="REVERSED"] .trail-title {
     color: var(--color-destructive);
@@ -507,7 +515,7 @@ const entryTypeLabel: Record<string, string> = {
   .trail-reason {
     margin-top: 0.375rem;
     padding-left: 0.75rem;
-    border-left: 2px solid var(--color-border);
+    border-left: 1px solid var(--color-border);
     overflow-wrap: anywhere;
   }
   .trail-reason span {
@@ -542,15 +550,9 @@ const entryTypeLabel: Record<string, string> = {
     gap: 0.625rem;
     font-size: var(--text-sm);
   }
-  .split-list a {
-    color: var(--color-primary);
-  }
   .split-list li[data-reversed="true"] :is(a, strong) {
     color: var(--color-muted);
     text-decoration: line-through;
-  }
-  .split-list a:hover {
-    text-decoration: underline;
   }
   .split-list strong {
     font-variant-numeric: tabular-nums;
@@ -568,7 +570,7 @@ const entryTypeLabel: Record<string, string> = {
   }
   @media (width < 40rem) {
     [data-payment-trail] {
-      width: calc(100vw - 2rem);
+      width: calc(100vw - 2 * var(--gutter));
     }
   }
 </style>

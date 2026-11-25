@@ -1,4 +1,5 @@
 ---
+import ResidentComposer from "../../../../../components/ui/ResidentComposer.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
 import {
   translate,
@@ -146,35 +147,12 @@ const time = (at: Date) =>
           {friendlyActionErrorMessage(sendResult.error, locale)}
         </p>
       )}
-      <form
-        method="POST"
-        action={actions.messages.residentSend}
-        class="resident-composer"
-        data-chat-form
-        data-sending={t("Sending…")}
-        data-failed={t(
-          "The message could not be sent. Check your connection and try again."
-        )}
-        data-you={t("You")}
-      >
-        <input type="hidden" name="dwellingId" value={dwellingId} />
-        <label class="field-label" for="chat-body">
-          {t("Your message")}
-        </label>
-        <div>
-          <textarea
-            id="chat-body"
-            name="body"
-            required
-            maxlength="4000"
-            rows="2"
-          >{unsent}</textarea>
-          <button type="submit" class="btn-primary">
-            <Icon name="send" />
-            {t("Send")}
-          </button>
-        </div>
-      </form>
+      <ResidentComposer
+        action={String(actions.messages.residentSend)}
+        dwellingId={dwellingId}
+        locale={locale}
+        value={unsent}
+      />
     </section>
   </div>
 </ResidentLayout>
@@ -183,6 +161,7 @@ const time = (at: Date) =>
   import { actions } from "astro:actions";
   import { bindMutationForm } from "../../../../../lib/ui/mutate-form";
   import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
+  import { bindResidentComposerShortcut } from "../../../../../lib/ui/resident-composer";
 
   onPageLoad(() => {
     const form = document.querySelector<HTMLFormElement>("[data-chat-form]");
@@ -235,13 +214,6 @@ const time = (at: Date) =>
       },
     });
 
-    // Ctrl/Cmd+Enter sends. Enter alone stays a new line, so a half-written
-    // message is not sent by accident.
-    field.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-        event.preventDefault();
-        form.requestSubmit();
-      }
-    });
+    bindResidentComposerShortcut(form, field);
   });
 </script>

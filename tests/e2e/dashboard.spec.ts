@@ -14,11 +14,19 @@ test("dashboard is readable across languages, themes and viewport sizes", async 
   }
   const dashboard = new URL(page.url()).pathname;
   await expect(page.locator(".dashboard-page")).toBeVisible();
-  // One money card: the total to pay leads, and the sum that makes it is
-  // visible without a click.
+  // The card leads with the amount paid on invoices, with the billing total and its
+  // breakdown still visible on desktop.
   // Readings are counted once, in the month progress, not in a second card.
   await expect(page.locator(".dashboard-metric")).toHaveCount(1);
   await expect(page.locator('[data-metric="collection"]')).toHaveCount(1);
+  const receivedLink = page.getByRole("link", {
+    name: /^Paid on invoices/,
+  });
+  await expect(receivedLink).toBeVisible();
+  await expect(receivedLink).toHaveAttribute(
+    "href",
+    /\/payments\?status=received&periodId=[^&#]+#history$/
+  );
   await expect(page.locator(".collection-total")).toBeVisible();
   await expect(page.locator(".money-ledger .money-total")).toBeVisible();
   await expect(page.locator(".money-total dd")).toHaveText(
@@ -34,6 +42,9 @@ test("dashboard is readable across languages, themes and viewport sizes", async 
   await expect(page.locator(".crumbs [aria-current='page']")).toHaveText(
     "Dashboard"
   );
+  await receivedLink.click();
+  await expect(page.locator("#payments-status")).toHaveValue("received");
+  await expect(page.locator("#payments-period")).not.toHaveValue("");
   for (const locale of ["en", "lv", "ru"]) {
     await page.goto(`${dashboard}?lang=${locale}`);
     for (const theme of ["light", "dark"]) {
@@ -115,6 +126,10 @@ test("dashboard is readable across languages, themes and viewport sizes", async 
     "background-color",
     targetSurface
   );
+  await expect(page.locator(".dashboard-metric")).toHaveCSS(
+    "border-top-width",
+    "0px"
+  );
   await page.screenshot({
     path: testInfo.outputPath("dashboard-dark.png"),
     fullPage: true,
@@ -127,6 +142,19 @@ test("dashboard is readable across languages, themes and viewport sizes", async 
     page.locator(".month-status-lead .btn-primary")
   ).toBeInViewport();
   await page.locator(".collection-ledger > summary").click();
+  await expect(page.locator(".money-ledger .money-total")).toBeVisible();
+  await page.locator(".dashboard-metrics").evaluate((card) => {
+    const replacement = card.cloneNode(true) as HTMLElement;
+    const ledger =
+      replacement.querySelector<HTMLDetailsElement>("#collection-ledger")!;
+    ledger.open = true;
+    delete ledger.dataset.collapsed;
+    card.replaceWith(replacement);
+    document.dispatchEvent(new Event("workbench:refreshed"));
+    return new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    );
+  });
   await expect(page.locator(".money-ledger .money-total")).toBeVisible();
   await page.locator(".collection-ledger > summary").click();
   await page.setViewportSize({ width: 1440, height: 900 });

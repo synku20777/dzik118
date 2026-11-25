@@ -1,0 +1,50 @@
+---
+import Icon from "./Icon.astro";
+import { translate, type Locale } from "../../lib/ui/i18n";
+
+interface Props {
+  action?: string;
+  dwellingId: string;
+  locale: Locale;
+  value?: string;
+  inputId?: string;
+}
+const {
+  action,
+  dwellingId,
+  locale,
+  value,
+  inputId = "chat-body",
+} = Astro.props;
+const t = (message: string) => translate(locale, message);
+---
+
+<form
+  method={action ? "POST" : "dialog"}
+  action={action}
+  class="resident-composer"
+  data-chat-form
+  data-sending={t("Sending…")}
+  data-failed={t(
+    "The message could not be sent. Check your connection and try again."
+  )}
+  data-you={t("You")}
+>
+  <input type="hidden" name="dwellingId" value={dwellingId} />
+  <label class="field-label" for={inputId}>
+    {t("Your message")}
+  </label>
+  <div>
+    <textarea
+      id={inputId}
+      name="body"
+      required
+      maxlength="4000"
+      rows="2"
+    >{value}</textarea>
+    <button type="submit" class="btn-primary">
+      <Icon name="send" />
+      {t("Send")}
+    </button>
+  </div>
+</form>

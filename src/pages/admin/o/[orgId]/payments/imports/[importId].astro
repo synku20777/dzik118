@@ -3,6 +3,7 @@ import { translate } from "../../../../../../lib/ui/i18n";
 const t = (text: string) => translate(locale, text);
 // Phase J (Payments) - bank import detail.
 import StatusBadge from "../../../../../../components/ui/StatusBadge.astro";
+import PageHeader from "../../../../../../components/ui/PageHeader.astro";
 import {
   uiLocale,
   formatDate,
@@ -43,7 +44,7 @@ try {
 ---
 
 <AdminLayout
-  title={`Import - ${organization.name}`}
+  title={`${t("Import")} – ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[
@@ -52,16 +53,10 @@ try {
   ]}
 >
   <div class="space-y-6">
-    <div>
-      <h1 class="text-xl font-bold text-foreground">
-        {bankImport.originalFilename}
-      </h1>
-      <p class="text-sm text-muted">
-        Imported{" "}
-        {formatDate(bankImport.importedAt, locale, organization.timezone)} --{" "}
-        {bankImport.rowCount} row(s)
-      </p>
-    </div>
+    <PageHeader
+      title={bankImport.originalFilename}
+      description={`${t("Imported")} ${formatDate(bankImport.importedAt, locale, organization.timezone)} · ${t("Rows")}: ${bankImport.rowCount}`}
+    />
 
     <div class="table-wrap stack-table">
       <table class="w-full text-left text-sm">
@@ -97,7 +92,7 @@ try {
               <tr>
                 <td class="px-4 py-2">{tx.rowNumber}</td>
                 <td class="px-4 py-2">{formatDate(tx.bookingDate, locale)}</td>
-                <td class="px-4 py-2">
+                <td class="px-4 py-2 text-right tabular-nums whitespace-nowrap">
                   {formatMoney(tx.amount, tx.currency, locale)}
                 </td>
                 <td class="px-4 py-2">{tx.currency}</td>
