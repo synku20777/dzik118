@@ -8,7 +8,7 @@ describe("ledger descriptions", () => {
         "Current charges INV-202609-00003",
         "Kārtējā perioda maksa INV-202609-00003",
       ],
-      ["Late fee INV-1", "Nokavējuma maksa INV-1"],
+      ["Late fee INV-1", "Kavējuma nauda INV-1"],
       ["Manual adjustment INV-1", "Manuāla korekcija INV-1"],
       ["Manual charge adjustment", "Manuāla debeta korekcija"],
       ["Manual credit adjustment", "Manuāla kredīta korekcija"],
