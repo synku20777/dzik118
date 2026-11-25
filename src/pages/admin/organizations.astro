@@ -36,7 +36,7 @@ const archived = organizations.filter((o) => o.archivedAt);
 ---
 
 <AdminLayout
-  title="Organizations - Namkopa"
+  title={`${t("Your organizations")} – Namkopa`}
   breadcrumbs={[{ label: t("Your organizations") }]}
 >
   <div class="space-y-8">
@@ -47,14 +47,14 @@ const archived = organizations.filter((o) => o.archivedAt);
           {t("You don't belong to any organization yet. Create one below.")}
         </p>
       ) : (
-        <ul class="mt-4 divide-y divide-border rounded-control contained bg-surface">
+        <ul class="menu-list mt-4 rounded-panel contained bg-surface p-1 [corner-shape:squircle]">
           {[...active, ...archived].map((org) => (
             <li>
               <a
                 href={`/admin/o/${org.id}/dashboard`}
-                class="flex items-center justify-between px-4 py-3 hover:bg-hover"
+                class="justify-between gap-3 px-4 py-3"
               >
-                <span class="font-medium text-foreground">
+                <span class="min-w-0 font-medium text-foreground [overflow-wrap:anywhere]">
                   {org.name}
                   {org.archivedAt && (
                     <span class="ml-2">
@@ -62,7 +62,9 @@ const archived = organizations.filter((o) => o.archivedAt);
                     </span>
                   )}
                 </span>
-                <span class="text-body-sm text-muted">{org.addressLine1}</span>
+                <span class="min-w-0 text-right text-body-sm text-muted [overflow-wrap:anywhere]">
+                  {org.addressLine1}
+                </span>
               </a>
             </li>
           ))}

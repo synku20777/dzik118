@@ -1,0 +1,377 @@
+---
+import "../../styles/workbench.css";
+import { translate, workbenchSelectionCopy } from "../../lib/ui/i18n";
+import { invoiceStatusBadge } from "../../lib/ui/invoice-status";
+import type { WorkbenchProblem } from "../../lib/ui/workbench-problem";
+import AdminContextDrawer from "./AdminContextDrawer.astro";
+import Icon from "./Icon.astro";
+import StatusBadge from "./StatusBadge.astro";
+import WorkbenchBulkOutcome from "./WorkbenchBulkOutcome.astro";
+import WorkbenchBulkToolbar from "./WorkbenchBulkToolbar.astro";
+import WorkbenchReadiness from "./WorkbenchReadiness.astro";
+import WorkbenchSearch from "./WorkbenchSearch.astro";
+
+const requested = Astro.url.searchParams.get("lang");
+const locale = requested === "lv" || requested === "ru" ? requested : "en";
+const t = (message: string) => translate(locale, message);
+const cases = [
+  {
+    id: "12",
+    name: "Anna Bērziņa",
+    status: "MISSING_DATA",
+    action: "Enter readings",
+    drawer: "readings",
+    invoice: "",
+    amount: "",
+  },
+  {
+    id: "14",
+    name: "Jānis Liepa",
+    status: "DRAFT",
+    action: "Billing details",
+    drawer: "billing-details",
+    invoice: "INV-014",
+    amount: "€63.00",
+  },
+  {
+    id: "16",
+    name: "Marta Ozola",
+    status: "DRAFT",
+    action: "",
+    drawer: undefined,
+    invoice: "INV-016",
+    amount: "€76.20",
+  },
+  {
+    id: "18",
+    name: "Līga Kalniņa",
+    status: "PREPARED",
+    action: "",
+    drawer: undefined,
+    invoice: "INV-018",
+    amount: "€81.40",
+  },
+] as const;
+const problems: Record<string, WorkbenchProblem[]> = {
+  "12": [
+    {
+      text: "Cold water meter 006742",
+      tone: "warning",
+      drawer: "readings",
+      focus: "meter-water",
+      keepEnd: 6,
+    },
+    {
+      text: "Heating allocation",
+      tone: "warning",
+      drawer: "readings",
+      focus: "rule-heating",
+    },
+    {
+      text: "Check tariff dates for this period",
+      tone: "warning",
+      href: "#period-tariffs",
+    },
+  ],
+  "14": [
+    {
+      text: t("Billing email missing"),
+      tone: "danger",
+      drawer: "billing-details",
+      focus: "billing-email",
+    },
+  ],
+};
+const stages = [
+  ["", "All"],
+  ["MISSING_DATA", "Missing data"],
+  ["READY", "Ready"],
+  ["DRAFT", "Draft"],
+  ["PREPARED", "Prepared"],
+  ["SENT", "Sent"],
+] as const;
+---
+
+<div
+  id="workbench-specimen"
+  class="workbench app-content"
+  data-selection-copy={JSON.stringify(workbenchSelectionCopy(locale))}
+>
+  <AdminContextDrawer
+    preview={locale}
+    organizationId="preview"
+    periodId="preview"
+    periodStatus="OPEN"
+    periodName="September 2026"
+    workbenchPath="/design-system"
+    refreshSelectors={["#workbench-specimen .case-queue"]}
+  />
+  <div>
+    <div class="toggle-tabs" role="group" aria-label="Queue width">
+      <button type="button" data-queue-width="full" aria-pressed="true">
+        Available width
+      </button>
+      <button type="button" data-queue-width="narrow" aria-pressed="false">
+        Narrow queue
+      </button>
+    </div>
+  </div>
+  <p
+    id="bulk-selection-status"
+    class="sr-only"
+    lang={locale}
+    aria-live="polite"
+    aria-atomic="true"
+  ></p>
+  <section class="case-queue" aria-labelledby="queue-heading">
+    <WorkbenchSearch locale={locale} />
+    <nav
+      class="workflow-rail"
+      aria-label={t("Filter by workflow stage")}
+      lang={locale}
+    >
+      {stages.map(([status, label]) => (
+        <a
+          href="#workbench"
+          class="workflow-filter"
+          data-queue-stage={status}
+          aria-current={status === "" ? "page" : undefined}
+        >
+          {t(label)}{" "}
+          <strong>
+            {cases.filter((row) => !status || row.status === status).length}
+          </strong>
+        </a>
+      ))}
+    </nav>
+    <p class="queue-result" role="status" lang={locale} hidden>
+      <span
+        data-queue-result={t("Showing {shown} of {total} billing cases")}
+      ></span>
+      <a href="#workbench" class="btn-ghost btn-sm clear-filters">
+        {t("Clear filters")}
+      </a>
+    </p>
+    <form method="POST" id="bulk-select-form"></form>
+    <WorkbenchBulkToolbar locale={locale}>
+      <button
+        type="submit"
+        form="bulk-select-form"
+        class="btn-secondary"
+        data-bulk-status="DRAFT"
+        disabled
+      >
+        Prepare eligible
+      </button>
+      <button
+        type="submit"
+        form="bulk-select-form"
+        class="btn-primary"
+        data-bulk-status="PREPARED"
+        disabled
+      >
+        Send eligible
+      </button>
+    </WorkbenchBulkToolbar>
+    <div class="table-wrap case-table-wrap">
+      <table class="case-table table-compact" role="table">
+        <caption class="sr-only">Sample billing cases</caption>
+        <thead>
+          <tr>
+            <th class="select-column" scope="col">
+              <label class="check-target">
+                <input
+                  type="checkbox"
+                  id="select-all"
+                  aria-label="Select all eligible invoices"
+                />
+              </label>
+            </th>
+            <th scope="col">Dwelling</th>
+            <th scope="col">Status</th>
+            <th class="numeric-column" scope="col">
+              Invoice
+            </th>
+            <th scope="col">Next action</th>
+            <th scope="col" aria-label="More actions"></th>
+          </tr>
+        </thead>
+        <tbody role="rowgroup">
+          {cases.map((row) => (
+            <tr role="row" data-status={row.status} data-dwelling-id={row.id}>
+              <td class="select-column">
+                {row.invoice && (
+                  <label class="check-target">
+                    <input
+                      type="checkbox"
+                      name="invoiceIds"
+                      form="bulk-select-form"
+                      value={row.id}
+                      aria-label={`Select invoice for dwelling ${row.id}`}
+                      data-prepare-eligible={String(row.id === "16")}
+                      data-send-eligible={String(row.status === "PREPARED")}
+                    />
+                  </label>
+                )}
+              </td>
+              <td class="dwelling-cell">
+                <strong>{row.id}</strong>
+                <span>{row.name}</span>
+              </td>
+              <td class="status-cell">
+                {row.drawer ? (
+                  <StatusBadge status={row.status} locale={locale} />
+                ) : (
+                  <span class="status-text">
+                    <Icon
+                      name={invoiceStatusBadge(row.status).icon}
+                      size="xs"
+                    />
+                    {t(row.status === "DRAFT" ? "Draft" : "Prepared")}
+                  </span>
+                )}
+                <WorkbenchReadiness
+                  caseId={`sample-${row.id}`}
+                  dwellingId={row.id}
+                  problems={problems[row.id] ?? []}
+                  locale={locale}
+                />
+              </td>
+              <td class="invoice-cell numeric-column">
+                <span>{row.invoice || "—"}</span> <strong>{row.amount}</strong>
+              </td>
+              <td class="next-action">
+                {row.drawer && (
+                  <button
+                    type="button"
+                    class="btn-secondary btn-sm"
+                    data-open-drawer={row.drawer}
+                    data-dwelling-id={row.id}
+                  >
+                    {t(row.action)}
+                  </button>
+                )}
+              </td>
+              <td class="menu-cell">
+                {row.drawer && (
+                  <>
+                    <button
+                      type="button"
+                      class="case-menu-trigger icon-btn icon-btn-sm"
+                      popovertarget={`sample-case-menu-${row.id}`}
+                      aria-label={`More actions: ${row.id}`}
+                    >
+                      <Icon name="dots" size="sm" />
+                    </button>
+                    <div
+                      class="case-menu"
+                      id={`sample-case-menu-${row.id}`}
+                      popover="auto"
+                    >
+                      <button
+                        type="button"
+                        data-open-drawer={row.drawer}
+                        data-dwelling-id={row.id}
+                      >
+                        {t(row.action)}
+                      </button>
+                      <a href="#period-tariffs">Check tariffs</a>
+                    </div>
+                  </>
+                )}
+              </td>
+            </tr>
+          ))}
+          <tr data-queue-empty hidden>
+            <td colspan="6" class="empty-queue" lang={locale}>
+              <strong>{t("No billing cases match these filters.")}</strong>
+              <a href="#workbench" class="btn-secondary clear-filters">
+                {t("Clear filters")}
+              </a>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <p data-queue-action-result class="notice" role="status" hidden></p>
+  <div class="period-resources">
+    <details id="period-tariffs" class="disclosure">
+      <summary>
+        Tariffs in this period{" "}
+        <span class="ml-2 font-normal text-muted">Applying: 2 / 2</span>
+      </summary>
+      <ul class="mt-3 divide-y divide-border">
+        <li class="py-2">
+          Cold water{" "}
+          <span class="text-body-sm text-muted">· From 1 January 2026</span>
+        </li>
+        <li class="py-2">
+          Heating allocation{" "}
+          <span class="text-body-sm text-muted">· From 1 September 2026</span>
+        </li>
+      </ul>
+    </details>
+    <details class="disclosure">
+      <summary>
+        Dwellings not in this period{" "}
+        <span class="ml-2 font-normal text-muted">1</span>
+      </summary>
+      <p class="mt-2">Dwelling 20 has no billing case for September.</p>
+    </details>
+    <details class="disclosure">
+      <summary>
+        Example of skipped invoices
+      </summary>
+      <div class="mt-2">
+        <WorkbenchBulkOutcome
+          locale={locale}
+          outcome={{
+            count: 1,
+            label: "invoices sent",
+            skippedCount: 1,
+            skipReasons: ["Cannot send an invoice in DRAFT status"],
+          }}
+        />
+      </div>
+    </details>
+  </div>
+  <template id="workbench-ready-status">
+    <span class="status-text">
+      <Icon name={invoiceStatusBadge("READY").icon} size="xs" /> {t("Ready")}
+    </span>
+  </template>
+  {["meter-water", "rule-heating"].map((resolved) => (
+    <template data-resolved-problem={resolved}>
+      <WorkbenchReadiness
+        caseId="sample-12"
+        dwellingId="12"
+        problems={problems["12"].filter(
+          (problem) => problem.focus !== resolved
+        )}
+        locale={locale}
+      />
+    </template>
+  ))}
+</div>
+
+<script>
+  import { mountWorkbenchSpecimen } from "../../lib/ui/workbench-specimen";
+  mountWorkbenchSpecimen();
+</script>
+
+<style>
+  #workbench-specimen[data-width="narrow"] :global(.case-queue) {
+    max-width: 42rem;
+  }
+  @media (width >= 70rem) {
+    #workbench-specimen :global(#bulk-toolbar) {
+      top: calc(4.25rem + 0.75rem);
+    }
+  }
+  @media (40rem <= width < 70rem) {
+    #workbench-specimen :global(#bulk-toolbar) {
+      top: calc(8rem + 0.75rem);
+    }
+  }
+</style>

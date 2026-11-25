@@ -46,6 +46,10 @@ async function loginAdmin(page: Page): Promise<string> {
   await page.locator("#admin-email").fill("admin.a@example.com");
   await page.locator("#admin-password").fill("ChangeMe123!");
   await page.locator("#admin-login-form button").click();
+  await page.waitForURL(/\/admin\/(organizations|o\/.+\/dashboard)/);
+  if (new URL(page.url()).pathname === "/admin/organizations") {
+    await page.getByRole("link", { name: /Brīvības 118 Demo/ }).click();
+  }
   await page.waitForURL(/\/admin\/o\/.+\/dashboard/);
   return new URL(page.url()).pathname.replace(/\/dashboard$/, "");
 }
@@ -235,12 +239,7 @@ function mutationStatuses(page: Page) {
 test("admin routes, keyboard navigation, filters and locked actions", async ({
   page,
 }) => {
-  await page.goto("/login");
-  await page.locator("#admin-email").fill("admin.a@example.com");
-  await page.locator("#admin-password").fill("ChangeMe123!");
-  await page.locator("#admin-login-form button").click();
-  await page.waitForURL(/\/admin\/o\/.+\/dashboard/);
-  const base = new URL(page.url()).pathname.replace(/\/dashboard$/, "");
+  const base = await loginAdmin(page);
   for (const path of [
     "dashboard",
     "periods",
@@ -332,7 +331,9 @@ test("admin routes, keyboard navigation, filters and locked actions", async ({
   await expect(done).toBeVisible();
   await done.click();
   await page.setViewportSize({ width: 390, height: 900 });
-  await dwellingViews.getByRole("link", { name: "Table" }).click();
+  const table = dwellingViews.getByRole("link", { name: "Table" });
+  await table.click();
+  await expect(table).toHaveAttribute("aria-current", "page");
   await expect(
     page.locator(".table-wrap").filter({ has: page.locator("table") })
   ).toHaveCSS("border-top-width", "0px");
@@ -361,12 +362,7 @@ test("admin routes, keyboard navigation, filters and locked actions", async ({
 test("first meter is reconciled immediately and its dynamic archive control works", async ({
   page,
 }) => {
-  await page.goto("/login");
-  await page.locator("#admin-email").fill("admin.a@example.com");
-  await page.locator("#admin-password").fill("ChangeMe123!");
-  await page.locator("#admin-login-form button").click();
-  await page.waitForURL(/\/admin\/o\/.+\/dashboard/);
-  const base = new URL(page.url()).pathname.replace(/\/dashboard$/, "");
+  const base = await loginAdmin(page);
   const dwellingNumber = `00-E2E-${Date.now()}`;
 
   await page.goto(`${base}/dwellings`);

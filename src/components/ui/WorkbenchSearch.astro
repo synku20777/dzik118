@@ -1,0 +1,33 @@
+---
+import { translate, type Locale } from "../../lib/ui/i18n";
+import Icon from "./Icon.astro";
+interface Props {
+  locale: Locale;
+  search?: string;
+  statusFilter?: string;
+}
+const { locale, search, statusFilter } = Astro.props;
+const t = (text: string) => translate(locale, text);
+---
+
+<div class="queue-heading">
+  <h2 id="queue-heading">{t("Billing cases")}</h2>
+  {/* One field: Enter submits. The active stage is kept. */}
+  <form method="GET" class="queue-filters" role="search">
+    {statusFilter && <input type="hidden" name="status" value={statusFilter} />}
+    <div class="queue-search input-icon">
+      <Icon name="search" size="sm" />
+      <label class="sr-only" for="search">
+        {t("Search dwelling")}
+      </label>
+      <input
+        id="search"
+        name="search"
+        type="search"
+        value={search ?? ""}
+        placeholder={t("Search dwelling…")}
+        autocomplete="off"
+      />
+    </div>
+  </form>
+</div>

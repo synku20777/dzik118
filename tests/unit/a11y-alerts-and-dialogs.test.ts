@@ -192,7 +192,7 @@ describe("dialog ARIA, live alert notices, and non-dangling aria-describedby", (
     );
   });
 
-  it("ensures every <dialog> has aria-labelledby and #archive-dialog includes title & description links", () => {
+  it("ensures every <dialog> has a label and production lock dialogs use the shared title and description", () => {
     const missingLabelledBy: string[] = [];
     for (const file of listAstroFiles(srcDir)) {
       const rel = file.slice(root.length + 1).replace(/\\/g, "/");
@@ -206,11 +206,20 @@ describe("dialog ARIA, live alert notices, and non-dangling aria-describedby", (
       resolve(root, "src/pages/admin/o/[orgId]/dwellings/[dwellingId].astro"),
       "utf8"
     );
-    expect(dwellingDetail).toMatch(
-      /<dialog[^>]*id="archive-dialog"[^>]*aria-labelledby="archive-dialog-title"[^>]*aria-describedby="archive-dialog-description"/
+    const lockDialog = readFileSync(
+      resolve(root, "src/components/ui/LockDialog.astro"),
+      "utf8"
     );
-    expect(dwellingDetail).toContain('id="archive-dialog-title"');
-    expect(dwellingDetail).toContain('id="archive-dialog-description"');
+    const periodDetail = readFileSync(
+      resolve(root, "src/pages/admin/o/[orgId]/periods/[periodId]/index.astro"),
+      "utf8"
+    );
+    expect(dwellingDetail).toMatch(/<LockDialog\s+id="archive-dialog"/);
+    expect(periodDetail).toMatch(/<LockDialog\s+id="lock-period-dialog"/);
+    expect(lockDialog).toContain("aria-labelledby={`${id}-title`}");
+    expect(lockDialog).toContain("aria-describedby={`${id}-description`}");
+    expect(lockDialog).toContain("<h2 id={`${id}-title`}>");
+    expect(lockDialog).toContain("<p id={`${id}-description`}>");
   });
 
   it("has zero static dangling aria-describedby='*-error' references outside static design-system specimen", () => {

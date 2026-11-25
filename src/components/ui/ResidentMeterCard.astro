@@ -1,0 +1,79 @@
+---
+import Icon from "./Icon.astro";
+import { METER_ICONS } from "../../lib/ui/icons";
+import {
+  entityLabel,
+  formatNumber,
+  translate,
+  type Locale,
+} from "../../lib/ui/i18n";
+
+interface Props {
+  id: string;
+  type: string;
+  name: string;
+  unit: string;
+  serialNumber?: string | null;
+  previousValue?: string | null;
+  currentValue: string | null;
+  source?: string | null;
+  locale: Locale;
+}
+const {
+  id,
+  type,
+  name,
+  unit,
+  serialNumber,
+  previousValue,
+  currentValue,
+  source,
+  locale,
+} = Astro.props;
+const t = (message: string) => translate(locale, message);
+---
+
+<section class="resident-meter" aria-labelledby={`meter-title-${id}`}>
+  <span class="icon-tile resident-meter-icon" data-meter={type} aria-hidden="true">
+    <Icon name={METER_ICONS[type] ?? "tool"} size="lg" />
+  </span>
+  <div>
+    <h3 id={`meter-title-${id}`}>{name}</h3>
+    <p class="resident-meter-facts">
+      {serialNumber && (
+        <span>
+          {t("Serial number")}: {serialNumber}
+        </span>
+      )}
+      {previousValue != null && (
+        <span>
+          {t("Previous reading")}:{" "}
+          <strong>
+            {formatNumber(previousValue, locale)} {unit}
+          </strong>
+        </span>
+      )}
+    </p>
+  </div>
+  <div
+    data-reading-received
+    hidden={currentValue === null}
+    role="status"
+    tabindex="-1"
+  >
+    <p class="resident-meter-figure">
+      <strong data-reading-value>
+        {currentValue !== null && formatNumber(currentValue, locale)}
+      </strong>{" "}
+      <span>{unit}</span>
+    </p>
+    <p class="resident-meter-state">
+      <Icon name="check" size="sm" />
+      {t("Reading received")}
+    </p>
+    {source === "CARRIED_FORWARD" && (
+      <p class="resident-muted">{entityLabel(source, locale)}</p>
+    )}
+  </div>
+  <slot />
+</section>

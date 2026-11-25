@@ -19,7 +19,7 @@ import { onPageLoad } from "./page-lifecycle";
 
 type DrawerKind = "readings" | "billing-details";
 
-interface DrawerData {
+export interface DrawerData {
   dwelling: {
     id: string;
     number: string;
@@ -75,6 +75,40 @@ interface DrawerConfig {
   caseStatuses: Record<string, StatusInfo>;
 }
 
+type DrawerTarget = Pick<DrawerConfig, "organizationId" | "periodId"> & {
+  dwellingId: string;
+};
+type SaveResult<
+  Submit extends (form: FormData) => Promise<{ error?: unknown }>,
+> = Promise<Pick<Awaited<ReturnType<Submit>>, "error">>;
+
+export interface WorkbenchDrawerTransport {
+  load(
+    target: DrawerTarget
+  ): Promise<{ data?: DrawerData; error?: { message: string } }>;
+  saveReading(form: FormData): SaveResult<typeof actions.readings.adminSubmit>;
+  saveManualInput(
+    form: FormData
+  ): SaveResult<typeof actions.readings.adminSubmitManualRuleInput>;
+  saveBillingDetails(
+    form: FormData
+  ): SaveResult<typeof actions.dwellings.update>;
+  refresh(url: URL): Promise<Document>;
+}
+
+const productionTransport: WorkbenchDrawerTransport = {
+  load: (target) => actions.workbench.getDrawerData(target),
+  saveReading: (form) => actions.readings.adminSubmit(form),
+  saveManualInput: (form) => actions.readings.adminSubmitManualRuleInput(form),
+  saveBillingDetails: (form) => actions.dwellings.update(form),
+  async refresh(url) {
+    const response = await fetch(url.pathname + url.search, {
+      headers: { "X-Requested-With": "workbench-drawer" },
+    });
+    return new DOMParser().parseFromString(await response.text(), "text/html");
+  },
+};
+
 // Element.append()'s overloads resolve incorrectly in this project's TS
 // program -- @cloudflare/workers-types' ambient globals (Response,
 // ReadableStream, ...) collide with lib.dom.d.ts here, corrupting overload
@@ -100,13 +134,21 @@ function iconSvg(name: IconName): SVGSVGElement {
   return svg;
 }
 
-onPageLoad(() => {
+export function initWorkbenchDrawer(
+  transport: WorkbenchDrawerTransport = productionTransport
+) {
   const dialogEl = document.querySelector<HTMLDialogElement>(
     "#admin-context-drawer"
   );
-  if (!dialogEl) return;
+  if (
+    !dialogEl ||
+    (transport === productionTransport &&
+      dialogEl.dataset.workbenchPreview !== undefined)
+  )
+    return;
   const controller = new AbortController();
   const dialog = dialogEl;
+  const syncHistory = dialog.dataset.workbenchPreview === undefined;
   const config: DrawerConfig = JSON.parse(dialog.dataset.config ?? "{}");
   const eyebrowEl = dialog.querySelector<HTMLElement>(
     "#context-drawer-eyebrow"
@@ -183,26 +225,35 @@ onPageLoad(() => {
     );
     // A "+N" menu's invoker is re-rendered too: find it again by its menu.
     const menuId = trigger?.getAttribute?.("popovertarget");
-    const replacement =
-      ((menuId &&
-        document.querySelector<HTMLElement>(
-          `[popovertarget="${CSS.escape(menuId)}"]`
-        )) ||
-        sameDwelling.find(
-          (el) =>
-            el.dataset.openDrawer === params.kind &&
-            el.dataset.focus === trigger?.dataset.focus
-        )) ??
-      sameDwelling[0] ??
+    const candidates = [
+      menuId
+        ? document.querySelector<HTMLElement>(
+            `[popovertarget="${CSS.escape(menuId)}"]`
+          )
+        : null,
+      sameDwelling.find(
+        (el) =>
+          el.dataset.openDrawer === params.kind &&
+          el.dataset.focus === trigger?.dataset.focus
+      ),
+      ...sameDwelling,
       document.querySelector<HTMLElement>(
         `tr[data-dwelling-id="${CSS.escape(params.dwellingId)}"] .next-action :is(a,button):not(:disabled)`
-      ) ??
-      document.querySelector<HTMLElement>("#queue-heading") ??
-      document.querySelector<HTMLElement>(".dashboard-attention h2") ??
-      document.querySelector<HTMLElement>("h1");
-    if (replacement) {
+      ),
+      document.querySelector<HTMLElement>("#queue-heading"),
+      document.querySelector<HTMLElement>(".dashboard-attention h2"),
+      document.querySelector<HTMLElement>("h1"),
+    ];
+    for (const replacement of candidates) {
+      if (
+        !replacement ||
+        replacement.matches(":disabled") ||
+        replacement.getClientRects().length === 0
+      )
+        continue;
       if (replacement.matches("h1,h2,h3")) replacement.tabIndex = -1;
       replacement.focus();
+      if (document.activeElement === replacement) return;
     }
   }
 
@@ -226,7 +277,7 @@ onPageLoad(() => {
     dirtySnapshot = null;
     const closedParams = openParams;
     openParams = null;
-    if (!options.fromPopstate) {
+    if (syncHistory && !options.fromPopstate) {
       history.pushState(null, "", clearedUrl());
     }
     if (returnFocusTo && document.contains(returnFocusTo)) {
@@ -263,12 +314,23 @@ onPageLoad(() => {
     closeDrawer(options);
   }
 
-  function labeled(text: string, forId: string): HTMLLabelElement {
-    const label = document.createElement("label");
-    label.htmlFor = forId;
+  // Boxed field (DESIGN_SYSTEM.md "Form field"): the label sits inside the
+  // frame; a required field gets the red dot, not a text asterisk.
+  function boxedField(
+    text: string,
+    forId: string | undefined,
+    control: HTMLElement,
+    required: boolean
+  ): HTMLDivElement {
+    const box = document.createElement("div");
+    box.className = required ? "field-box is-required" : "field-box";
+    // A read-only value has no control to label: its caption is a span.
+    const label = document.createElement(forId ? "label" : "span");
+    if (forId) (label as HTMLLabelElement).htmlFor = forId;
+    else label.className = "field-box-label";
     label.textContent = text;
-    label.className = "field-label";
-    return label;
+    appendAll(box, label, control);
+    return box;
   }
 
   function fieldWrap(...children: Node[]): HTMLDivElement {
@@ -291,27 +353,22 @@ onPageLoad(() => {
     labelText: string,
     control: HTMLElement,
     unit: string,
-    forId?: string
+    forId?: string,
+    required = false
   ): HTMLDivElement {
     const row = document.createElement("div");
     row.className = "drawer-field-row";
-    let label: HTMLElement;
-    if (forId) {
-      const labelEl = document.createElement("label");
-      labelEl.htmlFor = forId;
-      label = labelEl;
-    } else {
-      label = document.createElement("span");
-    }
-    label.className = "field-label drawer-field-row-label";
-    label.textContent = labelText;
     const controlRow = document.createElement("div");
     controlRow.className = "drawer-field-row-control";
     const unitEl = document.createElement("span");
     unitEl.className = "drawer-field-unit";
     unitEl.textContent = unit;
-    appendAll(controlRow, control, unitEl);
-    appendAll(row, label, controlRow);
+    appendAll(
+      controlRow,
+      boxedField(labelText, forId, control, required),
+      unitEl
+    );
+    row.appendChild(controlRow);
     return row;
   }
 
@@ -335,7 +392,7 @@ onPageLoad(() => {
     const main = document.createElement("div");
     main.className = "drawer-resident-main";
     const icon = document.createElement("span");
-    icon.className = "drawer-resident-icon";
+    icon.className = "icon-tile drawer-resident-icon";
     icon.setAttribute("aria-hidden", "true");
     icon.appendChild(iconSvg("user"));
     const text = document.createElement("div");
@@ -416,7 +473,7 @@ onPageLoad(() => {
       const head = document.createElement("div");
       head.className = "drawer-meter-head";
       const icon = document.createElement("span");
-      icon.className = "drawer-meter-icon";
+      icon.className = "icon-tile drawer-meter-icon";
       icon.dataset.meterType = meter.type;
       icon.setAttribute("aria-hidden", "true");
       icon.appendChild(iconSvg(METER_ICONS[meter.type] ?? "tool"));
@@ -451,10 +508,11 @@ onPageLoad(() => {
       input.value = meter.currentValue ?? "";
       const err = errorNode(errorId);
       const currentRow = fieldRow(
-        `${s("currentReading")} *`,
+        s("currentReading"),
         input,
         meter.unit,
-        inputId
+        inputId,
+        true
       );
       currentRow.appendChild(err);
 
@@ -514,7 +572,7 @@ onPageLoad(() => {
       const head = document.createElement("div");
       head.className = "drawer-meter-head";
       const icon = document.createElement("span");
-      icon.className = "drawer-meter-icon";
+      icon.className = "icon-tile drawer-meter-icon";
       icon.dataset.meterType = "MANUAL";
       icon.setAttribute("aria-hidden", "true");
       icon.appendChild(iconSvg("percentage"));
@@ -548,10 +606,11 @@ onPageLoad(() => {
         formErrorEl.hidden = true;
       });
       const valueRow = fieldRow(
-        `${s("manualInputValue")} *`,
+        s("manualInputValue"),
         input,
         rule.unit,
-        inputId
+        inputId,
+        true
       );
       valueRow.appendChild(err);
 
@@ -635,7 +694,7 @@ onPageLoad(() => {
       fd.set("periodId", config.periodId);
       fd.set("meterId", meterId);
       fd.set("currentValue", submittedValue);
-      const { error } = await actions.readings.adminSubmit(fd);
+      const { error } = await transport.saveReading(fd);
       if (error && stale()) hadError = true;
       else if (error) {
         hadError = true;
@@ -685,7 +744,7 @@ onPageLoad(() => {
       fd.set("dwellingId", data.dwelling.id);
       fd.set("billingRuleId", billingRuleId);
       fd.set("value", submittedValue);
-      const { error } = await actions.readings.adminSubmitManualRuleInput(fd);
+      const { error } = await transport.saveManualInput(fd);
       if (error && stale()) hadError = true;
       else if (error) {
         hadError = true;
@@ -791,10 +850,13 @@ onPageLoad(() => {
 
     const residentCard = renderResidentCard(data, {
       eyebrow: s("residentInformationLabel"),
-      action: {
-        label: s("openFullDwelling"),
-        href: `/admin/o/${config.organizationId}/dwellings/${dwelling.id}`,
-      },
+      action:
+        transport === productionTransport
+          ? {
+              label: s("openFullDwelling"),
+              href: `/admin/o/${config.organizationId}/dwellings/${dwelling.id}`,
+            }
+          : undefined,
     });
     if (residentCard) nodes.push(residentCard);
 
@@ -906,11 +968,12 @@ onPageLoad(() => {
         formErrorEl.hidden = true;
       });
       fieldControls.set(field.name, { control, errorEl: fieldErr });
-      const labelText = field.required
-        ? `${s(field.labelKey)} *`
-        : s(field.labelKey);
+      if (field.required) control.setAttribute("aria-required", "true");
       form.appendChild(
-        fieldWrap(labeled(labelText, inputId), control, fieldErr)
+        fieldWrap(
+          boxedField(s(field.labelKey), inputId, control, !!field.required),
+          fieldErr
+        )
       );
       if (!firstInput) firstInput = control;
       if (focus === field.focusKey) firstInput = control;
@@ -967,7 +1030,7 @@ onPageLoad(() => {
       ])
     );
     const payload = new FormData(form);
-    const { error } = await actions.dwellings.update(payload);
+    const { error } = await transport.saveBillingDetails(payload);
     if (currentForm !== form) {
       if (!error) {
         await refreshAfterClosedSave(
@@ -1031,12 +1094,7 @@ onPageLoad(() => {
   }
 
   async function refreshWorkbench(message: string) {
-    const url = clearedUrl();
-    const response = await fetch(url.pathname + url.search, {
-      headers: { "X-Requested-With": "workbench-drawer" },
-    });
-    const html = await response.text();
-    const fresh = new DOMParser().parseFromString(html, "text/html");
+    const fresh = await transport.refresh(clearedUrl());
     for (const selector of config.refreshSelectors) {
       const current = document.querySelector(selector);
       const updated = fresh.querySelector(selector);
@@ -1074,7 +1132,8 @@ onPageLoad(() => {
     trigger: HTMLElement | null
   ) {
     returnFocusTo = trigger;
-    openParams = { kind, dwellingId, focus };
+    const requested = { kind, dwellingId, focus };
+    openParams = requested;
     eyebrowEl.textContent = `${s("dwellingEyebrow")}`;
     titleEl.textContent = "";
     setStatusPill(null);
@@ -1083,11 +1142,12 @@ onPageLoad(() => {
     footerEl.replaceChildren();
     if (!dialog.open) dialog.showModal();
 
-    const { data, error } = await actions.workbench.getDrawerData({
+    const { data, error } = await transport.load({
       organizationId: config.organizationId,
       periodId: config.periodId,
       dwellingId,
     });
+    if (openParams !== requested || controller.signal.aborted) return;
     if (error || !data) {
       metaEl.textContent = error?.message ?? s("genericError");
       return;
@@ -1127,7 +1187,8 @@ onPageLoad(() => {
       const kind = trigger.dataset.openDrawer as DrawerKind;
       const dwellingId = trigger.dataset.dwellingId!;
       const focus = trigger.dataset.focus;
-      history.pushState(null, "", drawerUrl(kind, dwellingId, focus));
+      if (syncHistory)
+        history.pushState(null, "", drawerUrl(kind, dwellingId, focus));
       // A trigger inside a popover menu is hidden once the drawer opens:
       // return focus to the control that opened the menu instead.
       const menu = trigger.closest?.<HTMLElement>("[popover]");
@@ -1144,43 +1205,43 @@ onPageLoad(() => {
     { signal: controller.signal, capture: true }
   );
 
-  closeButton.addEventListener("click", () => requestClose());
-  dialog.addEventListener("cancel", (event) => {
-    // Native Escape handling -- intercept so the dirty check runs first.
-    event.preventDefault();
-    requestClose();
-  });
-
-  window.addEventListener(
-    "popstate",
-    () => {
-      const params = new URLSearchParams(window.location.search);
-      const kind = params.get("drawer") as DrawerKind | null;
-      const dwellingId = params.get("dwelling");
-      if (kind && dwellingId) {
-        void openDrawer(
-          kind,
-          dwellingId,
-          params.get("focus") ?? undefined,
-          null
-        );
-      } else if (dialog.open) {
-        requestClose({ fromPopstate: true });
-      }
+  const options = { signal: controller.signal };
+  closeButton.addEventListener("click", () => requestClose(), options);
+  dialog.addEventListener(
+    "cancel",
+    (event) => {
+      // Native Escape handling -- intercept so the dirty check runs first.
+      event.preventDefault();
+      requestClose();
     },
-    { signal: controller.signal }
+    options
   );
 
-  const initialParams = new URLSearchParams(window.location.search);
-  const initialKind = initialParams.get("drawer") as DrawerKind | null;
-  const initialDwelling = initialParams.get("dwelling");
-  if (initialKind && initialDwelling) {
-    void openDrawer(
-      initialKind,
-      initialDwelling,
-      initialParams.get("focus") ?? undefined,
-      null
+  if (!syncHistory) {
+    const topic = dialog.closest<HTMLElement>(".ds-topic");
+    window.addEventListener(
+      "hashchange",
+      () => {
+        if (topic?.hidden) closeDrawer();
+      },
+      options
     );
+    return () => controller.abort();
   }
+
+  function openFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const kind = params.get("drawer");
+    const dwellingId = params.get("dwelling");
+    if ((kind === "readings" || kind === "billing-details") && dwellingId) {
+      void openDrawer(kind, dwellingId, params.get("focus") ?? undefined, null);
+    } else if (dialog.open) {
+      requestClose({ fromPopstate: true });
+    }
+  }
+  window.addEventListener("popstate", openFromUrl, options);
+  openFromUrl();
   return () => controller.abort();
-});
+}
+
+onPageLoad(() => initWorkbenchDrawer());

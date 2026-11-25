@@ -1,0 +1,87 @@
+---
+import InvoicePreviewFrame from "./InvoicePreviewFrame.astro";
+import InvoiceTemplateEditor from "./InvoiceTemplateEditor.astro";
+import {
+  renderInvoiceHtml,
+  type InvoiceHtmlInvoice,
+  type InvoiceHtmlLine,
+} from "../../domain/billing/invoice-html";
+import { createDefaultInvoiceTemplateConfig } from "../../domain/billing/invoice-template-schema";
+import { uiLocale } from "../../lib/ui/i18n";
+
+const locale = uiLocale(Astro.cookies, Astro.url);
+const sampleLines: InvoiceHtmlLine[] = [
+  {
+    id: "sample-water",
+    description: "Cold water",
+    quantity: "1",
+    unit: "m³",
+    unitPrice: "3.00",
+    netAmount: "3.00",
+    vatAmount: "0.63",
+    grossAmount: "3.63",
+    sourceSnapshot: {
+      code: "COLD_WATER",
+      nameEn: "Cold water",
+      nameRu: "Холодная вода",
+    },
+  },
+  {
+    id: "sample-management",
+    description: "Building management",
+    quantity: "1",
+    unit: "month",
+    unitPrice: "25.00",
+    netAmount: "25.00",
+    vatAmount: "5.25",
+    grossAmount: "30.25",
+    sourceSnapshot: { code: "MANAGEMENT" },
+  },
+];
+const sampleInvoice: InvoiceHtmlInvoice = {
+  invoiceNumber: "INV-SAMPLE-00001",
+  issueDate: "2026-09-01",
+  dueDate: "2026-09-15",
+  currency: "EUR",
+  subtotal: "28.00",
+  vatTotal: "5.88",
+  currentCharges: "33.88",
+  previousOutstanding: "0.00",
+  previousCreditApplied: "0.00",
+  lateFeeApplied: "0.00",
+  manualAdjustment: "0.00",
+  amountDue: "33.88",
+  issuerSnapshot: {
+    name: "Brīvības 118",
+    addressLine1: "Brīvības iela 118, Riga",
+  },
+  recipientSnapshot: { billingName: "Sample resident", dwellingNumber: "12" },
+  paymentSnapshot: { currency: "EUR" },
+  templateSnapshot: null,
+};
+const bootstrap = {
+  headerText: "",
+  footerText: "",
+  paymentInstructions: "",
+  defaultNote: "",
+  config: createDefaultInvoiceTemplateConfig(),
+  sampleInvoice,
+  sampleLines,
+};
+---
+
+<InvoiceTemplateEditor
+  organizationId="preview"
+  locale={locale}
+  bootstrap={bootstrap}
+  periodOptions={[]}
+  preview
+/>
+<details class="disclosure">
+  <summary>Invoice document frame</summary>
+  <InvoicePreviewFrame
+    title="Sample invoice document"
+    html={renderInvoiceHtml(sampleInvoice, sampleLines, locale)}
+    loading="lazy"
+  />
+</details>

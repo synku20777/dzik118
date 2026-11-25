@@ -1,0 +1,19 @@
+---
+interface Props {
+  id?: string;
+  title: string;
+  html: string;
+  loading?: "lazy" | "eager";
+}
+const { id, title, html, loading } = Astro.props;
+---
+
+<div class="invoice-preview-frame-wrap">
+  <iframe
+    id={id}
+    class="invoice-preview-frame"
+    title={title}
+    srcdoc={html}
+    loading={loading}
+  ></iframe>
+</div>

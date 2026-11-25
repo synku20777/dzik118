@@ -5,12 +5,17 @@ import SetupSteps, { type Props as StepProps } from "./SetupSteps.astro";
 interface Props extends StepProps {
   title: string;
   description?: string;
+  headingLevel?: "h1" | "h2" | "h3";
 }
-const { title, description, ...steps } = Astro.props;
+const { title, description, headingLevel, ...steps } = Astro.props;
 ---
 
 <div class="setup-page">
-  <PageHeader title={title} description={description} />
+  <PageHeader
+    title={title}
+    description={description}
+    headingLevel={headingLevel}
+  />
   <div class="setup-workspace">
     <SetupSteps {...steps} />
     <div class="setup-content space-y-6">
@@ -61,26 +66,41 @@ const { title, description, ...steps } = Astro.props;
   .setup-page legend:not(.sr-only) + * {
     clear: both;
   }
-  /* Required fields carry a mark; forms say what it means. */
-  .setup-page label:has(+ :required)::after,
-  .setup-page label:has(+ p + :required)::after {
+  /* Boxed fields already get the shared required dot. */
+  .setup-page
+    label:not(.field-box > label):is(
+      :has(+ :required),
+      :has(+ p + :required)
+    )::after {
     content: " *";
-    color: var(--color-destructive);
+    color: var(--color-required);
   }
   .setup-page .setup-required-note {
     color: var(--color-muted);
     font-size: var(--text-sm);
   }
   .setup-page input[type="file"]::file-selector-button {
-    margin-right: 0.75rem;
-    padding: 0.375rem 0.75rem;
-    border: 1px solid var(--color-input-border);
+    margin-inline-end: var(--space-3);
+    min-height: var(--control-size-md);
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
+    corner-shape: squircle;
     background: var(--color-surface);
     color: var(--color-foreground);
     font: inherit;
     font-weight: 600;
     cursor: pointer;
+  }
+  @media (hover: hover) {
+    .setup-page input[type="file"]:not(:disabled)::file-selector-button:hover {
+      box-shadow: var(--hover-ring)
+        color-mix(in srgb, var(--color-border) 70%, transparent);
+    }
+  }
+  .setup-page input[type="file"]:not(:disabled)::file-selector-button:active {
+    background: var(--color-nav-active-bg);
+    color: var(--color-primary);
   }
   .setup-page .setup-actions {
     display: flex;
@@ -107,12 +127,8 @@ const { title, description, ...steps } = Astro.props;
   .setup-page .setup-preset:has(input[type="checkbox"]:checked) {
     background: var(--color-nav-active-bg);
   }
-  .setup-page .setup-preset input[type="checkbox"] {
-    width: 1.125rem;
-    height: 1.125rem;
-  }
   .setup-page .setup-preset-fields:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
   }
   @media (prefers-reduced-motion: no-preference) {
     .setup-page .setup-preset {
@@ -121,15 +137,8 @@ const { title, description, ...steps } = Astro.props;
     .setup-page .setup-preset-fields {
       transition: opacity var(--duration-normal) var(--ease-standard);
     }
-    /* Results and errors ease in so a change is noticed. */
     .setup-content :is([role="status"], [role="alert"]) {
-      animation: setup-reveal var(--duration-normal) var(--ease-standard) both;
-    }
-  }
-  @keyframes setup-reveal {
-    from {
-      opacity: 0;
-      transform: translateY(-4px);
+      animation: panel-in var(--duration-panel) var(--ease-standard) both;
     }
   }
   .setup-page .setup-preset-fields {
@@ -181,6 +190,13 @@ const { title, description, ...steps } = Astro.props;
     }
     .setup-readings.stack-table td:nth-child(5) input[type="text"] {
       width: 100%;
+    }
+    /* The input keeps a visible caption: its column name ("Starting
+       reading") from the stacked table's data-label. */
+    .setup-readings.stack-table td:nth-child(5)::before {
+      display: block !important;
+      margin-bottom: var(--space-1);
+      text-align: left;
     }
   }
   @media (width < 40rem) {

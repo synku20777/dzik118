@@ -2,6 +2,10 @@
 import { translate, uiLocale } from "../../lib/ui/i18n";
 import Icon from "./Icon.astro";
 
+interface Props {
+  preview?: boolean;
+}
+const { preview } = Astro.props;
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 const strings = {
@@ -35,7 +39,24 @@ const strings = {
 };
 ---
 
-<div id="mutation-status" data-strings={JSON.stringify(strings)}>
+{preview && (
+  <div class="ds-inline" data-mutation-specimen-controls>
+    <button type="button" class="btn-secondary" data-sample-mutation="success">
+      Save sample change
+    </button>
+    <button type="button" class="btn-secondary" data-sample-mutation="error">
+      Simulate save failure
+    </button>
+    <button type="button" class="btn-secondary" data-sample-mutation="unknown">
+      Simulate unknown outcome
+    </button>
+  </div>
+)}
+<div
+  id="mutation-status"
+  data-strings={JSON.stringify(strings)}
+  data-mutation-preview={preview ? "" : undefined}
+>
   <span
     class="sr-only"
     data-mutation-announcer
@@ -48,7 +69,7 @@ const strings = {
     aria-live="polite"
     aria-atomic="false"
   ></div>
-  <details class="mutation-activity" hidden>
+  <details class="mutation-activity" data-dismiss hidden>
     <summary class="mutation-summary">
       <span aria-hidden="true" data-mutation-summary-icon>
         <Icon name="check" size="sm" />
@@ -67,6 +88,7 @@ const strings = {
   import { navigate } from "astro:transitions/client";
   import { onPageLoad } from "../../lib/ui/page-lifecycle";
   import { ICONS, type IconName } from "../../lib/ui/icons";
+  import { bindMutationSpecimen } from "../../lib/ui/mutation-specimen";
 
   // Static registry markup (icons.ts), not user input.
   function setIcon(el: HTMLElement, name: IconName) {
@@ -123,13 +145,16 @@ const strings = {
   function renderItems(
     container: HTMLElement,
     mutations: readonly UiMutation[],
-    strings: Strings
+    strings: Strings,
+    retrySave: (mutation: UiMutation) => void,
+    dismissSave: (id: string) => void
   ): void {
     const existing = new Map(
       [...container.querySelectorAll<HTMLElement>("[data-mutation-id]")].map(
         (element) => [element.dataset.mutationId!, element]
       )
     );
+    let nextItem = container.firstElementChild;
 
     for (const mutation of mutations) {
       const item =
@@ -146,8 +171,9 @@ const strings = {
           '<button type="button" class="mutation-retry"></button>' +
           '<button type="button" class="mutation-dismiss"></button>' +
           "</span>";
-        container.appendChild(item);
       }
+      if (item !== nextItem) container.insertBefore(item, nextItem);
+      nextItem = item.nextElementSibling;
       const icon = item.querySelector<HTMLElement>(".mutation-item-icon")!;
       setIcon(
         icon,
@@ -171,15 +197,10 @@ const strings = {
         !mutation.refresh &&
         (mutation.status !== "error" || !mutation.retry) &&
         (mutation.status !== "unknown" || !mutation.checkAgain);
-      retry.onclick = () =>
-        mutation.refresh
-          ? location.reload()
-          : mutation.status === "unknown"
-            ? mutation.checkAgain?.()
-            : retryMutation(mutation.id);
+      retry.onclick = () => retrySave(mutation);
       dismiss.textContent = strings.dismiss;
       dismiss.hidden = mutation.status !== "error";
-      dismiss.onclick = () => dismissMutation(mutation.id);
+      dismiss.onclick = () => dismissSave(mutation.id);
       item.setAttribute(
         "role",
         mutation.status === "error" || mutation.status === "unknown"
@@ -193,9 +214,10 @@ const strings = {
   onPageLoad(() => {
     const root = document.querySelector<HTMLElement>("#mutation-status");
     if (!root) return;
+    const preview = root.hasAttribute("data-mutation-preview");
     const strings: Strings = JSON.parse(root.dataset.strings ?? "{}");
     const translateMessage = (key: string) => strings.messages[key] ?? key;
-    const hydrated = hydrateMutations(translateMessage);
+    const hydrated = preview ? [] : hydrateMutations(translateMessage);
 
     function recover(mutation: UiMutation) {
       if (!mutation.recovery) return;
@@ -294,7 +316,25 @@ const strings = {
       signal: controller.signal,
     });
 
-    const unsubscribe = subscribeMutations((mutations) => {
+    let specimen: ReturnType<typeof bindMutationSpecimen> | undefined;
+    const returnFocus = () => {
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && root.contains(focused))
+        activity.querySelector("summary")?.focus();
+    };
+    const retrySave = (mutation: UiMutation) => {
+      returnFocus();
+      if (mutation.refresh) location.reload();
+      else if (mutation.status === "unknown") mutation.checkAgain?.();
+      else if (specimen) mutation.retry?.();
+      else retryMutation(mutation.id);
+    };
+    const dismissSave = (id: string) => {
+      returnFocus();
+      if (specimen) specimen.dismiss(id);
+      else dismissMutation(id);
+    };
+    const render = (mutations: readonly UiMutation[]) => {
       const { active, errors } = mutationCounts(mutations);
       summary.textContent = errors
         ? errors === 1
@@ -330,11 +370,20 @@ const strings = {
       }
       previousActive = active;
       initialized = true;
-      renderItems(toasts, mutations, strings);
-      renderItems(list, mutations, strings);
-    });
+      renderItems(toasts, mutations, strings, retrySave, dismissSave);
+      renderItems(list, mutations, strings, retrySave, dismissSave);
+    };
+    const controls = root.previousElementSibling;
+    if (
+      preview &&
+      controls instanceof HTMLElement &&
+      controls.hasAttribute("data-mutation-specimen-controls")
+    )
+      specimen = bindMutationSpecimen(controls, render);
+    const unsubscribe = preview ? undefined : subscribeMutations(render);
     return () => {
-      unsubscribe();
+      unsubscribe?.();
+      specimen?.dispose();
       controller.abort();
       clearTimeout(hideTimer);
       clearTimeout(fadeTimer);
@@ -359,6 +408,25 @@ const strings = {
   #mutation-status .mutation-summary,
   #mutation-status .mutation-panel {
     pointer-events: auto;
+  }
+  #mutation-status[data-mutation-preview] {
+    position: static;
+    width: min(24rem, 100%);
+    justify-items: start;
+    margin-block-start: 1rem;
+  }
+  #mutation-status[data-mutation-preview] .mutation-activity {
+    max-width: 100%;
+    width: 100%;
+  }
+  #mutation-status[data-mutation-preview] .mutation-panel {
+    position: static;
+    width: 100%;
+    margin-block-start: 0.5rem;
+  }
+  #mutation-status[data-mutation-preview]:has(.mutation-activity[open])
+    .mutation-toasts {
+    display: none;
   }
   .mutation-toasts {
     display: grid;
@@ -447,26 +515,7 @@ const strings = {
     opacity: 0;
   }
   .mutation-summary {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-height: var(--control-size-md);
-    padding: 0.625rem 0.875rem;
-    border: 1px solid var(--color-border);
-    border-radius: 999px;
-    background: var(--color-surface-raised);
-    box-shadow: var(--elevation-raised);
-    color: var(--color-foreground);
-    font-size: var(--text-sm);
-    font-weight: 650;
-    list-style: none;
     cursor: pointer;
-  }
-  .mutation-summary::-webkit-details-marker {
-    display: none;
-  }
-  #mutation-status[data-state="error"] .mutation-summary {
-    color: var(--color-destructive);
   }
   .mutation-panel {
     position: absolute;

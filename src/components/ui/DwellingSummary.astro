@@ -1,0 +1,106 @@
+---
+import { translate, type Locale } from "../../lib/ui/i18n";
+
+interface Props {
+  balance: string;
+  balanceKpiTone?: string;
+  isCredit: boolean;
+  area: string | number | null;
+  residentCount: number | null;
+  delivery: string;
+  locale: Locale;
+}
+const {
+  balance,
+  balanceKpiTone,
+  isCredit,
+  area,
+  residentCount,
+  delivery,
+  locale,
+} = Astro.props;
+const t = (message: string) => translate(locale, message);
+---
+
+<section class="dwelling-summary" aria-label={t("Summary")}>
+  <div class="summary-stat" data-tone={balanceKpiTone}>
+    <span class="summary-label">
+      {isCredit ? t("Account credit") : t("Outstanding balance")}
+    </span>
+    <strong class="summary-value">{balance}</strong>
+  </div>
+  <div class="summary-stat" data-kpi="area">
+    <span class="summary-label">{t("Area")}</span>
+    <p class="summary-value">{area == null ? "—" : `${area} m²`}</p>
+  </div>
+  <div class="summary-stat" data-kpi="resident-count">
+    <span class="summary-label">{t("Resident count")}</span>
+    <p class="summary-value">{residentCount ?? "—"}</p>
+  </div>
+  <div class="summary-stat" data-kpi="invoice-delivery">
+    <span class="summary-label">{t("Invoice delivery")}</span>
+    <p class="summary-value summary-value-text">{delivery}</p>
+  </div>
+</section>
+
+<style>
+  /* Same single-surface strip as the Current Month finances, so the two
+     pages read as one product. The balance leads; the rest is reference. */
+  .dwelling-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border: var(--panel-border);
+    border-radius: var(--radius-panel);
+    corner-shape: squircle;
+    background: var(--color-surface);
+  }
+  .summary-stat {
+    display: grid;
+    align-content: start;
+    gap: 0.375rem;
+    min-width: 0;
+    padding: 1.25rem 1.5rem;
+  }
+  .summary-stat + .summary-stat {
+    border-left: 1px solid var(--color-border);
+  }
+  .summary-label {
+    color: var(--color-muted);
+    font-size: var(--text-sm);
+    font-weight: 550;
+  }
+  .summary-value {
+    margin: 0;
+    font-size: var(--text-display-sm);
+    font-weight: 600;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .summary-value-text {
+    font-size: var(--text-xl);
+    line-height: 1.6;
+  }
+  .summary-stat[data-tone="success"] .summary-value {
+    color: var(--color-success);
+  }
+  .summary-stat[data-tone="warning"] .summary-value {
+    color: var(--color-warning);
+  }
+  @media (width < 48rem) {
+    .dwelling-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .summary-stat:nth-child(odd) {
+      border-left: 0;
+    }
+    .summary-stat:nth-child(n + 3) {
+      border-top: 1px solid var(--color-border);
+    }
+  }
+  @media (width < 40rem) {
+    .summary-stat {
+      padding: 1rem;
+    }
+  }
+</style>

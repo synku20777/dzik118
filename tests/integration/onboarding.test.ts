@@ -72,7 +72,7 @@ describe("guided setup", () => {
     const org = await newOrg("IT-Setup Maintenance");
     let progress = await getSetupProgress(db, org.id);
     expect(progress.steps).toEqual({
-      organization: true,
+      organization: false,
       dwellings: false,
       period: false,
       charges: false,
@@ -143,7 +143,7 @@ describe("guided setup", () => {
     ]);
 
     progress = await getSetupProgress(db, org.id);
-    expect(progress.complete).toBe(true);
+    expect(progress.complete).toBe(false);
     expect(progress.readyToGenerate).toBe(true);
     // No bank details and no recipients yet: not ready to prepare.
     expect(progress.issuerMissing).toEqual(["bank name", "IBAN"]);
@@ -156,7 +156,10 @@ describe("guided setup", () => {
       { bankName: "Test Bank", iban: "LV00TEST0000000000000" },
       adminId
     );
-    expect((await getSetupProgress(db, org.id)).issuerMissing).toEqual([]);
+    progress = await getSetupProgress(db, org.id);
+    expect(progress.issuerMissing).toEqual([]);
+    expect(progress.steps.organization).toBe(true);
+    expect(progress.complete).toBe(true);
 
     await cleanupOrganization(db, org.id);
   });

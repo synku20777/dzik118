@@ -1,8 +1,9 @@
 ---
-import { translate, uiLocale } from "../../../../../lib/ui/i18n";
+import { translate, uiLocale, entityLabel } from "../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import PaginationBar from "../../../../../components/ui/PaginationBar.astro";
 import { formatDate } from "../../../../../lib/ui/i18n";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
@@ -97,15 +98,15 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
 ---
 
 <AdminLayout
-  title={`Audit log - ${organization.name}`}
+  title={`${t("Audit log")} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[{ label: t("Audit log") }]}
 >
   <div class="space-y-6">
-    <h1 class="text-xl font-bold text-foreground">{t("Audit log")}</h1>
+    <PageHeader title={t("Audit log")} />
 
-    <form method="GET" class="flex flex-wrap items-end gap-3">
+    <form method="GET" class="filter-bar" data-instant-filter>
       <div>
         <label class="field-label" for="action">
           {t("Action")}
@@ -131,7 +132,7 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
           </option>
           {availableEntityTypes.map((type) => (
             <option value={type} selected={type === entityTypeFilter}>
-              {type}
+              {entityLabel(type, locale)}
             </option>
           ))}
         </select>
@@ -231,13 +232,13 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
                 </div>
               </td>
               <td class="px-4 py-2">
-                {log.entityType}
+                {entityLabel(log.entityType, locale)}
                 {log.entityId ? ` (${log.entityId})` : ""}
               </td>
               <td class="px-4 py-2">
                 {log.beforeData != null || log.afterData != null ? (
                   <details>
-                    <summary class="chevron-toggle text-muted hover:underline">
+                    <summary class="chevron-toggle text-muted">
                       {t("View")}
                     </summary>
                     <pre class="mt-2 max-w-md overflow-x-auto rounded-control bg-surface-hover p-2 text-xs">
@@ -272,3 +273,15 @@ const exportHref = `/api/v1/admin/o/${organizationId}/audit/export?${filterParam
     />
   </div>
 </AdminLayout>
+
+<script>
+  import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
+  import { bindInstantFilter } from "../../../../../lib/ui/instant-filter";
+
+  onPageLoad(() => {
+    const form = document.querySelector<HTMLFormElement>(
+      "[data-instant-filter]"
+    );
+    return form ? bindInstantFilter(form) : undefined;
+  });
+</script>

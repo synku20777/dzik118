@@ -143,6 +143,19 @@ test("dashboard is readable across languages, themes and viewport sizes", async 
   ).toBeInViewport();
   await page.locator(".collection-ledger > summary").click();
   await expect(page.locator(".money-ledger .money-total")).toBeVisible();
+  await page.locator(".dashboard-metrics").evaluate((card) => {
+    const replacement = card.cloneNode(true) as HTMLElement;
+    const ledger =
+      replacement.querySelector<HTMLDetailsElement>("#collection-ledger")!;
+    ledger.open = true;
+    delete ledger.dataset.collapsed;
+    card.replaceWith(replacement);
+    document.dispatchEvent(new Event("workbench:refreshed"));
+    return new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    );
+  });
+  await expect(page.locator(".money-ledger .money-total")).toBeVisible();
   await page.locator(".collection-ledger > summary").click();
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(page.locator(".money-ledger .money-total")).toBeVisible();

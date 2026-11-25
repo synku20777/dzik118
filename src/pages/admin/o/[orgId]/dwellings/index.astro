@@ -142,7 +142,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
 ---
 
 <AdminLayout
-  title={`Dwellings - ${organization.name}`}
+  title={`${t("Dwellings")} – ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[{ label: t("Dwellings") }]}
@@ -256,7 +256,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
             {t("Show archived")}
           </label>
           {(search || typeFilter || statusFilter || includeArchived) && (
-            <a href={listPath} class="clear-filters">
+            <a href={listPath} class="btn-ghost btn-sm">
               {t("Clear filters")}
             </a>
           )}
@@ -311,7 +311,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
                 <tr class="row-link">
                   <td class="px-4 py-2 font-medium">
                     <a
-                      class="row-link-target hover:underline"
+                      class="row-link-target link link-ghost"
                       href={"/admin/o/" + organizationId + "/dwellings/" + d.id}
                     >
                       {d.number}
@@ -321,6 +321,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
                     <span class="dwelling-type">
                       <Icon
                         name={DWELLING_TYPE_ICONS[d.type] ?? "building"}
+                        size="sm"
                         class="dwelling-type-icon"
                       />
                       {entityLabel(d.type, locale)}
@@ -328,7 +329,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
                   </td>
                   <td class="px-4 py-2">
                     {d.occupantName ? (
-                      <span class="occupant">
+                      <span class="table-occupant">
                         <span class="avatar avatar-sm" aria-hidden="true">
                           {initials(d.occupantName)}
                         </span>
@@ -354,13 +355,20 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
                   </td>
                   <td class="row-link-above px-4 py-2 text-right">
                     {!d.archivedAt && (
-                      <details class="row-menu">
-                        <summary
+                      <>
+                        <button
+                          type="button"
+                          class="icon-btn icon-btn-sm"
+                          popovertarget={`dwelling-menu-${d.id}`}
                           aria-label={`${t("More actions")}: ${d.number}`}
                         >
                           <Icon name="dots" size="sm" />
-                        </summary>
-                        <div>
+                        </button>
+                        <div
+                          id={`dwelling-menu-${d.id}`}
+                          class="case-menu"
+                          popover="auto"
+                        >
                           <form
                             method="POST"
                             action={actions.dwellings.archive}
@@ -384,7 +392,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
                             </button>
                           </form>
                         </div>
-                      </details>
+                      </>
                     )}
                   </td>
                 </tr>
@@ -501,6 +509,8 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
     copyAstroScope,
   } from "../../../../../lib/ui/mutate-form";
   import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
+  import { bindInstantFilter } from "../../../../../lib/ui/instant-filter";
+  import { initCaseMenus } from "../../../../../lib/ui/case-menu";
 
   interface CreatedDwelling {
     id: string;
@@ -518,27 +528,18 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
       "[data-instant-filter]"
     );
     if (!filterForm) return;
-    const searchInput = document.querySelector<HTMLInputElement>("#search");
-    const typeSelect = document.querySelector("#type-filter");
-    const statusSelect = document.querySelector("#status-filter");
-    const archivedCheckbox = document.querySelector(
-      'input[name="includeArchived"]'
-    );
-    let searchTimer: number | undefined;
-    searchInput?.addEventListener("input", () => {
-      window.clearTimeout(searchTimer);
-      searchTimer = window.setTimeout(() => filterForm.requestSubmit(), 300);
-    });
-    typeSelect?.addEventListener("change", () => filterForm.requestSubmit());
-    statusSelect?.addEventListener("change", () => filterForm.requestSubmit());
-    archivedCheckbox?.addEventListener("change", () =>
-      filterForm.requestSubmit()
-    );
+    const stopInstantFilter = bindInstantFilter(filterForm);
 
     const form = document.querySelector<HTMLFormElement>("#dwelling-form");
     const list =
       document.querySelector<HTMLTableSectionElement>("#dwellings-list");
-    if (!form || !list) return () => window.clearTimeout(searchTimer);
+    const stopCaseMenus = list ? initCaseMenus() : () => {};
+    if (!form || !list) {
+      return () => {
+        stopCaseMenus();
+        stopInstantFilter();
+      };
+    }
 
     const reconcileEmpty = () => {
       const emptyRow =
@@ -569,7 +570,7 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
         numberCell.textContent = dwelling.number;
       } else {
         const link = document.createElement("a");
-        link.className = "row-link-target hover:underline";
+        link.className = "row-link-target link link-ghost";
         link.href = href;
         link.textContent = dwelling.number;
         numberCell.appendChild(link);
@@ -695,7 +696,10 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
       },
     });
 
-    return () => window.clearTimeout(searchTimer);
+    return () => {
+      stopInstantFilter();
+      stopCaseMenus();
+    };
   });
 </script>
 
@@ -706,29 +710,11 @@ const DWELLING_TYPE_ICONS: Record<string, IconName> = {
     gap: 0.5rem;
   }
   .dwelling-type-icon {
-    width: 1.15rem;
-    height: 1.15rem;
     flex-shrink: 0;
     color: var(--color-muted);
   }
   #dwellings-list tr[data-pending="true"] td:last-of-type {
     color: var(--color-primary);
     font-weight: 650;
-  }
-  /* .row-link-above (below) gives each row's actions cell z-index:1 so its
-     button/menu clears the row-wide invisible link overlay -- but that
-     makes every row's actions cell its OWN stacking context at the same
-     z-index, so a later row's cell always paints over an earlier row's
-     open menu regardless of the menu's own z-index (a child z-index can
-     never escape its parent's stacking context). Promoting the whole
-     <tr> only while ITS menu is open fixes that without giving every row
-     a competing z-index. */
-  .row-link:has(.row-menu[open]) {
-    z-index: calc(var(--z-raised) + 1);
-  }
-  .occupant {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
   }
 </style>

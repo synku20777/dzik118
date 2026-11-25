@@ -50,7 +50,7 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
 ---
 
 <AdminLayout
-  title={`Billing settings - ${organization.name}`}
+  title={`${t("Billing")} – ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[
@@ -77,7 +77,7 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
         <form
           method="POST"
           action={actions.organizations.update}
-          class="billing-card panel"
+          class="billing-card box"
           id="billing-defaults-form"
         >
           <input type="hidden" name="organizationId" value={organizationId} />
@@ -94,8 +94,8 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
           )}
 
           <div class="billing-card-head">
-            <span class="billing-card-icon" aria-hidden="true">
-              <Icon name="receipt-euro" size="lg" />
+            <span class="icon-tile" aria-hidden="true">
+              <Icon name="receipt-euro" />
             </span>
             <div>
               <h2>{t("Billing defaults")}</h2>
@@ -105,7 +105,9 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
 
           <div class="billing-field-row">
             <div class="billing-field">
-              <label for="currency">{t("Currency")}</label>
+              <label class="field-label" for="currency">
+                {t("Currency")}
+              </label>
               <select
                 id="currency"
                 name="currency"
@@ -120,7 +122,9 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
               <FieldError name="currency" error={updateResult?.error} />
             </div>
             <div class="billing-field">
-              <label for="timezone">{t("Timezone")}</label>
+              <label class="field-label" for="timezone">
+                {t("Timezone")}
+              </label>
               <select
                 id="timezone"
                 name="timezone"
@@ -138,7 +142,9 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
 
           <div class="billing-field-row">
             <div class="billing-field">
-              <label for="locale">{t("Locale")}</label>
+              <label class="field-label" for="locale">
+                {t("Locale")}
+              </label>
               <select
                 id="locale"
                 name="locale"
@@ -153,14 +159,18 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
               <FieldError name="locale" error={updateResult?.error} />
             </div>
             <div class="billing-field">
-              <label for="invoicePrefix">{t("Invoice number prefix")}</label>
+              <label class="field-label" for="invoicePrefix">
+                {t("Invoice number prefix")}
+              </label>
               <input
                 id="invoicePrefix"
                 name="invoicePrefix"
                 value={organization.invoicePrefix}
-                {...fieldErrorAttrs(updateResult?.error, "invoicePrefix")}
+                {...fieldErrorAttrs(updateResult?.error, "invoicePrefix", {
+                  describedBy: "invoicePrefix-hint",
+                })}
               />
-              <p class="billing-field-hint">
+              <p class="field-hint" id="invoicePrefix-hint">
                 {t("Prefix for newly generated invoice numbers.")}
               </p>
               <FieldError name="invoicePrefix" error={updateResult?.error} />
@@ -168,7 +178,9 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
           </div>
 
           <div class="billing-field">
-            <label for="defaultDueDays">{t("Default due days")}</label>
+            <label class="field-label" for="defaultDueDays">
+              {t("Default due days")}
+            </label>
             <input
               id="defaultDueDays"
               name="defaultDueDays"
@@ -176,19 +188,21 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
               min="0"
               max="120"
               value={organization.defaultDueDays}
-              {...fieldErrorAttrs(updateResult?.error, "defaultDueDays")}
+              {...fieldErrorAttrs(updateResult?.error, "defaultDueDays", {
+                describedBy: "defaultDueDays-hint",
+              })}
             />
-            <p class="billing-field-hint">
+            <p class="field-hint" id="defaultDueDays-hint">
               {t("Number of days after the invoice date.")}
             </p>
             <FieldError name="defaultDueDays" error={updateResult?.error} />
           </div>
         </form>
 
-        <div class="billing-card panel" id="automation-card">
+        <div class="billing-card box" id="automation-card">
           <div class="billing-card-head">
-            <span class="billing-card-icon" aria-hidden="true">
-              <Icon name="settings" size="lg" />
+            <span class="icon-tile" aria-hidden="true">
+              <Icon name="settings" />
             </span>
             <div>
               <h2>{t("Automation")}</h2>
@@ -271,7 +285,9 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
           </label>
 
           <div class="billing-field billing-subfield">
-            <label for="autoSendDay">{t("Auto-send day of month")}</label>
+            <label class="field-label" for="autoSendDay">
+              {t("Auto-send day of month")}
+            </label>
             <input
               id="autoSendDay"
               name="autoSendDay"
@@ -281,12 +297,15 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
               value={organization.autoSendDay ?? ""}
               disabled={!organization.autoSendEnabled}
               form="billing-defaults-form"
-              {...fieldErrorAttrs(updateResult?.error, "autoSendDay")}
+              {...fieldErrorAttrs(updateResult?.error, "autoSendDay", {
+                describedBy:
+                  "autoSendDay-enabled-hint autoSendDay-schedule-hint",
+              })}
             />
-            <p class="billing-field-hint">
+            <p class="field-hint" id="autoSendDay-enabled-hint">
               {t("Used only when automatic sending is enabled.")}
             </p>
-            <p class="billing-field-hint">
+            <p class="field-hint" id="autoSendDay-schedule-hint">
               {t(
                 "Invoices prepared by the end of this day are sent on this day. The app tries a failed send again on the next days."
               )}
@@ -308,10 +327,10 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
           </div>
         </div>
 
-        <div class="billing-card panel">
+        <div class="billing-card box">
           <div class="billing-card-head">
-            <span class="billing-card-icon" aria-hidden="true">
-              <Icon name="percentage" size="lg" />
+            <span class="icon-tile" aria-hidden="true">
+              <Icon name="percentage" />
             </span>
             <div>
               <h2>{t("Late-payment rules")}</h2>
@@ -343,7 +362,9 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
 
             <div class="billing-field-row">
               <div class="billing-field">
-                <label for="late-effective">{t("Effective from")}</label>
+                <label class="field-label" for="late-effective">
+                  {t("Effective from")}
+                </label>
                 <input
                   id="late-effective"
                   name="effectiveFrom"
@@ -351,7 +372,7 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
                   required
                 />
               </div>
-              <label class="checkbox-row">
+              <label class="check-row billing-check-row">
                 <input
                   type="checkbox"
                   name="enabled"
@@ -370,29 +391,35 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
 
             <div class="billing-field-row">
               <div class="billing-field">
-                <label for="late-rate">{t("Daily rate (%)")}</label>
+                <label class="field-label" for="late-rate">
+                  {t("Daily rate (%)")}
+                </label>
                 <input
                   id="late-rate"
                   name="dailyRate"
                   inputmode="decimal"
                   value={lateFeePolicy?.dailyRate ?? "0.000000"}
+                  aria-describedby="late-rate-hint"
                   required
                 />
-                <p class="billing-field-hint">
+                <p class="field-hint" id="late-rate-hint">
                   {t("Daily late fee rate as a percentage.")}
                 </p>
               </div>
               <div class="billing-field">
-                <label for="late-grace">{t("Grace period (days)")}</label>
+                <label class="field-label" for="late-grace">
+                  {t("Grace period (days)")}
+                </label>
                 <input
                   id="late-grace"
                   name="graceDays"
                   type="number"
                   min="0"
                   value={lateFeePolicy?.graceDays ?? 0}
+                  aria-describedby="late-grace-hint"
                   required
                 />
-                <p class="billing-field-hint">
+                <p class="field-hint" id="late-grace-hint">
                   {t(
                     "Number of days after the due date before late fees apply."
                   )}
@@ -402,19 +429,22 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
 
             <div class="billing-field-row">
               <div class="billing-field">
-                <label for="late-cap">{t("Maximum total penalty (%)")}</label>
+                <label class="field-label" for="late-cap">
+                  {t("Maximum total penalty (%)")}
+                </label>
                 <input
                   id="late-cap"
                   name="maxPenaltyPercent"
                   inputmode="decimal"
                   value={lateFeePolicy?.maxPenaltyPercent ?? "10"}
+                  aria-describedby="late-cap-hint"
                   required
                 />
-                <p class="billing-field-hint">
+                <p class="field-hint" id="late-cap-hint">
                   {t("Maximum penalty as a percentage of eligible principal.")}
                 </p>
               </div>
-              <label class="checkbox-row">
+              <label class="check-row billing-check-row">
                 <input
                   type="checkbox"
                   name="stopsAtCap"
@@ -446,10 +476,10 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
       </div>
 
       <aside class="billing-sidebar">
-        <div class="billing-summary-card panel">
+        <div class="billing-summary-card box">
           <div class="billing-summary-head">
-            <span class="billing-summary-icon" aria-hidden="true">
-              <Icon name="chart-bar" size="lg" />
+            <span class="icon-tile" aria-hidden="true">
+              <Icon name="chart-bar" />
             </span>
             <div>
               <h2>{t("Billing summary")}</h2>
@@ -480,10 +510,14 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
           </dl>
         </div>
 
-        <div class="billing-tips panel">
+        <div class="billing-tips notice">
           <div class="billing-tips-head">
-            <span class="billing-info-icon" aria-hidden="true">
-              i
+            <span
+              class="icon-tile icon-tile-sm"
+              data-tone="info"
+              aria-hidden="true"
+            >
+              <Icon name="info-circle" />
             </span>
             <div>
               <h3>{t("Good to know")}</h3>
@@ -491,8 +525,12 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
             </div>
           </div>
           <div class="billing-tip">
-            <span class="billing-tip-icon" aria-hidden="true">
-              <Icon name="receipt-euro" size="lg" />
+            <span
+              class="icon-tile icon-tile-sm"
+              data-tone="info"
+              aria-hidden="true"
+            >
+              <Icon name="receipt-euro" />
             </span>
             <div>
               <p class="billing-tip-title">{t("Invoice numbering")}</p>
@@ -504,8 +542,12 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
             </div>
           </div>
           <div class="billing-tip">
-            <span class="billing-tip-icon" aria-hidden="true">
-              <Icon name="settings" size="lg" />
+            <span
+              class="icon-tile icon-tile-sm"
+              data-tone="info"
+              aria-hidden="true"
+            >
+              <Icon name="settings" />
             </span>
             <div>
               <p class="billing-tip-title">{t("Automation scope")}</p>
@@ -517,8 +559,12 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
             </div>
           </div>
           <div class="billing-tip">
-            <span class="billing-tip-icon" aria-hidden="true">
-              <Icon name="percentage" size="lg" />
+            <span
+              class="icon-tile icon-tile-sm"
+              data-tone="info"
+              aria-hidden="true"
+            >
+              <Icon name="percentage" />
             </span>
             <div>
               <p class="billing-tip-title">{t("Late-payment changes")}</p>
@@ -568,27 +614,10 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
   .billing-card {
     display: grid;
     gap: 1rem;
-    padding: 1.5rem;
-    box-shadow: var(--elevation-flat);
   }
   .billing-card-head {
     display: flex;
     gap: 0.75rem;
-  }
-  .billing-card-icon {
-    display: grid;
-    width: 2.5rem;
-    height: 2.5rem;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: var(--radius-panel);
-    corner-shape: squircle;
-    background: var(--tone-neutral-bg);
-    color: var(--color-foreground);
-  }
-  .billing-card-icon svg {
-    width: 1.25rem;
-    height: 1.25rem;
   }
   .billing-card-head h2 {
     font-size: var(--text-base);
@@ -604,22 +633,11 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1rem;
   }
-  .billing-field label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-size: var(--text-sm);
-    font-weight: 600;
-  }
   .billing-field input:not([type="checkbox"]):not([type="radio"]),
   .billing-field select {
     width: 100%;
     font: inherit;
     font-size: var(--text-sm);
-  }
-  .billing-field-hint {
-    margin-top: 0.5rem;
-    color: var(--color-muted);
-    font-size: var(--text-xs);
   }
   .billing-subfield {
     padding-left: 3.35rem;
@@ -653,18 +671,14 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
     color: var(--color-muted);
     font-size: var(--text-sm);
   }
-  .checkbox-row {
-    display: flex;
+  .billing-check-row {
     align-items: flex-start;
     gap: 0.75rem;
     padding-top: 1.6rem;
     cursor: pointer;
   }
-  .checkbox-row input {
-    margin-top: 0.25rem;
-    width: 1.05rem;
-    height: 1.05rem;
-    flex: 0 0 auto;
+  .billing-check-row input {
+    margin-top: 0.125rem;
   }
   .checkbox-row-title {
     display: block;
@@ -688,28 +702,9 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
     display: grid;
     gap: 1.25rem;
   }
-  .billing-summary-card {
-    padding: 1.5rem;
-    box-shadow: var(--elevation-flat);
-  }
   .billing-summary-head {
     display: flex;
     gap: 0.75rem;
-  }
-  .billing-summary-icon {
-    display: grid;
-    width: 2.5rem;
-    height: 2.5rem;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: var(--radius-panel);
-    corner-shape: squircle;
-    background: var(--tone-neutral-bg);
-    color: var(--color-foreground);
-  }
-  .billing-summary-icon svg {
-    width: 1.25rem;
-    height: 1.25rem;
   }
   .billing-summary-head h2 {
     font-size: var(--text-base);
@@ -740,25 +735,9 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
     font-size: var(--text-sm);
     font-weight: 600;
   }
-  .billing-tips {
-    padding: 1.25rem;
-  }
   .billing-tips-head {
     display: flex;
     gap: 0.75rem;
-  }
-  .billing-info-icon {
-    display: grid;
-    flex: 0 0 auto;
-    width: 1.75rem;
-    height: 1.75rem;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--tone-neutral-bg);
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-    font-weight: 700;
-    font-style: italic;
   }
   .billing-tips-head h3 {
     font-size: var(--text-sm);
@@ -766,7 +745,6 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
   }
   .billing-tips-head p {
     margin-top: 0.25rem;
-    color: var(--color-muted);
     font-size: var(--text-sm);
   }
   .billing-tip {
@@ -774,21 +752,7 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
     gap: 0.75rem;
     margin-top: 1rem;
     padding-top: 1rem;
-    border-top: 1px solid var(--color-border);
-  }
-  .billing-tip-icon {
-    display: grid;
-    flex: 0 0 auto;
-    width: 1.9rem;
-    height: 1.9rem;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--tone-neutral-bg);
-    color: var(--color-muted);
-  }
-  .billing-tip-icon svg {
-    width: 0.95rem;
-    height: 0.95rem;
+    border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent);
   }
   .billing-tip-title {
     font-size: var(--text-sm);
@@ -796,7 +760,6 @@ const localeOptions = [...new Set(["lv", "en", "ru", organization.locale])];
   }
   .billing-tip p:not(.billing-tip-title) {
     margin-top: 0.25rem;
-    color: var(--color-muted);
     font-size: var(--text-sm);
     line-height: 1.5;
   }

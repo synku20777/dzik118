@@ -1,0 +1,64 @@
+---
+import { translate, type Locale } from "../../lib/ui/i18n";
+
+interface Props {
+  action?: string;
+  dwellingId: string;
+  periodId: string;
+  meterId: string;
+  name: string;
+  unit: string;
+  helpId: string;
+  value?: string;
+  locale: Locale;
+}
+const {
+  action,
+  dwellingId,
+  periodId,
+  meterId,
+  name,
+  unit,
+  helpId,
+  value,
+  locale,
+} = Astro.props;
+const t = (message: string) => translate(locale, message);
+---
+
+<form
+  method={action ? "POST" : "dialog"}
+  action={action}
+  data-resident-reading
+  data-saving={t("Saving…")}
+  data-failed={t(
+    "The reading could not be saved. Check your connection and try again."
+  )}
+>
+  <input type="hidden" name="dwellingId" value={dwellingId} />
+  <input type="hidden" name="periodId" value={periodId} />
+  <input type="hidden" name="meterId" value={meterId} />
+  <label class="field-label" for={`reading-${meterId}`}>
+    {t("Number shown on the meter")} ({unit})
+  </label>
+  <div class="resident-reading-controls">
+    <input
+      id={`reading-${meterId}`}
+      name="currentValue"
+      type="text"
+      inputmode="decimal"
+      pattern="[0-9]{1,11}([.,][0-9]{1,3})?"
+      required
+      autocomplete="off"
+      value={value}
+      aria-describedby={helpId}
+    />
+    <button
+      type="submit"
+      class="btn-primary"
+      aria-label={`${t("Submit reading")}: ${name}`}
+    >
+      {t("Submit reading")}
+    </button>
+  </div>
+</form>

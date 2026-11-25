@@ -1,0 +1,16 @@
+---
+import ResidentDetails from "./ResidentDetails.astro";
+
+interface Props {
+  label: string;
+  description: string;
+  imageLabel: string;
+  svg: string;
+}
+const { label, description, imageLabel, svg } = Astro.props;
+---
+
+<ResidentDetails label={label}>
+  <p>{description}</p>
+  <div class="resident-qr" role="img" aria-label={imageLabel} set:html={svg} />
+</ResidentDetails>

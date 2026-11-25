@@ -80,7 +80,7 @@ const adminLinkError = errorCode === "6";
       <form
         method="POST"
         action="/api/v1/auth/request-link"
-        class="mt-4 space-y-3"
+        class="mt-4 space-y-4"
       >
         <div>
           <label class="field-label" for="resident-email">
@@ -93,7 +93,7 @@ const adminLinkError = errorCode === "6";
             type="email"
             required
             autocomplete="email"
-            class="mt-1 w-full text-sm"
+            class="mt-1 w-full"
           />
         </div>
         <button type="submit" class="btn-primary w-full">
@@ -110,12 +110,20 @@ const adminLinkError = errorCode === "6";
         </p>
       )}
       {adminError && (
-        <p class="notice notice-danger mt-4" role="alert">
+        <p
+          id="admin-login-error"
+          class="notice notice-danger mt-4"
+          role="alert"
+        >
           {t("Incorrect email or password.")}
         </p>
       )}
       {unexpectedError && (
-        <p class="notice notice-danger mt-4" role="alert">
+        <p
+          id="admin-login-error"
+          class="notice notice-danger mt-4"
+          role="alert"
+        >
           {t("Something went wrong. Please try again.")}
         </p>
       )}
@@ -123,7 +131,7 @@ const adminLinkError = errorCode === "6";
         id="admin-login-form"
         method="POST"
         action="/api/v1/auth/admin-login"
-        class="mt-4 space-y-3"
+        class="mt-4 space-y-4"
       >
         <div>
           <label class="field-label" for="admin-email">
@@ -136,7 +144,11 @@ const adminLinkError = errorCode === "6";
             type="email"
             required
             autocomplete="email"
-            class="mt-1 w-full text-sm"
+            aria-describedby={
+              adminError || unexpectedError ? "admin-login-error" : undefined
+            }
+            aria-invalid={adminError ? "true" : undefined}
+            class="mt-1 w-full"
           />
         </div>
         <div>
@@ -149,14 +161,18 @@ const adminLinkError = errorCode === "6";
             type="password"
             required
             autocomplete="current-password"
-            class="mt-1 w-full text-sm"
+            aria-describedby={
+              adminError || unexpectedError ? "admin-login-error" : undefined
+            }
+            aria-invalid={adminError ? "true" : undefined}
+            class="mt-1 w-full"
           />
         </div>
         <button type="submit" class="btn-primary w-full">
           {t("Sign in")}
         </button>
         <p class="text-center text-sm">
-          <a href="/forgot-password" class="text-muted hover:underline">
+          <a href="/forgot-password" class="link link-ghost">
             {t("Forgot password?")}
           </a>
         </p>

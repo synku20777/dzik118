@@ -57,7 +57,7 @@ const { previousHref, nextHref } = resolvePaginationLinks({
 ---
 
 <AdminLayout
-  title={`Periods - ${organization.name}`}
+  title={`${t("Periods")} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[{ label: t("Periods") }]}
@@ -128,13 +128,13 @@ const { previousHref, nextHref } = resolvePaginationLinks({
               <td class="px-4 py-2 font-medium">
                 <a
                   href={`/admin/o/${organizationId}/periods/${p.id}`}
-                  class="row-link-target hover:underline"
+                  class="row-link-target link link-ghost"
                 >
                   {formatPeriod(p.year, p.month, locale)}
                 </a>
               </td>
               <td class="px-4 py-2">
-                {formatDate(p.startsOn, locale)} →{" "}
+                {formatDate(p.startsOn, locale)} –{" "}
                 {formatDate(p.endsOn, locale)}
               </td>
               <td class="px-4 py-2">{formatDate(p.readingDeadline, locale)}</td>

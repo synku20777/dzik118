@@ -20,8 +20,8 @@ const ordered = [...organizations].sort(
 ---
 
 <details class="organization-switcher dropdown" name="organization-switcher">
-  <summary class="organization-trigger">
-    <span class="organization-symbol">
+  <summary class="organization-trigger btn-secondary">
+    <span class="icon-tile icon-tile-sm" data-tone="info" aria-hidden="true">
       <Icon name="building" size="sm" />
     </span>
     <span class="organization-name">
@@ -90,39 +90,23 @@ const ordered = [...organizations].sort(
     position: relative;
     margin: 1.5rem 0 1rem;
   }
+  /* A dropdown trigger: a secondary button (global.css gives its border,
+     hover ring and pressed fill) laid out as tile, name and chevron. */
   .organization-trigger {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
+    justify-content: stretch;
     gap: 0.625rem;
+    width: 100%;
     min-height: 3.5rem;
     padding: 0.625rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-control);
-    background: var(--color-surface);
-    color: var(--color-foreground);
+    text-align: left;
     cursor: pointer;
     list-style: none;
   }
   .organization-trigger::-webkit-details-marker {
     display: none;
-  }
-  .organization-trigger:hover,
-  .organization-switcher[open] > .organization-trigger {
-    background: var(--color-hover);
-  }
-  .organization-trigger:focus-visible {
-    outline: 2px solid var(--color-focus-ring);
-    outline-offset: 3px;
-  }
-  .organization-symbol {
-    display: grid;
-    place-items: center;
-    width: 2rem;
-    height: 2rem;
-    border-radius: var(--radius-control);
-    background: var(--color-nav-active-bg);
-    color: var(--color-primary);
   }
   .organization-name {
     font-size: var(--text-sm);
@@ -177,14 +161,6 @@ const ordered = [...organizations].sort(
   /* Motion answers the person's action: the trigger sinks when pressed, the
      chevron turns, and the menu eases in as it opens. */
   @media (prefers-reduced-motion: no-preference) {
-    .organization-trigger {
-      transition:
-        background-color var(--duration-fast) ease,
-        transform var(--duration-feedback) var(--ease-standard);
-    }
-    .organization-trigger:active {
-      transform: scale(0.985);
-    }
     .organization-chevron {
       transition: transform var(--duration-panel) var(--ease-standard);
     }

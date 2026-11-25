@@ -11,6 +11,7 @@ import {
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../../../layouts/AdminLayout.astro";
+import PageHeader from "../../../../../../../components/ui/PageHeader.astro";
 import { actions } from "astro:actions";
 import { getOrganization } from "../../../../../../../domain/organizations/organizations";
 import { getDwelling } from "../../../../../../../domain/organizations/dwellings";
@@ -47,7 +48,7 @@ try {
 ---
 
 <AdminLayout
-  title={`${dwelling.number} readings - ${organization.name}`}
+  title={`${t("Dwelling")} ${dwelling.number}: ${t("Readings")} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[
@@ -60,16 +61,16 @@ try {
   ]}
 >
   <div class="space-y-6">
-    <h1 class="text-h2 text-foreground">
-      {t("Dwelling")} {dwelling.number}: {t("Readings")}
-    </h1>
+    <PageHeader
+      title={`${t("Dwelling")} ${dwelling.number}: ${t("Readings")}`}
+    />
     {submitResult?.error && (
       <p class="notice notice-danger" role="alert">
         {friendlyActionErrorMessage(submitResult.error, locale)}
       </p>
     )}
     {period.status === "LOCKED" && (
-      <p class="rounded-control bg-canvas p-3 text-body-sm text-foreground">
+      <p class="notice">
         {t("This period is locked; readings can no longer be edited.")}
       </p>
     )}
@@ -88,8 +89,9 @@ try {
             </h2>
             {m.currentValue !== null && (
               <p class="mt-2 text-body-sm text-muted">
-                Previous: {m.previousValue ?? "—"} · Current: {m.currentValue} ·
-                Consumption: {m.consumption} ({m.source})
+                {t("Previous reading")}: {m.previousValue ?? "—"} ·{" "}
+                {t("Current reading")}: {m.currentValue} · {t("Consumption")}:{" "}
+                {m.consumption} ({m.source})
               </p>
             )}
             {period.status === "OPEN" && (
@@ -126,7 +128,7 @@ try {
                     {t("Confirm even if lower than previous")}
                   </label>
                 )}
-                <button type="submit" class="btn-primary">
+                <button type="submit" class="btn-secondary">
                   {t("Save")}
                 </button>
               </form>

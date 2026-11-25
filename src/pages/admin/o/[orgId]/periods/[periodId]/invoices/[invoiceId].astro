@@ -1,4 +1,6 @@
 ---
+import InvoiceDeliveryHistory from "../../../../../../../components/ui/InvoiceDeliveryHistory.astro";
+import InvoicePreviewFrame from "../../../../../../../components/ui/InvoicePreviewFrame.astro";
 import Icon from "../../../../../../../components/ui/Icon.astro";
 // Phase F (Billing) - invoice detail (spec Section 9.2, INV-001/003/004).
 // Renders through the same renderInvoiceHtml() the PDF and the public
@@ -207,15 +209,13 @@ const overrideStatuses: string[] = [
   ]}
 >
   <div class="space-y-6">
-    <div class="flex flex-wrap items-start justify-between gap-4">
+    <header class="page-header items-start">
       <div>
         <div class="flex flex-wrap items-center gap-2">
-          <h1 class="text-xl font-bold text-foreground">
-            {invoice.invoiceNumber}
-          </h1>
+          <h1>{invoice.invoiceNumber}</h1>
           <StatusBadge status={caseStatus} />
         </div>
-        <p class="mt-2 text-sm text-muted">
+        <p class="page-description">
           {t("Amount due")}:{" "}
           <strong class="text-lg text-foreground">
             {formatMoney(invoice.amountDue, invoice.currency, locale)}
@@ -380,7 +380,7 @@ const overrideStatuses: string[] = [
           </div>
         )}
       </div>
-    </div>
+    </header>
     {(prepareResult?.error ||
       sendResult?.error ||
       resendResult?.error ||
@@ -470,7 +470,7 @@ const overrideStatuses: string[] = [
                 "Recipient information is incomplete. Add a billing name or occupant name and billing address."
               )}{" "}
               <a
-                class="font-semibold underline"
+                class="link link-underlined font-semibold text-inherit"
                 href={
                   "/admin/o/" +
                   organizationId +
@@ -488,7 +488,7 @@ const overrideStatuses: string[] = [
                 "Issuer or payment information is incomplete. Add the organization name, address, bank name and IBAN."
               )}{" "}
               <a
-                class="font-semibold underline"
+                class="link link-underlined font-semibold text-inherit"
                 href={"/admin/o/" + organizationId + "/settings/organization"}
               >
                 {t("Fix organization details")}
@@ -518,7 +518,7 @@ const overrideStatuses: string[] = [
           <p>
             {hasConfirmedEmailDelivery
               ? t(
-                  "This invoice was delivered by email previously. A later attempt's outcome could not be confirmed -- verify the recipient mailbox or provider logs before resending."
+                  "This invoice was delivered by email previously. A later attempt's outcome could not be confirmed — verify the recipient mailbox or provider logs before resending."
                 )
               : t(
                   "Delivery outcome could not be confirmed. The email provider may have accepted this invoice, but the application did not receive confirmation. Verify the recipient mailbox or provider logs before resending."
@@ -562,7 +562,7 @@ const overrideStatuses: string[] = [
         <div class="notice notice-warning" role="alert">
           <p>
             {t(
-              "This invoice was delivered by email previously. The most recent resend failed -- use Resend to try again."
+              "This invoice was delivered by email previously. The most recent resend failed — use Resend to try again."
             )}
           </p>
         </div>
@@ -778,87 +778,13 @@ const overrideStatuses: string[] = [
         </button>
       </form>
     </div>
-    <div class="invoice-preview-frame-wrap">
-      <iframe
-        class="invoice-preview-frame"
-        title={t("Invoice")}
-        srcdoc={invoiceHtml}
-      ></iframe>
-    </div>
+    <InvoicePreviewFrame title={t("Invoice")} html={invoiceHtml} />
 
-    {deliveries.length > 0 && (
-      <section>
-        <h2 class="section-title mb-3">{t("Delivery history")}</h2>
-        <div class="table-wrap stack-table">
-          <table class="w-full text-left text-sm">
-            <caption class="sr-only">{t("Delivery history")}</caption>
-            <thead class="border-b border-border bg-surface-hover text-muted">
-              <tr>
-                <th scope="col" class="px-4 py-2">
-                  {t("When")}
-                </th>
-                <th scope="col" class="px-4 py-2">
-                  {t("Method")}
-                </th>
-                <th scope="col" class="px-4 py-2">
-                  {t("To")}
-                </th>
-                <th scope="col" class="px-4 py-2">
-                  {t("Status")}
-                </th>
-                <th scope="col" class="px-4 py-2">
-                  {t("Error")}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              {deliveries.map((d) => (
-                <tr>
-                  <td class="px-4 py-2">
-                    {formatDate(d.createdAt, locale, organization.timezone)}
-                  </td>
-                  <td class="px-4 py-2">
-                    {d.method === "PAPER" ? t("Paper") : t("Email")}
-                  </td>
-                  <td class="px-4 py-2">{d.destinationEmail ?? "—"}</td>
-                  <td class="px-4 py-2">
-                    {d.status === "SENT" ? (
-                      d.method === "PAPER" && !d.isInitialPaperDispatch ? (
-                        <span
-                          class="text-muted"
-                          data-tip={t(
-                            "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch."
-                          )}
-                        >
-                          {t("Paper (unverified legacy record)")}
-                          <span class="sr-only">
-                            {" "}
-                            {t(
-                              "Recorded automatically under the old delivery workflow -- not a confirmed manual physical dispatch."
-                            )}
-                          </span>
-                        </span>
-                      ) : (
-                        <span class="text-success">
-                          {d.method === "PAPER"
-                            ? t("Paper dispatched")
-                            : t("Sent")}
-                        </span>
-                      )
-                    ) : d.status === "UNKNOWN" ? (
-                      <span class="text-warning">{t("Needs attention")}</span>
-                    ) : (
-                      <span class="text-destructive">{t("Failed")}</span>
-                    )}
-                  </td>
-                  <td class="px-4 py-2 text-muted">{d.errorCode ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    )}
+    <InvoiceDeliveryHistory
+      deliveries={deliveries}
+      locale={locale}
+      timezone={organization.timezone}
+    />
 
     <section class="panel p-4" aria-labelledby="override-status">
       <h2 id="override-status" class="section-title">

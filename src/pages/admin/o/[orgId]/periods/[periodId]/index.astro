@@ -2,10 +2,17 @@
 // Monthly billing workbench. Domain actions remain the workflow authority;
 // this page only makes their state and eligibility easier to understand.
 import { actions } from "astro:actions";
+import WorkbenchReadiness from "../../../../../../components/ui/WorkbenchReadiness.astro";
+import type { WorkbenchProblem } from "../../../../../../lib/ui/workbench-problem";
+import WorkbenchSearch from "../../../../../../components/ui/WorkbenchSearch.astro";
+import WorkbenchBulkToolbar from "../../../../../../components/ui/WorkbenchBulkToolbar.astro";
+import WorkbenchBulkOutcome from "../../../../../../components/ui/WorkbenchBulkOutcome.astro";
 import AdminContextDrawer from "../../../../../../components/ui/AdminContextDrawer.astro";
 import StatusBadge from "../../../../../../components/ui/StatusBadge.astro";
 import Icon from "../../../../../../components/ui/Icon.astro";
 import AdminLayout from "../../../../../../layouts/AdminLayout.astro";
+import LockDialog from "../../../../../../components/ui/LockDialog.astro";
+import "../../../../../../styles/workbench.css";
 import { getOrganization } from "../../../../../../domain/organizations/organizations";
 import {
   listRuleAssignmentsWithDwellingNumbers,
@@ -35,11 +42,10 @@ import {
   formatMoney,
   formatPeriod,
   friendlyActionErrorMessage,
-  plural,
   translate,
   uiLocale,
+  workbenchSelectionCopy,
 } from "../../../../../../lib/ui/i18n";
-import { skipReasonsText } from "../../../../../../lib/ui/skip-reason";
 
 type CaseStatus = (typeof billingCaseStatusEnum.enumValues)[number];
 type Snapshot = Record<string, string | null>;
@@ -246,23 +252,6 @@ function filterHref(status?: CaseStatus) {
   const query = params.toString();
   return query ? `${workbenchPath}?${query}` : workbenchPath;
 }
-// A case's problems share one line under its status: this many are named,
-// then "+N" (never cut off) opens the drawer that lists them all.
-const MAX_PROBLEMS = 2;
-type Problem = {
-  text: string;
-  tone: "danger" | "warning";
-  href?: string;
-  drawer?: "readings" | "billing-details";
-  focus?: string;
-  // A name told apart by its end (a meter serial): cut in the middle,
-  // keeping this many trailing digits.
-  keepEnd?: number;
-  // Fixed only outside the drawer (tariffs, meters): listed first.
-  config?: boolean;
-  // Guidance too long for the line: tooltip and screen readers.
-  detail?: string;
-};
 // Apple's rule for names that differ at the end: keep the tail visible.
 const KEEP_END = 6;
 // A name ending in a number (a meter serial) is told apart by its end: keep
@@ -274,9 +263,6 @@ const serialLike = (text: string) => {
     ? Math.min(KEEP_END, digits)
     : 0;
 };
-// Narrowest an item may get: 4ch, or a serial's kept digits plus an ellipsis.
-const itemMinCh = (problem: Problem) =>
-  problem.keepEnd ? problem.keepEnd + 2 : 4;
 const dayMonth = (value: string) =>
   new Intl.DateTimeFormat(locale, {
     day: "numeric",
@@ -294,7 +280,10 @@ const dayMonth = (value: string) =>
     { label: periodName },
   ]}
 >
-  <div class="workbench">
+  <div
+    class="workbench"
+    data-selection-copy={JSON.stringify(workbenchSelectionCopy(locale))}
+  >
     <AdminContextDrawer
       organizationId={organizationId}
       periodId={periodId}
@@ -316,9 +305,13 @@ const dayMonth = (value: string) =>
       <div class="period-actions">
         {/* A period with no neighbour gets no placeholder button. */}
         {(previousPeriod || nextPeriod) && (
-          <nav class="period-navigation" aria-label={t("Period navigation")}>
+          <nav
+            class="btn-group period-nav period-navigation"
+            aria-label={t("Period navigation")}
+          >
             {previousPeriod && (
               <a
+                class="btn-secondary"
                 href={`/admin/o/${organizationId}/periods/${previousPeriod.id}`}
               >
                 <Icon name="arrow-left" size="xs" />
@@ -331,7 +324,10 @@ const dayMonth = (value: string) =>
               </a>
             )}
             {nextPeriod && (
-              <a href={`/admin/o/${organizationId}/periods/${nextPeriod.id}`}>
+              <a
+                class="btn-secondary"
+                href={`/admin/o/${organizationId}/periods/${nextPeriod.id}`}
+              >
                 <span class="sr-only">{t("Next period")}: </span>
                 {formatPeriod(nextPeriod.year, nextPeriod.month, locale)}
                 <Icon name="arrow-right" size="xs" />
@@ -365,12 +361,16 @@ const dayMonth = (value: string) =>
                 </button>
               </form>
             )}
-            <details class="more-menu">
+            <details class="more-menu" data-dismiss>
               <summary class="icon-btn" aria-label={t("More actions")}>
                 <Icon name="dots" size="sm" />
               </summary>
               <div>
-                <button type="button" data-open-lock-dialog>
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  data-open-lock-dialog="lock-period-dialog"
+                >
                   {t("Lock period")}
                 </button>
               </div>
@@ -381,40 +381,23 @@ const dayMonth = (value: string) =>
     </header>
 
     {period.status === "OPEN" && (
-      <dialog
-        class="lock-dialog"
+      <LockDialog
         id="lock-period-dialog"
-        aria-labelledby="lock-dialog-title"
-        aria-describedby="lock-dialog-description"
+        title={t("Lock this period?")}
+        description={t(
+          "Locking this period prevents normal reading edits and invoice regeneration. Historical data will remain available."
+        )}
+        cancelLabel={t("Cancel")}
       >
-        <div class="dialog-body">
-          <div class="dialog-icon" aria-hidden="true">
-            <Icon name="alert-triangle" size="sm" />
-          </div>
-          <div>
-            <h2 id="lock-dialog-title">{t("Lock this period?")}</h2>
-            <p id="lock-dialog-description">
-              {t(
-                "Locking this period prevents normal reading edits and invoice regeneration. Historical data will remain available."
-              )}
-            </p>
-          </div>
-        </div>
-        <div class="dialog-actions">
-          <form method="dialog">
-            <button class="btn-secondary" value="cancel">
-              {t("Cancel")}
-            </button>
-          </form>
-          <form method="POST" action={actions.periods.lock}>
-            <input type="hidden" name="organizationId" value={organizationId} />
-            <input type="hidden" name="periodId" value={periodId} />
-            <button type="submit" class="btn-danger">
-              {t("Lock period")}
-            </button>
-          </form>
-        </div>
-      </dialog>
+        <Icon slot="icon" name="alert-triangle" size="sm" />
+        <form method="POST" action={actions.periods.lock}>
+          <input type="hidden" name="organizationId" value={organizationId} />
+          <input type="hidden" name="periodId" value={periodId} />
+          <button type="submit" class="btn-primary">
+            {t("Lock period")}
+          </button>
+        </form>
+      </LockDialog>
     )}
 
     {period.status === "LOCKED" && (
@@ -483,45 +466,21 @@ const dayMonth = (value: string) =>
       </p>
     )}
     {bulkOutcome && (
-      <p class="notice" role="status">
-        {bulkOutcome.count} {t(bulkOutcome.label)}.
-        {bulkOutcome.skippedCount > 0 && (
-          <>
-            {" "}
-            {bulkOutcome.skippedCount} {t("skipped")}:{" "}
-            {skipReasonsText(
-              bulkOutcome.skipReasons.map((reason) => ({ reason })),
-              locale
-            )}
-          </>
-        )}
-      </p>
+      <WorkbenchBulkOutcome locale={locale} outcome={bulkOutcome} />
     )}
 
+    <p
+      id="bulk-selection-status"
+      class="sr-only"
+      aria-live="polite"
+      aria-atomic="true"
+    ></p>
     <section class="case-queue" aria-labelledby="queue-heading">
-      <div class="queue-heading">
-        <h2 id="queue-heading">{t("Billing cases")}</h2>
-        {/* One field: Enter submits. The active stage is kept. */}
-        <form method="GET" class="queue-filters" role="search">
-          {statusFilter && (
-            <input type="hidden" name="status" value={statusFilter} />
-          )}
-          <div class="queue-search input-icon">
-            <Icon name="search" size="sm" />
-            <label class="sr-only" for="search">
-              {t("Search dwelling")}
-            </label>
-            <input
-              id="search"
-              name="search"
-              type="search"
-              value={search ?? ""}
-              placeholder={t("Search dwelling…")}
-              autocomplete="off"
-            />
-          </div>
-        </form>
-      </div>
+      <WorkbenchSearch
+        locale={locale}
+        search={search}
+        statusFilter={statusFilter}
+      />
 
       <nav class="workflow-rail" aria-label={t("Filter by workflow stage")}>
         {workflowFilters.map(([status, label, description]) => (
@@ -552,7 +511,7 @@ const dayMonth = (value: string) =>
             })}
             {statusFilter === "UNSENT" && <> · {t("Unsent invoices")}</>}
           </span>
-          <a href={workbenchPath} class="clear-filters">
+          <a href={workbenchPath} class="btn-ghost btn-sm clear-filters">
             {t("Clear filters")}
           </a>
         </p>
@@ -567,50 +526,34 @@ const dayMonth = (value: string) =>
         value={organizationId}
         form="bulk-select-form"
       />
-      <div id="bulk-toolbar" class="bulk-toolbar" hidden aria-live="polite">
-        <div class="selection-summary">
-          <strong>
-            <span id="selected-count">0</span> {t("selected")}
-          </strong>
-          <span>
-            <span id="prepare-count">0</span> {t("eligible to prepare")}
-          </span>
-          <span>
-            <span id="send-count">0</span> {t("eligible to send")}
-          </span>
-        </div>
-        <div class="bulk-actions">
-          <button
-            type="submit"
-            form="bulk-select-form"
-            formaction={actions.billing.bulkPrepare}
-            data-bulk-status="DRAFT"
-            class="btn-secondary"
-            disabled
-          >
-            {t("Prepare eligible")}
-          </button>
-          <button
-            type="submit"
-            form="bulk-select-form"
-            formaction={actions.invoices.bulkSend}
-            data-bulk-status="PREPARED"
-            data-confirm={t(
-              "Send all selected invoices to residents by email now? Sent invoices cannot be edited."
-            )}
-            class="btn-primary"
-            disabled
-          >
-            {t("Send eligible")}
-          </button>
-          <button type="button" id="clear-selection" class="clear-selection">
-            {t("Clear selection")}
-          </button>
-        </div>
-      </div>
+      <WorkbenchBulkToolbar locale={locale}>
+        <button
+          type="submit"
+          form="bulk-select-form"
+          formaction={actions.billing.bulkPrepare}
+          data-bulk-status="DRAFT"
+          class="btn-secondary"
+          disabled
+        >
+          {t("Prepare eligible")}
+        </button>
+        <button
+          type="submit"
+          form="bulk-select-form"
+          formaction={actions.invoices.bulkSend}
+          data-bulk-status="PREPARED"
+          data-confirm={t(
+            "Send all selected invoices to residents by email now? Sent invoices cannot be edited."
+          )}
+          class="btn-primary"
+          disabled
+        >
+          {t("Send eligible")}
+        </button>
+      </WorkbenchBulkToolbar>
 
       <div class="table-wrap case-table-wrap">
-        <table class="case-table" role="table">
+        <table class="case-table table-compact" role="table">
           <caption class="sr-only">{t("Billing cases")}</caption>
           <thead>
             <tr>
@@ -755,7 +698,7 @@ const dayMonth = (value: string) =>
               const dwellingHref = `/admin/o/${organizationId}/dwellings/${billingCase.dwellingId}`;
               // Everything that needs work on this case, most urgent first,
               // shown as one line under the status (see the status cell).
-              const problems: Problem[] = [];
+              const problems: WorkbenchProblem[] = [];
               if (overdue?.dueDate && overdue.overdueAmount)
                 problems.push({
                   text: `${t("Still unpaid")} ${formatMoney(overdue.overdueAmount, organization.currency, locale)} · ${fill(t("Due {date}"), { date: dayMonth(overdue.dueDate) })}`,
@@ -864,8 +807,6 @@ const dayMonth = (value: string) =>
                 ...problems.filter((p) => p.config),
                 ...problems.filter((p) => !p.config),
               ];
-              const shownProblems = ordered.slice(0, MAX_PROBLEMS);
-              const hiddenProblems = ordered.slice(MAX_PROBLEMS);
 
               return (
                 <tr
@@ -895,7 +836,9 @@ const dayMonth = (value: string) =>
                       )}
                   </td>
                   <td class="dwelling-cell">
-                    <a href={readingsHref}>{billingCase.dwellingNumber}</a>
+                    <a href={readingsHref} class="link link-ghost">
+                      {billingCase.dwellingNumber}
+                    </a>
                     {/* Paper delivery is a setting of the dwelling, not a
                         problem: it sits with the name. */}
                     {(billingCase.occupantName || invoiceByPaper) && (
@@ -924,149 +867,12 @@ const dayMonth = (value: string) =>
                         {t(invoiceStatusBadge(billingCase.status).label)}
                       </span>
                     )}
-                    {/* One line, never a stack: the last named problem is cut
-                        at its end, a serial-like name in its middle. "+N" sits
-                        outside the clipped part, so it is never cut, and opens
-                        a menu with every hidden problem and its own link. Full
-                        text is always in the DOM for screen readers. */}
-                    {problems.length > 0 && (
-                      <div class="readiness-line" data-tone={problems[0].tone}>
-                        <span class="readiness-icon" aria-hidden="true">
-                          <Icon name="alert-triangle" size="xs" />
-                        </span>
-                        <span
-                          class="readiness-items"
-                          style={`--items-min:${shownProblems.reduce(
-                            (sum, problem) => sum + itemMinCh(problem),
-                            // A separator and its two gaps.
-                            (shownProblems.length - 1) * 3
-                          )}ch`}
-                        >
-                          {shownProblems.map((problem, index) => {
-                            const Tag = problem.href
-                              ? "a"
-                              : problem.drawer
-                                ? "button"
-                                : "span";
-                            const cut = Boolean(problem.keepEnd);
-                            return (
-                              <>
-                                {index > 0 && (
-                                  <span
-                                    class="readiness-separator"
-                                    aria-hidden="true"
-                                  >
-                                    ·
-                                  </span>
-                                )}
-                                <Tag
-                                  class="readiness-item"
-                                  data-tone={problem.tone}
-                                  data-last={
-                                    index === shownProblems.length - 1
-                                      ? ""
-                                      : undefined
-                                  }
-                                  href={problem.href}
-                                  type={problem.drawer ? "button" : undefined}
-                                  data-open-drawer={problem.drawer}
-                                  data-dwelling-id={
-                                    problem.drawer
-                                      ? billingCase.dwellingId
-                                      : undefined
-                                  }
-                                  data-focus={problem.focus}
-                                  style={
-                                    cut
-                                      ? `min-width:${itemMinCh(problem)}ch`
-                                      : undefined
-                                  }
-                                  data-tip={problem.detail ?? problem.text}
-                                  data-tip-clipped={
-                                    problem.detail ? undefined : ""
-                                  }
-                                >
-                                  {cut ? (
-                                    <span class="mid-truncate">
-                                      <span class="mid-start">
-                                        {problem.text.slice(
-                                          0,
-                                          -problem.keepEnd!
-                                        )}
-                                      </span>
-                                      <span class="mid-end">
-                                        {problem.text.slice(-problem.keepEnd!)}
-                                      </span>
-                                    </span>
-                                  ) : (
-                                    problem.text
-                                  )}
-                                  {problem.detail && (
-                                    <span class="sr-only">
-                                      {" "}
-                                      {problem.detail}
-                                    </span>
-                                  )}
-                                </Tag>
-                              </>
-                            );
-                          })}
-                        </span>
-                        {hiddenProblems.length > 0 && (
-                          <>
-                            <button
-                              type="button"
-                              class="readiness-more"
-                              popovertarget={`problems-${billingCase.id}`}
-                              aria-label={plural(
-                                locale,
-                                hiddenProblems.length,
-                                "{n} more problem",
-                                "{n} more problems"
-                              )}
-                            >
-                              +{hiddenProblems.length}
-                            </button>
-                            <div
-                              class="case-menu"
-                              id={`problems-${billingCase.id}`}
-                              popover="auto"
-                            >
-                              {hiddenProblems.map((problem) => {
-                                const Tag = problem.href
-                                  ? "a"
-                                  : problem.drawer
-                                    ? "button"
-                                    : "span";
-                                return (
-                                  <Tag
-                                    class="problem-menu-item"
-                                    data-tone={problem.tone}
-                                    href={problem.href}
-                                    type={problem.drawer ? "button" : undefined}
-                                    data-open-drawer={problem.drawer}
-                                    data-dwelling-id={
-                                      problem.drawer
-                                        ? billingCase.dwellingId
-                                        : undefined
-                                    }
-                                    data-focus={problem.focus}
-                                  >
-                                    {problem.text}
-                                    {problem.detail && (
-                                      <span class="sr-only">
-                                        {" "}
-                                        {problem.detail}
-                                      </span>
-                                    )}
-                                  </Tag>
-                                );
-                              })}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
+                    <WorkbenchReadiness
+                      caseId={billingCase.id}
+                      dwellingId={billingCase.dwellingId}
+                      problems={ordered}
+                      locale={locale}
+                    />
                   </td>
                   <td class="invoice-cell numeric-column">
                     {invoiceHref ? (
@@ -1329,14 +1135,14 @@ const dayMonth = (value: string) =>
       {!period.openingReadings &&
         period.status === "OPEN" &&
         dwellingsWithoutCase.length > 0 && (
-          <details id="add-dwelling" class="period-resource">
-            <summary class="chevron-toggle chevron-toggle-end font-semibold">
+          <details id="add-dwelling" class="disclosure">
+            <summary>
               {t("Dwellings not in this period")}
               <span class="ml-2 font-normal text-muted">
                 {dwellingsWithoutCase.length}
               </span>
             </summary>
-            <p class="text-body-sm mt-2 text-muted">
+            <p class="text-body-sm text-muted">
               {t(
                 "These dwellings have no billing case in this period, so they get no invoice for it. Add a dwelling to bill it for this period. The invoice uses the issue and due dates of this period."
               )}
@@ -1353,7 +1159,7 @@ const dayMonth = (value: string) =>
               />
               <input type="hidden" name="periodId" value={periodId} />
               <label class="text-body-sm">
-                <span class="block font-medium">{t("Dwelling")}</span>
+                <span class="field-label">{t("Dwelling")}</span>
                 <select name="dwellingId" required class="mt-1">
                   {dwellingsWithoutCase.map((dwelling) => (
                     <option value={dwelling.id}>{dwelling.number}</option>
@@ -1367,18 +1173,18 @@ const dayMonth = (value: string) =>
           </details>
         )}
 
-      <details id="period-tariffs" class="period-resource">
-        <summary class="chevron-toggle chevron-toggle-end font-semibold">
+      <details id="period-tariffs" class="disclosure">
+        <summary>
           {t("Tariffs in this period")}
           <span class="ml-2 font-normal text-muted">
             {t("Applying:")} {applyingTariffs} / {tariffRows.length}
           </span>
         </summary>
-        <p class="text-body-sm mt-2 text-muted">
+        <p class="text-body-sm text-muted">
           {t(
             "A tariff applies when its effective dates overlap the period. To bill an earlier period, give the tariff an earlier Effective from date."
           )}{" "}
-          <a class="underline" href={rulesPath}>
+          <a class="link link-underlined" href={rulesPath}>
             {t("Edit tariffs")}
           </a>
         </p>
@@ -1390,13 +1196,19 @@ const dayMonth = (value: string) =>
               <li class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2">
                 <span class="min-w-0">
                   <a
-                    class="font-medium underline"
+                    class="link link-underlined font-medium"
                     href={`${rulesPath}?edit=${rule.id}`}
                   >
                     {rule.name}
                   </a>
                   <span class="text-body-sm block text-muted">
-                    {rule.effectiveFrom} → {rule.effectiveUntil ?? t("ongoing")}
+                    {rule.effectiveFrom}
+                    <Icon
+                      name="arrow-right"
+                      size="xs"
+                      class="inline-block align-middle"
+                    />
+                    {rule.effectiveUntil ?? t("ongoing")}
                   </span>
                 </span>
                 <span
@@ -1417,122 +1229,16 @@ const dayMonth = (value: string) =>
 
 <script>
   import { onPageLoad } from "../../../../../../lib/ui/page-lifecycle";
+  import { initWorkbenchSelection } from "../../../../../../lib/ui/workbench-selection";
+  import { initCaseMenus } from "../../../../../../lib/ui/case-menu";
 
   onPageLoad(() => {
-    if (!document.querySelector(".workbench")) return;
+    const root = document.querySelector<HTMLElement>(".workbench");
+    if (!root) return;
     const controller = new AbortController();
     const options = { signal: controller.signal };
-    const boxes = () => [
-      ...document.querySelectorAll<HTMLInputElement>(
-        'input[name="invoiceIds"]'
-      ),
-    ];
-    const setToolbarSpace = (space: string) => {
-      document.documentElement.style.scrollPaddingBottom = space;
-      document
-        .querySelector<HTMLElement>(".workbench")
-        ?.style.setProperty("padding-bottom", space);
-    };
-    controller.signal.addEventListener("abort", () => setToolbarSpace(""));
-    // A bulk action submits only the selected invoices it can act on, so a
-    // blocked one in the selection is not sent to the server to be skipped.
-    // Capture listeners: the queue is re-rendered after saves, and formdata
-    // does not bubble.
-    let bulkStatus = "";
-    document.addEventListener(
-      "submit",
-      (event) => {
-        if ((event.target as Element).id !== "bulk-select-form") return;
-        bulkStatus =
-          (event.submitter as HTMLElement | null)?.dataset.bulkStatus ?? "";
-      },
-      { ...options, capture: true }
-    );
-    document.addEventListener(
-      "formdata",
-      (event) => {
-        if ((event.target as Element).id !== "bulk-select-form" || !bulkStatus)
-          return;
-        const eligible =
-          bulkStatus === "DRAFT" ? "prepareEligible" : "sendEligible";
-        event.formData.delete("invoiceIds");
-        for (const box of boxes())
-          if (box.checked && box.dataset[eligible] === "true")
-            event.formData.append("invoiceIds", box.value);
-      },
-      { ...options, capture: true }
-    );
-    const updateSelection = () => {
-      const all = boxes();
-      const selected = all.filter((box) => box.checked);
-      const prepareEligible = selected.filter(
-        (box) => box.dataset.prepareEligible === "true"
-      ).length;
-      const sendEligible = selected.filter(
-        (box) => box.dataset.sendEligible === "true"
-      ).length;
-      const toolbar = document.querySelector<HTMLElement>("#bulk-toolbar");
-      if (toolbar) toolbar.hidden = selected.length === 0;
-      for (const [id, value] of [
-        ["selected-count", selected.length],
-        ["prepare-count", prepareEligible],
-        ["send-count", sendEligible],
-      ] as const) {
-        const el = document.getElementById(id);
-        if (el) el.textContent = String(value);
-      }
-      document
-        .querySelectorAll<HTMLButtonElement>("[data-bulk-status]")
-        .forEach((button) => {
-          button.disabled =
-            button.dataset.bulkStatus === "DRAFT"
-              ? prepareEligible === 0
-              : sendEligible === 0;
-        });
-      all.forEach((box) =>
-        box.closest("tr")?.toggleAttribute("data-selected", box.checked)
-      );
-      const selectAll = document.querySelector<HTMLInputElement>("#select-all");
-      if (selectAll) {
-        selectAll.checked = all.length > 0 && selected.length === all.length;
-        selectAll.indeterminate =
-          selected.length > 0 && selected.length < all.length;
-        selectAll.disabled = all.length === 0;
-      }
-      // Measured last, once the counts are in.
-      measureToolbar();
-    };
-    // On phones the toolbar is pinned to the bottom (fixed). Keep its real
-    // height clear, measured because it wraps by language and width, so a
-    // focused row control and the last row are never hidden under it.
-    const measureToolbar = () => {
-      const toolbar = document.querySelector<HTMLElement>("#bulk-toolbar");
-      const pinned =
-        toolbar &&
-        !toolbar.hidden &&
-        getComputedStyle(toolbar).position === "fixed";
-      setToolbarSpace(
-        pinned
-          ? `${Math.ceil(innerHeight - toolbar.getBoundingClientRect().top) + 12}px`
-          : ""
-      );
-    };
-    // Rotation or a resize can wrap the toolbar or unpin it.
-    addEventListener("resize", measureToolbar, options);
-    document.addEventListener(
-      "change",
-      (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLInputElement)) return;
-        if (target.id === "select-all")
-          boxes().forEach((box) => {
-            box.checked = target.checked;
-          });
-        if (target.id === "select-all" || target.name === "invoiceIds")
-          updateSelection();
-      },
-      options
-    );
+    initCaseMenus({ signal: controller.signal });
+    const disposeSelection = initWorkbenchSelection(root);
     document.addEventListener(
       "click",
       (event) => {
@@ -1544,127 +1250,17 @@ const dayMonth = (value: string) =>
             document.querySelector<HTMLDetailsElement>("#period-tariffs");
           if (tariffs) tariffs.open = true;
         }
-        if (target.closest("#clear-selection")) {
-          boxes().forEach((box) => {
-            box.checked = false;
-          });
-          updateSelection();
-          // Select-all is not shown below sm; fall back to the first case.
-          const selectAll =
-            document.querySelector<HTMLInputElement>("#select-all");
-          (selectAll?.checkVisibility?.() ? selectAll : boxes()[0])?.focus();
-        }
-        if (target.closest("[data-open-lock-dialog]")) {
-          target.closest("details")?.removeAttribute("open");
-          document
-            .querySelector<HTMLDialogElement>("#lock-period-dialog")
-            ?.showModal();
-        }
-        document
-          .querySelectorAll<HTMLDetailsElement>(".more-menu[open]")
-          .forEach((menu) => {
-            if (!menu.contains(target)) menu.open = false;
-          });
       },
       options
     );
-    document.addEventListener(
-      "keydown",
-      (event) => {
-        if (event.key !== "Escape") return;
-        document
-          .querySelectorAll<HTMLDetailsElement>(".more-menu[open]")
-          .forEach((menu) => {
-            menu.open = false;
-            menu.querySelector<HTMLElement>("summary")?.focus();
-          });
-      },
-      options
-    );
-    const positionRowMenu = (menu: HTMLElement) => {
-      const trigger = document.querySelector<HTMLElement>(
-        `[popovertarget="${CSS.escape(menu.id)}"]`
-      );
-      if (!trigger) return;
-      const anchor = trigger.getBoundingClientRect();
-      if (
-        anchor.bottom < 0 ||
-        anchor.top > innerHeight ||
-        anchor.right < 0 ||
-        anchor.left > innerWidth
-      ) {
-        menu.hidePopover();
-        return;
-      }
-      menu.style.inset = "auto";
-      menu.style.margin = "0";
-      const box = menu.getBoundingClientRect();
-      const gap = 6;
-      const margin = 8;
-      menu.style.left = `${Math.max(margin, Math.min(anchor.right - box.width, innerWidth - box.width - margin))}px`;
-      const below = anchor.bottom + gap;
-      const top =
-        below + box.height <= innerHeight - margin
-          ? below
-          : anchor.top - box.height - gap;
-      menu.style.top = `${Math.max(margin, Math.min(top, innerHeight - box.height - margin))}px`;
-    };
-    const positionRowMenus = () =>
-      document
-        .querySelectorAll<HTMLElement>(".case-menu:popover-open")
-        .forEach(positionRowMenu);
-    document.addEventListener(
-      "toggle",
-      (event) => {
-        const menu = event.target;
-        if (
-          menu instanceof HTMLElement &&
-          menu.matches(".case-menu:popover-open")
-        )
-          positionRowMenu(menu);
-      },
-      { ...options, capture: true }
-    );
-    // Follow visible rows during viewport/table scroll; dismiss when the
-    // invoker leaves the viewport. Ignore the menu's own internal scrolling.
-    document.addEventListener(
-      "scroll",
-      (event) => {
-        if (
-          !(event.target instanceof Element) ||
-          !event.target.closest(".case-menu")
-        )
-          positionRowMenus();
-      },
-      { ...options, capture: true }
-    );
-    window.addEventListener("resize", positionRowMenus, options);
-    const lockDialog = document.querySelector<HTMLDialogElement>(
-      "#lock-period-dialog"
-    );
-    lockDialog?.addEventListener(
-      "click",
-      (event) => {
-        if (event.target === lockDialog) lockDialog.close();
-      },
-      options
-    );
-    // Drawer saves replace the queue. Controls are delegated, so only the
-    // selection state has to be read again from the new rows.
-    document.addEventListener("workbench:refreshed", updateSelection, options);
-    updateSelection();
     return () => {
+      disposeSelection();
       controller.abort();
     };
   });
 </script>
 
 <style>
-  .workbench {
-    display: grid;
-    gap: 1rem;
-    min-width: 0;
-  }
   /* Title on the left, navigation and actions on the right; the right group
      drops to its own row when the two do not fit. */
   .workbench-header {
@@ -1693,599 +1289,6 @@ const dayMonth = (value: string) =>
     gap: 0.5rem;
     margin-inline-start: auto;
   }
-  /* The "more" menu uses the shared dropdown panel (global.css). The case
-     menus are native popovers with the same look. */
-  .case-menu {
-    z-index: var(--z-popover);
-    min-width: 11rem;
-    padding: var(--space-1);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    corner-shape: squircle;
-    background: var(--color-surface-raised);
-    box-shadow: var(--elevation-overlay);
-  }
-  /* Native top-layer popovers clear table clipping without changing columns. */
-  .case-menu {
-    position: fixed;
-    inset: 0;
-    margin: auto;
-    width: max-content;
-    height: fit-content;
-    max-width: calc(100vw - 1rem);
-    max-height: calc(100dvh - 1rem);
-    overflow: auto;
-    color: var(--color-foreground);
-  }
-  .case-menu a,
-  .case-menu button {
-    display: block;
-    width: 100%;
-    padding: 0.625rem 0.75rem;
-    border-radius: var(--radius-badge);
-    color: var(--color-foreground);
-    font-size: var(--text-sm);
-    text-align: left;
-  }
-  .case-menu a:hover,
-  .case-menu button:hover {
-    background: var(--color-menu-hover);
-  }
-  /* Previous and next month as one joined control, as on the dashboard. */
-  .period-navigation {
-    display: flex;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-control);
-    background: var(--color-surface);
-    font-size: var(--text-sm);
-  }
-  .period-navigation a {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.375rem;
-    min-height: var(--control-size-md);
-    padding: 0.5rem 0.875rem;
-    color: var(--color-primary);
-    font-weight: 600;
-    white-space: nowrap;
-  }
-  .period-navigation a + a {
-    border-inline-start: 1px solid var(--color-border);
-  }
-  .period-navigation a:first-child {
-    border-start-start-radius: var(--radius-control);
-    border-end-start-radius: var(--radius-control);
-  }
-  .period-navigation a:last-child {
-    border-start-end-radius: var(--radius-control);
-    border-end-end-radius: var(--radius-control);
-  }
-  .period-navigation a:hover {
-    background: var(--color-hover);
-  }
-  /* The money of the month on one line. The breakdown is on the dashboard. */
-  .financial-summary {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.25rem 2.5rem;
-    padding: 0.75rem 1.25rem;
-    border: var(--panel-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-    font-size: var(--text-sm);
-  }
-  .financial-stat {
-    display: flex;
-    align-items: baseline;
-    gap: 0.5rem;
-    color: var(--color-muted);
-  }
-  .financial-stat strong {
-    color: var(--color-foreground);
-    font-size: var(--text-base);
-    font-weight: 650;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  .financial-note {
-    color: var(--color-muted);
-    font-size: var(--text-xs);
-  }
-  .period-resources {
-    display: grid;
-    gap: 0.75rem;
-  }
-  .period-resource {
-    min-width: 0;
-    padding: 1rem 1.25rem;
-    border: var(--panel-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-    font-size: var(--text-sm);
-  }
-  .period-resource summary {
-    min-height: 1.5rem;
-  }
-  .period-resource[open] summary {
-    padding-bottom: 0.5rem;
-  }
-  .lock-dialog {
-    width: min(30rem, calc(100vw - 2rem));
-    margin: auto;
-    padding: 0;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface-raised);
-    color: var(--color-foreground);
-    box-shadow: var(--elevation-modal);
-  }
-  .lock-dialog::backdrop {
-    background: var(--color-backdrop);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .lock-dialog {
-      opacity: 0;
-      scale: 0.96;
-      transition:
-        opacity 200ms ease,
-        scale 200ms ease,
-        overlay 200ms allow-discrete,
-        display 200ms allow-discrete;
-    }
-    .lock-dialog[open] {
-      opacity: 1;
-      scale: 1;
-    }
-    @starting-style {
-      .lock-dialog[open] {
-        opacity: 0;
-        scale: 0.96;
-      }
-    }
-    .lock-dialog::backdrop {
-      background: transparent;
-      transition:
-        background-color 200ms ease,
-        overlay 200ms allow-discrete,
-        display 200ms allow-discrete;
-    }
-    .lock-dialog[open]::backdrop {
-      background: var(--color-backdrop);
-    }
-    @starting-style {
-      .lock-dialog[open]::backdrop {
-        background: transparent;
-      }
-    }
-  }
-  .dialog-body {
-    display: flex;
-    gap: 1rem;
-    padding: 1.5rem;
-  }
-  .dialog-icon {
-    display: grid;
-    width: 2.25rem;
-    height: 2.25rem;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--tone-warning-bg);
-    color: var(--tone-warning-text);
-    font-weight: 800;
-  }
-  .dialog-body h2 {
-    font-size: var(--text-lg);
-    font-weight: 700;
-  }
-  .dialog-body p {
-    margin-top: 0.5rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-    line-height: 1.6;
-  }
-  .dialog-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-    padding: 1rem 1.5rem;
-    border-top: 1px solid var(--color-border);
-  }
-  .case-queue {
-    display: grid;
-    gap: 0;
-    min-width: 0;
-    /* The table becomes a list by the room this panel has, not the screen. */
-    container-type: inline-size;
-    border: var(--panel-border);
-    border-radius: var(--radius-panel);
-    background: var(--color-surface);
-  }
-  .queue-heading {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem 1rem;
-    padding: 1rem 1.25rem 0.5rem;
-  }
-  .queue-heading h2 {
-    font-size: var(--text-base);
-    font-weight: 650;
-  }
-  .queue-filters {
-    flex: 0 1 20rem;
-    min-width: 0;
-  }
-  .queue-filters input {
-    width: 100%;
-    font-size: var(--text-sm);
-  }
-  /* Stage filters are tabs, not boxes: one rule under the row, an underline on
-     the active one. They wrap to a second row instead of scrolling, so no
-     stage is ever hidden. */
-  .workflow-rail {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0 0.25rem;
-    padding: 0 1.25rem;
-    border-bottom: 1px solid var(--color-border);
-  }
-  .workflow-filter {
-    /* Holds the screen-reader-only description, so it cannot widen the page. */
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    min-height: 2.75rem;
-    padding: 0.5rem 0.625rem;
-    border-bottom: 2px solid transparent;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    white-space: nowrap;
-    transition: color var(--duration-feedback);
-  }
-  .workflow-filter:hover {
-    color: var(--color-foreground);
-  }
-  .workflow-filter:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: -2px;
-  }
-  .workflow-filter[aria-current="page"] {
-    border-bottom-color: var(--color-primary);
-    color: var(--color-foreground);
-  }
-  .workflow-filter strong {
-    color: var(--color-muted);
-    font-size: var(--text-xs);
-    font-weight: 500;
-    font-variant-numeric: tabular-nums;
-  }
-  .queue-result {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.25rem 1rem;
-    padding: 0.5rem 1.25rem;
-    color: var(--color-muted);
-    font-size: var(--text-xs);
-  }
-  .clear-filters,
-  .clear-selection {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2.25rem;
-    color: var(--color-primary);
-    font-size: var(--text-sm);
-    font-weight: 550;
-  }
-  .bulk-toolbar {
-    position: sticky;
-    top: 0.75rem;
-    z-index: var(--z-sticky);
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin: 0 1.25rem 0.75rem;
-    padding: 0.75rem 1rem;
-    border: 1px solid var(--color-input-border);
-    border-radius: var(--radius-control);
-    /* Opaque: rows scroll under it. */
-    background: var(--color-surface-raised);
-    box-shadow: var(--elevation-raised);
-  }
-  .bulk-toolbar[hidden] {
-    display: none;
-  }
-  .selection-summary,
-  .bulk-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.75rem;
-  }
-  .selection-summary {
-    font-size: var(--text-sm);
-  }
-  .selection-summary > span {
-    color: var(--color-muted);
-  }
-  /* Five columns that fit the panel: no minimum width, so nothing is pushed
-     off the side at 1024px in any language. Problems sit under the status. */
-  .case-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    text-align: left;
-    font-size: var(--text-sm);
-  }
-  .case-table-wrap {
-    min-width: 0;
-    max-width: 100%;
-    border: 0;
-    border-radius: 0 0 var(--radius-panel) var(--radius-panel);
-    box-shadow: none;
-    overflow-x: auto;
-  }
-  .case-table thead {
-    background: var(--color-table-th-bg);
-    color: var(--color-muted);
-  }
-  .case-table th {
-    font-size: var(--text-xs);
-    font-weight: 600;
-  }
-  .case-table th,
-  .case-table td {
-    padding: 0.625rem 0.75rem;
-    border-bottom: 1px solid var(--color-border);
-    vertical-align: middle;
-  }
-  .case-table tbody tr:last-child td {
-    border-bottom: 0;
-  }
-  .case-table tbody tr:hover {
-    background: var(--color-hover);
-  }
-  .case-table tbody tr[data-selected] {
-    background: var(--color-nav-active-bg);
-  }
-  .select-column {
-    width: 2.75rem;
-    text-align: center;
-  }
-  /* Routine stages: plain text, so the tinted badges mark only exceptions. */
-  .status-text {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    color: var(--color-muted);
-    font-size: var(--text-xs);
-    font-weight: 500;
-    letter-spacing: var(--tracking-small);
-    line-height: 1rem;
-  }
-  .dwelling-cell {
-    overflow-wrap: break-word;
-  }
-  .dwelling-cell a {
-    color: var(--color-foreground);
-    font-size: var(--text-base);
-    font-weight: 650;
-  }
-  .dwelling-cell a:hover {
-    text-decoration: underline;
-    text-underline-offset: 0.2em;
-  }
-  .dwelling-cell span {
-    display: block;
-    color: var(--color-muted);
-    font-size: var(--text-xs);
-  }
-  /* A case's problems: one line under its status. Plain caption text coloured
-     by meaning, separated by dots. A definite max-width: with nowrap, the line
-     would otherwise set the column's minimum width and widen the table. */
-  .readiness-line {
-    display: flex;
-    align-items: center;
-    gap: 0 0.375rem;
-    min-width: 0;
-    max-width: 18rem;
-    margin-top: 0.25rem;
-    font-size: var(--text-xs);
-    letter-spacing: var(--tracking-small);
-    line-height: 1.5rem;
-    white-space: nowrap;
-  }
-  .readiness-icon {
-    display: flex;
-    flex-shrink: 0;
-    color: var(--color-warning);
-  }
-  .readiness-line[data-tone="danger"] .readiness-icon {
-    color: var(--color-destructive);
-  }
-  .readiness-separator {
-    flex-shrink: 0;
-    color: var(--color-muted);
-  }
-  /* The named problems are the only part that clips; the icon and "+N" sit
-     outside it, so the count can never be pushed out. Its minimum is what its
-     names need (4ch each, a serial's kept digits plus an ellipsis, set per
-     row), so no name
-     is ever clipped away: the column grows that little instead. */
-  .readiness-items {
-    display: flex;
-    flex: 0 1 auto;
-    align-items: center;
-    gap: 0 0.375rem;
-    min-width: var(--items-min, 0);
-    overflow: hidden;
-  }
-  .readiness-item {
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--color-muted);
-    font: inherit;
-    font-size: var(--text-xs);
-    line-height: 1.5;
-    text-align: left;
-  }
-  .readiness-item :global(svg) {
-    display: inline-block;
-    margin-right: 0.25rem;
-    vertical-align: -3px;
-  }
-  /* Named problems keep their width; the last one gives way first and is
-     cut at its end (Apple's tail truncation). */
-  .readiness-line .readiness-item {
-    display: flex;
-    align-items: center;
-    flex: 0 1 auto;
-    min-width: 4ch;
-    overflow: hidden;
-    line-height: 1.5rem;
-  }
-  .readiness-line .readiness-item:not(:has(.mid-truncate)) {
-    display: block;
-    text-overflow: ellipsis;
-  }
-  /* Everything shrinks, so the "+N" is never pushed out; the last name
-     shrinks four times faster, so it gives way first. */
-  .readiness-line .readiness-item[data-last] {
-    flex-shrink: 4;
-  }
-  /* A name told apart by its end (a meter serial) is cut in the middle, so
-     the distinguishing tail stays visible (Apple's middle truncation). */
-  .mid-truncate {
-    display: flex;
-    min-width: 0;
-  }
-  .mid-start {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .mid-end {
-    flex-shrink: 0;
-  }
-  /* The menu sits inside the one-line row: undo its nowrap so a long tariff
-     or meter name wraps instead of scrolling sideways on a phone. */
-  .readiness-line .case-menu {
-    max-width: min(20rem, calc(100vw - 1rem));
-    letter-spacing: normal;
-    white-space: normal;
-  }
-  .problem-menu-item {
-    display: block;
-    padding: 0.625rem 0.75rem;
-    font-size: var(--text-sm);
-    overflow-wrap: anywhere;
-  }
-  .case-menu .problem-menu-item[data-tone="danger"] {
-    color: var(--color-destructive);
-  }
-  .case-menu .problem-menu-item[data-tone="warning"] {
-    color: var(--color-warning);
-  }
-  :is(button, a).readiness-item {
-    cursor: pointer;
-    text-decoration: underline;
-    text-decoration-style: dotted;
-    text-underline-offset: 2px;
-  }
-  :is(button, a).readiness-item:hover,
-  :is(button, a).readiness-item:focus-visible {
-    text-decoration-style: solid;
-  }
-  /* The count is never cut. */
-  .readiness-more {
-    flex-shrink: 0;
-    padding: 0;
-    border: none;
-    background: none;
-    color: var(--color-primary);
-    font: inherit;
-    font-size: var(--text-xs);
-    font-weight: 600;
-    line-height: 1.5rem;
-    cursor: pointer;
-  }
-  .readiness-more:hover {
-    text-decoration: underline;
-  }
-  .readiness-item[data-tone="danger"] {
-    color: var(--color-destructive);
-  }
-  .readiness-item[data-tone="success"] {
-    color: var(--color-success);
-  }
-  .readiness-item[data-tone="warning"] {
-    color: var(--color-warning);
-  }
-  /* Tags inside the table are caption text, not bold body text. */
-  .case-table :global(.status-badge) {
-    padding: 0.125rem 0.375rem;
-    font-size: var(--text-xs);
-    font-weight: 500;
-    letter-spacing: var(--tracking-small);
-    line-height: 1rem;
-  }
-  .numeric-column {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-  .invoice-cell a {
-    display: grid;
-    gap: 0.125rem;
-  }
-  .invoice-cell span,
-  .invoice-cell small {
-    color: var(--color-muted);
-    font-size: var(--text-xs);
-  }
-  .invoice-cell span {
-    white-space: nowrap;
-  }
-  .invoice-cell strong {
-    color: var(--color-foreground);
-    font-size: var(--text-sm);
-  }
-  .next-action {
-    white-space: nowrap;
-  }
-  .menu-cell {
-    width: 3rem;
-  }
-  .case-menu-trigger {
-    color: var(--color-muted);
-  }
-  .empty-queue {
-    padding: 3rem 1.25rem;
-    text-align: center;
-  }
-  .empty-queue strong,
-  .empty-queue span,
-  .empty-queue a {
-    display: block;
-    width: fit-content;
-    margin-inline: auto;
-  }
-  .empty-queue span {
-    margin-top: 0.5rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .empty-queue a {
-    margin-top: 1rem;
-  }
   @media (width < 40rem) {
     .period-actions {
       width: 100%;
@@ -2293,142 +1296,8 @@ const dayMonth = (value: string) =>
     .period-actions > :is(a, form, nav) {
       flex: 1 1 auto;
     }
-    .period-navigation a {
-      flex: 1;
-    }
     .period-actions form .btn-primary {
       width: 100%;
-    }
-    .financial-summary,
-    .queue-heading,
-    .queue-result {
-      padding-inline: 1rem;
-    }
-    .queue-filters {
-      flex-basis: 100%;
-    }
-    .workflow-rail {
-      padding-inline: 0.5rem;
-    }
-    /* Phones: pinned to the bottom, so the actions stay in reach while the
-       admin ticks rows further down. */
-    .bulk-toolbar {
-      position: fixed;
-      inset: auto 0.75rem 0.75rem;
-      z-index: var(--z-popover);
-      margin: 0;
-      padding: 0.75rem;
-    }
-    .bulk-actions {
-      width: 100%;
-    }
-    .bulk-actions .btn-primary,
-    .bulk-actions .btn-secondary {
-      flex: 1;
-    }
-    .dialog-actions {
-      flex-wrap: wrap;
-    }
-  }
-  /* Narrower than the five columns need (54rem holds the longest Russian
-     labels): each case is three short lines instead of a table row. Dwelling
-     and amount, then the status with any problems, then the action. */
-  @container (width < 54rem) {
-    .workflow-filter {
-      min-height: 2.25rem;
-    }
-    .case-table thead {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip-path: inset(50%);
-    }
-    .case-table,
-    .case-table tbody,
-    .case-table td {
-      display: block;
-    }
-    .case-table tbody tr {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      grid-template-areas:
-        "select dwelling invoice"
-        "status status status"
-        "action action menu";
-      align-items: center;
-      gap: 0.375rem 0.75rem;
-      padding: 0.75rem 1rem;
-      border-bottom: 1px solid var(--color-border);
-    }
-    .case-table tbody tr:last-child {
-      border-bottom: 0;
-    }
-    .case-table td {
-      padding: 0;
-      border: 0;
-    }
-    .select-column {
-      grid-area: select;
-      width: auto;
-    }
-    /* A case that cannot be selected gives its checkbox space to the name. */
-    .select-column:not(:has(input)) {
-      display: none;
-    }
-    /* The header row is hidden here; its checkbox must not take focus. */
-    #select-all {
-      display: none;
-    }
-    .dwelling-cell {
-      grid-area: dwelling;
-    }
-    tr:not(:has(input[name="invoiceIds"])) .dwelling-cell {
-      grid-column: 1 / 3;
-    }
-    .invoice-cell {
-      grid-area: invoice;
-    }
-    .status-cell {
-      grid-area: status;
-    }
-    .next-action {
-      grid-area: action;
-      white-space: normal;
-    }
-    .menu-cell {
-      grid-area: menu;
-      width: auto;
-      justify-self: end;
-    }
-    .readiness-line {
-      max-width: 100%;
-    }
-    .case-table tbody tr:has(.empty-queue) {
-      display: block;
-    }
-  }
-  @media (pointer: coarse) {
-    .readiness-line {
-      line-height: 2.75rem;
-    }
-    .readiness-line .readiness-item,
-    .readiness-line .readiness-more {
-      line-height: 2.75rem;
-    }
-    .readiness-item:is(button, a),
-    .readiness-more,
-    .clear-filters,
-    .clear-selection,
-    .period-resource summary {
-      min-height: 2.75rem;
-    }
-  }
-  @media (forced-colors: active) {
-    .workflow-filter[aria-current="page"],
-    .case-table tr[data-selected] {
-      outline: 2px solid Highlight;
-      outline-offset: -2px;
     }
   }
 </style>

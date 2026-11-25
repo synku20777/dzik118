@@ -173,7 +173,6 @@
     var(--palette-limestone-75),
     var(--palette-night-750)
   );
-  --color-org-context-bg: var(--color-table-th-bg);
   --color-nav-active-bg: var(--tone-info-bg);
   /* Menus, dropdown items and the app navigation: a faint wash of the text
      colour on hover and a stronger one for the selected item, so both read in
@@ -498,9 +497,6 @@
     var(--palette-daugava-700),
     var(--palette-daugava-200)
   );
-  --color-danger-surface: var(--tone-danger-bg);
-  --color-success-surface: var(--tone-success-bg);
-  --color-info-surface: var(--tone-info-bg);
   --radius-check: 0.3125rem; /* checkbox squares */
   --radius-badge: 0.5rem;
   --radius-input: 0.75rem;
@@ -558,7 +554,7 @@
     padding-inline-end: 2.25rem;
     /* A data URI cannot read CSS variables: the stroke is --palette-ink-500
        here and --palette-night-300 in the dark rules below. */
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2358666c' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6l6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234f5d63' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6l6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 0.75rem center;
     background-size: 1rem;
@@ -950,12 +946,13 @@ textarea:disabled {
     .btn-secondary,
     .btn-danger,
     .btn-ghost,
-    .icon-btn {
+    .icon-btn,
+    .row-menu > summary {
       transition:
-        background-color var(--duration-fast) ease,
-        border-color var(--duration-fast) ease,
-        color var(--duration-fast) ease,
-        box-shadow var(--duration-fast) ease;
+        background-color var(--duration-fast) var(--ease-standard),
+        border-color var(--duration-fast) var(--ease-standard),
+        color var(--duration-fast) var(--ease-standard),
+        box-shadow var(--duration-fast) var(--ease-standard);
     }
   }
   .btn-primary {
@@ -1005,7 +1002,7 @@ textarea:disabled {
       box-shadow: var(--hover-ring)
         color-mix(in srgb, var(--color-destructive) 22%, transparent);
     }
-    :is(.btn-secondary, .icon-btn):where(
+    :is(.btn-secondary, .icon-btn, :where(.row-menu > summary)):where(
         :not(:disabled):not([aria-disabled="true"])
       ):hover {
       box-shadow: var(--hover-ring)
@@ -1026,9 +1023,12 @@ textarea:disabled {
     background: var(--color-destructive-active);
     transition-duration: var(--duration-feedback);
   }
-  :is(.btn-secondary, .icon-btn):where(
+  :is(.btn-secondary, .icon-btn, :where(.row-menu > summary)):where(
       :not(:disabled):not([aria-disabled="true"])
-    ):active {
+    ):active,
+  .row-menu[open] > summary,
+  .more-menu[open] > summary:is(.icon-btn, .btn-secondary),
+  [popovertarget]:has(+ .case-menu:popover-open) {
     background: var(--color-nav-active-bg);
     color: var(--color-primary);
     transition-duration: var(--duration-feedback);
@@ -1056,7 +1056,8 @@ textarea:disabled {
       min-height: var(--control-size-md);
     }
   }
-  .icon-btn {
+  .icon-btn,
+  .row-menu > summary {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1069,22 +1070,27 @@ textarea:disabled {
     color: var(--color-muted);
     cursor: pointer;
   }
-  .icon-btn:where(:not(:disabled):not([aria-disabled="true"])):hover {
+  /* Not while pressed: the pressed rule's primary icon colour wins then. */
+  :is(.icon-btn, :where(.row-menu > summary)):where(
+      :not(:disabled):not([aria-disabled="true"]):not(:active)
+    ):hover {
     color: var(--color-foreground);
   }
-  .icon-btn svg {
+  :is(.icon-btn, :where(.row-menu > summary)) svg {
     width: 1.125rem;
     height: 1.125rem;
     flex-shrink: 0;
   }
   /* Compact icon button for dense rows, like .btn-sm: 36px for precise
      pointers, 44px for coarse ones. */
-  .icon-btn-sm {
+  .icon-btn-sm,
+  .row-menu > summary {
     width: var(--control-size-sm);
     height: var(--control-size-sm);
   }
   @media (pointer: coarse) {
-    .icon-btn-sm {
+    .icon-btn-sm,
+    .row-menu > summary {
       width: var(--control-size-md);
       height: var(--control-size-md);
     }
@@ -1344,6 +1350,12 @@ textarea:disabled {
   summary.chevron-toggle::-webkit-details-marker {
     display: none;
   }
+  /* A text toggle underlines under the pointer, like a disclosure summary. */
+  summary.chevron-toggle:hover {
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+  }
   summary.chevron-toggle::after {
     content: "";
     flex: none;
@@ -1355,7 +1367,8 @@ textarea:disabled {
   }
   /* Dropdown menu items (row, more and case menus) are controls too. */
   @media (pointer: coarse) {
-    :is(.row-menu, .more-menu, .case-menu) > div :is(a, button) {
+    :is(.row-menu, .more-menu) > div :is(a, button),
+    .case-menu :is(a, button) {
       min-height: var(--control-size-md);
     }
   }
@@ -1448,21 +1461,41 @@ textarea:disabled {
     box-shadow: var(--elevation-flat);
     min-width: 0;
   }
-  .kpi-icon {
+  /* Icon tile: a tinted square carrying one icon beside a title or a figure
+     (KPI cards, settings cards, summaries, drawer rows). Tone it with
+     data-tone on the tile, or on a .kpi around it. Decorative: aria-hidden. */
+  .icon-tile {
     display: grid;
+    flex: 0 0 auto;
     place-items: center;
-    align-self: flex-start;
-    flex: 0 0 2.75rem;
     width: 2.75rem;
     height: 2.75rem;
     border-radius: var(--radius-panel);
+    corner-shape: squircle;
     background: var(--tone-neutral-bg);
     color: var(--color-muted);
   }
-  .kpi-icon svg {
+  .icon-tile svg {
     width: 1.25rem;
     height: 1.25rem;
     flex-shrink: 0;
+  }
+  /* On a well the neutral tile would match the fill; lift it to the surface. */
+  .box-well .icon-tile:not([data-tone]) {
+    background: var(--color-surface);
+  }
+  .icon-tile-sm {
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--radius-control);
+  }
+  .icon-tile-sm svg {
+    width: 1rem;
+    height: 1rem;
+  }
+  :is(.icon-tile[data-tone="info"], .kpi[data-tone="info"] .icon-tile) {
+    color: var(--tone-info-text);
+    background: var(--tone-info-bg);
   }
   .kpi-text {
     flex: 1 1 auto;
@@ -1488,21 +1521,21 @@ textarea:disabled {
   .kpi[data-tone="success"] .kpi-value {
     color: var(--color-success);
   }
-  .kpi[data-tone="success"] .kpi-icon {
+  :is(.icon-tile[data-tone="success"], .kpi[data-tone="success"] .icon-tile) {
     color: var(--tone-success-text);
     background: var(--tone-success-bg);
   }
   .kpi[data-tone="warning"] .kpi-value {
     color: var(--color-warning);
   }
-  .kpi[data-tone="warning"] .kpi-icon {
+  :is(.icon-tile[data-tone="warning"], .kpi[data-tone="warning"] .icon-tile) {
     color: var(--tone-warning-text);
     background: var(--tone-warning-bg);
   }
   .kpi[data-tone="danger"] .kpi-value {
     color: var(--color-destructive);
   }
-  .kpi[data-tone="danger"] .kpi-icon {
+  :is(.icon-tile[data-tone="danger"], .kpi[data-tone="danger"] .icon-tile) {
     color: var(--tone-danger-text);
     background: var(--tone-danger-bg);
   }
@@ -1800,8 +1833,8 @@ textarea:disabled {
   @media (prefers-reduced-motion: no-preference) {
     .tabs a {
       transition:
-        color var(--duration-fast) ease,
-        box-shadow var(--duration-fast) ease;
+        color var(--duration-fast) var(--ease-standard),
+        box-shadow var(--duration-fast) var(--ease-standard);
     }
   }
   .pagination-bar {
@@ -1868,20 +1901,14 @@ textarea:disabled {
     overflow-y: auto;
     z-index: var(--z-popover);
   }
+  /* The sidebar is a menu list: its items take the menu item rules below
+     (spacing, hover and selected washes, muted icons). */
   .app-nav {
     display: grid;
-    gap: 0.25rem;
+    gap: 1px;
   }
   .app-nav a {
     position: relative;
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    padding: 0.625rem 0.75rem;
-    border-radius: var(--radius-control);
-    font-size: var(--text-sm);
-    font-weight: 500;
-    color: var(--color-muted);
   }
   /* Unread counter on the Messages item. Pushed to the end of the row. */
   .nav-badge {
@@ -1896,15 +1923,6 @@ textarea:disabled {
     line-height: 1.25rem;
     text-align: center;
   }
-  .app-nav a:hover {
-    background: var(--color-menu-hover);
-    color: var(--color-foreground);
-  }
-  .app-nav a[aria-current="page"] {
-    background: var(--color-menu-selected);
-    color: var(--color-foreground);
-    font-weight: 600;
-  }
   .nav-icon {
     width: 1.125rem;
     height: 1.125rem;
@@ -1916,26 +1934,14 @@ textarea:disabled {
     border: 0;
     border-top: 1px solid var(--color-border);
   }
-  /* Nav motion. The look of the items is unchanged; only how they respond is:
-     the icon leans toward the label on hover, a press sinks the item, and a
-     newly active item arrives (AdminLayout marks it only when the section
-     changed, so same-page reloads do not blink). */
+  /* Nav motion: the washes fade like any menu item, and a newly active item
+     arrives (AdminLayout marks it only when the section changed, so same-page
+     reloads do not blink). */
   @media (prefers-reduced-motion: no-preference) {
     .app-nav a {
       transition:
-        background-color var(--duration-fast) ease,
-        color var(--duration-fast) ease,
-        transform var(--duration-feedback) var(--ease-standard);
-    }
-    .app-nav a .nav-icon {
-      transition: transform var(--duration-normal) var(--ease-standard);
-    }
-    .app-nav a:hover .nav-icon {
-      transform: translateX(2px) scale(1.08);
-    }
-    .app-nav a:active {
-      transform: scale(0.985);
-      transition-duration: var(--duration-feedback);
+        background-color var(--duration-fast) var(--ease-standard),
+        color var(--duration-fast) var(--ease-standard);
     }
     .app-nav a[data-arrived] {
       animation: nav-arrive var(--duration-panel) var(--ease-standard) both;
@@ -2005,24 +2011,14 @@ textarea:disabled {
     cursor: pointer;
   }
   .account-signout:hover {
-    background: var(--color-hover);
+    background: var(--color-menu-hover);
     color: var(--color-foreground);
   }
   @media (prefers-reduced-motion: no-preference) {
     .account-signout {
       transition:
-        background-color var(--duration-fast) ease,
-        color var(--duration-fast) ease,
-        transform var(--duration-feedback) var(--ease-standard);
-    }
-    .account-signout .nav-icon {
-      transition: transform var(--duration-normal) var(--ease-standard);
-    }
-    .account-signout:hover .nav-icon {
-      transform: translateX(3px);
-    }
-    .account-signout:active {
-      transform: scale(0.985);
+        background-color var(--duration-fast) var(--ease-standard),
+        color var(--duration-fast) var(--ease-standard);
     }
   }
   /* Language switch: toggle tabs (markup carries both classes), sized to sit
@@ -2127,6 +2123,13 @@ textarea:disabled {
   .disclosure > summary::-webkit-details-marker {
     display: none;
   }
+  /* The summary is a text control: it underlines under the pointer, like
+     link-ghost and btn-ghost. */
+  .disclosure > summary:hover {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+  }
   /* Tabler "chevron-right" (see icons.ts), as a CSS mask so it inherits
      the summary's own color -- rotated to point down while closed, up
      while open, instead of the browser's default triangle marker. */
@@ -2143,7 +2146,7 @@ textarea:disabled {
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
     transform: rotate(90deg);
-    transition: transform var(--duration-fast) ease;
+    transition: transform var(--duration-fast) var(--ease-standard);
   }
   .disclosure[open] > summary::before {
     transform: rotate(-90deg);
@@ -2168,27 +2171,6 @@ textarea:disabled {
   }
   :is(.row-menu, .more-menu) > summary::-webkit-details-marker {
     display: none;
-  }
-  .row-menu > summary {
-    display: grid;
-    min-width: var(--control-size-sm);
-    min-height: var(--control-size-sm);
-    place-items: center;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-control);
-    background: var(--color-surface);
-    color: var(--color-muted);
-  }
-  .row-menu > summary:hover,
-  .row-menu[open] > summary {
-    background: var(--color-surface-hover);
-    color: var(--color-foreground);
-  }
-  @media (pointer: coarse) {
-    .row-menu > summary {
-      min-width: var(--control-size-md);
-      min-height: var(--control-size-md);
-    }
   }
   :is(.row-menu, .more-menu) > div {
     position: absolute;
@@ -2215,6 +2197,27 @@ textarea:disabled {
   }
   .link:hover,
   .link-underlined {
+    text-decoration-line: underline;
+  }
+  /* Dashboard and workbench text actions are links by another name: they
+     underline like .link (1px, 0.2em below) and never change colour. */
+  .attention-heading > a,
+  .attention-action,
+  .month-status-link,
+  .attention-more-row a,
+  .collection-link,
+  .clear-selection {
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+  }
+  :is(
+    .attention-heading > a,
+    .attention-action,
+    .month-status-link,
+    .attention-more-row a,
+    .collection-link,
+    .clear-selection
+  ):hover {
     text-decoration-line: underline;
   }
   .link-underlined:hover {
@@ -2332,7 +2335,7 @@ textarea:disabled {
     opacity: 0.7;
     rotate: 90deg;
   }
-  .dropdown[open] .dropdown-chevron {
+  :is(.dropdown[open], details[open] > summary) .dropdown-chevron {
     rotate: -90deg;
   }
   .dropdown-panel {
@@ -2347,6 +2350,7 @@ textarea:disabled {
     left: auto;
   }
   :is(.row-menu, .more-menu) > div,
+  .case-menu:popover-open,
   .dropdown-panel {
     display: flex;
     flex-direction: column;
@@ -2358,6 +2362,7 @@ textarea:disabled {
     box-shadow: var(--elevation-overlay);
   }
   :is(.row-menu, .more-menu) > div :is(a, button),
+  .case-menu :is(a, button),
   .dropdown-item {
     display: flex;
     align-items: center;
@@ -2376,6 +2381,7 @@ textarea:disabled {
     cursor: pointer;
   }
   :is(.row-menu, .more-menu) > div :is(a, button):hover,
+  .case-menu :is(a, button):hover,
   .dropdown-item:hover {
     background: var(--color-menu-hover);
   }
@@ -2401,6 +2407,17 @@ textarea:disabled {
   .dropdown-item-danger,
   .dropdown-item-danger > svg {
     color: var(--color-destructive);
+  }
+  /* A menu under a labelled button is as wide as a dropdown panel, and on
+     phones it opens to the right. */
+  .more-menu-wide > div {
+    min-width: 13rem;
+  }
+  @media (width < 40rem) {
+    .page-actions .more-menu-wide > div {
+      left: 0;
+      right: auto;
+    }
   }
   .dropdown-divider {
     height: 1px;
@@ -2462,30 +2479,31 @@ textarea:disabled {
     padding: 0;
     list-style: none;
   }
-  :is(.menu-list a, .menu-tree > summary) {
+  :is(.menu-list a, .menu-tree > summary, .app-nav a) {
     display: flex;
     align-items: center;
     gap: var(--space-2);
     min-height: var(--control-size-sm);
     padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-control);
+    corner-shape: squircle;
     color: var(--color-foreground);
     font-size: var(--text-sm);
     font-weight: 500;
     text-decoration: none;
   }
-  :is(.menu-list a, .menu-tree > summary):hover {
+  :is(.menu-list a, .menu-tree > summary, .app-nav a):hover {
     background: var(--color-menu-hover);
   }
-  .menu-list a[aria-current] {
+  :is(.menu-list, .app-nav) a[aria-current] {
     background: var(--color-menu-selected);
     font-weight: 600;
   }
-  :is(.menu-list a, .menu-tree > summary) > svg {
+  :is(.menu-list a, .menu-tree > summary, .app-nav a) > svg {
     flex-shrink: 0;
     color: var(--color-muted);
   }
-  .menu-list a[aria-current] > svg {
+  :is(.menu-list, .app-nav) a[aria-current] > svg {
     color: var(--color-foreground);
   }
   /* Tree: a group that folds open on its summary. Its children hang off a
@@ -2521,13 +2539,13 @@ textarea:disabled {
     border-inline-start: 2px solid var(--color-menu-selected);
   }
   @media (pointer: coarse) {
-    :is(.menu-list a, .menu-tree > summary, .dropdown-item) {
+    :is(.menu-list a, .menu-tree > summary, .app-nav a, .dropdown-item) {
       min-height: var(--control-size-md);
     }
   }
   @media (prefers-reduced-motion: no-preference) {
     :is(.menu-list a, .menu-tree > summary, .dropdown-item, .dropdown-tile) {
-      transition: background-color var(--duration-feedback) ease;
+      transition: background-color var(--duration-feedback) var(--ease-standard);
     }
     .menu-tree > summary::after,
     .dropdown-chevron {
@@ -2547,13 +2565,15 @@ textarea:disabled {
     box-shadow: inset 0 1px 2px
       color-mix(in srgb, var(--color-foreground) 5%, transparent);
   }
-  .field-box > label {
+  /* A read-only value has no control, so its caption is a span, not a label. */
+  .field-box > :is(label, .field-box-label) {
     padding: var(--space-2) var(--space-3) 0;
     color: var(--color-muted);
     font-size: var(--text-sm);
     line-height: 1.25rem;
   }
-  .field-box:is(:hover, :focus-within) > label {
+  .field-box:not(:has(> .drawer-readonly-box)):is(:hover, :focus-within)
+    > label {
     color: var(--color-foreground);
   }
   .field-optional {
@@ -2759,9 +2779,9 @@ textarea:disabled {
   @media (prefers-reduced-motion: no-preference) {
     .toggle-tabs > :is(a, button, label) {
       transition:
-        background-color var(--duration-fast) ease,
-        color var(--duration-fast) ease,
-        box-shadow var(--duration-fast) ease;
+        background-color var(--duration-fast) var(--ease-standard),
+        color var(--duration-fast) var(--ease-standard),
+        box-shadow var(--duration-fast) var(--ease-standard);
     }
   }
   @media (forced-colors: active) {
@@ -3009,16 +3029,6 @@ textarea:disabled {
     gap: 1rem;
     padding: 1.5rem;
   }
-  .lock-dialog .dialog-icon {
-    display: grid;
-    width: 2.25rem;
-    height: 2.25rem;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--tone-warning-bg);
-    color: var(--tone-warning-text);
-  }
   .lock-dialog .dialog-body h2 {
     font-size: var(--text-lg);
     font-weight: 700;
@@ -3031,6 +3041,7 @@ textarea:disabled {
   }
   .lock-dialog .dialog-actions {
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: 0.75rem;
     padding: 1rem 1.5rem;
@@ -3052,6 +3063,741 @@ textarea:disabled {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-badge);
     background: #fff; /* the invoice is paper in both themes */
+  }
+
+  /* Joined previous/next period control (dashboard and workbench headers). */
+
+  /* KPI Breakdown: primary collection summary beside the accounting ledger.
+     Below 32rem of card width, the breakdown collapses into a disclosure. */
+  .collection-card {
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    padding: 1rem 1.5rem;
+    min-width: 0;
+  }
+  .collection-card .metric-label {
+    line-height: 1.4;
+  }
+  .collection-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .collection-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    min-width: 0;
+    padding-inline-end: 1.5rem;
+  }
+  .collection-hero {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+  }
+  .collection-link {
+    min-width: 0;
+    color: inherit;
+    text-decoration-line: none;
+  }
+  .collection-received {
+    font-size: var(--text-display-lg);
+    line-height: var(--text-display-lg--line-height);
+    letter-spacing: -0.025em;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .collection-bar {
+    height: 0.625rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--color-surface-hover);
+  }
+  .collection-bar > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--color-success);
+  }
+  .collection-split {
+    display: grid;
+    gap: 0.25rem;
+  }
+  .collection-ledger {
+    min-width: 0;
+    padding-inline-start: 1.5rem;
+    border-inline-start: 1px solid var(--color-border);
+  }
+  .collection-ledger > summary {
+    display: none;
+  }
+  @container (width < 32rem) {
+    .collection-received {
+      font-size: var(--text-display-sm);
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .collection-grid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.75rem;
+    }
+    .collection-summary {
+      padding-inline-end: 0;
+    }
+    .collection-ledger {
+      padding: 0;
+      border-inline-start: 0;
+      border-top: 1px solid var(--color-border);
+    }
+    .collection-ledger > summary {
+      display: flex;
+      min-height: var(--control-size-md);
+      align-items: center;
+      font-size: var(--text-sm);
+      font-weight: 600;
+      cursor: pointer;
+    }
+  }
+  @media (width < 48rem) {
+    .collection-card {
+      padding: 1rem;
+    }
+  }
+  .collection-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0.75rem;
+    min-height: 1.5rem;
+    color: var(--color-muted);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    text-decoration: none;
+  }
+  a.collection-row:hover .collection-row-label {
+    text-decoration: underline;
+  }
+  .collection-row strong {
+    color: var(--color-foreground);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .collection-row[data-tone="danger"],
+  .collection-row[data-tone="danger"] strong {
+    color: var(--color-destructive);
+  }
+  .collection-row svg {
+    display: inline-block;
+    margin-inline-end: 0.25rem;
+    vertical-align: -3px;
+  }
+  /* A share is neutral until it is complete; only then is it good news. */
+  .collection-share {
+    color: var(--color-foreground);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .collection-hero .collection-share {
+    font-size: var(--text-xl);
+  }
+  .collection-row .collection-share {
+    margin-inline-start: 0.375rem;
+  }
+  .collection-share[data-complete] {
+    color: var(--color-success);
+  }
+  .collection-note {
+    margin-top: 0.5rem;
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    line-height: 1.5;
+  }
+  .money-ledger > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.1875rem 0;
+    font-size: var(--text-sm);
+    line-height: 1.5;
+  }
+  .money-ledger dt {
+    display: flex;
+    align-items: baseline;
+    gap: 0.375rem;
+    color: var(--color-muted);
+  }
+  .money-operator {
+    flex: 0 0 0.75rem;
+    text-align: center;
+  }
+  .money-ledger dd {
+    text-align: end;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .money-ledger > .money-total {
+    margin-top: 0.25rem;
+    padding-top: 0.375rem;
+    border-top: 1px solid var(--color-border);
+    font-weight: 700;
+  }
+  .money-total dt {
+    color: var(--color-foreground);
+  }
+  @media (pointer: coarse) {
+    .collection-link {
+      display: flex;
+    }
+    .collection-link,
+    a.collection-row {
+      min-height: var(--control-size-md);
+      align-items: center;
+    }
+  }
+  @media (forced-colors: active) {
+    .collection-bar {
+      outline: 1px solid CanvasText;
+    }
+    .collection-bar > span {
+      forced-color-adjust: none;
+      background: Highlight;
+    }
+  }
+
+  /* Horizontal progress stepper (dashboard month progress & setup steps). */
+  .month-status {
+    padding: 1rem 1.5rem;
+    container-type: inline-size;
+  }
+  .month-status-lead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .month-status-sentence {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .month-status-lead .btn-primary {
+    flex-shrink: 0;
+    font-size: var(--text-sm);
+  }
+  .month-status-link,
+  .attention-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: var(--control-size-md);
+    color: var(--color-primary);
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+  .month-progress {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+    list-style: none;
+    padding: 0;
+  }
+  @container (width < 48rem) {
+    .month-status .month-progress {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  .month-progress li {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    align-content: start;
+    gap: 0.25rem 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 2px solid var(--color-border);
+    min-width: 0;
+  }
+  .month-progress li::before {
+    content: "";
+    position: absolute;
+    inset-block-start: -2px;
+    inset-inline-start: 0;
+    height: 2px;
+    width: var(--step-progress, 0%);
+    background: var(--color-primary);
+  }
+  .month-progress li[data-state="done"]::before {
+    background: var(--color-success);
+  }
+  .progress-marker {
+    display: grid;
+    place-items: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    color: var(--color-muted);
+  }
+  [data-state="done"] .progress-marker {
+    color: var(--color-success);
+  }
+  [data-state="current"] .progress-marker {
+    color: var(--color-primary);
+  }
+  .progress-label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    line-height: 1.5;
+    overflow-wrap: break-word;
+  }
+  .progress-now {
+    margin-inline-start: 0.375rem;
+    color: var(--color-primary);
+    font-size: var(--text-xs);
+  }
+  .progress-late {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--color-warning);
+  }
+  .progress-detail {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.125rem 0.5rem;
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
+  }
+  @media (width < 48rem) {
+    .month-status {
+      padding: 1rem;
+    }
+    .month-status-lead {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .month-status-lead .btn-primary {
+      width: 100%;
+    }
+    .progress-detail {
+      grid-column: 1 / -1;
+    }
+  }
+  @media (forced-colors: active) {
+    .month-progress li {
+      border-top-color: CanvasText;
+    }
+    .month-progress li::before {
+      forced-color-adjust: none;
+      background: Highlight;
+    }
+  }
+
+  /* Grouped attention list (dashboard exception rows + summary/overflow rows). */
+  .attention-list {
+    padding-block: 0.5rem;
+  }
+  .attention-group + .attention-group {
+    border-top: 1px solid var(--color-border);
+  }
+  .attention-group-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem 0.25rem;
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    font-weight: 600;
+  }
+  .attention-group-icon {
+    display: flex;
+    color: var(--color-warning);
+  }
+  .attention-group-heading[data-tone="danger"] .attention-group-icon {
+    color: var(--color-destructive);
+  }
+  .attention-group-count {
+    margin-inline-start: auto;
+    font-variant-numeric: tabular-nums;
+  }
+  .attention-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.25rem 1rem;
+    padding: 0.5rem 1.5rem;
+    min-height: 4rem;
+  }
+  .attention-row + .attention-row {
+    border-top: 1px solid var(--color-border);
+  }
+  .attention-row-main {
+    min-width: 0;
+  }
+  .attention-heading > a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.5rem;
+    color: var(--color-foreground);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .attention-reason,
+  .attention-details {
+    font-size: var(--text-sm);
+    color: var(--color-muted);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .attention-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .attention-details strong {
+    color: var(--color-destructive);
+  }
+  .attention-summary-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .attention-summary-row > p {
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .attention-summary-icon {
+    display: flex;
+    color: var(--color-primary);
+  }
+  .attention-summary-row[data-tone="danger"] .attention-summary-icon {
+    color: var(--color-destructive);
+  }
+  .attention-summary-row[data-tone="warning"] .attention-summary-icon {
+    color: var(--color-warning);
+  }
+  .attention-more-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-top: 1px solid var(--color-border);
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+  }
+  .attention-more-row a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: var(--control-size-md);
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+  @media (pointer: coarse) {
+    .attention-heading > a {
+      min-height: var(--control-size-md);
+    }
+  }
+  @media (width < 48rem) {
+    .attention-row,
+    .attention-group-heading,
+    .attention-more-row {
+      padding-inline: 1.25rem;
+    }
+    .attention-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .attention-action {
+      justify-self: start;
+    }
+    .attention-summary-row {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+    .attention-summary-row .attention-action {
+      grid-column: 2;
+    }
+  }
+
+  /* Inline financial summary bar (compact sibling to metric-strip). */
+  .financial-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 2.5rem;
+    padding: 0.75rem 1.25rem;
+    border: var(--panel-border);
+    border-radius: var(--radius-panel);
+    corner-shape: squircle;
+    background: var(--color-surface);
+    font-size: var(--text-sm);
+  }
+  .financial-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    color: var(--color-muted);
+  }
+  .financial-stat strong {
+    color: var(--color-foreground);
+    font-size: var(--text-base);
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .financial-note {
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+  }
+  @media (width < 40rem) {
+    .financial-summary {
+      padding-inline: 1rem;
+    }
+  }
+
+  /* Routine status label without a tinted pill, reserving StatusBadge for exceptions. */
+  .status-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    letter-spacing: var(--tracking-small);
+    line-height: 1rem;
+  }
+
+  /* Middle truncation: preserves distinguishing endings such as meter serials. */
+  .mid-truncate {
+    display: flex;
+    min-width: 0;
+  }
+  .mid-start {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mid-end {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* Wrapping underline filter tabs with tabular counts. */
+  .workflow-rail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.25rem;
+    padding: 0 1.25rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .workflow-filter {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: var(--control-size-md);
+    padding: 0.5rem 0.625rem;
+    border-bottom: 2px solid transparent;
+    color: var(--color-muted);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .workflow-filter:hover {
+    color: var(--color-foreground);
+  }
+  .workflow-filter:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: -2px;
+  }
+  .workflow-filter[aria-current="page"] {
+    border-bottom-color: var(--color-primary);
+    color: var(--color-foreground);
+  }
+  .workflow-filter strong {
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .workflow-filter {
+      transition: color var(--duration-feedback) var(--ease-standard);
+    }
+  }
+  @media (width < 40rem) {
+    .workflow-rail {
+      padding-inline: 0.5rem;
+    }
+  }
+  @media (forced-colors: active) {
+    .workflow-filter[aria-current="page"] {
+      border-bottom: 3px solid Highlight;
+    }
+    .workflow-filter:focus-visible {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
+
+  /* Contextual bulk-selection bar above tables; fixed to bottom on phones. */
+  .bulk-toolbar {
+    position: sticky;
+    top: 0.75rem;
+    z-index: var(--z-sticky);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--color-input-border);
+    border-radius: var(--radius-control);
+    background: var(--color-surface-raised);
+    box-shadow: var(--elevation-raised);
+  }
+  .bulk-toolbar[hidden] {
+    display: none;
+  }
+  .selection-summary,
+  .bulk-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .selection-summary {
+    font-size: var(--text-sm);
+  }
+  .selection-summary > span {
+    color: var(--color-muted);
+  }
+  .clear-selection {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--control-size-sm);
+    color: var(--color-primary);
+    font-size: var(--text-sm);
+    font-weight: 550;
+    cursor: pointer;
+  }
+  @media (pointer: coarse) {
+    .clear-selection {
+      min-height: var(--control-size-md);
+    }
+  }
+  @media (width < 40rem) {
+    .bulk-toolbar {
+      position: fixed;
+      inset: auto 0.75rem 0.75rem;
+      z-index: var(--z-popover);
+      margin: 0;
+      padding: 0.75rem;
+    }
+    .bulk-actions {
+      width: 100%;
+    }
+    .bulk-actions .btn-primary,
+    .bulk-actions .btn-secondary {
+      flex: 1;
+    }
+  }
+
+  /* Native top-layer popover row menu: clears scrolling table clipping. */
+  .case-menu {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-popover);
+    margin: auto;
+    width: max-content;
+    height: fit-content;
+    min-width: 11rem;
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+    overflow: auto;
+    color: var(--color-foreground);
+  }
+  .case-menu a:focus-visible,
+  .case-menu button:focus-visible {
+    background: var(--color-menu-hover);
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: -2px;
+  }
+  .case-menu .menu-danger {
+    color: var(--color-destructive);
+  }
+  @media (forced-colors: active) {
+    .case-menu :is(a, button):hover {
+      outline: 1px solid Highlight;
+      outline-offset: -1px;
+    }
+    .case-menu :is(a, button):focus-visible {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
+
+  /* Save-status pill shared by MutationStatus and /design-system#notice. */
+  .mutation-summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: var(--control-size-md);
+    padding: 0.625rem 0.875rem;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-surface-raised);
+    box-shadow: var(--elevation-raised);
+    color: var(--color-foreground);
+    font-size: var(--text-sm);
+    font-weight: 650;
+    list-style: none;
+  }
+  .mutation-summary::-webkit-details-marker {
+    display: none;
+  }
+  .mutation-summary[data-state="error"],
+  [data-state="error"] .mutation-summary {
+    color: var(--color-destructive);
+  }
+
+  /* Inline Undo control paired with status lines (Tariffs, Invoice template). */
+  .inline-undo {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.5rem;
+    padding-inline: var(--space-2);
+    color: var(--color-primary);
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+    cursor: pointer;
+  }
+  .inline-undo:hover {
+    color: var(--color-primary-hover);
+  }
+  @media (pointer: coarse) {
+    .inline-undo {
+      min-height: var(--control-size-md);
+    }
+  }
+
+  /* Occupant cell pairing an avatar with a person's name. */
+  .table-occupant {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
   }
 }
 .app-content h1 {
@@ -3098,15 +3844,13 @@ textarea:disabled {
 }
 @media (prefers-reduced-motion: no-preference) {
   .app-content tbody tr {
-    transition: background-color var(--duration-fast) ease;
+    transition: background-color var(--duration-fast) var(--ease-standard);
   }
 }
-.app-content td a {
+/* Text links in tables are primary; a link styled as a button keeps its own
+   colour. */
+.app-content td a:where(:not([class*="btn-"], .link)) {
   color: var(--color-primary);
-}
-.app-content .rounded-panel.border {
-  border-color: var(--color-border);
-  box-shadow: var(--elevation-flat);
 }
 .app-content .flex.items-center.justify-between {
   gap: 0.75rem;
@@ -3176,7 +3920,7 @@ html:has(.context-drawer:modal) {
     opacity: 0;
     transition:
       translate var(--duration-panel) var(--ease-standard),
-      opacity var(--duration-normal) ease,
+      opacity var(--duration-normal) var(--ease-standard),
       overlay var(--duration-panel) allow-discrete,
       display var(--duration-panel) allow-discrete;
   }
@@ -3193,7 +3937,7 @@ html:has(.context-drawer:modal) {
   .context-drawer::backdrop {
     background: transparent;
     transition:
-      background-color var(--duration-normal) ease,
+      background-color var(--duration-normal) var(--ease-standard),
       overlay var(--duration-panel) allow-discrete,
       display var(--duration-panel) allow-discrete;
   }
@@ -3422,7 +4166,7 @@ html:has(.context-drawer:modal) {
 @media (prefers-reduced-motion: no-preference) {
   .tooltip {
     transition:
-      opacity var(--duration-fast) ease,
+      opacity var(--duration-fast) var(--ease-standard),
       transform var(--duration-normal) var(--ease-standard);
   }
 }
@@ -3438,30 +4182,39 @@ html:has(.context-drawer:modal) {
    and hover colours; this only adds the motion. */
 @media (prefers-reduced-motion: no-preference) {
   :is(.row-menu, .more-menu) > div,
+  .case-menu:popover-open,
   .dropdown-panel,
   .edit-disclosure-panel,
   .tpl-popover {
     transform-origin: top right;
     animation: panel-in var(--duration-panel) var(--ease-standard) both;
   }
+  .case-menu[data-placement="top"]:popover-open {
+    --panel-in-y: 6px;
+    transform-origin: bottom right;
+  }
   .dropdown:not(.dropdown-end) > .dropdown-panel {
     transform-origin: top left;
   }
-  :is(.row-menu, .more-menu) :is(a, button),
+  /* An opened disclosure reveals its content with the same panel motion. */
+  .disclosure[open] > :not(summary) {
+    transform-origin: top left;
+    animation: panel-in var(--duration-panel) var(--ease-standard) both;
+  }
+  :is(.row-menu, .more-menu, .case-menu) :is(a, button),
   .messages-list-item,
   .settings-card,
-  .tariff-dwelling-row,
-  .tpl-icon-button {
+  .tariff-dwelling-row {
     transition:
-      background-color var(--duration-fast) ease,
-      border-color var(--duration-fast) ease,
-      color var(--duration-fast) ease;
+      background-color var(--duration-fast) var(--ease-standard),
+      border-color var(--duration-fast) var(--ease-standard),
+      color var(--duration-fast) var(--ease-standard);
   }
 }
 @keyframes panel-in {
   from {
     opacity: 0;
-    transform: translateY(-6px) scale(0.97);
+    transform: translateY(var(--panel-in-y, -6px)) scale(0.97);
   }
 }
 
@@ -3495,7 +4248,7 @@ html:has(.context-drawer:modal) {
   .theme-toggle svg {
     transition:
       transform var(--duration-panel) var(--ease-standard),
-      opacity var(--duration-normal) ease;
+      opacity var(--duration-normal) var(--ease-standard);
   }
   .theme-toggle:active svg {
     transform: scale(0.9);
@@ -3518,6 +4271,122 @@ html:has(.context-drawer:modal) {
   }
 }
 
+/* Opt-in table modifiers: placed unlayered after .app-content table defaults
+   so padding, overflow-visible corner radii, voided cells and selection
+   states override cleanly at low specificity without breaking @container card
+   modes on pages like Current Month or Tariffs. */
+.app-content td :is(.case-menu, .row-menu, .more-menu) a,
+.case-menu a {
+  color: var(--color-foreground);
+}
+.app-content td :is(.case-menu, .row-menu, .more-menu) .menu-danger,
+.case-menu .menu-danger {
+  color: var(--color-destructive);
+}
+.table-wrap-visible {
+  overflow: visible;
+}
+/* The corner cells paint the rounded corners, in the container's own
+   squircle shape. */
+.table-wrap-visible thead th:first-child {
+  border-top-left-radius: var(--radius-panel);
+  corner-shape: squircle;
+}
+.table-wrap-visible thead th:last-child {
+  border-top-right-radius: var(--radius-panel);
+  corner-shape: squircle;
+}
+.table-wrap-visible
+  tbody
+  tr:where(:not([hidden]):not(:has(~ tr:not([hidden]))))
+  > td:first-child {
+  border-bottom-left-radius: var(--radius-panel);
+  corner-shape: squircle;
+}
+.table-wrap-visible
+  tbody
+  tr:where(:not([hidden]):not(:has(~ tr:not([hidden]))))
+  > td:last-child {
+  border-bottom-right-radius: var(--radius-panel);
+  corner-shape: squircle;
+}
+.table-wrap-visible tbody tr:hover {
+  background: transparent;
+}
+.table-wrap-visible tbody tr:hover > td {
+  background: var(--color-hover);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .table-wrap-visible td {
+    transition: background-color var(--duration-fast) var(--ease-standard);
+  }
+}
+.row-link:has(.row-menu[open]) {
+  z-index: calc(var(--z-raised) + 1);
+}
+.row-changed > td {
+  animation: row-changed-fade 1.5s ease-out;
+}
+@keyframes row-changed-fade {
+  from {
+    background: var(--color-hover);
+  }
+}
+.row-changed-still > td {
+  background: var(--color-hover);
+}
+td[data-void="true"] {
+  color: var(--color-muted);
+  text-decoration: line-through;
+}
+tbody tr[data-receded="true"] > td,
+tbody
+  tr[data-receded="true"]
+  > td
+  a:not([class*="btn-"], .row-menu a, .more-menu a, .case-menu a) {
+  color: var(--color-muted);
+}
+.table-compact th {
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+.table-compact th,
+.table-compact td {
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+.table-compact tbody tr:last-child td {
+  border-bottom: 0;
+}
+.table-compact .status-badge {
+  padding: 0.125rem 0.375rem;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: var(--tracking-small);
+  line-height: 1rem;
+}
+.table-compact tbody tr[data-selected] {
+  background: var(--color-nav-active-bg);
+}
+.table-wrap-visible .table-compact tbody tr[data-selected] {
+  background: transparent;
+}
+.table-wrap-visible .table-compact tbody tr[data-selected] > td,
+.table-wrap-visible .table-compact tbody tr[data-selected]:hover > td {
+  background: var(--color-nav-active-bg);
+}
+@media (forced-colors: active) {
+  .table-compact tbody tr[data-selected] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}
+.numeric-column {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Phones: `.stack-table` wrappers render each row as a labelled card
    (labels come from stack-tables.ts). Unlayered + !important on the
    structural bits so page-scoped table styles (min-width, borders) lose. */
@@ -3527,6 +4396,29 @@ html:has(.context-drawer:modal) {
     border: 0;
     background: none;
     box-shadow: none;
+  }
+  .table-wrap-visible.stack-table thead th:first-child,
+  .table-wrap-visible.stack-table thead th:last-child,
+  .table-wrap-visible.stack-table tbody tr > td:first-child,
+  .table-wrap-visible.stack-table tbody tr > td:last-child {
+    border-radius: 0;
+  }
+  .table-wrap-visible.stack-table tbody tr:hover {
+    background: var(--color-hover);
+  }
+  .table-wrap-visible.stack-table tbody tr:hover > td {
+    background: transparent;
+  }
+  .table-wrap-visible.stack-table .table-compact tbody tr[data-selected] {
+    background: var(--color-nav-active-bg);
+  }
+  .table-wrap-visible.stack-table .table-compact tbody tr[data-selected] > td,
+  .table-wrap-visible.stack-table
+    .table-compact
+    tbody
+    tr[data-selected]:hover
+    > td {
+    background: transparent;
   }
   .stack-table table,
   .stack-table tbody,

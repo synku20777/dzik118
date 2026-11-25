@@ -3,6 +3,7 @@ import { translate, uiLocale } from "../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import {
   ForbiddenError,
   requireActiveOrganization,
@@ -110,7 +111,7 @@ if (Astro.request.method === "POST") {
 ---
 
 <AdminLayout
-  title={`Import bank statement - ${organization.name}`}
+  title={`${t("Import bank statement")} – ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[
@@ -119,7 +120,7 @@ if (Astro.request.method === "POST") {
   ]}
 >
   <div class="space-y-6">
-    <h1 class="text-h2 text-foreground">{t("Import bank statement")}</h1>
+    <PageHeader title={t("Import bank statement")} />
 
     {step === "upload" && (
       <form
@@ -194,7 +195,9 @@ if (Astro.request.method === "POST") {
                 <tr>
                   <td class="px-4 py-2">{row.rowNumber}</td>
                   <td class="px-4 py-2">{row.bookingDate || "—"}</td>
-                  <td class="px-4 py-2">{row.amount || "—"}</td>
+                  <td class="px-4 py-2 text-right tabular-nums whitespace-nowrap">
+                    {row.amount || "—"}
+                  </td>
                   <td class="px-4 py-2">{row.currency || "—"}</td>
                   <td class="px-4 py-2">
                     <span

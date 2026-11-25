@@ -8,6 +8,7 @@ const t = (text: string) => translate(locale, text);
 // re-checks the mapping, and the import validates everything again inside its
 // own transaction. Nothing is stored until the last step.
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import {
   ForbiddenError,
   requireActiveOrganization,
@@ -390,7 +391,7 @@ const badge = (source: MappingSource, field: string | null) =>
 ---
 
 <AdminLayout
-  title={`${balances ? "Import opening balances" : metersKind ? "Import meter readings" : "Import dwellings"} - ${organization.name}`}
+  title={`${t(balances ? "Import opening balances" : metersKind ? "Import meter readings" : "Import dwellings")} – ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[
@@ -409,13 +410,15 @@ const badge = (source: MappingSource, field: string | null) =>
   ]}
 >
   <div class="space-y-6">
-    <h1 class="text-h2 text-foreground">
-      {balances
-        ? t("Import opening balances")
-        : metersKind
-          ? t("Import meter readings")
-          : t("Import dwellings")}
-    </h1>
+    <PageHeader
+      title={
+        balances
+          ? t("Import opening balances")
+          : metersKind
+            ? t("Import meter readings")
+            : t("Import dwellings")
+      }
+    />
 
     {needsPeriod && (
       <div class="notice max-w-2xl space-y-2">

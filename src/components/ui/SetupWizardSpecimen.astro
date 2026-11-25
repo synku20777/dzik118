@@ -1,0 +1,88 @@
+---
+import SetupLayout from "./SetupLayout.astro";
+import type { Props as SetupStepProps } from "./SetupSteps.astro";
+
+const samples = {
+  organization: {
+    title: "Organization details",
+    field: "Organization name",
+    value: "Brīvības 118",
+  },
+  dwellings: { title: "Dwellings", field: "Dwelling number", value: "12" },
+  period: {
+    title: "First billing period",
+    field: "Billing month",
+    value: "September 2026",
+  },
+  charges: {
+    title: "Charges",
+    field: "Tariff name",
+    value: "Building management",
+  },
+  meters: {
+    title: "Meters and starting readings",
+    field: "Cold water meter reading",
+    value: "125.100",
+  },
+  review: {
+    title: "Review",
+    field: "First invoice reference",
+    value: "INV-2026-001",
+  },
+} satisfies Record<
+  SetupStepProps["current"],
+  { title: string; field: string; value: string }
+>;
+const keys = Object.keys(samples) as SetupStepProps["current"][];
+const current =
+  keys.find((key) => key === Astro.url.searchParams.get("setupStep")) ??
+  "charges";
+const currentIndex = keys.indexOf(current);
+const stepLinks = Object.fromEntries(
+  keys.map((key) => {
+    const params = new URLSearchParams(Astro.url.search);
+    params.set("setupStep", key);
+    return [key, `?${params}#setup-wizard`];
+  })
+);
+const sample = samples[current];
+---
+
+<SetupLayout
+  title={sample.title}
+  headingLevel="h2"
+  organizationId="preview"
+  current={current}
+  steps={{
+    organization: true,
+    dwellings: true,
+    period: true,
+    charges: false,
+    meters: false,
+  }}
+  stepLinks={stepLinks}
+>
+  <section class="panel space-y-4">
+    <div class="field-box">
+      <label for="sample-setup-value">{sample.field}</label>
+      <input
+        id="sample-setup-value"
+        type="text"
+        value={sample.value}
+        readonly
+      />
+    </div>
+    <nav class="setup-actions" aria-label="Sample setup actions">
+      {currentIndex > 0 && (
+        <a class="btn-ghost" href={stepLinks[keys[currentIndex - 1]]}>
+          Back
+        </a>
+      )}
+      {currentIndex < keys.length - 1 && (
+        <a class="btn-primary" href={stepLinks[keys[currentIndex + 1]]}>
+          Continue
+        </a>
+      )}
+    </nav>
+  </section>
+</SetupLayout>

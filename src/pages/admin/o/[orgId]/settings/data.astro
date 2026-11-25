@@ -6,7 +6,9 @@ const t = (text: string) => translate(locale, text);
 // import/export index (spec Section 9.2, 11, 27 "Settings:
 // data/import/export").
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
+import type { IconName } from "../../../../../lib/ui/icons";
 
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { withRequestDb } from "../../../../../lib/db-request";
@@ -14,10 +16,38 @@ const organizationId = Astro.params.orgId!;
 const organization = await withRequestDb((db) =>
   getOrganization(db, organizationId)
 );
+
+const dataItems: Array<{ href: string; icon: IconName; label: string }> = [
+  {
+    href: `/admin/o/${organizationId}/migration`,
+    icon: "database",
+    label: "Migration Center",
+  },
+  {
+    href: `/admin/o/${organizationId}/dwellings/import`,
+    icon: "upload",
+    label: "Import dwellings (CSV)",
+  },
+  {
+    href: `/api/v1/admin/o/${organizationId}/dwellings/export`,
+    icon: "download",
+    label: "Export dwellings (CSV)",
+  },
+  {
+    href: `/api/v1/admin/o/${organizationId}/readings/export`,
+    icon: "download",
+    label: "Export meter readings (CSV)",
+  },
+  {
+    href: `/admin/o/${organizationId}/payments/import`,
+    icon: "upload",
+    label: "Import bank statement (CSV)",
+  },
+];
 ---
 
 <AdminLayout
-  title="Data import/export"
+  title={t("Data")}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[
@@ -25,52 +55,62 @@ const organization = await withRequestDb((db) =>
     { label: t("Data") },
   ]}
 >
-  <h1 class="text-h2 text-foreground">{t("Data")}</h1>
-  <ul class="mt-6 grid gap-4 sm:grid-cols-2">
-    <li>
-      <a
-        href={`/admin/o/${organizationId}/migration`}
-        class="box flex items-center gap-3 font-medium text-primary hover:underline"
-      >
-        <Icon name="database" size="sm" />
-        {t("Migration Center")}
-      </a>
-    </li>
-    <li>
-      <a
-        href={`/admin/o/${organizationId}/dwellings/import`}
-        class="box flex items-center gap-3 font-medium text-primary hover:underline"
-      >
-        <Icon name="upload" size="sm" />
-        {t("Import dwellings (CSV)")}
-      </a>
-    </li>
-    <li>
-      <a
-        href={`/api/v1/admin/o/${organizationId}/dwellings/export`}
-        class="box flex items-center gap-3 font-medium text-primary hover:underline"
-      >
-        <Icon name="download" size="sm" />
-        {t("Export dwellings (CSV)")}
-      </a>
-    </li>
-    <li>
-      <a
-        href={`/api/v1/admin/o/${organizationId}/readings/export`}
-        class="box flex items-center gap-3 font-medium text-primary hover:underline"
-      >
-        <Icon name="download" size="sm" />
-        {t("Export meter readings (CSV)")}
-      </a>
-    </li>
-    <li>
-      <a
-        href={`/admin/o/${organizationId}/payments/import`}
-        class="box flex items-center gap-3 font-medium text-primary hover:underline"
-      >
-        <Icon name="upload" size="sm" />
-        {t("Import bank statement (CSV)")}
-      </a>
-    </li>
-  </ul>
+  <div class="space-y-6">
+    <PageHeader title={t("Data")} />
+    <ul class="settings-grid">
+      {dataItems.map((item) => (
+        <li>
+          <a href={item.href} class="settings-card box">
+            <span class="icon-tile" aria-hidden="true">
+              <Icon name={item.icon} />
+            </span>
+            <span class="settings-card-label">{t(item.label)}</span>
+            <span class="settings-card-chevron" aria-hidden="true">
+              <Icon name="chevron-right" size="sm" />
+            </span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
 </AdminLayout>
+
+<style>
+  .settings-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .settings-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    color: var(--color-foreground);
+    text-decoration: none;
+  }
+  .settings-card-label {
+    min-width: 0;
+    flex: 1 1 auto;
+    font-size: var(--text-base);
+    font-weight: 700;
+  }
+  .settings-card-chevron {
+    flex: 0 0 auto;
+    color: var(--color-muted);
+    font-size: var(--text-xl);
+  }
+  .settings-card:hover .settings-card-chevron,
+  .settings-card:focus-visible .settings-card-chevron {
+    color: var(--color-foreground);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .settings-card-chevron {
+      transition: color var(--duration-fast) var(--ease-standard);
+    }
+  }
+  @media (width < 48rem) {
+    .settings-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

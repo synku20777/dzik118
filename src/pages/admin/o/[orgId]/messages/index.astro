@@ -1,4 +1,5 @@
 ---
+import "../../../../../styles/admin-messages.css";
 // Phase K (Messaging) - admin inbox (spec Section 13.19, 35 MSG-001/002).
 // This single page replaces the old separate list + [conversationId] pages
 // with a two-pane inbox: the list on the left always renders, the right
@@ -253,18 +254,21 @@ const conversationStatusMap = Object.fromEntries(
     {dwellingIdFilter && (
       <p class="notice">
         {t("Showing conversations for one dwelling only.")}{" "}
-        <a href={`/admin/o/${organizationId}/messages`} class="clear-filters">
+        <a
+          href={`/admin/o/${organizationId}/messages`}
+          class="link link-underlined"
+        >
           {t("Clear")}
         </a>
       </p>
     )}
 
     <form method="GET" class="filter-bar" data-instant-filter>
-      <div>
+      <div class="w-full sm:w-96">
         <label class="field-label" for="search">
           {t("Search")}
         </label>
-        <div class="input-icon mt-1">
+        <div class="input-icon mt-1 inline-block w-full align-top">
           <Icon name="search" size="sm" />
           <input
             id="search"
@@ -308,7 +312,7 @@ const conversationStatusMap = Object.fromEntries(
             status: undefined,
             unread: undefined,
           })}
-          class="clear-filters"
+          class="btn-ghost btn-sm"
         >
           {t("Clear filters")}
         </a>
@@ -469,7 +473,7 @@ const conversationStatusMap = Object.fromEntries(
               <span id="detail-status-badge">
                 <StatusBadge status={selectedConversation.status} />
               </span>
-              <details class="row-menu">
+              <details class="row-menu" data-dismiss>
                 <summary aria-label={t("More actions")}>
                   <Icon name="dots" size="sm" />
                 </summary>
@@ -483,8 +487,8 @@ const conversationStatusMap = Object.fromEntries(
               </details>
             </div>
 
-            <div class="messages-dwelling-card">
-              <span class="messages-dwelling-icon" aria-hidden="true">
+            <div class="messages-dwelling-card box box-well">
+              <span class="icon-tile" aria-hidden="true">
                 <Icon name="building" />
               </span>
               <div>
@@ -526,7 +530,8 @@ const conversationStatusMap = Object.fromEntries(
                 class="btn-secondary btn-sm"
                 href={`/admin/o/${organizationId}/dwellings/${selectedConversation.dwellingId}`}
               >
-                <span aria-hidden="true">↗</span> {t("Open dwelling")}
+                <Icon name="external-link" size="sm" />
+                {t("Open dwelling")}
               </a>
             </div>
 
@@ -576,7 +581,9 @@ const conversationStatusMap = Object.fromEntries(
               class="messages-reply"
               hidden={selectedConversation.status === "RESOLVED"}
             >
-              <h3>{t("Reply")}</h3>
+              <label class="field-label" for="reply-body">
+                {t("Reply")}
+              </label>
               <form
                 id="reply-form"
                 method="POST"
@@ -590,6 +597,7 @@ const conversationStatusMap = Object.fromEntries(
                 <input type="hidden" name="sentAs" value="ADMIN" />
               </form>
               <textarea
+                id="reply-body"
                 name="body"
                 form="reply-form"
                 required
@@ -642,6 +650,7 @@ const conversationStatusMap = Object.fromEntries(
   import { actions, isInputError } from "astro:actions";
   import { ICONS, type IconName } from "../../../../../lib/ui/icons";
   import { onPageLoad } from "../../../../../lib/ui/page-lifecycle";
+  import { bindInstantFilter } from "../../../../../lib/ui/instant-filter";
   import { initials } from "../../../../../lib/ui/initials";
 
   // Static, developer-authored path data only (never user input) -- see
@@ -664,18 +673,9 @@ const conversationStatusMap = Object.fromEntries(
     const filterForm = document.querySelector<HTMLFormElement>(
       "[data-instant-filter]"
     );
-    const searchInput = document.querySelector<HTMLInputElement>("#search");
-    const statusSelect = document.querySelector("#status-filter");
-    const unreadCheckbox = document.querySelector("#unread-only");
-    let searchTimer: number | undefined;
-    searchInput?.addEventListener("input", () => {
-      window.clearTimeout(searchTimer);
-      searchTimer = window.setTimeout(() => filterForm?.requestSubmit(), 300);
-    });
-    statusSelect?.addEventListener("change", () => filterForm?.requestSubmit());
-    unreadCheckbox?.addEventListener("change", () =>
-      filterForm?.requestSubmit()
-    );
+    const stopInstantFilter = filterForm
+      ? bindInstantFilter(filterForm)
+      : () => {};
 
     // Live thread + status updates for the open conversation. Polling (not a
     // websocket/Supabase Realtime subscription) because this app has no
@@ -848,276 +848,8 @@ const conversationStatusMap = Object.fromEntries(
       applyStatus("RESOLVED");
     });
     return () => {
-      window.clearTimeout(searchTimer);
+      stopInstantFilter();
       if (pollTimer !== undefined) window.clearInterval(pollTimer);
     };
   });
 </script>
-
-<style>
-  .messages-page {
-    display: grid;
-    gap: 1.25rem;
-  }
-  .messages-split {
-    display: grid;
-    /* The list takes a share of the width instead of a fixed 380px, so it
-       grows on wide screens and never squeezes the thread below 18rem. */
-    grid-template-columns: minmax(18rem, 32%) minmax(0, 1fr);
-    gap: 1.25rem;
-    align-items: start;
-  }
-  .messages-list-pane {
-    display: grid;
-    gap: 0;
-    overflow: hidden;
-  }
-  .messages-list-item {
-    display: block;
-    padding: 1rem 1rem;
-    border-bottom: 1px solid var(--color-border);
-    color: var(--color-foreground);
-  }
-  .messages-list-item:last-child {
-    border-bottom: 0;
-  }
-  .messages-list-item:hover {
-    background: var(--color-hover);
-  }
-  .messages-list-item[aria-current="true"] {
-    background: var(--color-nav-active-bg);
-  }
-  .messages-list-item-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.25rem 0.5rem;
-  }
-  .messages-list-item-title {
-    display: flex;
-    align-items: center;
-    min-width: 0;
-    gap: 0.5rem;
-    font-weight: 650;
-    font-size: var(--text-sm);
-  }
-  .messages-house-icon {
-    width: 1rem;
-    height: 1rem;
-    flex-shrink: 0;
-    color: var(--color-muted);
-  }
-  .unread-dot {
-    width: 0.45rem;
-    height: 0.45rem;
-    border-radius: 50%;
-    background: var(--color-primary);
-    flex-shrink: 0;
-  }
-  .messages-list-item-subject {
-    margin-top: 0.5rem;
-    font-weight: 650;
-    font-size: var(--text-sm);
-  }
-  .messages-list-item-occupant {
-    margin-top: 0.25rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .messages-list-item-foot {
-    display: grid;
-    gap: 0.25rem;
-    margin-top: 0.5rem;
-  }
-  /* Two lines of preview, then an ellipsis. The date has its own line, so a
-     long date (Latvian, Russian) no longer eats the preview width. */
-  .messages-list-item-preview {
-    min-width: 0;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    overflow-wrap: anywhere;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .messages-list-item-date {
-    color: var(--color-muted);
-    font-size: var(--text-xs);
-  }
-  .messages-empty {
-    padding: 3rem 1.5rem;
-    text-align: center;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .messages-detail-pane {
-    display: grid;
-    gap: 1rem;
-    padding: 1.5rem;
-    min-width: 0;
-  }
-  .messages-detail-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-  .messages-detail-header h2 {
-    font-size: var(--text-lg);
-    font-weight: 700;
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  .messages-dwelling-card {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem 1.25rem;
-    border: var(--panel-border);
-    border-radius: var(--radius-panel);
-    corner-shape: squircle;
-    background: var(--color-surface-hover);
-    flex-wrap: wrap;
-  }
-  .messages-dwelling-icon {
-    display: grid;
-    width: 2.5rem;
-    height: 2.5rem;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: var(--radius-panel);
-    corner-shape: squircle;
-    background: var(--tone-neutral-bg);
-    color: var(--color-muted);
-  }
-  .messages-dwelling-icon svg {
-    width: 1.15rem;
-    height: 1.15rem;
-  }
-  .messages-dwelling-card-title {
-    font-size: var(--text-sm);
-    font-weight: 650;
-  }
-  .messages-dwelling-card-sub {
-    margin-top: 0.25rem;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .messages-actions {
-    display: flex;
-    gap: 0.75rem;
-  }
-  .messages-thread {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
-  .messages-reply {
-    display: grid;
-    gap: 0.75rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--color-border);
-  }
-  .messages-reply h3 {
-    font-size: var(--text-sm);
-    font-weight: 700;
-  }
-  .messages-reply textarea {
-    width: 100%;
-    min-height: 6rem;
-    font: inherit;
-    font-size: var(--text-sm);
-    resize: vertical;
-  }
-  .messages-reply-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-  }
-  .messages-resolved-notice {
-    padding-top: 1rem;
-    border-top: 1px solid var(--color-border);
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .messages-new {
-    display: grid;
-    gap: 1rem;
-  }
-  .messages-new h2 {
-    font-size: var(--text-lg);
-    font-weight: 700;
-  }
-  .messages-new-form {
-    display: grid;
-    gap: 1rem;
-  }
-  .messages-new-form label {
-    margin-bottom: 0.5rem;
-  }
-  .messages-new-form select,
-  .messages-new-form input:not([type="checkbox"]):not([type="radio"]),
-  .messages-new-form textarea {
-    width: 100%;
-    font: inherit;
-    font-size: var(--text-sm);
-  }
-  .messages-new-form textarea {
-    resize: vertical;
-  }
-
-  @media (width < 48rem) {
-    .messages-split {
-      grid-template-columns: 1fr;
-    }
-  }
-</style>
-
-<style is:global>
-  /* Astro scopes component styles by adding a data-astro-cid attribute
-     that only elements written directly in this template receive --
-     message rows appended by the polling/reply script in this page's
-     <script> block are created via document.createElement and never get
-     that attribute, so their styling must live here instead of the
-     scoped <style> block above (same reasoning as AdminContextDrawer's
-     drawer-* classes). */
-  .message-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-  }
-  .message-row[data-mine="true"] {
-    flex-direction: row-reverse;
-  }
-  .message-col {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    max-width: 75%;
-    min-width: 0;
-  }
-  .message-row[data-mine="true"] .message-col {
-    align-items: flex-end;
-  }
-  .message-meta {
-    display: flex;
-    gap: 0.5rem;
-    font-size: var(--text-xs);
-    color: var(--color-muted);
-  }
-  .message-bubble {
-    padding: 0.75rem 1rem;
-    border-radius: var(--radius-panel);
-    corner-shape: squircle;
-    background: var(--color-surface-hover);
-    font-size: var(--text-sm);
-    line-height: 1.55;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .message-row[data-mine="true"] .message-bubble {
-    background: var(--color-nav-active-bg);
-  }
-</style>

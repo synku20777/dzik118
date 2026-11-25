@@ -83,7 +83,7 @@ interface SampleRow {
   label: string;
 }
 
-interface EditorBootstrap {
+export interface EditorBootstrap {
   headerText: string;
   footerText: string;
   paymentInstructions: string;
@@ -97,6 +97,7 @@ interface EditorBootstrap {
 onPageLoad(() => {
   const root = document.querySelector<HTMLElement>("#template-editor");
   if (!root) return;
+  const preview = root.hasAttribute("data-editor-preview");
   const controller = new AbortController();
   const bootstrapEl = document.querySelector<HTMLScriptElement>(
     "#template-editor-bootstrap"
@@ -260,7 +261,7 @@ onPageLoad(() => {
   window.addEventListener(
     "beforeunload",
     (event) => {
-      if (!isDirty()) return;
+      if (preview || !isDirty()) return;
       event.preventDefault();
     },
     { signal: controller.signal }
@@ -408,49 +409,50 @@ onPageLoad(() => {
       label: line.description,
     }));
   let currentPeriodId = periodSelect?.value ?? "";
-  periodSelect?.addEventListener(
-    "change",
-    async () => {
-      const select = periodSelect;
-      const periodId = select.value;
-      periodError.hidden = true;
-      select.disabled = true;
-      try {
-        const { data, error } = await actions.invoiceTemplates.previewLines({
-          organizationId,
-          periodId,
-        });
-        if (error || !data) throw error ?? new Error("previewLines");
-        bootstrap.sampleLines = data.sampleLines;
-        sampleRows = sampleRowsFor(data.sampleLines);
-        bootstrap.sampleInvoice = {
-          ...bootstrap.sampleInvoice,
-          issueDate: data.issueDate,
-          dueDate: data.dueDate,
-          subtotal: data.totals.subtotal,
-          vatTotal: data.totals.vatTotal,
-          currentCharges: data.totals.currentCharges,
-          amountDue: data.totals.currentCharges,
-        };
-        currentPeriodId = periodId;
-        const url = new URL(location.href);
-        url.searchParams.set("previewPeriodId", periodId);
-        history.replaceState(null, "", url);
-        renderBlockList();
-        renderPreviewNow();
-      } catch {
-        select.value = currentPeriodId;
-        periodError.textContent = s(
-          "Could not load the sample charges. Try again."
-        );
-        periodError.hidden = false;
-      } finally {
-        select.disabled = false;
-        select.focus();
-      }
-    },
-    { signal: controller.signal }
-  );
+  if (!preview)
+    periodSelect?.addEventListener(
+      "change",
+      async () => {
+        const select = periodSelect;
+        const periodId = select.value;
+        periodError.hidden = true;
+        select.disabled = true;
+        try {
+          const { data, error } = await actions.invoiceTemplates.previewLines({
+            organizationId,
+            periodId,
+          });
+          if (error || !data) throw error ?? new Error("previewLines");
+          bootstrap.sampleLines = data.sampleLines;
+          sampleRows = sampleRowsFor(data.sampleLines);
+          bootstrap.sampleInvoice = {
+            ...bootstrap.sampleInvoice,
+            issueDate: data.issueDate,
+            dueDate: data.dueDate,
+            subtotal: data.totals.subtotal,
+            vatTotal: data.totals.vatTotal,
+            currentCharges: data.totals.currentCharges,
+            amountDue: data.totals.currentCharges,
+          };
+          currentPeriodId = periodId;
+          const url = new URL(location.href);
+          url.searchParams.set("previewPeriodId", periodId);
+          history.replaceState(null, "", url);
+          renderBlockList();
+          renderPreviewNow();
+        } catch {
+          select.value = currentPeriodId;
+          periodError.textContent = s(
+            "Could not load the sample charges. Try again."
+          );
+          periodError.hidden = false;
+        } finally {
+          select.disabled = false;
+          select.focus();
+        }
+      },
+      { signal: controller.signal }
+    );
 
   // --- Phone: one column at a time -------------------------------------------
   const viewButtons = [
@@ -482,7 +484,7 @@ onPageLoad(() => {
     if (undo) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "tpl-undo";
+      button.className = "inline-undo";
       button.textContent = s("Undo");
       button.addEventListener("click", () => {
         clearStatus();
@@ -612,10 +614,15 @@ onPageLoad(() => {
     return input;
   }
 
-  function iconButton(label: string, onClick: () => void): HTMLButtonElement {
+  function actionButton(
+    label: string,
+    onClick: () => void,
+    options?: { className?: string; move?: "up" | "down" }
+  ): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "tpl-icon-button";
+    button.className = options?.className ?? "btn-secondary btn-sm";
+    if (options?.move) button.dataset.move = options.move;
     // The label is the visible text, so there is nothing for a tooltip to add.
     button.textContent = label;
     button.addEventListener("click", onClick);
@@ -642,12 +649,10 @@ onPageLoad(() => {
     const li = blockListEl.querySelector<HTMLElement>(
       `[data-block-id="${blockId}"]`
     );
-    const label = direction === -1 ? s("Move up") : s("Move down");
-    const button = li
-      ? [...li.querySelectorAll<HTMLButtonElement>(".tpl-icon-button")].find(
-          (b) => b.getAttribute("aria-label") === label
-        )
-      : undefined;
+    const move = direction === -1 ? "up" : "down";
+    const button = li?.querySelector<HTMLButtonElement>(
+      `button[data-move="${move}"]`
+    );
     button?.focus();
   }
 
@@ -704,10 +709,10 @@ onPageLoad(() => {
 
     const overflow = document.createElement("details");
     overflow.className = "tpl-row-overflow";
+    overflow.setAttribute("data-dismiss", "");
     const summary = document.createElement("summary");
-    summary.className = "tpl-overflow-btn tpl-icon-button";
+    summary.className = "icon-btn icon-btn-sm tpl-overflow-btn";
     summary.setAttribute("aria-label", s("More options"));
-    summary.dataset.tip = s("More options");
     summary.innerHTML = iconMarkup("dots");
     overflow.appendChild(summary);
     const popover = document.createElement("div");
@@ -1049,17 +1054,21 @@ onPageLoad(() => {
     const actions = document.createElement("div");
     actions.className = "tpl-block-actions";
     actions.appendChild(
-      iconButton(s("Move up"), () => moveBlock(block.id, -1))
+      actionButton(s("Move up"), () => moveBlock(block.id, -1), { move: "up" })
     );
     actions.appendChild(
-      iconButton(s("Move down"), () => moveBlock(block.id, 1))
+      actionButton(s("Move down"), () => moveBlock(block.id, 1), {
+        move: "down",
+      })
     );
     if (block.type === "text") {
       actions.appendChild(
-        iconButton(s("Duplicate"), () => duplicateTextBlock(block.id))
+        actionButton(s("Duplicate"), () => duplicateTextBlock(block.id))
       );
       actions.appendChild(
-        iconButton(s("Delete"), () => deleteTextBlock(block.id))
+        actionButton(s("Delete"), () => deleteTextBlock(block.id), {
+          className: "btn-secondary btn-sm",
+        })
       );
     }
     detail.appendChild(actions);
@@ -1255,7 +1264,9 @@ onPageLoad(() => {
       data.set("defaultNote", state.defaultNote);
       data.set("config", JSON.stringify(state.config));
       try {
-        const { error } = await actions.invoiceTemplates.update(data);
+        const error = preview
+          ? undefined
+          : (await actions.invoiceTemplates.update(data)).error;
         if (error) {
           saveFailed = true;
         } else {
@@ -1283,6 +1294,7 @@ onPageLoad(() => {
     "keydown",
     (event) => {
       if (
+        (preview && !root.getClientRects().length) ||
         !(event.ctrlKey || event.metaKey) ||
         event.key.toLowerCase() !== "s"
       ) {

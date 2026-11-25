@@ -53,6 +53,12 @@ import StatusBadge from "../../../../../components/ui/StatusBadge.astro";
 import { orgLocalDateString } from "../../../../../lib/org-time";
 import { listPeriods } from "../../../../../domain/periods/periods";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import TariffDrawer from "../../../../../components/ui/TariffDrawer.astro";
+import {
+  calculationTypes,
+  tariffCalculationLabels,
+} from "../../../../../lib/ui/tariff-options";
+import "../../../../../styles/tariffs.css";
 
 const organizationId = Astro.params.orgId!;
 
@@ -181,36 +187,45 @@ function ruleToDrawerJson(rule: RuleRow) {
 const editRuleId = Astro.url.searchParams.get("edit");
 const editRule = allRules.find((r) => r.id === editRuleId);
 
-const calculationTypes = [
-  "FIXED",
-  "AREA",
-  "RESIDENT_COUNT",
-  "METER_CONSUMPTION",
-  "MANUAL_QUANTITY",
-  "MANUAL_AMOUNT",
-] as const;
-const calculationTypeLabels: Record<string, string> = {
-  FIXED: t("Fixed"),
-  AREA: t("Area"),
-  RESIDENT_COUNT: t("Resident count"),
-  METER_CONSUMPTION: t("Meter consumption"),
-  MANUAL_QUANTITY: t("Manual quantity"),
-  MANUAL_AMOUNT: t("Manual amount"),
+const calculationTypeLabels = tariffCalculationLabels(locale);
+const drawerStrings = {
+  refreshError: t(
+    "The tariff was saved, but the list could not be refreshed. Reload the page to see the latest tariffs."
+  ),
+  ...pluralStrings(
+    "resultCount",
+    "Showing {shown} of {total} tariff",
+    "Showing {shown} of {total} tariffs"
+  ),
+  ...pluralStrings(
+    "dwellingCount",
+    "{n} dwelling selected",
+    "{n} dwellings selected"
+  ),
+  archiveConfirm: t(
+    "Archive {name}? It will no longer be used for new invoices."
+  ),
+  saved: t("Tariff saved"),
+  created: t("Tariff created"),
+  archived: t("Tariff archived"),
+  restored: t("Tariff restored. It is disabled until you enable it."),
+  turnedOff: t("«{name}» turned off."),
+  turnedOn: t("«{name}» turned on."),
+  undo: t("Undo"),
+  archivedStatus: t("Archived"),
+  priceWarning: t(
+    "Saving changes what open months bill: {months}. Draft invoices there change when they are generated again; prepared and sent invoices do not change."
+  ),
+  createTitle: t("New tariff"),
+  discardConfirm: t("Discard unsaved changes? Your edits have not been saved."),
+  createLabel: t("Create tariff"),
+  saveLabel: t("Save changes"),
+  savingLabel: t("Saving…"),
+  active: t("Active"),
+  disabled: t("Disabled"),
+  genericError: t("Something went wrong. Please try again."),
+  withVat: t("With VAT: {amount}"),
 };
-const unitOptions = [
-  { value: "m3", label: "m³" },
-  { value: "m2", label: "m²" },
-  { value: "kWh", label: "kWh" },
-  {
-    value: "month",
-    label: locale === "lv" ? "mēnesis" : locale === "ru" ? "месяц" : "month",
-  },
-  {
-    value: "person",
-    label: locale === "lv" ? "persona" : locale === "ru" ? "человек" : "person",
-  },
-  { value: "dwelling", label: t("Dwelling").toLowerCase() },
-];
 ---
 
 <AdminLayout
@@ -262,7 +277,7 @@ const unitOptions = [
             name="search"
             type="search"
             value={search}
-            placeholder={t("Name or code")}
+            placeholder={`${t("Name or code")}…`}
             autocomplete="off"
           />
         </div>
@@ -341,7 +356,7 @@ const unitOptions = [
       hidden
     ></p>
     <p id="tariff-operation-status" role="status" hidden></p>
-    <div class="table-wrap rules-table-wrap">
+    <div class="table-wrap table-wrap-visible rules-table-wrap">
       <table class="rules-table w-full text-left text-sm">
         <caption class="sr-only">{t("Billing rules")}</caption>
         <thead>
@@ -370,12 +385,13 @@ const unitOptions = [
               )}
               data-type={rule.calculationType}
               data-status={ruleStatus(rule)}
+              data-receded={ruleStatus(rule) !== "ACTIVE" ? "true" : undefined}
               hidden={!matchesFilters(rule)}
             >
               <td class="tariff-name">
                 <a
                   href={`?edit=${rule.id}`}
-                  class="row-link-target hover:underline"
+                  class="row-link-target link link-ghost"
                   data-open-tariff-drawer="edit"
                   data-rule={JSON.stringify(ruleToDrawerJson(rule))}
                 >
@@ -419,7 +435,7 @@ const unitOptions = [
                 <StatusBadge status={ruleStatus(rule)} />
               </td>
               <td class="tariff-menu text-right">
-                <details class="row-menu row-link-above">
+                <details class="row-menu row-link-above" data-dismiss>
                   <summary aria-label={`${t("More actions")}: ${rule.name}`}>
                     <Icon name="dots" size="sm" />
                   </summary>
@@ -494,394 +510,17 @@ const unitOptions = [
     </details>
   </div>
 
-  <dialog
-    id="tariff-drawer"
-    class="context-drawer tariff-drawer"
-    aria-labelledby="tariff-drawer-title"
-    data-deep-link-rule={
-      editRule ? JSON.stringify(ruleToDrawerJson(editRule)) : ""
+  <TariffDrawer
+    organizationId={organizationId}
+    currency={organization.currency}
+    locale={locale}
+    dwellingOptions={dwellingOptions}
+    editRuleJson={
+      editRule ? JSON.stringify(ruleToDrawerJson(editRule)) : undefined
     }
-    data-locale={locale}
-    data-open-periods={JSON.stringify(openPeriods)}
-    data-currency={organization.currency}
-    data-strings={JSON.stringify({
-      refreshError: t(
-        "The tariff was saved, but the list could not be refreshed. Reload the page to see the latest tariffs."
-      ),
-      ...pluralStrings(
-        "resultCount",
-        "Showing {shown} of {total} tariff",
-        "Showing {shown} of {total} tariffs"
-      ),
-      ...pluralStrings(
-        "dwellingCount",
-        "{n} dwelling selected",
-        "{n} dwellings selected"
-      ),
-      archiveConfirm: t(
-        "Archive {name}? It will no longer be used for new invoices."
-      ),
-      saved: t("Tariff saved"),
-      created: t("Tariff created"),
-      archived: t("Tariff archived"),
-      restored: t("Tariff restored. It is disabled until you enable it."),
-      turnedOff: t("«{name}» turned off."),
-      turnedOn: t("«{name}» turned on."),
-      undo: t("Undo"),
-      archivedStatus: t("Archived"),
-      priceWarning: t(
-        "Saving changes what open months bill: {months}. Draft invoices there change when they are generated again; prepared and sent invoices do not change."
-      ),
-      createTitle: t("New tariff"),
-      discardConfirm: t(
-        "Discard unsaved changes? Your edits have not been saved."
-      ),
-      createLabel: t("Create tariff"),
-      saveLabel: t("Save changes"),
-      savingLabel: t("Saving…"),
-      active: t("Active"),
-      disabled: t("Disabled"),
-      genericError: t("Something went wrong. Please try again."),
-      withVat: t("With VAT: {amount}"),
-    })}
-  >
-    <header class="context-drawer-header">
-      <div class="context-drawer-heading">
-        <div class="context-drawer-title-row">
-          <h2 class="context-drawer-title" id="tariff-drawer-title"></h2>
-          <span
-            class="status-badge"
-            id="tariff-drawer-status"
-            data-tone="neutral"
-            hidden
-          ></span>
-        </div>
-      </div>
-      <button
-        type="button"
-        class="icon-btn context-drawer-close"
-        data-close-tariff-drawer
-        aria-label={t("Close")}
-      >
-        <Icon name="x" size="sm" />
-      </button>
-    </header>
-    <div class="context-drawer-body">
-      <p
-        class="notice notice-danger"
-        role="alert"
-        tabindex="-1"
-        data-tariff-drawer-error
-        hidden
-      ></p>
-      <form id="tariff-form" novalidate>
-        <div>
-          <label class="check-row">
-            <input
-              type="checkbox"
-              id="tariff-enabled"
-              name="enabled"
-              value="1"
-              aria-describedby="tariff-enabled-hint"
-              checked
-            />
-            {t("Enabled")}
-          </label>
-          <p class="rule-field-hint" id="tariff-enabled-hint">
-            {t("A tariff that is off is not added to invoices.")}
-          </p>
-        </div>
-        <input type="hidden" name="organizationId" value={organizationId} />
-        <input type="hidden" name="ruleId" id="tariff-ruleId" />
-
-        <div class="rule-field-row">
-          <div class="rule-field">
-            <label for="tariff-name">{t("Name")} *</label>
-            <input id="tariff-name" name="name" type="text" required />
-          </div>
-          <div class="rule-field">
-            <label for="tariff-code">{t("Code")}</label>
-            <input
-              id="tariff-code"
-              name="code"
-              type="text"
-              maxlength="50"
-              required
-              aria-describedby="tariff-code-hint"
-            />
-            <p id="tariff-code-readonly" class="font-mono" hidden></p>
-            <p class="rule-field-hint" id="tariff-code-hint">
-              {t(
-                "Used to match invoice row styling. It cannot be changed after the tariff is created."
-              )}
-            </p>
-          </div>
-        </div>
-        <div class="rule-field">
-          <label for="tariff-description">{t("Description")}</label>
-          <textarea
-            id="tariff-description"
-            name="description"
-            class="drawer-textarea-box"
-            rows="2"
-          ></textarea>
-        </div>
-
-        <h3 class="drawer-section-heading">{t("Calculation")}</h3>
-        <div class="rule-field-row">
-          <div class="rule-field">
-            <label for="tariff-calculationType">{t("Type")} *</label>
-            <select id="tariff-calculationType" name="calculationType">
-              {calculationTypes.map((type) => (
-                <option value={type}>{calculationTypeLabels[type]}</option>
-              ))}
-            </select>
-          </div>
-          <div class="rule-field" data-meter-type-field>
-            <label for="tariff-meterType">{t("Meter type")}</label>
-            <select id="tariff-meterType" name="meterType">
-              <option value="">{t("-- none --")}</option>
-              <option value="COLD_WATER">{t("Cold water")}</option>
-              <option value="HOT_WATER">{t("Hot water")}</option>
-              <option value="ELECTRICITY">{t("Electricity")}</option>
-              <option value="GAS">{t("Gas")}</option>
-              <option value="HEAT">{t("Heat")}</option>
-              <option value="OTHER">{t("Other")}</option>
-            </select>
-          </div>
-          <div class="rule-field">
-            <label for="tariff-unit">{t("Unit")} *</label>
-            <input
-              id="tariff-unit"
-              name="unit"
-              type="text"
-              required
-              list="tariff-unit-options"
-              placeholder={unitOptions
-                .slice(0, 4)
-                .map(({ label }) => label)
-                .join(", ")}
-            />
-            <datalist id="tariff-unit-options">
-              {unitOptions.map(({ value, label }) => (
-                <option value={value} label={label} />
-              ))}
-            </datalist>
-          </div>
-
-          <div class="rule-field" data-unit-price-field>
-            <label for="tariff-unitPrice">{t("Unit price")} *</label>
-            <input
-              id="tariff-unitPrice"
-              name="unitPrice"
-              type="text"
-              placeholder={locale === "en" ? "0.00" : "0,00"}
-              inputmode="decimal"
-              aria-describedby="tariff-price-hint"
-            />
-            <p class="rule-field-hint" id="tariff-price-hint">
-              {t("A price of 0.00 is valid and will show on the invoice.")}
-            </p>
-          </div>
-          <div class="rule-field">
-            <label for="tariff-vatRate">{t("VAT %")}</label>
-            <input
-              id="tariff-vatRate"
-              name="vatRate"
-              type="text"
-              value={formatTrimmed("21", locale, 0)}
-              inputmode="decimal"
-            />
-          </div>
-        </div>
-        <p class="rule-field-hint tariff-gross" data-gross-preview hidden></p>
-
-        <p
-          class="notice notice-warning"
-          data-price-warning
-          role="status"
-          hidden
-        ></p>
-        <h3 class="drawer-section-heading">{t("Applies to")}</h3>
-        <div class="rule-field">
-          <div
-            class="tariff-scope-options"
-            role="radiogroup"
-            aria-label={t("Applies to")}
-          >
-            <label class="tariff-scope-option">
-              <input
-                type="radio"
-                name="applicationScope"
-                value="ONE_TO_ALL"
-                checked
-              />
-              <span>
-                <strong>{t("All dwellings")}</strong>
-                <p>{t("Applies to every current and future dwelling.")}</p>
-              </span>
-            </label>
-            <label class="tariff-scope-option">
-              <input type="radio" name="applicationScope" value="ONE_TO_MANY" />
-              <span>
-                <strong>{t("Selected dwellings")}</strong>
-                <p>
-                  {t(
-                    "Applies only to the dwellings you choose. New dwellings are not included automatically."
-                  )}{" "}
-                </p>
-              </span>
-            </label>
-            <label class="tariff-scope-option">
-              <input type="radio" name="applicationScope" value="ONE_TO_ONE" />
-              <span>
-                <strong>{t("One dwelling")}</strong>
-                <p>{t("Applies to exactly one dwelling.")}</p>
-              </span>
-            </label>
-          </div>
-        </div>
-        <div class="rule-field" data-scope-panel="ONE_TO_MANY" hidden>
-          <label for="tariff-dwelling-search">{t("Search dwellings")}</label>
-          <input
-            id="tariff-dwelling-search"
-            type="text"
-            data-dwelling-search
-            placeholder={t("Filter by dwelling number...")}
-          />
-          <div class="tariff-dwelling-actions">
-            <button
-              type="button"
-              class="btn-secondary btn-sm"
-              data-select-all-visible
-            >
-              {t("Select all visible")}
-            </button>
-            <button
-              type="button"
-              class="btn-secondary btn-sm"
-              data-clear-selection
-            >
-              {t("Clear selection")}
-            </button>
-            <span data-dwelling-count-label>{t("0 dwellings selected")}</span>
-          </div>
-          <div class="tariff-dwelling-list" data-dwelling-checklist>
-            {dwellingOptions.map((d) => (
-              <label
-                class="tariff-dwelling-row"
-                data-dwelling-number={d.number.toLowerCase()}
-              >
-                <input type="checkbox" name="dwellingIds" value={d.id} />
-                {t("Dwelling")} {d.number}
-              </label>
-            ))}
-          </div>
-        </div>
-        <div class="rule-field" data-scope-panel="ONE_TO_ONE" hidden>
-          <label for="tariff-dwelling-single">{t("Dwelling")} *</label>
-          <select id="tariff-dwelling-single" name="dwellingIdSingle">
-            <option value="">{t("-- select a dwelling --")}</option>
-            {dwellingOptions.map((d) => (
-              <option value={d.id}>
-                {t("Dwelling")} {d.number}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <h3 class="drawer-section-heading">{t("Validity")}</h3>
-        <div class="rule-field-row">
-          <div class="rule-field">
-            <label for="tariff-effectiveFrom">{t("Effective from")} *</label>
-            <input
-              id="tariff-effectiveFrom"
-              name="effectiveFrom"
-              type="date"
-              required
-            />
-          </div>
-          <div class="rule-field">
-            <label for="tariff-effectiveUntil">{t("Effective until")}</label>
-            <input
-              id="tariff-effectiveUntil"
-              name="effectiveUntil"
-              type="date"
-              aria-describedby="tariff-until-hint"
-            />
-            <p class="rule-field-hint" id="tariff-until-hint">
-              {t("Leave empty for ongoing.")}
-            </p>
-          </div>
-        </div>
-
-        <h3 class="drawer-section-heading">{t("On the invoice")}</h3>
-        <div class="rule-field-row">
-          <div class="rule-field">
-            <label for="tariff-nameEn">{t("English invoice label")}</label>
-            <input
-              id="tariff-nameEn"
-              name="nameEn"
-              type="text"
-              maxlength="200"
-            />
-          </div>
-          <div class="rule-field">
-            <label for="tariff-nameRu">{t("Russian invoice label")}</label>
-            <input
-              id="tariff-nameRu"
-              name="nameRu"
-              type="text"
-              maxlength="200"
-            />
-          </div>
-        </div>
-
-        <div class="rule-field">
-          <label for="tariff-sortOrder">{t("Order on the invoice")}</label>
-          <input
-            id="tariff-sortOrder"
-            name="sortOrder"
-            type="number"
-            step="1"
-            aria-describedby="tariff-order-hint"
-          />
-          <p class="field-hint" id="tariff-order-hint">
-            {t("Lower numbers come first on the invoice.")}
-          </p>
-        </div>
-      </form>
-    </div>
-    <footer class="context-drawer-footer">
-      <button
-        type="button"
-        class="btn-secondary"
-        id="tariff-drawer-archive"
-        hidden
-      >
-        {t("Archive")}
-      </button>
-      <button
-        type="button"
-        class="btn-secondary"
-        id="tariff-drawer-restore"
-        hidden
-      >
-        {t("Restore")}
-      </button>
-      <button type="button" class="btn-secondary" data-close-tariff-drawer>
-        {t("Close")}
-      </button>
-      <button
-        type="submit"
-        form="tariff-form"
-        class="btn-primary"
-        id="tariff-drawer-save"
-      >
-        {t("Save changes")}
-      </button>
-    </footer>
-  </dialog>
+    openPeriodsJson={JSON.stringify(openPeriods)}
+    stringsJson={JSON.stringify(drawerStrings)}
+  />
 </AdminLayout>
 
 <script
@@ -1050,7 +689,7 @@ const unitOptions = [
       if (undo) {
         const button = document.createElement("button");
         button.type = "button";
-        button.className = "tariff-undo";
+        button.className = "inline-undo tariff-undo";
         button.textContent = strings.undo;
         button.onclick = undo;
         operationStatus.appendChild(document.createTextNode(" "));
@@ -1753,7 +1392,10 @@ const unitOptions = [
         );
         if (!button) return;
         const menu = button.closest("details");
-        if (menu) menu.open = false;
+        if (menu) {
+          menu.open = false;
+          menu.querySelector("summary")?.focus();
+        }
         if (button.dataset.ruleOperation === "toggle") {
           void toggleRule(
             button.dataset.ruleId!,
@@ -1891,361 +1533,3 @@ const unitOptions = [
     };
   });
 </script>
-
-<style>
-  .rules-page {
-    display: grid;
-    gap: var(--gap-section);
-    min-width: 0;
-  }
-  .rules-archived-toggle {
-    font-size: var(--text-sm);
-  }
-  .tariff-gross {
-    margin-block-start: calc(var(--gap-field) * -0.5);
-    color: var(--color-foreground);
-    font-variant-numeric: tabular-nums;
-  }
-  .tariff-undo {
-    min-height: 1.5rem;
-    padding-inline: var(--space-2);
-    color: var(--color-primary);
-    text-decoration: underline;
-  }
-  /* The table answers to its own width, not the screen's: the sidebar comes
-     and goes, and Russian labels run long. Inline-size containment also stops
-     the table from pushing the whole page wider than the screen. */
-  .rules-table-wrap {
-    overflow: visible;
-    container: rules-table / inline-size;
-  }
-  /* `.table-wrap` rounds its corners by clipping (overflow-x: auto), which
-     would cut off the row menu of the last rows here. So the corner cells
-     carry the panel radius themselves: the header's two outer cells, and the
-     outer cells of the last visible row (filtering hides rows, so :last-child
-     is not enough). The row tint moves from <tr> to its cells so the radius
-     clips it too. */
-  .rules-table thead th:first-child {
-    border-top-left-radius: var(--radius-panel);
-  }
-  .rules-table thead th:last-child {
-    border-top-right-radius: var(--radius-panel);
-  }
-  .rules-table
-    tbody
-    tr:not([hidden]):not(:has(~ tr:not([hidden])))
-    > td:first-child {
-    border-bottom-left-radius: var(--radius-panel);
-  }
-  .rules-table
-    tbody
-    tr:not([hidden]):not(:has(~ tr:not([hidden])))
-    > td:last-child {
-    border-bottom-right-radius: var(--radius-panel);
-  }
-  .rules-table-wrap .rules-table tbody tr:hover {
-    background: transparent;
-  }
-  .rules-table-wrap .rules-table tbody tr:hover > td {
-    background: var(--color-hover);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .rules-table td {
-      transition: background-color var(--duration-fast) ease;
-    }
-  }
-  /* One-line date ranges once the table has room for them (1024px and up). */
-  @container rules-table (width >= 60rem) {
-    .tariff-date-range {
-      white-space: nowrap;
-    }
-  }
-  /* Cell spacing, alignment and the row menu match the Dwellings table. */
-  .rules-table th {
-    padding: var(--space-3) var(--space-4);
-  }
-  .rules-table td {
-    padding: var(--space-4);
-    vertical-align: middle;
-  }
-  /* The global tablet padding (below 70rem), carried on to 90rem: with seven
-     columns and the one-line date range, Russian needs it until ~1400px. */
-  @media (40rem <= width < 90rem) {
-    .rules-table th,
-    .rules-table td {
-      padding-inline: 0.625rem;
-    }
-  }
-  .tariff-vat {
-    white-space: nowrap;
-  }
-  .rules-table tr[hidden] {
-    display: none;
-  }
-  .rules-table tbody tr {
-    border-bottom: 1px solid var(--color-border);
-  }
-  /* The last *visible* row: the tbody's last child is the hidden "no
-     matches" row, so :last-child never matched a tariff. */
-  .rules-table tbody tr:not([hidden]):not(:has(~ tr:not([hidden]))) {
-    border-bottom: 0;
-  }
-  .tariff-name a {
-    font-weight: 500;
-  }
-  .tariff-code,
-  .tariff-secondary {
-    display: block;
-    margin-block-start: var(--space-1);
-    color: var(--color-muted);
-  }
-  .tariff-code {
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    overflow-wrap: anywhere;
-  }
-  /* Off and archived tariffs recede; the badge still says why. */
-  [data-tariff-row]:not([data-status="ACTIVE"])
-    :is(.tariff-name a, .tariff-calculation, .tariff-vat, .tariff-validity) {
-    color: var(--color-muted);
-  }
-  /* A just-changed row: the hover tint, fading out. */
-  .row-changed > td {
-    animation: tariff-row-changed 1.5s ease-out;
-  }
-  @keyframes tariff-row-changed {
-    from {
-      background: var(--color-hover);
-    }
-  }
-  /* Reduced motion: no fade; the script removes this after 1.5 s. */
-  .row-changed-still > td {
-    background: var(--color-hover);
-  }
-  .row-link:has(.row-menu[open]) {
-    z-index: calc(var(--z-raised) + 1);
-  }
-  @media (pointer: coarse) {
-    .tariff-undo {
-      min-height: var(--control-size-md);
-    }
-  }
-  .rules-help {
-    display: grid;
-    gap: var(--gap-field);
-    padding: var(--pad-panel-compact);
-    font-size: var(--text-sm);
-  }
-  .rules-help p {
-    max-width: 80ch;
-  }
-  .rule-field-row {
-    display: grid;
-    gap: var(--gap-field);
-  }
-  .rule-field {
-    min-width: 0;
-  }
-  .rule-field label {
-    display: block;
-    margin-block-end: var(--gap-label);
-    font-size: var(--text-sm);
-    font-weight: 600;
-  }
-  .rule-field input:not([type="radio"]):not([type="checkbox"]),
-  .rule-field select,
-  .rule-field textarea {
-    width: 100%;
-    min-width: 0;
-    font-size: var(--text-sm);
-  }
-  .rule-field-hint {
-    margin-block-start: var(--gap-label);
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .tariff-drawer {
-    width: min(40rem, 100vw);
-  }
-  .tariff-drawer,
-  .tariff-drawer[open] {
-    translate: none;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .tariff-drawer {
-      transition:
-        opacity var(--duration-normal) ease,
-        overlay var(--duration-normal) allow-discrete,
-        display var(--duration-normal) allow-discrete;
-    }
-  }
-  #tariff-form {
-    display: grid;
-    gap: var(--gap-field);
-  }
-  .drawer-section-heading {
-    margin-block-start: var(--gap-section);
-    font-size: var(--text-base);
-    font-weight: 600;
-  }
-  .drawer-textarea-box {
-    resize: vertical;
-  }
-  .tariff-scope-options {
-    display: grid;
-    gap: var(--space-2);
-  }
-  .rule-field label.tariff-scope-option {
-    display: flex;
-    align-items: start;
-    gap: var(--space-3);
-    min-height: var(--control-size-md);
-    padding-block: var(--space-2);
-    cursor: pointer;
-  }
-  .tariff-scope-option input {
-    flex: 0 0 auto;
-    margin-block-start: var(--gap-label);
-  }
-  .tariff-scope-option strong {
-    display: block;
-    font-weight: 600;
-  }
-  .tariff-scope-option p {
-    color: var(--color-muted);
-    font-weight: 400;
-  }
-  .tariff-dwelling-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    margin-block-start: var(--space-2);
-  }
-  .tariff-dwelling-actions span {
-    margin-inline-start: auto;
-    color: var(--color-muted);
-    font-size: var(--text-sm);
-  }
-  .tariff-dwelling-list {
-    display: grid;
-    gap: var(--gap-label);
-    max-height: 12rem;
-    margin-block-start: var(--space-3);
-    overflow-y: auto;
-  }
-  .rule-field label.tariff-dwelling-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-height: var(--control-size-md);
-    padding: var(--space-2);
-    font-weight: 400;
-  }
-  .tariff-dwelling-row:hover {
-    background: var(--color-hover);
-  }
-  @media (width >= 48rem) {
-    .rule-field-row {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-  @media (width < 40rem) {
-    .rules-archived-toggle {
-      flex-basis: 100%;
-    }
-    .rules-page :global(.page-header) {
-      align-items: stretch;
-      flex-direction: column;
-    }
-    .rules-page :global(.page-actions) {
-      justify-content: start;
-    }
-    .tariff-drawer .context-drawer-footer {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    #tariff-drawer-save {
-      grid-column: 1 / -1;
-      grid-row: 2;
-      width: 100%;
-    }
-    .tariff-drawer .context-drawer-footer > [data-close-tariff-drawer] {
-      grid-column: 2;
-      grid-row: 1;
-    }
-    #tariff-drawer-archive,
-    #tariff-drawer-restore {
-      grid-column: 1;
-      grid-row: 1;
-    }
-  }
-  /* Cards once seven columns no longer fit (phones, and tablets without the
-     sidebar). */
-  @container rules-table (width < 50rem) {
-    /* Cards: the row is the box, so it carries the tint and the outer radius. */
-    .rules-table-wrap .rules-table tbody tr:hover {
-      background: var(--color-hover);
-    }
-    .rules-table-wrap .rules-table tbody tr:hover > td {
-      background: transparent;
-    }
-    .rules-table tbody tr:not([hidden]):not(tr:not([hidden]) ~ tr) {
-      border-top-left-radius: var(--radius-panel);
-      border-top-right-radius: var(--radius-panel);
-    }
-    .rules-table tbody tr:not([hidden]):not(:has(~ tr:not([hidden]))) {
-      border-bottom-left-radius: var(--radius-panel);
-      border-bottom-right-radius: var(--radius-panel);
-    }
-    .rules-table,
-    .rules-table tbody {
-      display: block;
-      width: 100%;
-    }
-    .rules-table thead {
-      display: none;
-    }
-    .rules-table tbody tr {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto auto;
-      gap: var(--space-2);
-      padding: var(--pad-panel-compact);
-    }
-    .rules-table td {
-      display: block;
-      padding: 0;
-    }
-    .rules-table .tariff-name {
-      grid-column: 1;
-      grid-row: 1;
-    }
-    .rules-table .tariff-status {
-      grid-column: 2;
-      grid-row: 1;
-    }
-    .rules-table .tariff-menu {
-      grid-column: 3;
-      grid-row: 1;
-    }
-    .rules-table .tariff-calculation {
-      grid-column: 1 / -1;
-      grid-row: 2;
-    }
-    .rules-table .tariff-validity {
-      grid-column: 1 / -1;
-      grid-row: 3;
-    }
-    .rules-table .tariff-vat,
-    .rules-table .tariff-scope {
-      display: none;
-    }
-    .tariff-calculation .tariff-secondary {
-      display: inline;
-      margin-inline-start: var(--space-2);
-    }
-    #tariff-empty td {
-      grid-column: 1 / -1;
-    }
-  }
-</style>

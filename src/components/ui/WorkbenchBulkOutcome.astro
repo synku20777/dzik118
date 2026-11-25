@@ -1,0 +1,29 @@
+---
+import { translate, type Locale } from "../../lib/ui/i18n";
+import { skipReasonsText } from "../../lib/ui/skip-reason";
+interface Props {
+  locale: Locale;
+  outcome: {
+    count: number;
+    label: string;
+    skippedCount: number;
+    skipReasons: string[];
+  };
+}
+const { locale, outcome } = Astro.props;
+const t = (text: string) => translate(locale, text);
+---
+
+<p class="notice" role="status">
+  {outcome.count} {t(outcome.label)}.
+  {outcome.skippedCount > 0 && (
+    <>
+      {" "}
+      {outcome.skippedCount} {t("skipped")}:{" "}
+      {skipReasonsText(
+        outcome.skipReasons.map((reason) => ({ reason })),
+        locale
+      )}
+    </>
+  )}
+</p>

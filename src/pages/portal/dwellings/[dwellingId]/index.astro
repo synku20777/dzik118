@@ -1,4 +1,8 @@
 ---
+import ResidentDetails from "../../../../components/ui/ResidentDetails.astro";
+import ResidentMeterCard from "../../../../components/ui/ResidentMeterCard.astro";
+import ResidentReadingForm from "../../../../components/ui/ResidentReadingForm.astro";
+import ResidentBack from "../../../../components/ui/ResidentBack.astro";
 import ResidentLayout from "../../../../layouts/ResidentLayout.astro";
 import { actions } from "astro:actions";
 import { meterTypeEnum } from "../../../../db/schema/dwellings";
@@ -22,7 +26,6 @@ import readingsSource from "../../../../domain/periods/readings.ts?raw";
 import { errorTranslations } from "../../../../lib/ui/error-translations";
 import StatusBadge from "../../../../components/ui/StatusBadge.astro";
 import InvoiceList from "../../../../components/ui/ResidentInvoiceList.astro";
-import { METER_ICONS } from "../../../../lib/ui/icons";
 import { unitLabel } from "../../../../lib/ui/units";
 import {
   translate,
@@ -139,10 +142,7 @@ const canSubmit = !deadlinePassed && missingReadings > 0;
 <ResidentLayout title={t("Dwelling") + " " + dwelling.number}>
   <div>
     {(Astro.locals.auth?.dwellingIds.length ?? 0) > 1 && (
-      <a class="resident-back" href="/portal/dwellings">
-        <Icon name="arrow-left" />
-        {t("Your dwellings")}
-      </a>
+      <ResidentBack href="/portal/dwellings" label={t("Your dwellings")} />
     )}
     <header class="resident-title">
       <h1 class="font-display">
@@ -243,7 +243,7 @@ const canSubmit = !deadlinePassed && missingReadings > 0;
             </p>
           )}
           {canSubmit && (
-            <p id="reading-help" class="resident-line resident-hint">
+            <p id="reading-help" class="resident-line resident-muted">
               <Icon name="info-circle" />
               {t(
                 "Enter the full number on the meter, not the amount used. You can use a comma or a decimal point, with up to 3 decimal places."
@@ -254,101 +254,35 @@ const canSubmit = !deadlinePassed && missingReadings > 0;
             const name = meter.label || entityLabel(meter.type, locale);
             const unit = unitLabel(meter.unit, locale);
             return (
-              <section
-                class="resident-meter"
-                aria-labelledby={`meter-title-${meter.meterId}`}
+              <ResidentMeterCard
+                id={meter.meterId}
+                type={meter.type}
+                name={name}
+                unit={unit}
+                serialNumber={meter.serialNumber}
+                previousValue={previousValues.get(meter.meterId)}
+                currentValue={meter.currentValue}
+                source={meter.source}
+                locale={locale}
               >
-                <span class="resident-meter-icon" data-meter={meter.type}>
-                  <Icon name={METER_ICONS[meter.type] ?? "tool"} size="lg" />
-                </span>
-                <div>
-                  <h3 id={`meter-title-${meter.meterId}`}>{name}</h3>
-                  <p class="resident-meter-facts">
-                    {meter.serialNumber && (
-                      <span>
-                        {t("Serial number")}: {meter.serialNumber}
-                      </span>
-                    )}
-                    {previousValues.has(meter.meterId) && (
-                      <span>
-                        {t("Previous reading")}:{" "}
-                        <strong>
-                          {formatNumber(
-                            previousValues.get(meter.meterId)!,
-                            locale
-                          )}{" "}
-                          {unit}
-                        </strong>
-                      </span>
-                    )}
-                  </p>
-                </div>
-                <div
-                  data-reading-received
-                  hidden={meter.currentValue === null}
-                  role="status"
-                  tabindex="-1"
-                >
-                  <p class="resident-meter-figure">
-                    <strong data-reading-value>
-                      {meter.currentValue !== null &&
-                        formatNumber(meter.currentValue, locale)}
-                    </strong>{" "}
-                    <span>{unit}</span>
-                  </p>
-                  <p class="resident-meter-state">
-                    <Icon name="check" size="sm" />
-                    {t("Reading received")}
-                  </p>
-                  {meter.source === "CARRIED_FORWARD" && (
-                    <p class="resident-muted">
-                      {entityLabel(meter.source, locale)}
-                    </p>
-                  )}
-                </div>
                 {meter.currentValue === null && !deadlinePassed && (
-                  <form
-                    method="POST"
+                  <ResidentReadingForm
                     action={`${actions.readings.residentSubmit}#readings`}
-                    data-resident-reading
-                    data-saving={t("Saving…")}
-                    data-failed={t(
-                      "The reading could not be saved. Check your connection and try again."
-                    )}
-                  >
-                    <input type="hidden" name="dwellingId" value={dwellingId} />
-                    <input type="hidden" name="periodId" value={period.id} />
-                    <input type="hidden" name="meterId" value={meter.meterId} />
-                    <label class="field-label" for={`reading-${meter.meterId}`}>
-                      {t("Number shown on the meter")} ({unit})
-                    </label>
-                    <div class="resident-reading-controls">
-                      <input
-                        id={`reading-${meter.meterId}`}
-                        name="currentValue"
-                        type="text"
-                        inputmode="decimal"
-                        pattern="[0-9]{1,11}([.,][0-9]{1,3})?"
-                        required
-                        autocomplete="off"
-                        value={
-                          submitted?.get("meterId") === meter.meterId
-                            ? String(submitted.get("currentValue") ?? "")
-                            : ""
-                        }
-                        aria-describedby="reading-help"
-                      />
-                      <button
-                        type="submit"
-                        class="btn-primary"
-                        aria-label={`${t("Submit reading")}: ${name}`}
-                      >
-                        {t("Submit reading")}
-                      </button>
-                    </div>
-                  </form>
+                    dwellingId={dwellingId}
+                    periodId={period.id}
+                    meterId={meter.meterId}
+                    name={name}
+                    unit={unit}
+                    helpId="reading-help"
+                    value={
+                      submitted?.get("meterId") === meter.meterId
+                        ? String(submitted.get("currentValue") ?? "")
+                        : ""
+                    }
+                    locale={locale}
+                  />
                 )}
-              </section>
+              </ResidentMeterCard>
             );
           })}
           {activeMeters.length === 0 && (
@@ -367,84 +301,72 @@ const canSubmit = !deadlinePassed && missingReadings > 0;
         {t("Help with readings")}
       </a>
     </section>
-    <details class="resident-details">
-      <summary>
-        {t("Consumption history")}
-        <Icon name="chevron-right" size="lg" />
-      </summary>
-      <div class="resident-details-body">
-        {groupedHistory.length === 0 ? (
-          <p class="resident-muted">{t("No consumption history yet.")}</p>
-        ) : (
-          <div class="table-wrap stack-table">
-            <table class="w-full text-sm">
-              <caption class="sr-only">{t("Consumption history")}</caption>
-              <>
-                <thead>
-                  <tr>
-                    <>
-                      <th scope="col" class="text-left">
-                        {t("Period")}
+    <ResidentDetails label={t("Consumption history")}>
+      {groupedHistory.length === 0 ? (
+        <p class="resident-muted">{t("No consumption history yet.")}</p>
+      ) : (
+        <div class="table-wrap stack-table">
+          <table class="w-full text-sm">
+            <caption class="sr-only">{t("Consumption history")}</caption>
+            <>
+              <thead>
+                <tr>
+                  <>
+                    <th scope="col" class="text-left">
+                      {t("Period")}
+                    </th>
+                    {historyColumns.map((column) => (
+                      <th scope="col" class="text-right">
+                        {entityLabel(column.meterType, locale)} (
+                        {unitLabel(column.unit, locale)})
                       </th>
-                      {historyColumns.map((column) => (
-                        <th scope="col" class="text-right">
-                          {entityLabel(column.meterType, locale)} (
-                          {unitLabel(column.unit, locale)})
-                        </th>
-                      ))}
-                    </>
+                    ))}
+                  </>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-border">
+                {groupedHistory.map((row) => (
+                  <tr>
+                    <td>{formatPeriod(row.year, row.month, locale)}</td>
+                    {historyColumns.map((column) => {
+                      const reading = row.readings.find(
+                        (r) =>
+                          r.meterType === column.meterType &&
+                          r.unit === column.unit
+                      );
+                      return (
+                        <td class="text-right">
+                          {reading
+                            ? formatNumber(reading.consumption, locale)
+                            : "—"}
+                        </td>
+                      );
+                    })}
                   </tr>
-                </thead>
-                <tbody class="divide-y divide-border">
-                  {groupedHistory.map((row) => (
-                    <tr>
-                      <td>{formatPeriod(row.year, row.month, locale)}</td>
-                      {historyColumns.map((column) => {
-                        const reading = row.readings.find(
-                          (r) =>
-                            r.meterType === column.meterType &&
-                            r.unit === column.unit
-                        );
-                        return (
-                          <td class="text-right">
-                            {reading
-                              ? formatNumber(reading.consumption, locale)
-                              : "—"}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </>
-            </table>
-          </div>
-        )}
-      </div>
-    </details>
-    <details class="resident-details">
-      <summary>
-        {t("Recent invoices")}
-        <Icon name="chevron-right" size="lg" />
-      </summary>
-      <div class="resident-details-body">
-        {recentInvoices.length === 0 ? (
-          <p class="resident-muted">{t("No invoices yet.")}</p>
-        ) : (
-          <>
-            <InvoiceList
-              invoices={recentInvoices}
-              dwellingId={dwellingId}
-              locale={locale}
-            />
-            <a class="btn-secondary" href={base + "/invoices"}>
-              {t("All invoices")}
-              <Icon name="arrow-right" />
-            </a>
-          </>
-        )}
-      </div>
-    </details>
+                ))}
+              </tbody>
+            </>
+          </table>
+        </div>
+      )}
+    </ResidentDetails>
+    <ResidentDetails label={t("Recent invoices")}>
+      {recentInvoices.length === 0 ? (
+        <p class="resident-muted">{t("No invoices yet.")}</p>
+      ) : (
+        <>
+          <InvoiceList
+            invoices={recentInvoices}
+            dwellingId={dwellingId}
+            locale={locale}
+          />
+          <a class="btn-secondary" href={base + "/invoices"}>
+            {t("All invoices")}
+            <Icon name="arrow-right" />
+          </a>
+        </>
+      )}
+    </ResidentDetails>
   </div>
 </ResidentLayout>
 

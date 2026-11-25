@@ -13,9 +13,10 @@ export interface Props {
     charges: boolean;
     meters: boolean;
   };
+  stepLinks?: Partial<Record<Props["current"], string>>;
 }
 
-const { organizationId, current, steps } = Astro.props;
+const { organizationId, current, steps, stepLinks } = Astro.props;
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 
@@ -76,9 +77,9 @@ const currentTitle = stepItems.find((step) => step.key === current)?.title;
     aria-valuenow={completedCount}
     aria-valuetext={`${completedCount} / 5`}
   >
-    <span style={`transform: scaleX(${completedCount / 5})`}></span>
+    <span style={`width: ${(completedCount / 5) * 100}%`}></span>
   </div>
-  <ol class="setup-steps">
+  <ol class="setup-steps menu-list">
     {stepItems.map((step, index) => {
       const isCurrent = step.key === current;
       const isDone = step.key !== "review" && steps[step.key];
@@ -87,14 +88,14 @@ const currentTitle = stepItems.find((step) => step.key === current)?.title;
       return (
         <li class="setup-step-item">
           <a
-            href={step.path}
+            href={stepLinks?.[step.key] ?? step.path}
             class:list={["setup-step-link", { "is-done": isDone }]}
             aria-current={isCurrent ? "step" : undefined}
           >
             <span class="step-num" aria-hidden="true">
               {isDone ? <Icon name="check" size="xs" /> : stepNum}
             </span>
-            <span class="step-title">{step.title}</span>
+            <span class="step-title sr-only sm:not-sr-only">{step.title}</span>
             {step.key !== "review" && (
               <span class="sr-only">{isDone ? t("Done") : t("To do")}</span>
             )}
@@ -127,55 +128,18 @@ const currentTitle = stepItems.find((step) => step.key === current)?.title;
   .setup-progress > span {
     display: block;
     height: 100%;
+    border-radius: inherit;
     background: var(--color-success);
-    transform-origin: left;
   }
   .setup-trail-current {
     display: none;
   }
-  /* The bar fills up to the current value on arrival. */
-  @media (prefers-reduced-motion: no-preference) {
-    .setup-progress > span {
-      animation: setup-fill var(--duration-panel) var(--ease-standard) both;
-    }
-    .setup-step-link {
-      transition:
-        background-color var(--duration-fast) ease,
-        color var(--duration-fast) ease;
-    }
-  }
-  @keyframes setup-fill {
-    from {
-      transform: scaleX(0);
-    }
-  }
   .setup-steps {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: grid;
-    gap: 0.375rem;
+    gap: var(--space-1);
   }
   .setup-step-link {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.875rem 0.75rem;
-    min-height: 3rem;
-    border-radius: var(--radius-control);
-    color: var(--color-muted);
-    font-size: var(--text-sm);
+    min-height: var(--control-size-lg);
     line-height: 1.4;
-    text-decoration: none;
-  }
-  .setup-step-link:hover {
-    background: var(--color-hover);
-    color: var(--color-foreground);
-  }
-  .setup-step-link[aria-current="step"] {
-    background: var(--color-nav-active-bg);
-    color: var(--color-primary);
-    font-weight: 650;
   }
   .step-num {
     display: inline-grid;
@@ -224,13 +188,6 @@ const currentTitle = stepItems.find((step) => step.key === current)?.title;
       justify-content: center;
       min-height: var(--control-size-md);
       padding: 0.25rem;
-    }
-    .step-title {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip-path: inset(50%);
     }
   }
 </style>

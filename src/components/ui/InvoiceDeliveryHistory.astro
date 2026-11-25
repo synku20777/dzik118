@@ -1,0 +1,91 @@
+---
+import { formatDate, translate, type Locale } from "../../lib/ui/i18n";
+
+interface Props {
+  locale: Locale;
+  timezone: string;
+  deliveries: Array<{
+    createdAt: Date | string;
+    method: string;
+    status: string;
+    destinationEmail: string | null;
+    errorCode: string | null;
+    isInitialPaperDispatch: boolean;
+  }>;
+}
+
+const { deliveries, locale, timezone } = Astro.props;
+const t = (message: string) => translate(locale, message);
+---
+
+{deliveries.length > 0 && (
+  <section>
+    <h2 class="section-title mb-3">{t("Delivery history")}</h2>
+    <div class="table-wrap stack-table">
+      <table class="w-full text-left text-sm">
+        <caption class="sr-only">{t("Delivery history")}</caption>
+        <thead class="border-b border-border bg-surface-hover text-muted">
+          <tr>
+            <th scope="col" class="px-4 py-2">
+              {t("When")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Method")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("To")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Status")}
+            </th>
+            <th scope="col" class="px-4 py-2">
+              {t("Error")}
+            </th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-border">
+          {deliveries.map((d) => (
+            <tr>
+              <td class="px-4 py-2">
+                {formatDate(d.createdAt, locale, timezone)}
+              </td>
+              <td class="px-4 py-2">
+                {d.method === "PAPER" ? t("Paper") : t("Email")}
+              </td>
+              <td class="px-4 py-2">{d.destinationEmail ?? "—"}</td>
+              <td class="px-4 py-2">
+                {d.status === "SENT" ? (
+                  d.method === "PAPER" && !d.isInitialPaperDispatch ? (
+                    <span
+                      class="text-muted"
+                      data-tip={t(
+                        "Recorded automatically under the old delivery workflow — not a confirmed manual physical dispatch."
+                      )}
+                    >
+                      {t("Paper (unverified legacy record)")}
+                      <span class="sr-only">
+                        {" "}
+                        {t(
+                          "Recorded automatically under the old delivery workflow — not a confirmed manual physical dispatch."
+                        )}
+                      </span>
+                    </span>
+                  ) : (
+                    <span class="text-success">
+                      {d.method === "PAPER" ? t("Paper dispatched") : t("Sent")}
+                    </span>
+                  )
+                ) : d.status === "UNKNOWN" ? (
+                  <span class="text-warning">{t("Needs attention")}</span>
+                ) : (
+                  <span class="text-destructive">{t("Failed")}</span>
+                )}
+              </td>
+              <td class="px-4 py-2 text-muted">{d.errorCode ?? "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+)}

@@ -229,10 +229,7 @@ const m = { currentValue: "10" };
     expect(editorTs).not.toContain('textContent = "›"');
 
     const tplAstro = readFileSync(
-      resolve(
-        root,
-        "src/pages/admin/o/[orgId]/settings/invoice-template.astro"
-      ),
+      resolve(root, "src/components/ui/InvoiceTemplateEditor.astro"),
       "utf8"
     );
     const accordionCssMatch = tplAstro.match(

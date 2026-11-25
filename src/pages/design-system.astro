@@ -1,20 +1,43 @@
 ---
 import "../styles/global.css";
+import "../styles/resident.css";
+import "../styles/dashboard.css";
 import tokenSource from "../styles/global.css?raw";
-import { ICONS, type IconName } from "../lib/ui/icons";
+import qrcode from "qrcode-generator";
+import { ICONS, METER_ICONS, type IconName } from "../lib/ui/icons";
 import AppNavigation from "../components/ui/AppNavigation.astro";
+import AdminMessagesSpecimen from "../components/ui/AdminMessagesSpecimen.astro";
+import AdminPaymentsSpecimen from "../components/ui/AdminPaymentsSpecimen.astro";
+import BuildingView from "../components/ui/BuildingView.astro";
 import ButtonGroup from "../components/ui/ButtonGroup.astro";
+import DwellingSummary from "../components/ui/DwellingSummary.astro";
 import EmptyState from "../components/ui/EmptyState.astro";
 import Icon from "../components/ui/Icon.astro";
+import InvoiceDeliveryHistory from "../components/ui/InvoiceDeliveryHistory.astro";
+import InvoiceEditorSpecimen from "../components/ui/InvoiceEditorSpecimen.astro";
 import KpiCard from "../components/ui/KpiCard.astro";
 import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
+import LockDialog from "../components/ui/LockDialog.astro";
+import MeterListSpecimen from "../components/ui/MeterListSpecimen.astro";
+import MutationStatus from "../components/ui/MutationStatus.astro";
 import Ornament from "../components/ui/Ornament.astro";
 import PageHeader from "../components/ui/PageHeader.astro";
+import PaginationBar from "../components/ui/PaginationBar.astro";
+import ResidentInvoiceList from "../components/ui/ResidentInvoiceList.astro";
+import ResidentBack from "../components/ui/ResidentBack.astro";
+import ResidentComposer from "../components/ui/ResidentComposer.astro";
+import ResidentMeterSpecimen from "../components/ui/ResidentMeterSpecimen.astro";
+import ResidentPaymentQr from "../components/ui/ResidentPaymentQr.astro";
 import BrandMark from "../components/ui/BrandMark.astro";
+import SetupProgressPanel from "../components/ui/SetupProgressPanel.astro";
+import SetupWizardSpecimen from "../components/ui/SetupWizardSpecimen.astro";
 import StatusBadge from "../components/ui/StatusBadge.astro";
 import ThemeToggle from "../components/ui/ThemeToggle.astro";
+import TariffSpecimen from "../components/ui/TariffSpecimen.astro";
 import Tooltips from "../components/ui/Tooltips.astro";
 import OrganizationSwitcher from "../components/ui/OrganizationSwitcher.astro";
+import WorkbenchSpecimen from "../components/ui/WorkbenchSpecimen.astro";
+import { invoiceStatusBadge } from "../lib/ui/invoice-status";
 
 Astro.response.headers.set("X-Robots-Tag", "noindex, nofollow");
 
@@ -47,6 +70,7 @@ const nav = [
     [
       ["avatar", "Avatar"],
       ["box", "Box"],
+      ["building-view", "Building view"],
       ["button", "Button"],
       ["button-group", "Button group"],
       ["checkbox", "Checkbox and radio"],
@@ -62,11 +86,29 @@ const nav = [
       ["notice", "Notice"],
       ["organization-switcher", "Organization switcher"],
       ["page-header", "Page header"],
+      ["pagination", "Pagination"],
+      ["period-nav", "Period navigation"],
+      ["progress-track", "Progress track"],
+      ["resident-portal", "Resident portal"],
       ["row-menu", "Row menu"],
+      ["setup-progress", "Setup progress"],
       ["status-badge", "Status badge"],
       ["table", "Table"],
       ["tabs", "Tabs"],
       ["tooltip", "Tooltip"],
+      ["workbench", "Billing workbench"],
+    ],
+  ],
+  [
+    "Admin patterns",
+    [
+      ["setup-wizard", "Setup wizard"],
+      ["tariffs", "Tariffs"],
+      ["invoice-editor", "Invoice editor"],
+      ["meter-list", "Meter list"],
+      ["admin-messages", "Admin messages"],
+      ["admin-payments", "Admin payments"],
+      ["invoice-delivery", "Invoice delivery"],
     ],
   ],
   ["Reference", [["audit", "Audit"]]],
@@ -78,10 +120,13 @@ const colors = [
   ["Surface hover", "--color-surface-hover"],
   ["Surface raised", "--color-surface-raised"],
   ["Hover", "--color-hover"],
+  ["Well", "--color-well"],
+  ["Table header", "--color-table-th-bg"],
   ["Foreground", "--color-foreground"],
   ["Muted", "--color-muted"],
   ["Border", "--color-border"],
   ["Input border", "--color-input-border"],
+  ["Focus ring", "--color-focus-ring"],
   ["Primary", "--color-primary"],
   ["Primary hover", "--color-primary-hover"],
   ["On primary", "--color-on-primary"],
@@ -89,6 +134,7 @@ const colors = [
   ["Success", "--color-success"],
   ["Warning", "--color-warning"],
   ["Destructive", "--color-destructive"],
+  ["Required dot", "--color-required"],
   ["Positive secondary", "--color-positive-secondary"],
   ["Info", "--color-info"],
   ["Chart 1", "--chart-1"],
@@ -97,6 +143,28 @@ const colors = [
   ["Chart 4", "--chart-4"],
   ["Chart 5", "--chart-5"],
   ["Chart 6", "--chart-6"],
+] as const;
+const structuralTokens = [
+  [
+    "--panel-border",
+    "0 solid transparent (CanvasText 1px in forced-colors; #bbb in print)",
+    "Borderless containers; separation relies on the canvas/surface step.",
+  ],
+  [
+    "--color-menu-hover",
+    "color-mix(in srgb, foreground 5%, transparent)",
+    "Faint hover wash on sidebar links, dropdown items and popovers.",
+  ],
+  [
+    "--color-menu-selected",
+    "color-mix(in srgb, foreground 9%, transparent)",
+    "Selected item wash in navigation menus and the sidebar.",
+  ],
+  [
+    "--color-hover (raised scope)",
+    "limestone-200 / night-725 in dark mode",
+    "Lighter step inside menus, dialogs and drawers where raised surface equals dark default hover.",
+  ],
 ] as const;
 const tones = [
   ["neutral", "Drafts, inactive and default states"],
@@ -134,14 +202,20 @@ const iconSizes = [
   ["lg", "24px", "Larger marks"],
 ] as const;
 
+const meterIconEntries = Object.entries(METER_ICONS) as [string, IconName][];
+
 // The --space-1 to --space-16 steps (global.css); the step is the value / 4.
 const spacing = [4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 64];
 const layoutSpacing = [
   ["--gap-label", "4px", "Label to its control"],
-  ["space-y-4, gap-4", "16px", "Between form fields"],
-  ["space-y-6", "24px", "Between panels and sections"],
-  ["p-6, p-4", "24px, 16px", "Inside a panel; 16px when compact"],
+  ["--gap-field, space-y-4", "16px", "Between form fields"],
+  ["--gap-section, space-y-6", "24px", "Between panels and sections"],
+  ["--pad-panel, p-6", "24px", "Inside an ordinary panel"],
+  ["--pad-panel-compact, p-4", "16px", "Inside a dense panel or card"],
   ["--gutter", "16px to fluid", "Page edge: 16px, 24px from sm, fluid from lg"],
+  ["--control-size-sm", "36px", "Compact controls (44px on coarse pointer)"],
+  ["--control-size-md", "44px", "Default control touch height"],
+  ["--control-size-lg", "48px", "Resident portal touch target"],
 ] as const;
 const widths = [
   ["--width-narrow", "28rem", "Auth card, single-purpose forms"],
@@ -198,11 +272,73 @@ const states = [
 ];
 const statuses = [
   ["MISSING_DATA", "Readings or details are missing"],
-  ["DRAFT", "Prepared, not sent yet"],
+  ["READY", "All inputs are ready; waiting to generate"],
+  ["DRAFT", "Draft invoice, not finalized yet"],
+  ["PREPARED", "Prepared, ready to send"],
   ["SENT", "Sent to the resident"],
   ["PAID", "Paid in full"],
   ["OVERDUE", "Past the due date"],
+  ["OPEN", "Open billing period or unresolved thread"],
+  ["LOCKED", "Closed period; calculations frozen"],
+  ["ACTIVE", "Enabled record"],
+  ["ARCHIVED", "Archived and kept for history"],
+  ["DISABLED", "Tariff switched off; not billed"],
+  ["NEW", "Awaiting administrator reply"],
+  ["RESOLVED", "Inquiry resolved"],
+  ["PROPOSED", "Suggested payment match awaiting review"],
+  ["CONFIRMED", "Payment match confirmed"],
+  ["REJECTED", "Suggested payment match rejected"],
+  ["REVERSED", "Voided or reversed payment"],
+  ["UNMATCHED", "Unmatched bank transaction"],
+  ["FAILED", "Action or delivery failed"],
 ] as const;
+const quietStatuses = ["READY", "DRAFT", "PREPARED", "SENT", "PAID"] as const;
+const specimenBuildingEntrances = [
+  {
+    name: "Entrance 1",
+    floors: 2,
+    columns: 3,
+    placements: [
+      { dwellingId: "b-4", floor: 1, slot: 0 },
+      { dwellingId: "b-5", floor: 1, slot: 1 },
+      { dwellingId: "b-6", floor: 1, slot: 2 },
+      { dwellingId: "b-1", floor: 0, slot: 0 },
+      { dwellingId: "b-2", floor: 0, slot: 1 },
+      { dwellingId: "b-3", floor: 0, slot: 2 },
+    ],
+  },
+];
+const specimenBuildingUnits = [
+  { id: "b-1", number: "1", type: "APARTMENT", stage: "PAID" },
+  { id: "b-2", number: "2", type: "APARTMENT", stage: "MISSING_DATA" },
+  { id: "b-3", number: "3", type: "APARTMENT", stage: "SENT" },
+  { id: "b-4", number: "4", type: "APARTMENT", stage: "OVERDUE" },
+  { id: "b-5", number: "5", type: "APARTMENT", stage: "DRAFT" },
+  { id: "b-6", number: "6", type: "APARTMENT", stage: null },
+  { id: "b-p1", number: "P1", type: "PARKING", stage: "PAID" },
+  { id: "b-7", number: "7", type: "APARTMENT", stage: "PREPARED" },
+];
+const specimenQr = qrcode(0, "M");
+specimenQr.addData("Namkopa design system sample");
+specimenQr.make();
+const specimenResidentInvoices = [
+  {
+    id: "specimen-inv-1",
+    invoiceNumber: "INV-202609-001",
+    dueDate: "2026-09-20",
+    amountDue: "124.50",
+    currency: "EUR",
+    caseStatus: "SENT",
+  },
+  {
+    id: "specimen-inv-2",
+    invoiceNumber: "INV-202608-001",
+    dueDate: "2026-08-20",
+    amountDue: "118.20",
+    currency: "EUR",
+    caseStatus: "PAID",
+  },
+];
 const notices = [
   ["notice", "Invoices are ready for review.", "Information"],
   ["notice notice-success", "Payments imported.", "A completed action"],
@@ -223,10 +359,17 @@ const emailSnippet = `<label class="field-label" for="email">Billing email</labe
 <p id="email-hint" class="field-hint">Invoices are sent here.</p>`;
 
 const boxes = [
-  ["box", "The default: a flat group with a hairline"],
-  ["box box-well", "Set back: secondary detail inside a page"],
+  [
+    "box",
+    "Default padded group on surface with --panel-border (no outline); relies on canvas/surface step",
+  ],
+  ["box box-well", "Set back on --color-well: secondary detail inside a page"],
   ["box box-raised", "One step forward: a card that can be picked"],
   ["box box-floating", "Floats over the page: a panel that stays in view"],
+  [
+    "contained",
+    "Utility-styled region wearing --panel-border (and CanvasText outline in forced-colors)",
+  ],
 ] as const;
 const links = [
   ["link", "A link outside running text, such as a table cell"],
@@ -348,7 +491,7 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
     <!-- --color-canvas per theme; theme.ts keeps these in step with a stored theme. -->
     <meta
       name="theme-color"
-      content="#f7f4ee"
+      content="#eee8de"
       media="(prefers-color-scheme: light)"
     />
     <meta
@@ -364,7 +507,7 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
           document.documentElement.dataset.theme = theme;
           document.querySelector('meta[name="color-scheme"]').content = theme;
           document.querySelectorAll('meta[name="theme-color"]').forEach((m) => {
-            m.content = theme === "dark" ? "#0e1517" : "#f7f4ee";
+            m.content = theme === "dark" ? "#0e1517" : "#eee8de";
           });
         }
       } catch {
@@ -436,9 +579,9 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
                 Color, type, icons, layout, radius, elevation and motion.
               </span>
             </a>
-            <a href="#button">
+            <a href="#avatar">
               <strong>Components</strong>
-              <span>Building blocks, from Button to Table.</span>
+              <span>Building blocks, from Avatar to Tooltip.</span>
             </a>
           </div>
           <p class="ds-source">
@@ -483,6 +626,36 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
                 </div>
               </article>
             ))}
+          </div>
+          <h2>Structural and interactive tokens</h2>
+          <p>
+            Borders, washes and surface-scoped hover adjustments that are not
+            solid color swatches.
+          </p>
+          <div class="table-wrap">
+            <table class="ds-spec ds-spec-tokens">
+              <caption class="sr-only">
+                Structural and interactive tokens
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Token</th>
+                  <th scope="col">Value</th>
+                  <th scope="col">Use</th>
+                </tr>
+              </thead>
+              <tbody>
+                {structuralTokens.map(([code, value, use]) => (
+                  <tr>
+                    <td>
+                      <code>{code}</code>
+                    </td>
+                    <td>{value}</td>
+                    <td>{use}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
           <h2>Tones</h2>
           <p>
@@ -628,6 +801,39 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
                     </td>
                     <td>{value}</td>
                     <td>{use}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <h2>Utility meter icons</h2>
+          <p>
+            Defined in <code>METER_ICONS</code>. Hot water always uses{" "}
+            <code>droplet-hot</code>, never <code>flame</code> (which reads as
+            gas).
+          </p>
+          <div class="table-wrap">
+            <table class="ds-spec">
+              <caption class="sr-only">Utility meter icons</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Icon</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Name</th>
+                </tr>
+              </thead>
+              <tbody>
+                {meterIconEntries.map(([meterType, iconName]) => (
+                  <tr>
+                    <td>
+                      <Icon name={iconName} size="md" />
+                    </td>
+                    <td>
+                      <code>{meterType}</code>
+                    </td>
+                    <td>
+                      <code>{iconName}</code>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1019,8 +1225,8 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
           <h1 tabindex="-1">Box</h1>
           <p class="ds-lead">
             A padded group of content about one subject. The default sits flat
-            with a hairline; the others step back or forward on the elevation
-            scale. Depth does not change on hover.
+            with <code>--panel-border</code> (no outline); the others step back
+            or forward on the elevation scale. Depth does not change on hover.
           </p>
           <div class="table-wrap">
             <table class="ds-spec">
@@ -1036,7 +1242,15 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
                 {boxes.map(([className, use]) => (
                   <tr>
                     <td>
-                      <div class={className}>Water meters</div>
+                      <div
+                        class={
+                          className === "contained"
+                            ? "contained bg-surface rounded-panel p-4"
+                            : className
+                        }
+                      >
+                        Water meters
+                      </div>
                     </td>
                     <td>
                       <code>{className}</code>
@@ -1048,6 +1262,85 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
             </table>
           </div>
           <pre class="ds-code"><code>{`<div class="box box-raised">…</div>`}</code></pre>
+        </section>
+
+        <section
+          id="building-view"
+          class="ds-topic"
+          data-component="building-view"
+        >
+          <div class="ds-topic-head">
+            <h1 tabindex="-1">Building view</h1>
+            <button
+              class="copy-button"
+              type="button"
+              data-copy={`<BuildingView organizationId={organizationId} entrances={building.entrances} units={building.units} saved={building.saved} />`}
+            >
+              Copy snippet
+            </button>
+          </div>
+          <p class="ds-lead">
+            Visual building facade used alongside the dwellings table view.
+            Entrances stand side by side on a common ground line, tiles mark
+            overdue and missing-reading exceptions, and non-apartment units sit
+            in a borderless <code>--panel-border</code> tray below.
+          </p>
+          <p>
+            On a wide screen, choose Arrange to move a dwelling by dragging or
+            with the arrow keys. The first sample save fails so you can try
+            Retry.
+          </p>
+          <div class="ds-specimen">
+            <div class="space-y-4">
+              <div
+                class="toggle-tabs"
+                role="radiogroup"
+                aria-label="Dwellings view example"
+                data-specimen-view-switch
+              >
+                <label data-view-target="table">
+                  <input
+                    type="radio"
+                    name="specimen-building-view"
+                    value="table"
+                  />
+                  Table
+                </label>
+                <label data-view-target="building">
+                  <input
+                    type="radio"
+                    name="specimen-building-view"
+                    value="building"
+                    checked
+                  />
+                  Building
+                </label>
+              </div>
+              <div data-view-panel="building">
+                <BuildingView
+                  organizationId="specimen"
+                  entrances={specimenBuildingEntrances}
+                  units={specimenBuildingUnits}
+                  saved={true}
+                  preview
+                  hrefBase="#building-view/"
+                />
+              </div>
+              <p
+                class="box box-well text-body-sm text-muted"
+                data-view-panel="table"
+                hidden
+              >
+                Table view shows dwellings in the sortable index table (
+                <a href="#table" class="link link-underlined">
+                  see Table
+                </a>
+                ). Switch back to <strong>Building</strong> to inspect the
+                facade.
+              </p>
+            </div>
+          </div>
+          <pre class="ds-code"><code>{`<nav class="toggle-tabs" aria-label="Dwellings view">\n  <a href="?view=table">Table</a>\n  <a href="?view=building" aria-current="page">Building</a>\n</nav>\n<BuildingView organizationId={orgId} entrances={entrances} units={units} saved={saved} />`}</code></pre>
         </section>
 
         <section id="button" class="ds-topic" data-component="button">
@@ -1430,7 +1723,9 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
               description="Create the first period to start collecting readings."
               ornament
             >
-              <button class="btn-secondary">Create period</button>
+              <button type="button" class="btn-secondary">
+                Create period
+              </button>
             </EmptyState>
           </div>
           <pre class="ds-code"><code>{`<EmptyState title="No billing periods yet" description="…" ornament>\n  <button class="btn-secondary">Create period</button>\n</EmptyState>`}</code></pre>
@@ -1737,8 +2032,15 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
         <section id="kpi-card" class="ds-topic" data-component="kpi-card">
           <h1 tabindex="-1">KPI card</h1>
           <p class="ds-lead">
-            One figure with its label and icon. For several related figures, use
-            a metric strip.
+            Standalone summary figures with <code>KpiCard</code>, and the
+            dashboard&apos;s collection breakdown card with its companion
+            invoice ledger. For uniform inline rows of figures, use a metric
+            strip.
+          </p>
+          <h2>Single KPI card</h2>
+          <p>
+            Used on views such as Periods where individual totals sit side by
+            side without an embedded breakdown.
           </p>
           <div class="ds-specimen kpi-grid">
             <KpiCard
@@ -1750,6 +2052,178 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
             <KpiCard label="Due soon" value="14" tone="warning" icon="clock" />
           </div>
           <pre class="ds-code"><code>{`<KpiCard label="Collected" value="€48,920" tone="success" icon="coins" />`}</code></pre>
+          <h2>Icon tile</h2>
+          <p>
+            The KPI card&apos;s icon square, shared by settings cards, summaries
+            and drawer rows. <code>icon-tile-sm</code> is 32px; tone it with
+            <code>data-tone</code>.
+          </p>
+          <div class="ds-specimen ds-inline">
+            <span class="icon-tile" aria-hidden="true">
+              <Icon name="building" />
+            </span>
+            <span class="icon-tile" data-tone="info" aria-hidden="true">
+              <Icon name="info-circle" />
+            </span>
+            <span class="icon-tile" data-tone="success" aria-hidden="true">
+              <Icon name="check" />
+            </span>
+            <span class="icon-tile icon-tile-sm" aria-hidden="true">
+              <Icon name="coin" />
+            </span>
+          </div>
+          <pre class="ds-code"><code>{`<span class="icon-tile" data-tone="info" aria-hidden="true"><Icon name="info-circle" /></span>`}</code></pre>
+          <h2>Collection and money breakdown</h2>
+          <p>
+            Used on the main admin dashboard: collection progress and exception
+            totals sit on the left beside an accounting breakdown on the right.
+            Below <code>32rem</code> of container width, the breakdown collapses
+            into a disclosure via <code>initCollectionLedgers()</code>. Give the
+            disclosure a stable ID so it retains its state after a refresh.
+          </p>
+          <div class="ds-specimen dashboard-metrics">
+            <div
+              class="dashboard-metric collection-card panel"
+              data-metric="collection"
+            >
+              <div class="collection-grid">
+                <div class="collection-summary">
+                  <span class="metric-label" id="specimen-collection-label">
+                    Paid on invoices
+                  </span>
+                  <div class="collection-hero">
+                    <a
+                      class="collection-link"
+                      aria-labelledby="specimen-collection-label specimen-collection-received"
+                      href="#kpi-card"
+                    >
+                      <strong
+                        class="collection-received"
+                        id="specimen-collection-received"
+                      >
+                        3 110.00 €
+                      </strong>
+                    </a>
+                    <span class="collection-share">73.7%</span>
+                  </div>
+                  <div
+                    class="collection-bar"
+                    role="img"
+                    aria-label="73.7% of 4 218.40 € paid"
+                  >
+                    <span style="width: 73.7%"></span>
+                  </div>
+                  <div class="collection-split">
+                    <div class="collection-row">
+                      <span>Total to pay</span>
+                      <strong class="collection-total">4 218.40 €</strong>
+                    </div>
+                    <a
+                      class="collection-row"
+                      data-metric="unpaid"
+                      href="#kpi-card"
+                    >
+                      <span class="collection-row-label">Still unpaid</span>
+                      <strong>1 108.40 €</strong>
+                    </a>
+                    <a
+                      class="collection-row"
+                      data-metric="overdue"
+                      data-tone="danger"
+                      href="#kpi-card"
+                    >
+                      <span>
+                        <Icon name="alert-triangle" size="xs" />
+                        <span class="collection-row-label">
+                          Overdue payments
+                        </span>
+                        <span class="collection-share">2</span>
+                      </span>
+                      <strong>342.10 €</strong>
+                    </a>
+                  </div>
+                </div>
+                <details
+                  id="specimen-collection-ledger"
+                  class="collection-ledger"
+                  open
+                >
+                  <summary class="chevron-toggle chevron-toggle-end">
+                    Invoice breakdown
+                  </summary>
+                  <dl class="money-ledger" aria-label="Money this month">
+                    <div>
+                      <dt>
+                        <span class="money-operator" aria-hidden="true"></span>
+                        <span>This month&apos;s invoices</span>
+                      </dt>
+                      <dd>3 902.10 €</dd>
+                    </div>
+                    <div>
+                      <dt>
+                        <span class="money-operator" aria-hidden="true">
+                          +
+                        </span>
+                        <span>Previous debt</span>
+                      </dt>
+                      <dd>410.00 €</dd>
+                    </div>
+                    <div>
+                      <dt>
+                        <span class="money-operator" aria-hidden="true">
+                          −
+                        </span>
+                        <span>Previous overpayment</span>
+                      </dt>
+                      <dd>125.00 €</dd>
+                    </div>
+                    <div>
+                      <dt>
+                        <span class="money-operator" aria-hidden="true">
+                          +
+                        </span>
+                        <span>Late fees</span>
+                      </dt>
+                      <dd>31.30 €</dd>
+                    </div>
+                    <div class="money-total">
+                      <dt>
+                        <span class="money-operator" aria-hidden="true">
+                          =
+                        </span>
+                        <span>Total to pay</span>
+                      </dt>
+                      <dd>4 218.40 €</dd>
+                    </div>
+                  </dl>
+                  <p class="collection-note">
+                    Includes invoices that are not sent yet.
+                  </p>
+                </details>
+              </div>
+            </div>
+          </div>
+          <pre class="ds-code"><code>{`<div class="dashboard-metric collection-card panel" data-metric="collection">
+  <div class="collection-grid">
+    <div class="collection-summary">…</div>
+    <details id="collection-ledger" class="collection-ledger" open>
+      <summary class="chevron-toggle chevron-toggle-end">Invoice breakdown</summary>
+      <dl class="money-ledger">…</dl>
+    </details>
+  </div>
+</div>`}</code></pre>
+          <section class="panel" aria-labelledby="specimen-dashboard-attention">
+            <div class="dashboard-section-heading">
+              <div>
+                <h2 id="specimen-dashboard-attention">Needs attention</h2>
+                <p aria-label="2 cases">2</p>
+              </div>
+            </div>
+            <ul class="divide-y divide-border">
+              <li class="px-6 py-3">Dwelling 12 · Missing meter readings</li>
+              <li class="px-6 py-3">Dwelling 14 · Billing email missing</li>
+            </ul>
+          </section>
         </section>
 
         <section id="link" class="ds-topic" data-component="link">
@@ -1895,6 +2369,49 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
             </section>
           </div>
           <pre class="ds-code"><code>{`<section class="metric-strip" style="--metrics: 3">\n  <div class="metric" data-tone="success">\n    <span class="metric-label">Received</span>\n    <strong class="metric-value">3 110.00 €</strong>\n    <span class="metric-note">of total to pay</span>\n  </div>\n  …\n</section>`}</code></pre>
+          <h2>Inline financial summary</h2>
+          <p>
+            Single-line strip used on the Current Month workbench, leaving the
+            detailed breakdown on the dashboard.
+          </p>
+          <div class="ds-specimen">
+            <section
+              class="financial-summary"
+              aria-label="Inline financial summary example"
+            >
+              <div class="financial-stat">
+                <span>Total to pay</span>
+                <strong>4 218.40 €</strong>
+              </div>
+              <div class="financial-stat">
+                <span>Paid on invoices</span>
+                <strong>3 110.00 €</strong>
+              </div>
+              <div class="financial-stat">
+                <span>Still unpaid</span>
+                <strong>1 108.40 €</strong>
+              </div>
+              <p class="financial-note">Current charges: 3 902.10 €</p>
+            </section>
+          </div>
+          <pre class="ds-code"><code>{`<section class="financial-summary" aria-label="Financial summary">\n  <div class="financial-stat"><span>Total to pay</span><strong>4 218.40 €</strong></div>\n  …\n</section>`}</code></pre>
+          <h2>Dwelling summary</h2>
+          <p>
+            Four columns on desktop, two below <code>48rem</code>.
+          </p>
+          <div class="ds-specimen">
+            <DwellingSummary
+              balance="€124.50"
+              balanceKpiTone="warning"
+              isCredit={false}
+              area="64.2"
+              residentCount={3}
+              delivery="Email, paper"
+              locale="en"
+            />
+          </div>
+          <pre class="ds-code"><code>{`<DwellingSummary balance={balance} balanceKpiTone={tone} isCredit={isCredit}
+  area={area} residentCount={residentCount} delivery={delivery} locale={locale} />`}</code></pre>
         </section>
 
         <section id="modal" class="ds-topic" data-component="modal">
@@ -2018,7 +2535,62 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
             </div>
           </dialog>
           <pre class="ds-code"><code>{modalFullSnippet}</code></pre>
-          <h2>Confirmation</h2>
+          <h2 id="lock-dialog" tabindex="-1">
+            Lock or archive confirmation
+          </h2>
+          <p>
+            Use <code>LockDialog</code> when the decision needs a warning and an
+            explanation of its consequences. Cancel receives focus first.
+          </p>
+          <div class="ds-specimen component-row">
+            <span role="status" id="specimen-lock-status">
+              Sample period open
+            </span>
+            <details class="more-menu ml-auto" data-dismiss>
+              <summary class="icon-btn" aria-label="Current Month actions">
+                <Icon name="dots" size="sm" />
+              </summary>
+              <div>
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  data-open-lock-dialog="specimen-lock-period"
+                >
+                  Lock period
+                </button>
+              </div>
+            </details>
+          </div>
+          <LockDialog
+            id="specimen-lock-period"
+            title="Lock this period?"
+            description="Locking this period prevents normal reading edits and invoice regeneration. Historical data will remain available."
+            cancelLabel="Cancel"
+          >
+            <Icon slot="icon" name="alert-triangle" size="sm" />
+            <form method="dialog">
+              <button class="btn-primary" value="confirm">
+                Lock period
+              </button>
+            </form>
+          </LockDialog>
+          <p>
+            See{" "}
+            <a class="link" href="#dwelling-actions">
+              Dwelling header actions
+            </a>
+            for the archive variant.
+          </p>
+          <pre class="ds-code"><code>{`<button type="button" data-open-lock-dialog="lock-period">Lock period</button>
+<LockDialog id="lock-period" title="Lock this period?" description={warning} cancelLabel="Cancel">
+  <Icon slot="icon" name="alert-triangle" size="sm" />
+  <form method="POST" action={actions.periods.lock}>
+    <input type="hidden" name="organizationId" value={organizationId} />
+    <input type="hidden" name="periodId" value={periodId} />
+    <button class="btn-primary">Lock period</button>
+  </form>
+</LockDialog>`}</code></pre>
+          <h2>Confirmation on submit</h2>
           <p>
             A form or its submit button with <code>data-confirm</code> asks in a
             modal card before it submits. The first sentence is the title; the
@@ -2041,6 +2613,78 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
 >
   Remove resident
 </button>`}</code></pre>
+          <h2>Context drawer</h2>
+          <p>
+            Right-hand modal sheet (<code>.context-drawer</code>) used by the
+            workbench, tariff editor and mobile navigation. Full viewport width
+            below <code>md</code>; Escape and Close dismiss it cleanly.
+          </p>
+          <div class="ds-specimen">
+            <button
+              type="button"
+              class="btn-secondary"
+              data-open-dialog="specimen-context-drawer"
+            >
+              Open context drawer
+            </button>
+          </div>
+          <dialog
+            id="specimen-context-drawer"
+            class="context-drawer"
+            aria-labelledby="specimen-context-drawer-title"
+          >
+            <header class="context-drawer-header">
+              <div class="context-drawer-heading">
+                <p class="context-drawer-eyebrow">Dwelling 12</p>
+                <div class="context-drawer-title-row">
+                  <h2
+                    id="specimen-context-drawer-title"
+                    class="context-drawer-title"
+                  >
+                    Meter readings
+                  </h2>
+                  <span class="status-badge" data-tone="warning">
+                    <Icon name="alert-triangle" size="xs" />
+                    Missing data
+                  </span>
+                </div>
+                <p class="context-drawer-meta">September 2026 · Anna Bērziņa</p>
+              </div>
+              <form method="dialog">
+                <button
+                  class="icon-btn icon-btn-ghost context-drawer-close"
+                  aria-label="Close"
+                >
+                  <Icon name="x" size="sm" />
+                </button>
+              </form>
+            </header>
+            <div class="context-drawer-body space-y-4">
+              <p class="notice" role="status">
+                Enter current meter readings for this period.
+              </p>
+              <div>
+                <label class="field-label" for="specimen-drawer-reading">
+                  Cold water · CW-014
+                </label>
+                <input
+                  id="specimen-drawer-reading"
+                  name="specimen-drawer-reading"
+                  type="text"
+                  inputmode="decimal"
+                  value="128.400"
+                  class="mt-1 w-full"
+                />
+              </div>
+            </div>
+            <footer class="context-drawer-footer">
+              <form method="dialog" class="ds-inline">
+                <button class="btn-secondary">Cancel</button>
+                <button class="btn-primary">Save readings</button>
+              </form>
+            </footer>
+          </dialog>
+          <pre class="ds-code"><code>{`<dialog class="context-drawer" aria-labelledby="drawer-title">\n  <header class="context-drawer-header">…</header>\n  <div class="context-drawer-body">…</div>\n  <footer class="context-drawer-footer">…</footer>\n</dialog>`}</code></pre>
         </section>
 
         <section id="notice" class="ds-topic" data-component="notice">
@@ -2073,6 +2717,51 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
                 ))}
               </tbody>
             </table>
+          </div>
+          <h2>Save status &amp; inline undo</h2>
+          <p>
+            Shared <code>MutationStatus</code> hides when idle, displays a{" "}
+            <code>.mutation-summary</code> pill for 4 seconds after the last
+            save before fading over 150ms (instant under reduced motion), and
+            announces changes via a visually hidden live region. Quick toggle
+            lists pair a status line with <code>.inline-undo</code>. The live
+            example keeps the activity inline. Open its status to see recent
+            changes and try Retry, Dismiss, or Check again.
+          </p>
+          <div class="ds-specimen">
+            <MutationStatus preview />
+          </div>
+          <div class="ds-specimen space-y-4">
+            <div class="component-row">
+              <span class="mutation-summary">
+                <Icon name="loader" size="sm" /> 1 change saving
+              </span>
+              <span class="mutation-summary">
+                <Icon name="check" size="sm" /> All changes saved
+              </span>
+              <span class="mutation-summary" data-state="error">
+                <Icon name="alert-triangle" size="sm" /> 1 change needs
+                attention
+              </span>
+            </div>
+            <p class="ds-inline text-body-sm text-muted">
+              <span data-specimen-undo-text tabindex="-1">
+                Cold water tariff turned off.
+              </span>
+              <button
+                type="button"
+                class="inline-undo"
+                data-specimen-undo
+                data-on-text="Cold water tariff restored."
+              >
+                Undo
+              </button>
+              <span
+                class="sr-only"
+                aria-live="polite"
+                data-specimen-undo-status
+              ></span>
+            </p>
           </div>
         </section>
 
@@ -2122,7 +2811,7 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
               description="Prepare, issue, and reconcile monthly invoices."
               eyebrow="September 2026"
             >
-              <button class="btn-primary">
+              <button type="button" class="btn-primary">
                 <Icon name="plus" size="sm" />
                 New period
               </button>
@@ -2131,27 +2820,603 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
           <pre class="ds-code"><code>{`<PageHeader title="Billing periods" description="…" eyebrow="September 2026" accent>\n  <button class="btn-primary">New period</button>\n</PageHeader>`}</code></pre>
         </section>
 
+        <section id="pagination" class="ds-topic" data-component="pagination">
+          <div class="ds-topic-head">
+            <h1 tabindex="-1">Pagination</h1>
+            <button
+              class="copy-button"
+              type="button"
+              data-copy={`<PaginationBar page={page} totalPages={totalPages} previousHref={prev} nextHref={next} />`}
+            >
+              Copy snippet
+            </button>
+          </div>
+          <p class="ds-lead">
+            <code>PaginationBar</code> connects paged list routes. Unavailable
+            boundary controls render non-focusable{" "}
+            <code>&lt;span role="link" aria-disabled="true"&gt;</code> elements
+            rather than focusable disabled anchors.
+          </p>
+          <h2>Boundary states</h2>
+          <div class="ds-specimen space-y-4">
+            <div class="box">
+              <PaginationBar
+                page={1}
+                totalPages={4}
+                previousHref={null}
+                nextHref="#pagination"
+              />
+            </div>
+            <div class="box">
+              <PaginationBar
+                page={2}
+                totalPages={4}
+                previousHref="#pagination"
+                nextHref="#pagination"
+              />
+            </div>
+          </div>
+          <pre class="ds-code"><code>{`<PaginationBar page={2} totalPages={4} previousHref="?page=1" nextHref="?page=3" />`}</code></pre>
+        </section>
+
+        <section id="period-nav" class="ds-topic" data-component="period-nav">
+          <div class="ds-topic-head">
+            <h1 tabindex="-1">Period navigation</h1>
+            <button
+              class="copy-button"
+              type="button"
+              data-copy={`<nav class="btn-group period-nav" aria-label="Period navigation">\n  <a class="btn-secondary" href="…"><Icon name="arrow-left" size="xs" /> August 2026</a>\n  <a class="btn-secondary" href="…">October 2026 <Icon name="arrow-right" size="xs" /></a>\n</nav>`}
+            >
+              Copy snippet
+            </button>
+          </div>
+          <p class="ds-lead">
+            A <code>.btn-group</code> of secondary buttons, shared by the
+            dashboard and Current Month workbench headers (
+            <code>.period-nav</code>
+            is only a hook). Adjacent months never render a disabled placeholder
+            when no neighbour exists.
+          </p>
+          <div class="ds-specimen space-y-4">
+            <div>
+              <nav class="btn-group period-nav" aria-label="Period navigation">
+                <a class="btn-secondary" href="#period-nav">
+                  <Icon name="arrow-left" size="xs" />
+                  <span class="sr-only">Previous period: </span>August 2026
+                </a>
+                <a class="btn-secondary" href="#period-nav">
+                  <span class="sr-only">Next period: </span>October 2026
+                  <Icon name="arrow-right" size="xs" />
+                </a>
+              </nav>
+            </div>
+            <div>
+              <nav
+                class="btn-group period-nav"
+                aria-label="Single neighbor period navigation"
+              >
+                <a class="btn-secondary" href="#period-nav">
+                  <Icon name="arrow-left" size="xs" />
+                  <span class="sr-only">Previous period: </span>August 2026
+                </a>
+              </nav>
+            </div>
+          </div>
+          <pre class="ds-code"><code>{`<nav class="btn-group period-nav" aria-label="Period navigation">\n  <a class="btn-secondary" href="…"><Icon name="arrow-left" size="xs" /> August 2026</a>\n  <a class="btn-secondary" href="…">October 2026 <Icon name="arrow-right" size="xs" /></a>\n</nav>`}</code></pre>
+        </section>
+
+        <section
+          id="progress-track"
+          class="ds-topic"
+          data-component="progress-track"
+        >
+          <h1 tabindex="-1">Progress track</h1>
+          <p class="ds-lead">
+            The dashboard&apos;s four-step workflow bar (
+            <code>.month-status</code> / <code>.month-progress</code>) and
+            grouped <code>.attention-list</code> action rows below it.
+          </p>
+          <h2>Month progress stepper</h2>
+          <p>
+            Four columns across above <code>48rem</code> container width and two
+            below. <code>--step-progress</code> fills the top rule; overdue
+            deadlines add an inline warning.
+          </p>
+          <div class="ds-specimen">
+            <section
+              class="month-status panel"
+              aria-label="Month progress example"
+            >
+              <div class="month-status-lead">
+                <p class="month-status-sentence">
+                  3 meter readings are still missing before invoices can be
+                  generated.
+                </p>
+                <a class="btn-primary" href="#progress-track">
+                  Enter readings <Icon name="arrow-right" size="sm" />
+                </a>
+              </div>
+              <ol class="month-progress" aria-label="Month progress steps">
+                <li data-state="current" style="--step-progress: 75%">
+                  <span class="progress-marker" aria-hidden="true">
+                    <Icon name="pencil" size="xs" />
+                  </span>
+                  <p class="progress-label">
+                    Readings <span class="progress-now">Now</span>
+                  </p>
+                  <p class="progress-detail">
+                    <span>9 of 12</span>
+                    <time datetime="2026-09-25">by Sep 25</time>
+                    <span class="progress-late">
+                      <Icon name="alert-triangle" size="xs" /> 2 days late
+                    </span>
+                  </p>
+                </li>
+                <li data-state="in-progress" style="--step-progress: 50%">
+                  <span class="progress-marker" aria-hidden="true">
+                    <Icon name="file-description" size="xs" />
+                  </span>
+                  <p class="progress-label">
+                    Drafts<span class="sr-only">, in progress</span>
+                  </p>
+                  <p class="progress-detail">
+                    <span>6 of 12</span>
+                  </p>
+                </li>
+                <li data-state="unavailable" style="--step-progress: 0%">
+                  <span class="progress-marker" aria-hidden="true">
+                    <Icon name="send" size="xs" />
+                  </span>
+                  <p class="progress-label">
+                    Sending<span class="sr-only">, not started</span>
+                  </p>
+                  <p class="progress-detail">
+                    <span>0 of 12</span>
+                    <time datetime="2026-10-01">by Oct 1</time>
+                  </p>
+                </li>
+                <li data-state="done" style="--step-progress: 100%">
+                  <span class="progress-marker" aria-hidden="true">
+                    <Icon name="circle-check" size="xs" />
+                  </span>
+                  <p class="progress-label">
+                    Reconciliation<span class="sr-only">, done</span>
+                  </p>
+                  <p class="progress-detail">
+                    <span>12 of 12</span>
+                  </p>
+                </li>
+              </ol>
+            </section>
+          </div>
+          <h2>Grouped attention list</h2>
+          <p>
+            Groups exception cases by severity (overdue payments, missing
+            readings) alongside summary rows.
+          </p>
+          <div class="ds-specimen">
+            <div class="panel">
+              <div class="attention-list">
+                <div class="attention-group">
+                  <h3
+                    id="specimen-attention-overdue"
+                    class="attention-group-heading"
+                    data-tone="danger"
+                  >
+                    <span class="attention-group-icon" aria-hidden="true">
+                      <Icon name="clock-exclamation" size="xs" />
+                    </span>
+                    Overdue payments
+                    <span class="attention-group-count">2</span>
+                  </h3>
+                  <div role="list" aria-labelledby="specimen-attention-overdue">
+                    <article class="attention-row" role="listitem">
+                      <div class="attention-row-main">
+                        <div class="attention-heading">
+                          <a href="#progress-track">Dwelling 4</a>
+                        </div>
+                        <p class="attention-details">
+                          <strong>194.20 €</strong>
+                          <span>Due Aug 20</span>
+                          <span>14 days late</span>
+                        </p>
+                      </div>
+                      <a class="attention-action" href="#progress-track">
+                        Account statement <Icon name="arrow-right" size="xs" />
+                      </a>
+                    </article>
+                  </div>
+                </div>
+                <div class="attention-group">
+                  <h3
+                    id="specimen-attention-missing"
+                    class="attention-group-heading"
+                  >
+                    <span class="attention-group-icon" aria-hidden="true">
+                      <Icon name="alert-triangle" size="xs" />
+                    </span>
+                    Missing readings
+                    <span class="attention-group-count">3</span>
+                  </h3>
+                  <div role="list" aria-labelledby="specimen-attention-missing">
+                    <article class="attention-row" role="listitem">
+                      <div class="attention-row-main">
+                        <div class="attention-heading">
+                          <a href="#progress-track">Dwelling 12</a>
+                        </div>
+                        <p class="attention-reason">Cold water · CW-014</p>
+                      </div>
+                      <a class="attention-action" href="#progress-track">
+                        Enter readings <Icon name="arrow-right" size="xs" />
+                      </a>
+                    </article>
+                    <article
+                      class="attention-row attention-summary-row"
+                      data-tone="warning"
+                      role="listitem"
+                    >
+                      <span class="attention-summary-icon" aria-hidden="true">
+                        <Icon name="send" size="sm" />
+                      </span>
+                      <p>4 prepared invoices are not sent yet.</p>
+                      <a class="attention-action" href="#progress-track">
+                        Send invoices <Icon name="arrow-right" size="xs" />
+                      </a>
+                    </article>
+                    <div class="attention-more-row" role="listitem">
+                      <span>+2 more</span>
+                      <a href="#progress-track">
+                        Show all (5) <Icon name="arrow-right" size="xs" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <pre class="ds-code"><code>{`<section class="month-status panel">\n  <div class="month-status-lead">…</div>\n  <ol class="month-progress"><li data-state="current" style="--step-progress: 75%">…</li></ol>\n</section>\n<div class="attention-list">\n  <div class="attention-group">\n    <h3 class="attention-group-heading" data-tone="danger">Overdue payments</h3>\n    <article class="attention-row">…</article>\n  </div>\n</div>`}</code></pre>
+        </section>
+
+        <section
+          id="resident-portal"
+          class="ds-topic"
+          data-component="resident-portal"
+        >
+          <h1 tabindex="-1">Resident portal</h1>
+          <p class="ds-lead">
+            Resident-facing system from <code>src/styles/resident.css</code>:
+            18px base copy, <code>--control-size-lg</code> (48px) touch targets,{" "}
+            <code>ResidentInvoiceList</code>, copyable bank-transfer fields, and
+            single-thread administrator messages.
+          </p>
+          <div class="ds-specimen resident-specimen resident-portal">
+            <div class="resident-content space-y-6" data-resident-specimen>
+              <div>
+                <h2
+                  class="section-title mb-3"
+                  id="sample-resident-invoices"
+                  tabindex="-1"
+                >
+                  Recent invoices
+                </h2>
+                <ResidentInvoiceList
+                  invoices={specimenResidentInvoices}
+                  dwellingId="specimen"
+                  locale="en"
+                  hrefBase="#resident-portal/"
+                />
+              </div>
+              <ResidentMeterSpecimen />
+              <ResidentBack
+                href="#sample-resident-invoices"
+                label="All invoices"
+              />
+              <section
+                class="resident-section"
+                aria-label="Bank transfer details"
+                data-copy-scope
+              >
+                <h2>Bank transfer</h2>
+                <dl class="resident-facts">
+                  <div>
+                    <dt>Total due</dt>
+                    <dd>124.50 €</dd>
+                  </div>
+                </dl>
+                <dl class="resident-payment-fields">
+                  <div>
+                    <dt>IBAN</dt>
+                    <dd>LV80UNLA0050012345678</dd>
+                    <dd class="resident-payment-action">
+                      <button
+                        type="button"
+                        class="btn-secondary"
+                        data-copy-value="LV80UNLA0050012345678"
+                        data-copied-label="Copied"
+                        aria-label="Copy: IBAN"
+                      >
+                        <Icon name="copy" />
+                        <span>Copy</span>
+                      </button>
+                    </dd>
+                  </div>
+                </dl>
+                <p
+                  role="status"
+                  class="sr-only"
+                  data-copy-status
+                  data-copied="Copied. Paste it into your bank's payment form."
+                  data-copy-failed="Could not copy. Select the details and copy them yourself."
+                ></p>
+                <ResidentPaymentQr
+                  label="Banking app QR code"
+                  description="This sample QR contains the text “Namkopa design system sample”."
+                  imageLabel="Sample QR code"
+                  svg={specimenQr.createSvgTag({
+                    cellSize: 4,
+                    margin: 16,
+                    scalable: true,
+                  })}
+                />
+              </section>
+              <div class="resident-chat">
+                <div
+                  class="resident-chat-log"
+                  role="log"
+                  aria-label="Messages"
+                  tabindex="0"
+                >
+                  <div>
+                    <p class="resident-chat-day">Today</p>
+                    <div class="resident-chat-msg">
+                      <p class="resident-chat-author">Administrator</p>
+                      <p class="resident-chat-bubble">
+                        September water readings are open until the 25th.
+                      </p>
+                      <p class="resident-chat-time">09:15</p>
+                    </div>
+                    <div class="resident-chat-msg" data-from="me">
+                      <p class="resident-chat-author">You</p>
+                      <p class="resident-chat-bubble">
+                        Submitted cold water reading today, thank you.
+                      </p>
+                      <p class="resident-chat-time">09:42</p>
+                    </div>
+                  </div>
+                </div>
+                <ResidentComposer
+                  dwellingId="sample-dwelling"
+                  locale="en"
+                  inputId="specimen-chat-body"
+                />
+              </div>
+            </div>
+          </div>
+          <pre class="ds-code"><code>{`<ResidentInvoiceList invoices={invoices} dwellingId={dwellingId} locale={locale} />`}</code></pre>
+        </section>
+
+        <section
+          id="setup-progress"
+          class="ds-topic"
+          data-component="setup-progress"
+        >
+          <h1 tabindex="-1">Setup progress</h1>
+          <p class="ds-lead">
+            Use <code>SetupProgressPanel</code> to help an administrator resume
+            first-time billing setup. The primary action opens the first
+            unfinished step, and every checklist row links to its own step.
+          </p>
+          <div class="ds-specimen">
+            <SetupProgressPanel
+              id="specimen-setup-progress-title"
+              locale="en"
+              steps={[
+                {
+                  title: "Organization details",
+                  done: true,
+                  href: "#setup-progress",
+                },
+                { title: "Dwellings", done: false, href: "#setup-progress" },
+                {
+                  title: "First billing period",
+                  done: false,
+                  href: "#setup-progress",
+                },
+                { title: "Charges", done: false, href: "#setup-progress" },
+                {
+                  title: "Meters and starting readings",
+                  done: false,
+                  href: "#setup-progress",
+                },
+              ]}
+            />
+          </div>
+          <h2>Layout and states</h2>
+          <p>
+            The summary and checklist sit side by side from <code>40rem</code>
+            of panel width and stack below it. Completed rows have a check and a
+            Done label. The current row has a tint, a Next step label, and{" "}
+            <code>aria-current="step"</code>. Upcoming rows show To do. Pass the
+            saved completion state for each step. The panel only renders while a
+            step is unfinished.
+          </p>
+          <pre class="ds-code"><code>{`<SetupProgressPanel id="setup-title" steps={steps} locale={locale} />`}</code></pre>
+        </section>
+
         <section id="row-menu" class="ds-topic" data-component="row-menu">
           <h1 tabindex="-1">Row menu</h1>
           <p class="ds-lead">
-            Actions for one row in a floating menu at the row's end. Destructive
-            items come last and use <code>menu-danger</code>.
+            Use <code>&lt;details class="row-menu"&gt;</code> for an
+            overflow-visible list or record header. Give the dots trigger a
+            label that identifies the record. Destructive actions come last.
           </p>
+          <h2>Tariffs</h2>
+          <div class="app-content">
+            <div class="table-wrap table-wrap-visible">
+              <table class="w-full text-left text-body-sm">
+                <caption class="sr-only">Sample tariffs</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Tariff</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" aria-label="Actions"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Cold water</td>
+                    <td>
+                      <span id="specimen-tariff-status" role="status">
+                        Active
+                      </span>
+                    </td>
+                    <td class="text-right">
+                      <details class="row-menu" data-dismiss>
+                        <summary aria-label="More actions: Cold water">
+                          <Icon name="dots" size="sm" />
+                        </summary>
+                        <div>
+                          <button type="button" data-specimen-tariff-toggle>
+                            Turn off
+                          </button>
+                          <button
+                            type="button"
+                            class="menu-danger"
+                            data-specimen-tariff-archive
+                          >
+                            Archive
+                          </button>
+                        </div>
+                      </details>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <pre class="ds-code"><code>{`<details class="row-menu" data-dismiss>\n  <summary aria-label="More actions: Cold water">…</summary>\n  <div>\n    <button type="button">Turn off</button>\n    <button type="button" class="menu-danger">Archive</button>\n  </div>\n</details>`}</code></pre>
+          <h2>Messages</h2>
           <div class="ds-specimen component-row">
-            <span>Dwelling 12</span>
-            <details class="row-menu ml-auto">
-              <summary aria-label="More actions: Dwelling 12">
+            <span>Water meter replacement</span>
+            <details class="row-menu ml-auto" data-dismiss>
+              <summary aria-label="More actions: Water meter replacement">
                 <Icon name="dots" size="sm" />
               </summary>
               <div>
-                <button type="button">Edit</button>
-                <button type="button" class="menu-danger">
-                  Archive
-                </button>
+                <a href="#dwelling-actions" data-specimen-menu-link>
+                  Open dwelling
+                </a>
               </div>
             </details>
           </div>
-          <pre class="ds-code"><code>{`<details class="row-menu">\n  <summary aria-label="More actions: Dwelling 12">…</summary>\n  <div>\n    <button type="button">Edit</button>\n    <button type="button" class="menu-danger">Archive</button>\n  </div>\n</details>`}</code></pre>
+          <h2 id="dwelling-actions" tabindex="-1">
+            Dwelling header actions
+          </h2>
+          <p>
+            Use <code>.more-menu</code> for page actions. Dwelling detail adds
+            <code>.more-menu-wide</code> and a labelled secondary button; the
+            panel and items are the shared dropdown ones.
+            <a class="link" href="#lock-dialog">
+              Current Month
+            </a>{" "}
+            uses the icon-only trigger.
+          </p>
+          <div class="ds-specimen">
+            <header class="page-header">
+              <div>
+                Dwelling 12{" "}
+                <span
+                  class="text-muted"
+                  id="specimen-archive-status"
+                  role="status"
+                ></span>
+              </div>
+              <div class="page-actions">
+                <details class="more-menu more-menu-wide" data-dismiss>
+                  <summary class="btn-secondary">
+                    <Icon name="dots" size="sm" /> More actions
+                  </summary>
+                  <div>
+                    <span class="menu-disabled">No open period</span>
+                    <a href="#resident-portal">View invoice history</a>
+                    <button
+                      type="button"
+                      aria-haspopup="dialog"
+                      class="menu-danger"
+                      data-open-lock-dialog="specimen-archive-dwelling"
+                    >
+                      Archive dwelling
+                    </button>
+                  </div>
+                </details>
+              </div>
+            </header>
+          </div>
+          <LockDialog
+            id="specimen-archive-dwelling"
+            title="Archive this dwelling?"
+            description="Archiving hides it from new periods and active lists. Past invoices and readings remain intact."
+            cancelLabel="Cancel"
+          >
+            <form method="dialog">
+              <button class="btn-danger" value="confirm">
+                Archive dwelling
+              </button>
+            </form>
+          </LockDialog>
+          <pre class="ds-code"><code>{`<details class="more-menu more-menu-wide" data-dismiss>
+  <summary class="btn-secondary"><Icon name="dots" size="sm" /> More actions</summary>
+  <div>
+    <a href={adjustmentHref}>Create adjustment</a>
+    <button type="button" class="menu-danger" data-open-lock-dialog="archive-dialog">
+      Archive dwelling
+    </button>
+  </div>
+</details>`}</code></pre>
+          <h2>Popover row menu</h2>
+          <p>
+            For tables inside scrolling wrappers where a floating child would
+            clip or shift columns, use a native <code>popover="auto"</code> menu
+            with <code>.case-menu</code> so actions render in the top layer.
+            Call <code>initCaseMenus()</code> to position each popover from its
+            trigger.
+          </p>
+          <div class="ds-specimen component-row">
+            <span>Dwelling 12</span>
+            <button
+              type="button"
+              class="icon-btn icon-btn-sm ml-auto"
+              popovertarget="specimen-row-popover"
+              aria-label="Popover row actions: Dwelling 12"
+            >
+              <Icon name="dots" size="sm" />
+            </button>
+            <div id="specimen-row-popover" class="case-menu" popover="auto">
+              <button
+                type="button"
+                popovertarget="specimen-row-popover"
+                popovertargetaction="hide"
+              >
+                Open readings drawer
+              </button>
+              <button
+                type="button"
+                popovertarget="specimen-row-popover"
+                popovertargetaction="hide"
+              >
+                View dwelling
+              </button>
+              <button
+                type="button"
+                class="menu-danger"
+                popovertarget="specimen-row-popover"
+                popovertargetaction="hide"
+              >
+                Void draft
+              </button>
+            </div>
+          </div>
+          <pre class="ds-code"><code>{`<button type="button" class="icon-btn icon-btn-sm" popovertarget="menu-1" aria-label="More actions">…</button>\n<div id="menu-1" class="case-menu" popover="auto">\n  <button type="button">Open readings</button>\n</div>`}</code></pre>
         </section>
 
         <section
@@ -2198,15 +3463,43 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
               </tbody>
             </table>
           </div>
+          <h2>Quiet status text</h2>
+          <p>
+            High-density worklists such as Current Month use{" "}
+            <code>.status-text</code> for routine stages so tinted badges mark
+            only exceptions (<code>MISSING_DATA</code> and <code>OVERDUE</code>
+            ).
+          </p>
+          <div class="ds-specimen component-row">
+            {quietStatuses.map((status) => {
+              const info = invoiceStatusBadge(status);
+              return (
+                <span class="status-text">
+                  <Icon name={info.icon} size="xs" />
+                  {info.label}
+                </span>
+              );
+            })}
+          </div>
+          <pre class="ds-code"><code>{`<span class="status-text">\n  <Icon name="send" size="xs" />\n  Sent\n</span>`}</code></pre>
         </section>
 
         <section id="table" class="ds-topic" data-component="table">
           <h1 tabindex="-1">Table</h1>
           <p class="ds-lead">
-            Column headers are small capitals. Below 640px each row of a{" "}
-            <code>stack-table</code> becomes a card labelled with its column
-            headers. The layout script copies each header into its cells as{" "}
-            <code>data-label</code>.
+            Column headers (<code>thead th</code>) are uppercase 12px muted
+            labels at <code>0.04em</code> tracking over{" "}
+            <code>--color-table-th-bg</code>, rows highlight on hover via{" "}
+            <code>--color-hover</code>, and wrappers have{" "}
+            <code>--panel-border</code>. Below 640px, <code>stack-table</code>{" "}
+            turns rows into labelled cards.
+          </p>
+          <h2>Standard list table</h2>
+          <p>
+            Supports clickable <code>.row-link</code> targets, ascending sort
+            indicators, <code>.table-occupant</code> avatar cells, voided{" "}
+            <code>data-void="true"</code> amounts and receded{" "}
+            <code>data-receded="true"</code> inactive rows.
           </p>
           <!-- Product table styles are scoped to .app-content. -->
           <div class="app-content">
@@ -2215,7 +3508,10 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
                 <caption class="sr-only">Stack table example</caption>
                 <thead>
                   <tr>
-                    <th scope="col">Dwelling</th>
+                    <th scope="col">
+                      Dwelling <Icon name="arrow-up" size="xs" class="inline" />
+                    </th>
+                    <th scope="col">Occupant</th>
                     <th scope="col">Status</th>
                     <th scope="col" class="text-right">
                       Amount
@@ -2223,25 +3519,309 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <td>12</td>
+                  <tr class="row-link">
+                    <td>
+                      <a href="#table" class="row-link-target">
+                        12
+                      </a>
+                    </td>
+                    <td>
+                      <span class="table-occupant">
+                        <span class="avatar avatar-sm" aria-hidden="true">
+                          AB
+                        </span>
+                        Anna Bērziņa
+                      </span>
+                    </td>
                     <td>
                       <StatusBadge status="SENT" />
                     </td>
                     <td class="text-right tabular-nums">84.20 €</td>
                   </tr>
-                  <tr>
-                    <td>14</td>
+                  <tr class="row-link">
+                    <td>
+                      <a href="#table" class="row-link-target">
+                        14
+                      </a>
+                    </td>
+                    <td>
+                      <span class="table-occupant">
+                        <span class="avatar avatar-sm" aria-hidden="true">
+                          JK
+                        </span>
+                        Jānis Kalniņš
+                      </span>
+                    </td>
                     <td>
                       <StatusBadge status="OVERDUE" />
                     </td>
                     <td class="text-right tabular-nums">112.75 €</td>
                   </tr>
+                  <tr data-receded="true">
+                    <td>15 (former)</td>
+                    <td>—</td>
+                    <td>
+                      <StatusBadge status="REVERSED" />
+                    </td>
+                    <td class="text-right tabular-nums" data-void="true">
+                      45.00 €
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
           </div>
-          <pre class="ds-code"><code>{`<div class="table-wrap stack-table">\n  <table>\n    <thead>…</thead>\n    <tbody>…</tbody>\n  </table>\n</div>`}</code></pre>
+          <h2>Overflow-visible corners &amp; updated row flash</h2>
+          <p>
+            Pair <code>.table-wrap-visible</code> with floating row menus so the
+            last row&apos;s menu is never clipped while outer corner radii clip
+            row hovers cleanly. Apply <code>.row-changed</code> (or{" "}
+            <code>.row-changed-still</code> under reduced motion) after an
+            in-place update.
+          </p>
+          <div class="space-y-3">
+            <div>
+              <button
+                type="button"
+                class="btn-secondary btn-sm"
+                data-flash-row-trigger
+              >
+                Highlight updated row
+              </button>
+            </div>
+            <div class="app-content">
+              <div class="table-wrap table-wrap-visible stack-table">
+                <table class="w-full text-left text-body-sm">
+                  <caption class="sr-only">
+                    Overflow-visible table example
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Tariff</th>
+                      <th scope="col">Status</th>
+                      <th scope="col" class="text-right">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr id="specimen-flash-row">
+                      <td>Cold water</td>
+                      <td>
+                        <StatusBadge status="ACTIVE" />
+                      </td>
+                      <td class="text-right">
+                        <details class="row-menu" data-dismiss>
+                          <summary aria-label="More actions: Cold water">
+                            <Icon name="dots" size="sm" />
+                          </summary>
+                          <div>
+                            <button type="button">Turn off</button>
+                            <button type="button" class="menu-danger">
+                              Archive
+                            </button>
+                          </div>
+                        </details>
+                      </td>
+                    </tr>
+                    <tr data-receded="true">
+                      <td>Shared lighting</td>
+                      <td>
+                        <StatusBadge status="DISABLED" />
+                      </td>
+                      <td class="text-right">
+                        <details class="row-menu" data-dismiss>
+                          <summary aria-label="More actions: Shared lighting">
+                            <Icon name="dots" size="sm" />
+                          </summary>
+                          <div>
+                            <button type="button">Turn on</button>
+                            <button type="button" class="menu-danger">
+                              Archive
+                            </button>
+                          </div>
+                        </details>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <h2>Compact workbench table &amp; bulk selection</h2>
+          <p>
+            <code>.table-compact</code> tightens cell padding and badge size for
+            dense worklists, combines <code>.status-text</code> with{" "}
+            <code>.mid-truncate</code> serial labels and{" "}
+            <code>label.check-target</code> bulk selection, and opens top-layer{" "}
+            <code>.case-menu</code> popovers. Production workbenches replace{" "}
+            <code>stack-table</code> with a three-line{" "}
+            <code>@container (width &lt; 54rem)</code> card layout.
+          </p>
+          <div class="space-y-3">
+            <p
+              id="specimen-selection-status"
+              class="sr-only"
+              aria-live="polite"
+            ></p>
+            <div id="specimen-bulk-toolbar" class="bulk-toolbar" hidden>
+              <div class="selection-summary">
+                <strong>
+                  <span id="specimen-selected-count">0</span> selected
+                </strong>
+                <span>ready for bulk action</span>
+              </div>
+              <div class="bulk-actions">
+                <button type="button" class="btn-primary btn-sm">
+                  Send eligible
+                </button>
+                <button
+                  type="button"
+                  id="specimen-clear-selection"
+                  class="clear-selection"
+                >
+                  Clear selection
+                </button>
+              </div>
+            </div>
+            <div class="app-content">
+              <div class="table-wrap stack-table">
+                <table class="table-compact w-full text-left">
+                  <caption class="sr-only">
+                    Compact workbench table example
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Select</th>
+                      <th scope="col">Dwelling</th>
+                      <th scope="col">Status</th>
+                      <th scope="col" class="numeric-column">
+                        Amount
+                      </th>
+                      <th scope="col" class="text-right">
+                        Menu
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>
+                        <label class="check-target">
+                          <input
+                            type="checkbox"
+                            data-specimen-select
+                            aria-label="Select Dwelling 12"
+                          />
+                        </label>
+                      </td>
+                      <td>
+                        <strong>12</strong>
+                        <span class="mid-truncate text-caption text-muted">
+                          <span class="mid-start">Meter SN-2026-88412</span>
+                          <span class="mid-end">-04</span>
+                        </span>
+                      </td>
+                      <td>
+                        <span class="status-text">
+                          <Icon name="check" size="xs" />
+                          Prepared
+                        </span>
+                      </td>
+                      <td class="numeric-column">84.20 €</td>
+                      <td class="text-right">
+                        <button
+                          type="button"
+                          class="icon-btn icon-btn-sm"
+                          popovertarget="specimen-table-popover-12"
+                          aria-label="Case actions: Dwelling 12"
+                        >
+                          <Icon name="dots" size="sm" />
+                        </button>
+                        <div
+                          id="specimen-table-popover-12"
+                          class="case-menu"
+                          popover="auto"
+                        >
+                          <a href="#table" data-close-popover>
+                            View readings
+                          </a>
+                          <a href="#table" data-close-popover>
+                            View dwelling
+                          </a>
+                          <button
+                            type="button"
+                            popovertarget="specimen-table-popover-12"
+                            popovertargetaction="hide"
+                          >
+                            Open readings drawer
+                          </button>
+                          <a
+                            href="#table"
+                            class="menu-danger"
+                            data-close-popover
+                          >
+                            Void draft
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <label class="check-target">
+                          <input
+                            type="checkbox"
+                            data-specimen-select
+                            aria-label="Select Dwelling 14"
+                          />
+                        </label>
+                      </td>
+                      <td>
+                        <strong>14</strong>
+                        <span class="mid-truncate text-caption text-muted">
+                          <span class="mid-start">Cold water SN-2026-991</span>
+                          <span class="mid-end">7B</span>
+                        </span>
+                      </td>
+                      <td>
+                        <StatusBadge status="MISSING_DATA" />
+                      </td>
+                      <td class="numeric-column">—</td>
+                      <td class="text-right">
+                        <button
+                          type="button"
+                          class="icon-btn icon-btn-sm"
+                          popovertarget="specimen-table-popover-14"
+                          aria-label="Case actions: Dwelling 14"
+                        >
+                          <Icon name="dots" size="sm" />
+                        </button>
+                        <div
+                          id="specimen-table-popover-14"
+                          class="case-menu"
+                          popover="auto"
+                        >
+                          <a href="#table" data-close-popover>
+                            View readings
+                          </a>
+                          <a href="#table" data-close-popover>
+                            View dwelling
+                          </a>
+                          <button
+                            type="button"
+                            popovertarget="specimen-table-popover-14"
+                            popovertargetaction="hide"
+                          >
+                            Open readings drawer
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <pre class="ds-code"><code>{`<!-- Overflow-visible list table with floating .row-menu -->\n<div class="table-wrap table-wrap-visible stack-table">\n  <table class="w-full text-left text-body-sm">…</table>\n</div>\n\n<!-- Compact workbench table with .bulk-toolbar and .case-menu -->\n<div class="table-wrap stack-table">\n  <table class="table-compact w-full text-left">…</table>\n</div>`}</code></pre>
         </section>
 
         <section id="tabs" class="ds-topic" data-component="tabs">
@@ -2252,7 +3832,7 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
           </p>
           <h2>Tabs</h2>
           <div class="ds-specimen">
-            <nav class="tabs" aria-label="Readings">
+            <nav class="tabs" aria-label="Readings" data-specimen-tabs>
               <a href="#tabs" aria-current="page">
                 All
               </a>
@@ -2262,11 +3842,44 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
             </nav>
           </div>
           <pre class="ds-code"><code>{`<nav class="tabs" aria-label="Readings">\n  <a href="…" aria-current="page">All</a>\n  <a href="…">Missing</a>\n</nav>`}</code></pre>
+          <h2>Wrapping stage filters</h2>
+          <p>
+            <code>.workflow-rail</code> wraps underline stage tabs with tabular
+            counts instead of scrolling horizontally, so no workflow stage is
+            ever hidden off-screen.
+          </p>
+          <div class="ds-specimen">
+            <nav
+              class="workflow-rail"
+              aria-label="Filter by workflow stage"
+              data-specimen-tabs
+            >
+              <a href="#tabs" class="workflow-filter" aria-current="page">
+                All <strong>24</strong>
+              </a>
+              <a href="#tabs" class="workflow-filter">
+                Missing data <strong>3</strong>
+              </a>
+              <a href="#tabs" class="workflow-filter">
+                Draft <strong>6</strong>
+              </a>
+              <a href="#tabs" class="workflow-filter">
+                Prepared <strong>4</strong>
+              </a>
+              <a href="#tabs" class="workflow-filter">
+                Sent <strong>9</strong>
+              </a>
+              <a href="#tabs" class="workflow-filter">
+                Overdue <strong>2</strong>
+              </a>
+            </nav>
+          </div>
           <h2>Toggle tabs</h2>
           <p>
             The selected segment sits above the recessed track. Use labels
             around radios for an in-page choice and links with
-            <code>aria-current</code> when the choice changes the URL.
+            <code>aria-current</code> when the choice changes the URL (such as
+            switching Table and Building views).
           </p>
           <div class="ds-specimen ds-inline">
             <div
@@ -2281,6 +3894,12 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
                 <input type="radio" name="specimen-amounts" /> Without VAT
               </label>
             </div>
+            <nav class="toggle-tabs" aria-label="View mode" data-specimen-tabs>
+              <a href="#tabs" aria-current="page">
+                Table
+              </a>
+              <a href="#tabs">Building</a>
+            </nav>
             <LanguageSwitch />
           </div>
           <pre class="ds-code"><code>{`<div class="toggle-tabs" role="radiogroup" aria-label="Show amounts">\n  <label><input type="radio" name="amounts" checked /> With VAT</label>\n  <label><input type="radio" name="amounts" /> Without VAT</label>\n</div>`}</code></pre>
@@ -2333,6 +3952,28 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
                     <code>data-tip</code>
                   </td>
                   <td>A short code or a one-line explanation</td>
+                </tr>
+                <tr>
+                  <td>
+                    <span
+                      class="mid-truncate ds-tip-clip"
+                      tabindex="0"
+                      data-tip-clipped
+                      data-tip="Long meter serial number 2026-88412-04"
+                    >
+                      <span class="mid-start">
+                        Long meter serial number 2026-88412
+                      </span>
+                      <span class="mid-end">-04</span>
+                    </span>
+                  </td>
+                  <td>
+                    <code>.mid-truncate + data-tip-clipped</code>
+                  </td>
+                  <td>
+                    Preserves tail characters; reveals full label only when
+                    <code>.mid-start</code> clips
+                  </td>
                 </tr>
                 <tr>
                   <td>
@@ -2390,6 +4031,125 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
         </section>
 
         <!-- Reference -->
+        <section id="workbench" class="ds-topic" data-component="workbench">
+          <h1 tabindex="-1">Billing workbench</h1>
+          <p class="ds-lead">
+            Search and select sample cases, open a readings or billing drawer,
+            and save to see the queue refresh. Changes apply to this preview
+            only.
+          </p>
+          <WorkbenchSpecimen />
+        </section>
+
+        <section
+          id="setup-wizard"
+          class="ds-topic"
+          data-component="setup-wizard"
+        >
+          <h1 tabindex="-1">Setup wizard</h1>
+          <p class="ds-lead">
+            Use the step trail to move between the sample setup screens.
+          </p>
+          <SetupWizardSpecimen />
+        </section>
+
+        <section id="tariffs" class="ds-topic" data-component="tariffs">
+          <h1 tabindex="-1">Tariffs</h1>
+          <p class="ds-lead">
+            Narrow the table to see the container-query cards. Open Cold water
+            to edit the sample tariff.
+          </p>
+          <TariffSpecimen />
+        </section>
+
+        <section
+          id="invoice-editor"
+          class="ds-topic"
+          data-component="invoice-editor"
+        >
+          <h1 tabindex="-1">Invoice editor</h1>
+          <p class="ds-lead">
+            Switch languages, edit sections, and save a sample layout for this
+            visit.
+          </p>
+          <InvoiceEditorSpecimen />
+        </section>
+
+        <section id="meter-list" class="ds-topic" data-component="meter-list">
+          <h1 tabindex="-1">Meter list</h1>
+          <p class="ds-lead">
+            Switch between active and archived meters for the same dwelling.
+          </p>
+          <MeterListSpecimen />
+        </section>
+
+        <section
+          id="admin-messages"
+          class="ds-topic"
+          data-component="admin-messages"
+        >
+          <h1 tabindex="-1">Admin messages</h1>
+          <p class="ds-lead">
+            Search the conversation list, filter by status, or reply to the open
+            sample conversation.
+          </p>
+          <AdminMessagesSpecimen />
+        </section>
+
+        <section
+          id="admin-payments"
+          class="ds-topic"
+          data-component="admin-payments"
+        >
+          <h1 tabindex="-1">Admin payments</h1>
+          <p class="ds-lead">
+            Inspect the payment history or confirm a sample manual payment.
+          </p>
+          <AdminPaymentsSpecimen />
+        </section>
+
+        <section
+          id="invoice-delivery"
+          class="ds-topic app-content"
+          data-component="invoice-delivery"
+        >
+          <h1 tabindex="-1">Invoice delivery</h1>
+          <p class="notice notice-warning">
+            Delivery outcome could not be confirmed. Verify the recipient
+            mailbox or provider logs before resending.
+          </p>
+          <InvoiceDeliveryHistory
+            locale="en"
+            timezone="Europe/Riga"
+            deliveries={[
+              {
+                createdAt: "2026-09-05",
+                method: "EMAIL",
+                status: "UNKNOWN",
+                destinationEmail: "resident@example.test",
+                errorCode: null,
+                isInitialPaperDispatch: false,
+              },
+              {
+                createdAt: "2026-09-04",
+                method: "EMAIL",
+                status: "FAILED",
+                destinationEmail: "resident@example.test",
+                errorCode: "DELIVERY_FAILED",
+                isInitialPaperDispatch: false,
+              },
+              {
+                createdAt: "2026-09-03",
+                method: "PAPER",
+                status: "SENT",
+                destinationEmail: null,
+                errorCode: null,
+                isInitialPaperDispatch: true,
+              },
+            ]}
+          />
+        </section>
+
         <section id="audit" class="ds-topic">
           <h1 tabindex="-1">Audit</h1>
           <p class="ds-lead">
@@ -2511,14 +4271,33 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
           } catch {
             /* A malformed fragment is looked up as written. */
           }
-          const target = id ? document.getElementById(aliases[id] ?? id) : null;
+          const normalized = id.startsWith("building-view/")
+            ? "building-view"
+            : id.startsWith("resident-portal/")
+              ? "resident-portal"
+              : (aliases[id] ?? id);
+          const target = normalized
+            ? document.getElementById(normalized)
+            : null;
           const topic = target?.closest(".ds-topic");
           // A jump to a target outside every topic (the skip link's
           // #main-content) keeps the open topic. On load, or for an unknown
           // fragment, show Overview.
           if (moved && target && !topic) return;
           const shown = topic ?? topics[0];
-          for (const section of topics) section.hidden = section !== shown;
+          for (const section of topics) {
+            const leaving = !section.hidden && section !== shown;
+            section.hidden = section !== shown;
+            if (leaving) {
+              document.querySelector("#confirm-dialog[open]")?.close("cancel");
+              section.querySelector("dialog.lock-dialog[open]")?.close();
+              section
+                .querySelectorAll(
+                  ":is(.row-menu, .more-menu, .mutation-activity)[data-dismiss][open]"
+                )
+                .forEach((details) => details.removeAttribute("open"));
+            }
+          }
           for (const link of links) {
             if (link.hash === `#${shown.id}`)
               link.setAttribute("aria-current", "page");
@@ -2530,8 +4309,12 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
               ? baseTitle
               : `${heading.textContent.trim()} – ${baseTitle}`;
           if (!moved) return;
-          if (target && target !== shown) target.scrollIntoView();
-          else {
+          if (target && target !== shown) {
+            target.scrollIntoView();
+            if (target.matches("[tabindex='-1']")) {
+              target.focus({ preventScroll: true });
+            }
+          } else {
             window.scrollTo(0, 0);
             heading.focus({ preventScroll: true });
           }
@@ -2561,10 +4344,221 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
       import { initTheme } from "../lib/ui/theme";
       import { labelStackTables } from "../lib/ui/stack-tables";
       import { installDismissableDetails } from "../lib/ui/dismissable-details";
-      import "../lib/ui/forms";
+      import { initCollectionLedgers } from "../lib/ui/collection-ledger";
+      import { getPopoverInvoker, initCaseMenus } from "../lib/ui/case-menu";
+      import { updateWorkbenchToolbarSpace } from "../lib/ui/workbench-selection";
+      import { initCopyButtons } from "../lib/ui/copy-field";
+      import { bindResidentSpecimen } from "../lib/ui/resident-specimen";
+      import { confirmAction } from "../lib/ui/forms";
       initTheme();
       labelStackTables();
       installDismissableDetails();
+      initCollectionLedgers();
+      initCaseMenus();
+      initCopyButtons();
+      const residentSpecimen = document.querySelector<HTMLElement>(
+        "[data-resident-specimen]"
+      );
+      if (residentSpecimen) bindResidentSpecimen(residentSpecimen);
+
+      const tariffStatus = document.querySelector("#specimen-tariff-status")!;
+      const tariffToggle = document.querySelector<HTMLButtonElement>(
+        "[data-specimen-tariff-toggle]"
+      )!;
+      const tariffArchive = document.querySelector<HTMLButtonElement>(
+        "[data-specimen-tariff-archive]"
+      )!;
+      const closeTariffMenu = () => {
+        const menu = tariffToggle.closest("details")!;
+        menu.open = false;
+        menu.querySelector("summary")?.focus();
+      };
+      let tariffActive = true;
+      tariffToggle.addEventListener("click", () => {
+        tariffActive = !tariffActive;
+        tariffStatus.textContent = tariffActive ? "Active" : "Off";
+        tariffToggle.textContent = tariffActive ? "Turn off" : "Turn on";
+        closeTariffMenu();
+      });
+      tariffArchive.addEventListener("click", async () => {
+        const restoring = tariffToggle.hidden === true;
+        closeTariffMenu();
+        if (
+          !restoring &&
+          !(await confirmAction(
+            "Archive Cold water? The sample tariff stops applying to new billing periods.",
+            tariffArchive
+          ))
+        )
+          return;
+        tariffToggle.hidden = !restoring;
+        tariffArchive.classList.toggle("menu-danger", restoring);
+        tariffArchive.textContent = restoring ? "Archive" : "Restore";
+        const activeStatus = tariffActive ? "Active" : "Off";
+        tariffStatus.textContent = restoring ? activeStatus : "Archived";
+      });
+      document
+        .querySelector("[data-specimen-menu-link]")
+        ?.addEventListener("click", (event) => {
+          const menu = (event.currentTarget as Element).closest("details");
+          if (menu) menu.open = false;
+        });
+      for (const [id, statusId, text] of [
+        [
+          "specimen-lock-period",
+          "specimen-lock-status",
+          "Sample period locked",
+        ],
+        [
+          "specimen-archive-dwelling",
+          "specimen-archive-status",
+          "· Archived (sample)",
+        ],
+      ]) {
+        const dialog = document.querySelector<HTMLDialogElement>(`#${id}`)!;
+        dialog.addEventListener("close", () => {
+          if (dialog.returnValue === "confirm")
+            document.getElementById(statusId)!.textContent = text;
+        });
+      }
+
+      // Interactive table, tabs, notice undo, and resident portal specimen controls.
+      let flashTimer: number | undefined;
+      document
+        .querySelector<HTMLButtonElement>("[data-flash-row-trigger]")
+        ?.addEventListener("click", () => {
+          const row = document.querySelector<HTMLElement>(
+            "#specimen-flash-row"
+          );
+          if (!row) return;
+          const cls = matchMedia("(prefers-reduced-motion: reduce)").matches
+            ? "row-changed-still"
+            : "row-changed";
+          row.classList.remove("row-changed", "row-changed-still");
+          void row.offsetWidth;
+          row.classList.add(cls);
+          window.clearTimeout(flashTimer);
+          flashTimer = window.setTimeout(() => row.classList.remove(cls), 1500);
+        });
+
+      for (const nav of document.querySelectorAll<HTMLElement>(
+        "[data-specimen-tabs]"
+      )) {
+        nav.addEventListener("click", (event) => {
+          const link = (event.target as Element | null)?.closest("a");
+          if (!link || !nav.contains(link)) return;
+          event.preventDefault();
+          for (const sibling of nav.querySelectorAll("a")) {
+            if (sibling === link) sibling.setAttribute("aria-current", "page");
+            else sibling.removeAttribute("aria-current");
+          }
+        });
+      }
+
+      for (const group of document.querySelectorAll<HTMLElement>(
+        "[data-specimen-view-switch]"
+      )) {
+        group.addEventListener("change", (event) => {
+          const input = event.target;
+          if (!(input instanceof HTMLInputElement)) return;
+          const scope = group.parentElement;
+          for (const panel of scope?.querySelectorAll<HTMLElement>(
+            "[data-view-panel]"
+          ) ?? []) {
+            panel.hidden = panel.dataset.viewPanel !== input.value;
+          }
+        });
+      }
+
+      const focusCaseMenuOpener = (menu: HTMLElement | null) => {
+        if (!menu) return;
+        queueMicrotask(() => {
+          if (!menu.matches(":popover-open")) getPopoverInvoker(menu)?.focus();
+        });
+      };
+      for (const item of document.querySelectorAll<HTMLElement>(
+        ".case-menu [data-close-popover], .case-menu [popovertargetaction='hide']"
+      )) {
+        item.addEventListener("click", (event) => {
+          const menu = item.closest<HTMLElement>(".case-menu");
+          if (item.hasAttribute("data-close-popover")) {
+            event.preventDefault();
+            menu?.hidePopover?.();
+          }
+          focusCaseMenuOpener(menu);
+        });
+      }
+
+      document
+        .querySelector<HTMLButtonElement>("[data-specimen-undo]")
+        ?.addEventListener("click", (event) => {
+          const btn = event.currentTarget as HTMLButtonElement;
+          const textEl = document.querySelector<HTMLElement>(
+            "[data-specimen-undo-text]"
+          );
+          const statusEl = document.querySelector<HTMLElement>(
+            "[data-specimen-undo-status]"
+          );
+          const message = btn.dataset.onText ?? "Cold water tariff restored.";
+          if (textEl) textEl.textContent = message;
+          if (statusEl) statusEl.textContent = message;
+          textEl?.focus();
+          btn.hidden = true;
+        });
+
+      const bulkToolbar = document.querySelector<HTMLElement>(
+        "#specimen-bulk-toolbar"
+      );
+      const selectedCountEl = document.querySelector<HTMLElement>(
+        "#specimen-selected-count"
+      );
+      const selectionStatusEl = document.querySelector<HTMLElement>(
+        "#specimen-selection-status"
+      );
+      const tableTopic = document.querySelector<HTMLElement>("#table");
+      const selectCheckboxes = [
+        ...document.querySelectorAll<HTMLInputElement>(
+          "[data-specimen-select]"
+        ),
+      ];
+      let lastCheckedBox: HTMLInputElement | null = null;
+      const measureSpecimenToolbar = () => {
+        if (tableTopic) updateWorkbenchToolbarSpace(tableTopic, bulkToolbar);
+      };
+      const syncBulkSpecimen = (announce = false) => {
+        let count = 0;
+        for (const cb of selectCheckboxes) {
+          const row = cb.closest("tr");
+          if (cb.checked) {
+            row?.setAttribute("data-selected", "");
+            count++;
+          } else {
+            row?.removeAttribute("data-selected");
+          }
+        }
+        if (selectedCountEl) selectedCountEl.textContent = String(count);
+        if (bulkToolbar) bulkToolbar.hidden = count === 0;
+        if (announce && selectionStatusEl) {
+          selectionStatusEl.textContent =
+            count > 0 ? `${count} selected` : "Selection cleared";
+        }
+        measureSpecimenToolbar();
+      };
+      for (const cb of selectCheckboxes) {
+        cb.addEventListener("change", () => {
+          if (cb.checked) lastCheckedBox = cb;
+          syncBulkSpecimen(true);
+        });
+      }
+      document
+        .querySelector<HTMLButtonElement>("#specimen-clear-selection")
+        ?.addEventListener("click", () => {
+          for (const cb of selectCheckboxes) cb.checked = false;
+          syncBulkSpecimen(true);
+          (lastCheckedBox ?? selectCheckboxes[0])?.focus();
+        });
+      window.addEventListener("resize", measureSpecimenToolbar);
+      window.addEventListener("hashchange", measureSpecimenToolbar);
 
       // Specimens: open the example dialogs, and show the mixed checkbox state
       // (indeterminate has no HTML attribute).
@@ -2831,7 +4825,7 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
     transition: background-color var(--duration-fast) var(--ease-standard);
   }
   .ds-entry a:hover {
-    background: var(--color-surface-hover);
+    background: var(--color-hover);
   }
   .ds-entry strong {
     font-size: var(--text-xl);
@@ -2970,7 +4964,7 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
     font-size: var(--text-xs);
   }
   .copy-button:hover {
-    background: var(--color-surface-hover);
+    background: var(--color-hover);
   }
 
   /* Color */
@@ -3158,6 +5152,15 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
     border-bottom: 1px dashed var(--color-input-border);
     text-decoration: none;
     cursor: help;
+  }
+  .ds-tip-clip {
+    max-width: 11rem;
+    border-bottom: 1px dashed var(--color-input-border);
+    cursor: help;
+  }
+  .resident-specimen .resident-content {
+    max-width: none;
+    padding: 0;
   }
   .divider-specimen > hr {
     margin-block: var(--space-3) var(--space-6);
@@ -3363,6 +5366,16 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
     font-size: var(--text-sm);
   }
 
+  @media (width >= 70rem) {
+    #specimen-bulk-toolbar {
+      top: calc(4.25rem + 0.75rem);
+    }
+  }
+  @media (40rem <= width < 70rem) {
+    #specimen-bulk-toolbar {
+      top: calc(8rem + 0.75rem);
+    }
+  }
   /* Below 70rem the sidebar becomes a Contents menu under the top bar. */
   @media (width < 70rem) {
     .ds-shell {
@@ -3409,6 +5422,9 @@ const palette = sourceTokens.filter((token) => token.startsWith("--palette-"));
     }
     .ds-topic {
       padding-top: var(--space-8);
+    }
+    .ds-specimen {
+      padding: var(--space-4);
     }
     .type-row {
       grid-template-columns: 1fr;

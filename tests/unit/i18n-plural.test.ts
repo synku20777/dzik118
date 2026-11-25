@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fill, plural } from "../../src/lib/ui/i18n";
+import { fill, plural, workbenchSelectionCopy } from "../../src/lib/ui/i18n";
 
 const one = "{n} day late";
 const other = "{n} days late";
@@ -25,5 +25,20 @@ describe("plural", () => {
 
   it("fills named placeholders", () => {
     expect(fill("{done} of {total}", { done: 1, total: 5 })).toBe("1 of 5");
+  });
+
+  it("provides workbench selection forms without sending the full dictionary", () => {
+    const lv = workbenchSelectionCopy("lv");
+    expect(fill(lv.selected.one, { n: 21 })).toBe("Izvēlēts 21 rēķins");
+    const ru = workbenchSelectionCopy("ru");
+    expect(fill(ru.selected.few, { n: 3 })).toBe("Выбрано 3 счёта");
+    expect(fill(ru.selected.many, { n: 12 })).toBe("Выбрано 12 счетов");
+    expect(
+      fill(ru.summary, {
+        selection: fill(ru.selected.few, { n: 3 }),
+        prepare: 2,
+        send: 1,
+      })
+    ).toBe("Выбрано 3 счёта. К подготовке: 2. К отправке: 1.");
   });
 });

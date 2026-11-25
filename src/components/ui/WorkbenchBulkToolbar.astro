@@ -1,0 +1,28 @@
+---
+import { translate, type Locale } from "../../lib/ui/i18n";
+interface Props {
+  locale: Locale;
+}
+const { locale } = Astro.props;
+const t = (text: string) => translate(locale, text);
+---
+
+<div id="bulk-toolbar" class="bulk-toolbar" hidden>
+  <div class="selection-summary">
+    <strong>
+      <span id="selected-count">0</span> {t("selected")}
+    </strong>
+    <span>
+      <span id="prepare-count">0</span> {t("eligible to prepare")}
+    </span>
+    <span>
+      <span id="send-count">0</span> {t("eligible to send")}
+    </span>
+  </div>
+  <div class="bulk-actions">
+    <slot />
+    <button type="button" id="clear-selection" class="clear-selection">
+      {t("Clear selection")}
+    </button>
+  </div>
+</div>

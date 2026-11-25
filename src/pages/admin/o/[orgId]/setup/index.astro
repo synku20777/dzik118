@@ -141,7 +141,7 @@ const readyToPrepareAndSend =
         {t(
           "The first billing period is locked. Reopen it on the period page before you change charges or meters."
         )}{" "}
-        <a href={firstPeriodHref} class="underline font-medium">
+        <a href={firstPeriodHref} class="link link-underlined font-medium">
           {t("Open the first billing period")}
         </a>
       </p>
@@ -190,7 +190,7 @@ const readyToPrepareAndSend =
             <ul class="space-y-1.5 pl-5 list-disc text-body-sm text-muted">
               {generationBlockers.map((blocker) => (
                 <li>
-                  <a href={blocker.href} class="text-primary hover:underline">
+                  <a href={blocker.href} class="link">
                     {blocker.count} {blocker.label}
                   </a>
                 </li>
@@ -220,7 +220,7 @@ const readyToPrepareAndSend =
                 <li>
                   <a
                     href={`/admin/o/${organizationId}/setup/organization`}
-                    class="text-primary hover:underline"
+                    class="link"
                   >
                     {t(field)}
                   </a>
@@ -228,10 +228,7 @@ const readyToPrepareAndSend =
               ))}
               {progress.recipientsIncomplete > 0 && (
                 <li>
-                  <a
-                    href={`/admin/o/${organizationId}/dwellings`}
-                    class="text-primary hover:underline"
-                  >
+                  <a href={`/admin/o/${organizationId}/dwellings`} class="link">
                     {progress.recipientsIncomplete}{" "}
                     {t("Dwellings without a recipient name or address")}
                   </a>
@@ -239,10 +236,7 @@ const readyToPrepareAndSend =
               )}
               {progress.billingEmailsMissing > 0 && (
                 <li>
-                  <a
-                    href={`/admin/o/${organizationId}/dwellings`}
-                    class="text-primary hover:underline"
-                  >
+                  <a href={`/admin/o/${organizationId}/dwellings`} class="link">
                     {progress.billingEmailsMissing}{" "}
                     {t("Dwellings without a billing email")}
                   </a>

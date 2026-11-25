@@ -4,6 +4,7 @@ const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 // Migration Center: start an import and see the past ones (ADR 0013).
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
+import PageHeader from "../../../../../components/ui/PageHeader.astro";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { listMigrationImports } from "../../../../../domain/migration/flow";
 import { withRequestDb } from "../../../../../lib/db-request";
@@ -30,7 +31,7 @@ const dateFormat = new Intl.DateTimeFormat(locale, {
 ---
 
 <AdminLayout
-  title={`Migration Center - ${organization.name}`}
+  title={`${t("Migration Center")} – ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[
@@ -39,12 +40,12 @@ const dateFormat = new Intl.DateTimeFormat(locale, {
   ]}
 >
   <div class="space-y-6">
-    <h1 class="text-h2 text-foreground">{t("Migration Center")}</h1>
-    <p class="max-w-2xl text-body-sm text-muted">
-      {t(
+    <PageHeader
+      title={t("Migration Center")}
+      description={t(
         "Bring your dwellings and recipients from a spreadsheet or your old system. You check every step before anything is saved."
       )}
-    </p>
+    />
 
     {justImported && (
       <p class="notice" role="status">
@@ -67,7 +68,7 @@ const dateFormat = new Intl.DateTimeFormat(locale, {
         )}
       </p>
       <div class="flex flex-wrap gap-3">
-        <a href={`${base}/dwellings`} class="btn-primary">
+        <a href={`${base}/dwellings`} class="btn-secondary">
           {t("Start an import")}
         </a>
         <a href={`${base}/templates/dwellings.csv`} class="btn-secondary">
@@ -84,7 +85,7 @@ const dateFormat = new Intl.DateTimeFormat(locale, {
         )}
       </p>
       <div class="flex flex-wrap gap-3">
-        <a href={`${base}/balances`} class="btn-primary">
+        <a href={`${base}/balances`} class="btn-secondary">
           {t("Start an import")}
         </a>
         <a href={`${base}/templates/balances.csv`} class="btn-secondary">
@@ -101,7 +102,7 @@ const dateFormat = new Intl.DateTimeFormat(locale, {
         )}
       </p>
       <div class="flex flex-wrap gap-3">
-        <a href={`${base}/meters`} class="btn-primary">
+        <a href={`${base}/meters`} class="btn-secondary">
           {t("Start an import")}
         </a>
         <a href={`${base}/templates/meters.csv`} class="btn-secondary">
@@ -145,10 +146,7 @@ const dateFormat = new Intl.DateTimeFormat(locale, {
                   </td>
                   <td class="px-4 py-2" data-label={t("File")}>
                     {i.kind === "BALANCES" ? (
-                      <a
-                        href={`${base}/report/${i.id}`}
-                        class="text-primary hover:underline"
-                      >
+                      <a href={`${base}/report/${i.id}`} class="link">
                         {i.sourceFilename}
                       </a>
                     ) : (
@@ -173,3 +171,11 @@ const dateFormat = new Intl.DateTimeFormat(locale, {
     </section>
   </div>
 </AdminLayout>
+
+<style>
+  td a.link {
+    display: inline-block;
+    min-width: 1.5rem;
+    min-height: 1.5rem;
+  }
+</style>

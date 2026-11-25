@@ -88,7 +88,7 @@ const { unreadMessages, switcherOrganizations } = organizationId
     <!-- --color-canvas per theme; theme.ts keeps these in step with a stored theme. -->
     <meta
       name="theme-color"
-      content="#f7f4ee"
+      content="#eee8de"
       media="(prefers-color-scheme: light)"
     />
     <meta
@@ -109,7 +109,7 @@ const { unreadMessages, switcherOrganizations } = organizationId
             document
               .querySelectorAll('meta[name="theme-color"]')
               .forEach(function (m) {
-                m.content = stored === "dark" ? "#0e1517" : "#f7f4ee";
+                m.content = stored === "dark" ? "#0e1517" : "#eee8de";
               });
           }
         } catch (e) {
@@ -173,7 +173,7 @@ const { unreadMessages, switcherOrganizations } = organizationId
         </span>
         <button
           type="button"
-          class="icon-btn context-drawer-close"
+          class="icon-btn icon-btn-ghost context-drawer-close"
           data-close-mobile-nav
           aria-label={t("Close menu")}
         >

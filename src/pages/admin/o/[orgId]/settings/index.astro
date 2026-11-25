@@ -87,7 +87,7 @@ const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
 ---
 
 <AdminLayout
-  title={`Settings - ${organization.name}`}
+  title={`${t("Settings")} - ${organization.name}`}
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[{ label: t("Settings") }]}
@@ -110,9 +110,9 @@ const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
           <h2 class="eyebrow">{t(group.label)}</h2>
           <div class="settings-grid">
             {group.items.map((s) => (
-              <a href={s.href} class="settings-card panel">
-                <span class="settings-card-icon" aria-hidden="true">
-                  <Icon name={s.icon} size="lg" />
+              <a href={s.href} class="settings-card box">
+                <span class="icon-tile" aria-hidden="true">
+                  <Icon name={s.icon} />
                 </span>
                 <div class="settings-card-text">
                   <h3>{t(s.label)}</h3>
@@ -148,26 +148,7 @@ const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
     display: flex;
     align-items: center;
     gap: 1rem;
-    padding: 1.5rem;
-    box-shadow: var(--elevation-flat);
     color: var(--color-foreground);
-  }
-  .settings-card:hover {
-    background: var(--color-hover);
-  }
-  .settings-card-icon {
-    display: grid;
-    width: 3rem;
-    height: 3rem;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 50%;
-    background: var(--tone-neutral-bg);
-    color: var(--color-foreground);
-  }
-  .settings-card-icon svg {
-    width: 1.5rem;
-    height: 1.5rem;
   }
   .settings-card-text {
     min-width: 0;
@@ -187,17 +168,13 @@ const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
     color: var(--color-muted);
     font-size: var(--text-xl);
   }
-  /* The chevron leans toward where the card goes. */
+  .settings-card:hover .settings-card-chevron,
+  .settings-card:focus-visible .settings-card-chevron {
+    color: var(--color-foreground);
+  }
   @media (prefers-reduced-motion: no-preference) {
     .settings-card-chevron {
-      transition:
-        transform var(--duration-normal) var(--ease-standard),
-        color var(--duration-fast) ease;
-    }
-    .settings-card:hover .settings-card-chevron,
-    .settings-card:focus-visible .settings-card-chevron {
-      transform: translateX(3px);
-      color: var(--color-foreground);
+      transition: color var(--duration-fast) var(--ease-standard);
     }
   }
 

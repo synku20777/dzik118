@@ -201,10 +201,12 @@ const sourceLabel = (e: (typeof ledger.entries)[number]) =>
       <h2 id="entries-heading" class="sr-only">
         {t("Ledger entries")}
       </h2>
-      <form method="GET" class="filters">
+      <form method="GET" class="filter-bar mb-4">
         <div>
-          <label for="ledger-dwelling">{t("Dwelling")}</label>
-          <select id="ledger-dwelling" name="dwelling">
+          <label class="field-label" for="ledger-dwelling">
+            {t("Dwelling")}
+          </label>
+          <select id="ledger-dwelling" name="dwelling" class="mt-1">
             <option value="">{t("All dwellings")}</option>
             {directory.map((d) => (
               <option value={d.id} selected={d.id === dwelling?.id}>
@@ -214,8 +216,10 @@ const sourceLabel = (e: (typeof ledger.entries)[number]) =>
           </select>
         </div>
         <div>
-          <label for="ledger-kind">{t("Show")}</label>
-          <select id="ledger-kind" name="kind">
+          <label class="field-label" for="ledger-kind">
+            {t("Show")}
+          </label>
+          <select id="ledger-kind" name="kind" class="mt-1">
             <option value="">{t("All entries")}</option>
             {(Object.keys(kinds) as (keyof typeof kinds)[]).map((k) => (
               <option value={k} selected={k === kind}>
@@ -225,18 +229,34 @@ const sourceLabel = (e: (typeof ledger.entries)[number]) =>
           </select>
         </div>
         <div>
-          <label for="ledger-from">{t("From date")}</label>
-          <input type="date" id="ledger-from" name="from" value={from ?? ""} />
+          <label class="field-label" for="ledger-from">
+            {t("From date")}
+          </label>
+          <input
+            type="date"
+            id="ledger-from"
+            name="from"
+            class="mt-1"
+            value={from ?? ""}
+          />
         </div>
         <div>
-          <label for="ledger-to">{t("To date")}</label>
-          <input type="date" id="ledger-to" name="to" value={to ?? ""} />
+          <label class="field-label" for="ledger-to">
+            {t("To date")}
+          </label>
+          <input
+            type="date"
+            id="ledger-to"
+            name="to"
+            class="mt-1"
+            value={to ?? ""}
+          />
         </div>
-        <button type="submit" class="btn-primary">
+        <button type="submit" class="btn-secondary">
           {t("Apply")}
         </button>
         {filtered && (
-          <a class="clear-filters" href="?">
+          <a class="btn-ghost btn-sm clear-filters" href="?">
             {t("Clear filters")}
           </a>
         )}
@@ -356,39 +376,15 @@ const sourceLabel = (e: (typeof ledger.entries)[number]) =>
 </AdminLayout>
 
 <style>
-  .filters {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: end;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-  }
-  .filters label {
-    display: block;
-    margin-bottom: 0.25rem;
-    font-size: var(--text-sm);
-    font-weight: 500;
-  }
-  .filters :is(select, input) {
-    min-width: 9rem;
-  }
-  .clear-filters {
-    color: var(--color-primary);
-    font-size: var(--text-sm);
-  }
-  .clear-filters:hover {
-    text-decoration: underline;
+  a.link {
+    display: inline-block;
+    min-width: 1.5rem;
+    min-height: 1.5rem;
   }
   .result-note {
     margin-bottom: 0.5rem;
     color: var(--color-muted);
     font-size: var(--text-sm);
-  }
-  .link {
-    color: var(--color-primary);
-  }
-  .link:hover {
-    text-decoration: underline;
   }
   td.text-right,
   th.text-right {
@@ -397,20 +393,8 @@ const sourceLabel = (e: (typeof ledger.entries)[number]) =>
   tr[data-type="PAYMENT_REVERSAL"] td:nth-child(n + 2) {
     color: var(--color-muted);
   }
-  /* On a phone the filters are a form: fields take the full row, the two dates
-     share one, and Apply spans. */
   @media (width < 40rem) {
-    .filters > div {
-      flex: 1 1 100%;
-    }
-    .filters > div:has(input[type="date"]) {
-      flex: 1 1 8rem;
-    }
-    .filters :is(select, input) {
-      width: 100%;
-      min-width: 0;
-    }
-    .filters .btn-primary {
+    .filter-bar .btn-secondary {
       width: 100%;
     }
   }

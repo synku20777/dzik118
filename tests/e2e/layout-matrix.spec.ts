@@ -323,6 +323,16 @@ async function sweep(
         );
         continue;
       }
+      const lightThemeColor = await page.evaluate(() =>
+        document
+          .querySelector(
+            'meta[name="theme-color"][media="(prefers-color-scheme: light)"]'
+          )
+          ?.getAttribute("content")
+      );
+      if (lightThemeColor !== "#eee8de") {
+        add(violations, `${view.name}: incorrect light theme-color`, "-");
+      }
       // Open every disclosure so the controls inside them are audited too.
       // Dialogs and drawers need an interaction and are not covered.
       await page.evaluate(() =>

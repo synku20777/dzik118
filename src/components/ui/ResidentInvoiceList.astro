@@ -21,14 +21,24 @@ interface Props {
   }[];
   dwellingId: string;
   locale: Locale;
+  hrefBase?: string;
 }
-const { invoices, dwellingId, locale } = Astro.props;
+const {
+  invoices,
+  dwellingId,
+  locale,
+  hrefBase = "/portal/invoices/",
+} = Astro.props;
 const t = (text: string) => translate(locale, text);
+const invoiceHref = (id: string) =>
+  hrefBase.startsWith("#")
+    ? `${hrefBase}${id}`
+    : `${hrefBase}${id}?dwellingId=${dwellingId}`;
 ---
 
 <div class="resident-list">
   {invoices.map((invoice) => (
-    <a href={`/portal/invoices/${invoice.id}?dwellingId=${dwellingId}`}>
+    <a href={invoiceHref(invoice.id)}>
       <span class="resident-list-main">
         <strong>{invoice.invoiceNumber}</strong>
         <span>

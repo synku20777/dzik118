@@ -50,7 +50,7 @@ export function setTheme(theme: "light" | "dark") {
 }
 
 // --color-canvas in each theme, for the browser chrome (theme-color).
-const CANVAS = { light: "#f7f4ee", dark: "#0e1517" } as const;
+const CANVAS = { light: "#eee8de", dark: "#0e1517" } as const;
 
 // A stored theme overrides the OS: point color-scheme and both media-scoped
 // theme-color metas at it.

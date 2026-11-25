@@ -1,5 +1,6 @@
 ---
 import Icon from "../../../../../../components/ui/Icon.astro";
+import PageHeader from "../../../../../../components/ui/PageHeader.astro";
 import {
   entityLabel,
   formatPeriod,
@@ -98,11 +99,7 @@ function getInitialConsumption(
     data-label-no-changes={t("No changed readings to save.")}
     data-label-generic-error={t("An error occurred while saving readings.")}
   >
-    <header class="space-y-1">
-      <h1 class="font-display text-h2 text-foreground">
-        {t("Meter readings")} — {periodName}
-      </h1>
-    </header>
+    <PageHeader title={`${t("Meter readings")} — ${periodName}`} display />
 
     {isLocked && (
       <p class="notice" role="status">
@@ -171,7 +168,7 @@ function getInitialConsumption(
                   <td class="px-4 py-2 font-medium" data-label={t("Dwelling")}>
                     <a
                       href={`/admin/o/${organizationId}/dwellings/${row.dwellingId}`}
-                      class="text-foreground hover:underline"
+                      class="link link-ghost"
                     >
                       {row.dwellingNumber}
                     </a>

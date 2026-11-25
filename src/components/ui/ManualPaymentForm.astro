@@ -23,6 +23,7 @@ interface Props {
   // Shown with the amount in the confirmation; without it the amount is
   // shown as typed.
   currency?: string;
+  preview?: boolean;
 }
 
 const {
@@ -33,6 +34,7 @@ const {
   error,
   idPrefix,
   currency,
+  preview,
 } = Astro.props;
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
@@ -51,8 +53,8 @@ const label = "field-label";
   )}
 </p>
 <form
-  method="POST"
-  action={actions.payments.recordManual}
+  method={preview ? "dialog" : "POST"}
+  action={preview ? undefined : actions.payments.recordManual}
   class="mt-4 space-y-3"
   data-payment-form
   data-currency={currency}
@@ -183,7 +185,7 @@ const label = "field-label";
     />
     <FieldError name="reason" id={`${id}-reason-error`} error={error} />
   </div>
-  <div>
+  <div class="editor-actions flex flex-wrap gap-2">
     <button
       type="submit"
       class="btn-primary"
@@ -194,6 +196,7 @@ const label = "field-label";
     >
       {t("Record payment")}
     </button>
+    <slot name="actions" />
   </div>
 </form>
 

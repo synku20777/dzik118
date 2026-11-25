@@ -5,6 +5,7 @@ import {
   getSystemTheme,
   initTheme,
   setTheme,
+  syncThemeMeta,
   updateToggleButtons,
 } from "../../src/lib/ui/theme";
 
@@ -190,7 +191,7 @@ describe("theme management", () => {
 
     const newRootAttributes: Record<string, string> = {};
     const scheme = { content: "light dark" };
-    const themeColors = [{ content: "#f7f4ee" }, { content: "#0e1517" }];
+    const themeColors = [{ content: "#eee8de" }, { content: "#0e1517" }];
     const newDocument = {
       documentElement: {
         setAttribute(name: string, val: string) {
@@ -207,6 +208,10 @@ describe("theme management", () => {
     // The incoming page's own metas would otherwise follow the OS again.
     expect(scheme.content).toBe("dark");
     expect(themeColors.map((m) => m.content)).toEqual(["#0e1517", "#0e1517"]);
+
+    syncThemeMeta(newDocument as unknown as Document, "light");
+    expect(scheme.content).toBe("light");
+    expect(themeColors.map((m) => m.content)).toEqual(["#eee8de", "#eee8de"]);
   });
 
   it("does not write an attribute onto the incoming document when no theme is set", () => {

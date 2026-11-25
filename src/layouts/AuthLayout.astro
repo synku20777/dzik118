@@ -3,7 +3,7 @@ import "../styles/global.css";
 import ThemeToggle from "../components/ui/ThemeToggle.astro";
 import LanguageSwitch from "../components/ui/LanguageSwitch.astro";
 import Tooltips from "../components/ui/Tooltips.astro";
-import { uiLocale } from "../lib/ui/i18n";
+import { translate, uiLocale } from "../lib/ui/i18n";
 
 interface Props {
   title?: string;
@@ -22,7 +22,7 @@ const locale = uiLocale(Astro.cookies, Astro.url);
     <!-- --color-canvas per theme; theme.ts keeps these in step with a stored theme. -->
     <meta
       name="theme-color"
-      content="#f7f4ee"
+      content="#eee8de"
       media="(prefers-color-scheme: light)"
     />
     <meta
@@ -33,6 +33,17 @@ const locale = uiLocale(Astro.cookies, Astro.url);
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script>
       import "../lib/ui/field-errors";
+      import { onPageLoad } from "../lib/ui/page-lifecycle";
+      // A page that reloads with an error (wrong password, expired link, rate
+      // limit) starts keyboard and screen-reader users at that error.
+      onPageLoad(() => {
+        const error = document.querySelector<HTMLElement>(
+          'main .notice-danger[role="alert"]'
+        );
+        if (!error) return;
+        error.tabIndex = -1;
+        error.focus();
+      });
     </script>
     <script is:inline>
       (function () {
@@ -45,7 +56,7 @@ const locale = uiLocale(Astro.cookies, Astro.url);
             document
               .querySelectorAll('meta[name="theme-color"]')
               .forEach(function (m) {
-                m.content = stored === "dark" ? "#0e1517" : "#f7f4ee";
+                m.content = stored === "dark" ? "#0e1517" : "#eee8de";
               });
           }
         } catch (e) {
@@ -56,6 +67,9 @@ const locale = uiLocale(Astro.cookies, Astro.url);
     <title>{title}</title>
   </head>
   <body class="min-h-screen bg-canvas text-foreground antialiased relative">
+    <a class="skip-link" href="#main-content">
+      {translate(locale, "Skip to content")}
+    </a>
     <div class="auth-architecture" aria-hidden="true">
       <svg viewBox="0 0 260 640" fill="none" focusable="false">
         <g stroke="currentColor" stroke-width="1">
@@ -73,7 +87,11 @@ const locale = uiLocale(Astro.cookies, Astro.url);
       <LanguageSwitch />
       <ThemeToggle />
     </header>
-    <main class="relative flex min-h-screen items-center justify-center px-4 py-20">
+    <main
+      id="main-content"
+      tabindex="-1"
+      class="relative flex min-h-screen items-center justify-center px-4 py-20"
+    >
       <slot />
     </main>
     <Tooltips />

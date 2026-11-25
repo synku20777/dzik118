@@ -495,8 +495,9 @@ describe("workbench drawer ARIA validation & design-system fidelity", () => {
 
     const banner = harness.bodyEl.querySelector(".drawer-info-banner")!;
     expect(banner.className.split(/\s+/)).toContain("notice");
+    // Drawer fields are boxed fields: the label sits inside the frame.
     expect(
-      harness.bodyEl.querySelectorAll(".field-label").length
+      harness.bodyEl.querySelectorAll(".field-box").length
     ).toBeGreaterThan(0);
 
     meterInput.value = "abc";
@@ -1086,7 +1087,7 @@ describe("workbench drawer ARIA validation & design-system fidelity", () => {
     expect(formError.textContent).toBe("Dwelling archived");
   });
 
-  it("aligns AdminContextDrawer CSS with --radius-input and shared label/error/notice classes", () => {
+  it("leaves field chrome to the shared field classes in AdminContextDrawer", () => {
     const drawerAstro = readFileSync(
       resolve(root, "src/components/ui/AdminContextDrawer.astro"),
       "utf8"
@@ -1094,6 +1095,7 @@ describe("workbench drawer ARIA validation & design-system fidelity", () => {
     expect(drawerAstro).not.toContain("--radius-control");
     expect(drawerAstro).not.toContain(".drawer-field-label");
     expect(drawerAstro).not.toContain(".drawer-field-error");
-    expect(drawerAstro).toContain("var(--radius-input)");
+    // The boxed field's frame supplies the radius; no field radius is redrawn.
+    expect(drawerAstro).not.toContain("var(--radius-input)");
   });
 });

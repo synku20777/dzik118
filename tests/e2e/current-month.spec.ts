@@ -205,6 +205,9 @@ test("Current Month keeps billing actions usable through filtering and queue ref
     .getByRole("button", { name: "Cancel" })
     .click();
   await expect(page.locator("#lock-period-dialog")).toBeHidden();
+  await expect(
+    page.locator(".period-actions .more-menu > summary")
+  ).toBeFocused();
 
   const drawer = page
     .locator('.case-table [data-open-drawer="readings"]')
@@ -293,6 +296,7 @@ test("Current Month keeps billing actions usable through filtering and queue ref
   await expect(page.locator(".empty-queue")).toContainText(
     "No billing cases match these filters."
   );
+  await expect(page.locator(".empty-queue")).toHaveCSS("padding-top", "48px");
   await page.locator(".empty-queue a").click();
   await expect(page.locator("tr[data-status]").first()).toBeVisible();
   for (const [theme, width, file] of [
@@ -321,6 +325,16 @@ test("Current Month keeps billing actions usable through filtering and queue ref
       "background-color",
       surface
     );
+    const dwelling = page.locator(".dwelling-cell a").first();
+    const foreground = await dwelling.evaluate(
+      (link) => getComputedStyle(link.closest(".workbench")!).color
+    );
+    await expect(dwelling).toHaveCSS("color", foreground);
+    if (width === 390) {
+      const cell = page.locator(".case-table .status-cell").first();
+      await expect(cell).toHaveCSS("padding", "0px");
+      await expect(cell).toHaveCSS("border-bottom-width", "0px");
+    }
     await page.screenshot({ path: testInfo.outputPath(file), fullPage: true });
   }
   // The seeded previous month is locked; inspection must remain available.

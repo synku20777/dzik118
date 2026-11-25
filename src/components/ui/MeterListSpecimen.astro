@@ -1,0 +1,62 @@
+---
+import "../../styles/item-list.css";
+import EmptyState from "./EmptyState.astro";
+---
+
+<section
+  class="panel space-y-4"
+  data-meter-list-specimen
+  aria-label="Sample dwelling meters"
+>
+  <div class="toggle-tabs" role="group" aria-label="Meter status">
+    <button type="button" data-meter-filter="active" aria-pressed="true">
+      Active
+    </button>
+    <button type="button" data-meter-filter="archived" aria-pressed="false">
+      Archived
+    </button>
+  </div>
+  <div
+    id="meters-list-region"
+    data-empty-active="No active meters for this dwelling."
+    data-empty-archived="No archived meters for this dwelling."
+  >
+    <ul class="item-list">
+      <li class="meter-row" data-archived="false">
+        <div class="item-icon" data-meter-type="COLD_WATER" aria-hidden="true">
+          m³
+        </div>
+        <div class="item-body">
+          <strong>Cold water</strong>
+          <span>Serial 006742</span>
+        </div>
+      </li>
+      <li class="meter-row" data-archived="true" hidden>
+        <div class="item-icon" data-meter-type="HOT_WATER" aria-hidden="true">
+          m³
+        </div>
+        <div class="item-body">
+          <strong>Hot water (archived)</strong>
+          <span>Serial 006710</span>
+        </div>
+      </li>
+    </ul>
+    <div id="meters-empty-state" role="status" hidden>
+      <EmptyState title="No active meters for this dwelling." />
+    </div>
+  </div>
+</section>
+
+<script>
+  import { bindMeterList } from "../../lib/ui/meter-list";
+  import { onPageLoad } from "../../lib/ui/page-lifecycle";
+  onPageLoad(() => {
+    const root = document.querySelector<HTMLElement>(
+      "[data-meter-list-specimen]"
+    );
+    if (!root) return;
+    const controller = new AbortController();
+    bindMeterList(root, controller.signal)();
+    return () => controller.abort();
+  });
+</script>

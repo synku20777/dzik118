@@ -1,0 +1,160 @@
+---
+import { fill, formatNumber, translate, type Locale } from "../../lib/ui/i18n";
+import Icon from "./Icon.astro";
+
+interface Props {
+  id: string;
+  steps: ReadonlyArray<{ title: string; href: string; done: boolean }>;
+  locale: Locale;
+}
+
+const { id, steps, locale } = Astro.props;
+const t = (text: string) => translate(locale, text);
+const nextStepIndex = steps.findIndex((step) => !step.done);
+const nextStep = steps[nextStepIndex];
+const completed = steps.filter((step) => step.done).length;
+---
+
+{nextStep && (
+  <section class="dashboard-setup panel" aria-labelledby={id}>
+    <div class="setup-progress-layout">
+      <div class="setup-progress-summary">
+        <h2 id={id} class="text-h2">
+          {t("Finish setting up")}
+        </h2>
+        <p id={`${id}-count`} class="setup-progress-count">
+          {fill(t("Setup steps done: {done} of {total}"), {
+            done: formatNumber(completed, locale),
+            total: formatNumber(steps.length, locale),
+          })}
+        </p>
+        <a class="btn-primary" href={nextStep.href}>
+          {t("Continue setup")}
+          <Icon name="arrow-right" size="sm" />
+        </a>
+      </div>
+      <ol
+        class="setup-progress-list"
+        role="list"
+        aria-labelledby={`${id}-count`}
+      >
+        {steps.map((step, index) => {
+          const current = index === nextStepIndex;
+          return (
+            <li
+              data-state={step.done ? "done" : current ? "current" : "upcoming"}
+            >
+              <a href={step.href} aria-current={current ? "step" : undefined}>
+                <span class="setup-step-marker" aria-hidden="true">
+                  {step.done ? (
+                    <Icon name="check" size="xs" />
+                  ) : (
+                    formatNumber(index + 1, locale)
+                  )}
+                </span>
+                <span class="setup-step-title">{step.title}</span>
+                <span class="setup-step-state">
+                  {t(step.done ? "Done" : current ? "Next step" : "To do")}
+                </span>
+              </a>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  </section>
+)}
+
+<style>
+  .dashboard-setup {
+    container: setup-progress / inline-size;
+  }
+  .setup-progress-layout {
+    display: grid;
+    padding: var(--pad-panel-compact);
+  }
+  .setup-progress-summary {
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    padding: var(--space-1) var(--space-2) var(--space-4);
+  }
+  .setup-progress-count {
+    margin-block: var(--space-1) var(--space-4);
+    color: var(--color-muted);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+  }
+  .setup-progress-list {
+    min-width: 0;
+    border-block-start: 1px solid var(--color-border);
+  }
+  .setup-progress-list li + li {
+    border-block-start: 1px solid var(--color-border);
+  }
+  .setup-progress-list a {
+    display: grid;
+    grid-template-columns: var(--icon-size-sm) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--control-size-md);
+    padding: var(--space-2);
+    color: var(--color-foreground);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    text-decoration: none;
+  }
+  .setup-progress-list a:hover {
+    background: var(--color-hover);
+  }
+  .setup-progress-list a:hover .setup-step-title {
+    text-decoration: underline;
+  }
+  .setup-progress-list a:focus-visible {
+    outline-offset: -2px;
+  }
+  .setup-step-title {
+    font-weight: 500;
+    overflow-wrap: anywhere;
+  }
+  .setup-step-marker {
+    display: grid;
+    place-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .setup-step-marker,
+  .setup-step-state {
+    color: var(--color-muted);
+    font-size: var(--text-xs);
+  }
+  [data-state="done"] .setup-step-marker {
+    color: var(--color-success);
+  }
+  .setup-progress-list a[aria-current="step"] {
+    background: var(--color-nav-active-bg);
+  }
+  [aria-current="step"]
+    :is(.setup-step-marker, .setup-step-state, .setup-step-title) {
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+  @container setup-progress (width >= 40rem) {
+    .setup-progress-layout {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+      padding: var(--pad-panel);
+    }
+    .setup-progress-summary {
+      justify-content: center;
+      padding: 0 var(--space-6) 0 0;
+    }
+    .setup-progress-list {
+      border-block-start: 0;
+      border-inline-start: 1px solid var(--color-border);
+      padding-inline-start: var(--space-4);
+    }
+    .setup-progress-list a {
+      gap: var(--space-3);
+      padding-inline: var(--space-3);
+    }
+  }
+</style>

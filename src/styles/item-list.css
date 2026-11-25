@@ -1,0 +1,102 @@
+.item-list {
+  display: grid;
+  margin-top: 1rem;
+}
+.item-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--color-border);
+}
+.item-list > li:first-child {
+  border-top: 0;
+}
+.item-list > li[data-pending] {
+  opacity: 0.7;
+}
+/* The tile carries the meter's unit (m³, kWh): it says something about
+   the meter and needs no icon. */
+.item-icon {
+  display: grid;
+  min-width: 2.5rem;
+  max-width: 4.5rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  padding: 0 0.5rem;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.item-icon[data-meter-type="COLD_WATER"] {
+  background: var(--color-meter-cold-bg);
+  color: var(--color-meter-cold-text);
+}
+.item-icon[data-meter-type="HOT_WATER"] {
+  background: var(--color-meter-hot-bg);
+  color: var(--color-meter-hot-text);
+}
+.item-icon[data-meter-type="ELECTRICITY"] {
+  background: var(--color-meter-electricity-bg);
+  color: var(--color-meter-electricity-text);
+}
+.item-icon[data-meter-type="GAS"] {
+  background: var(--color-meter-gas-bg);
+  color: var(--color-meter-gas-text);
+}
+.item-icon[data-meter-type="HEAT"] {
+  background: var(--color-meter-heat-bg);
+  color: var(--color-meter-heat-text);
+}
+.item-icon[data-meter-type="OTHER"] {
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral-text);
+}
+.item-body {
+  flex: 1 1 12rem;
+  min-width: 0;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.item-body strong {
+  display: block;
+  font-weight: 600;
+}
+.item-body span {
+  display: block;
+  margin-top: 0.125rem;
+  color: var(--color-muted);
+}
+.item-body .item-note {
+  color: var(--color-warning);
+}
+.item-body .optimistic-status {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-left: auto;
+}
+/* Standalone navigation links in item rows keep a >=24px target (44px on touch). */
+.item-list .link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  font-size: var(--text-sm);
+  font-weight: 550;
+  white-space: nowrap;
+}
+@media (pointer: coarse) {
+  .item-list .link {
+    min-height: var(--control-size-md);
+  }
+}

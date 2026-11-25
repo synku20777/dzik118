@@ -1,3 +1,5 @@
+import { getPopoverInvoker } from "./case-menu";
+
 // Delegation keeps these links working after Astro swaps route content.
 document.addEventListener("click", (event) => {
   const link = (event.target as Element).closest<HTMLAnchorElement>(
@@ -43,6 +45,12 @@ function askToConfirm(
   form: Element
 ): Promise<boolean> {
   const dialog = confirmDialog();
+  const origin =
+    submitter ??
+    (document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null);
+  const popover = origin?.closest<HTMLElement>("[popover]") ?? null;
   const [, title = message, rest = ""] =
     /^(.+?[?.!])\s+(.+)$/s.exec(message) ?? [];
   dialog.querySelector("#confirm-dialog-title")!.textContent = title;
@@ -74,7 +82,22 @@ function askToConfirm(
       "close",
       () => {
         delete dialog.dataset.asking;
-        resolve(dialog.returnValue === "confirm");
+        const confirmed = dialog.returnValue === "confirm";
+        const focused = document.activeElement;
+        const focusLost =
+          !focused ||
+          focused === document.body ||
+          dialog.contains(focused) ||
+          popover?.contains(focused);
+        if (
+          focusLost &&
+          !confirmed &&
+          popover &&
+          !popover.matches(":popover-open")
+        ) {
+          getPopoverInvoker(popover)?.focus();
+        }
+        resolve(confirmed);
       },
       { once: true }
     )
