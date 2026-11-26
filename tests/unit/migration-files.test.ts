@@ -1,5 +1,38 @@
 import { describe, expect, it } from "vitest";
 import { decodeBytes, parseTable } from "../../src/domain/migration/files";
+import {
+  balancesTemplateCsv,
+  CSV_BOM,
+  dwellingsTemplateCsv,
+  metersTemplateCsv,
+  readUpload,
+} from "../../src/domain/migration/flow";
+import { proposeMapping } from "../../src/domain/migration/mapping";
+import {
+  DWELLING_FIELDS,
+  METER_FIELDS,
+} from "../../src/domain/migration/targets";
+
+it.each([
+  ["DWELLINGS", dwellingsTemplateCsv, DWELLING_FIELDS.map((f) => f.key)],
+  ["BALANCES", balancesTemplateCsv, ["number", "balance", "debt_due_date"]],
+  ["METERS", metersTemplateCsv, METER_FIELDS.map((f) => f.key)],
+] as const)(
+  "scans the %s template as a comma CSV and maps its columns",
+  (kind, template, fields) => {
+    const { table } = readUpload({
+      bytes: new TextEncoder().encode(CSV_BOM + template()),
+    });
+    expect(table.delimiter).toBe(",");
+    expect(table.skippedTitleRows).toBe(0);
+    expect(table.rows).toHaveLength(kind === "DWELLINGS" ? 1 : 2);
+    expect(
+      proposeMapping(kind, table.headers, table.rows, table.delimiter).map(
+        (proposal) => proposal.field
+      )
+    ).toEqual(fields);
+  }
+);
 
 // TextEncoder only writes UTF-8, so single-byte test files are built by hand.
 const LV_1257: Record<string, number> = {
@@ -140,6 +173,14 @@ describe("parseTable", () => {
     expect(table.delimiter).toBe(";");
     expect(table.headers).toEqual(["Nr", "Platība"]);
     expect(table.rows[0]).toEqual(["1", "45,5"]);
+  });
+
+  it("uses the comma header when semicolons split more rows consistently", () => {
+    const table = parseTable(
+      "Dwelling number,Billing address,Notes\n1,Main St; Riga\n2,Oak St; Riga,Owner\n3,Elm St; Riga"
+    );
+    expect(table.delimiter).toBe(",");
+    expect(table.rows[0]).toEqual(["1", "Main St; Riga", ""]);
   });
 
   it("refuses an unclosed quote", () => {

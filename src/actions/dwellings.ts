@@ -1,8 +1,5 @@
 // Phase D (Organizations/dwellings) - Dwelling actions (spec Section 10).
-// CSV import (DWL-004) isn't here: it needs a raw multipart file upload,
-// which doesn't fit an action's input shape, so
-// src/pages/admin/o/[orgId]/dwellings/import.astro calls
-// validateDwellingsCsv/importDwellingsCsv directly instead.
+// Spreadsheet imports run through the Migration Center.
 import { z } from "astro/zod";
 import { dwellingTypeEnum } from "../db/schema/dwellings";
 import {

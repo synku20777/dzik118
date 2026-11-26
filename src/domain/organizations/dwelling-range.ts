@@ -4,7 +4,7 @@
 // duplicate checks and the write path are the dwelling import's own.
 import Papa from "papaparse";
 import { ValidationError } from "../errors";
-import { DWELLINGS_CSV_TEMPLATE } from "./csv-import";
+import { DWELLING_CSV_HEADERS } from "./csv-import";
 
 const MAX_PER_RANGE = 500;
 const MAX_TOTAL = 5_000;
@@ -65,10 +65,9 @@ export interface DwellingRangeRow {
 
 // The import requires all eleven headers, even blank ones.
 export function dwellingRangeToCsv(rows: DwellingRangeRow[]): string {
-  const fields = DWELLINGS_CSV_TEMPLATE.trim().split(",");
   return Papa.unparse(
     {
-      fields,
+      fields: DWELLING_CSV_HEADERS,
       data: rows.map((r) => ({
         number: r.number,
         type: r.type,

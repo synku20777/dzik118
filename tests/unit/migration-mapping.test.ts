@@ -117,6 +117,20 @@ describe("proposeMapping", () => {
       null,
     ]);
   });
+
+  it("maps a water meter serial only when the header identifies it", () => {
+    expect(
+      mapped(
+        [
+          "Dwelling number",
+          "Cold water",
+          "Hot water",
+          "Hot water meter serial",
+        ],
+        [["1", "15", "20.5", "XYZ-1"]]
+      )
+    ).toEqual(["number", null, null, "hot_water_meter_serial"]);
+  });
 });
 
 describe("saved mappings", () => {

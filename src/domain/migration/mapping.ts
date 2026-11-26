@@ -33,9 +33,11 @@ const tokens = (folded: string) => folded.split(" ").filter(Boolean);
 export function scoreHeader(header: string, field: TargetField): number {
   const folded = foldText(header);
   if (folded === "") return 0;
+  const aliases = aliasesOf(field);
+  if (field.exactHeader) return aliases.includes(folded) ? 1 : 0;
   const headerTokens = new Set(tokens(folded));
   let best = 0;
-  for (const alias of aliasesOf(field)) {
+  for (const alias of aliases) {
     if (alias === folded) return 1;
     const aliasTokens = tokens(alias);
     if (aliasTokens.every((t) => headerTokens.has(t))) {

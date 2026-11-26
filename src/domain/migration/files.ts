@@ -6,10 +6,11 @@ import Papa from "papaparse";
 import { ValidationError } from "../errors";
 import { MIGRATION_MAX_BYTES, MIGRATION_MAX_ROWS } from "./limits";
 import { ACCEPT_SCORE, scoreHeader } from "./mapping";
-import { TARGETS } from "./targets";
+import { aliasesOf, TARGETS } from "./targets";
+import { foldText, parseDecimal } from "./values";
 
 const ALL_FIELDS = Object.values(TARGETS).flat();
-import { foldText, parseDecimal } from "./values";
+const HEADER_ALIASES = new Set(ALL_FIELDS.flatMap(aliasesOf));
 
 export const SUPPORTED_ENCODINGS = [
   "utf-8",
@@ -132,13 +133,13 @@ function isTotalRow(row: string[]): boolean {
   );
 }
 
-const DELIMITERS = [";", ",", "\t", "|"];
+const DELIMITERS = [",", ";", "\t", "|"];
 
-// The delimiter that splits the most of the first lines into the same number
-// of columns. Papa's own guess is thrown off by a title line with a comma above
-// a semicolon file with comma decimals.
+// Prefer known column names, then consistent row widths. Punctuation in data
+// cells can look like a delimiter, especially with a title or uneven rows.
 function guessDelimiter(text: string): string {
-  let best = ";";
+  let best = DELIMITERS[0];
+  let bestHeaderHits = 1;
   let bestScore = 0;
   for (const delimiter of DELIMITERS) {
     const { data } = Papa.parse<string[]>(text, {
@@ -146,14 +147,28 @@ function guessDelimiter(text: string): string {
       preview: 30,
       skipEmptyLines: "greedy",
     });
+    const headerHits = Math.max(
+      1,
+      ...data
+        .slice(0, 15)
+        .map(
+          (row) =>
+            row.filter((cell) => HEADER_ALIASES.has(foldText(cell))).length
+        )
+    );
     const widths = new Map<number, number>();
-    for (const row of data)
-      widths.set(row.length, (widths.get(row.length) ?? 0) + 1);
-    for (const [width, count] of widths) {
-      if (width > 1 && count > bestScore) {
-        best = delimiter;
-        bestScore = count;
-      }
+    for (const row of data) {
+      if (row.length > 1)
+        widths.set(row.length, (widths.get(row.length) ?? 0) + 1);
+    }
+    const score = Math.max(0, ...widths.values());
+    if (
+      headerHits > bestHeaderHits ||
+      (headerHits === bestHeaderHits && score > bestScore)
+    ) {
+      best = delimiter;
+      bestHeaderHits = headerHits;
+      bestScore = score;
     }
   }
   return best;

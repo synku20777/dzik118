@@ -381,7 +381,7 @@ describe("migration: opening balances", () => {
       { rowNumber: 3, number: "3", reason: ROW_BALANCE_EMPTY_SKIP_MESSAGE },
     ]);
     const csv = balanceReportCsv(report);
-    expect(csv).toContain("2;Left unchanged;;;The balance is zero");
+    expect(csv).toContain("2,Left unchanged,,,The balance is zero");
     const [record] = await db
       .select()
       .from(migrationImports)

@@ -264,7 +264,7 @@ const hasErrors =
         <p class="flex flex-wrap items-center gap-x-1.5">
           <span>{t("Have a spreadsheet?")}</span>
           <a
-            href={`/admin/o/${organizationId}/dwellings/import`}
+            href={`/admin/o/${organizationId}/migration/dwellings?from=setup`}
             class="link link-underlined"
           >
             {t("Upload a CSV file")}
@@ -273,7 +273,7 @@ const hasErrors =
             ·
           </span>
           <a
-            href={`/admin/o/${organizationId}/setup/templates/dwellings.csv`}
+            href={`/admin/o/${organizationId}/migration/templates/dwellings.csv`}
             download
             class="link link-underlined"
           >

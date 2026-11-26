@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type Db } from "../../src/db/client";
 import { auditLogs } from "../../src/db/schema/audit";
 import { billingCases } from "../../src/db/schema/billing";
-import { dwellings } from "../../src/db/schema/dwellings";
+import { dwellings, meters } from "../../src/db/schema/dwellings";
 import { migrationImports } from "../../src/db/schema/migration";
 import {
   cleanupOrganization,
@@ -14,6 +14,7 @@ import {
 } from "./_helpers";
 import { createOrganization } from "../../src/domain/organizations/organizations";
 import { createDwelling } from "../../src/domain/organizations/dwellings";
+import { exportDwellingsCsv } from "../../src/domain/organizations/csv-import";
 import { createPeriod } from "../../src/domain/periods/periods";
 import { parseTable } from "../../src/domain/migration/files";
 import {
@@ -92,6 +93,63 @@ const latvian = [
 ].join("\n");
 
 describe("migration: dwellings", () => {
+  it("imports a dwelling export with recipients and water meter serials", async () => {
+    const source = await newOrg("IT-Mig Export Source");
+    const target = await newOrg("IT-Mig Export Target");
+    try {
+      const dwelling = await createDwelling(
+        db,
+        source.id,
+        {
+          number: "1",
+          billingName: "Example Owner",
+          billingEmail: "owner@example.com",
+        },
+        adminId
+      );
+      await db.insert(meters).values([
+        {
+          organizationId: source.id,
+          dwellingId: dwelling.id,
+          type: "COLD_WATER",
+          unit: "m3",
+          serialNumber: "001234",
+        },
+        {
+          organizationId: source.id,
+          dwellingId: dwelling.id,
+          type: "HOT_WATER",
+          unit: "m3",
+          serialNumber: "HW-456",
+        },
+      ]);
+      const csv = await exportDwellingsCsv(db, source.id);
+      expect(await run(target.id, csv)).toMatchObject({ created: 1 });
+      expect(await run(target.id, csv, "update")).toMatchObject({ updated: 1 });
+
+      const [imported] = await db
+        .select()
+        .from(dwellings)
+        .where(eq(dwellings.organizationId, target.id));
+      expect(imported).toMatchObject({
+        billingName: "Example Owner",
+        billingEmail: "owner@example.com",
+      });
+      const importedMeters = await db
+        .select()
+        .from(meters)
+        .where(eq(meters.organizationId, target.id))
+        .orderBy(meters.type);
+      expect(importedMeters).toMatchObject([
+        { dwellingId: imported.id, type: "COLD_WATER", serialNumber: "001234" },
+        { dwellingId: imported.id, type: "HOT_WATER", serialNumber: "HW-456" },
+      ]);
+    } finally {
+      await cleanupOrganization(db, target.id);
+      await cleanupOrganization(db, source.id);
+    }
+  });
+
   it("imports a Latvian Excel sheet: mapping, parsing, delivery, cases, audit, saved mapping", async () => {
     const org = await newOrg("IT-Mig Latvian");
     await createPeriod(db, org.id, october, adminId);

@@ -127,6 +127,13 @@ export async function validateMeters(
   fields.forEach((f, i) => {
     if (f) index.set(f, i);
   });
+  // In the previous setup template a quoted comma was always a decimal mark.
+  const legacyReading =
+    table.headers.length === 5 &&
+    table.headers[index.get("reading") ?? -1] === "reading" &&
+    ["dwelling_number", "meter_type", "serial_number", "unit"].every((header) =>
+      table.headers.includes(header)
+    );
   const readingSeparator = detectDecimalSeparator(
     table.rows.map((r) => r[index.get("reading") ?? -1] ?? "").filter(Boolean),
     table.delimiter
@@ -179,7 +186,9 @@ export async function validateMeters(
 
     const readingRaw = get("reading");
     let reading = "";
-    const parsedReading = parseDecimal(readingRaw, readingSeparator);
+    const parsedReading = legacyReading
+      ? { ok: true, value: readingRaw.replace(",", ".") }
+      : parseDecimal(readingRaw, readingSeparator);
     if (parsedReading.ok && DECIMAL3_PATTERN.test(parsedReading.value)) {
       reading = threeDecimals(parsedReading.value);
     } else {

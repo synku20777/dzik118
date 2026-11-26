@@ -14,6 +14,10 @@ test("setup wizard: compact phone trail and organization errors keep input", asy
   }
   const base = new URL(page.url()).pathname.replace(/\/dashboard$/, "");
 
+  await page.goto(`${base}/settings?lang=en`);
+  await page.getByRole("link", { name: /^Setup wizard/ }).click();
+  await expect(page).toHaveURL(`${base}/setup`);
+
   // Phones: the six steps are one row, never a tall grid, with no overflow.
   await page.setViewportSize({ width: 390, height: 800 });
   for (const step of [
@@ -31,7 +35,27 @@ test("setup wizard: compact phone trail and organization errors keep input", asy
         () => document.documentElement.scrollWidth <= window.innerWidth
       )
     ).toBe(true);
+    if (step === "dwellings" || step === "meters") {
+      await expect(
+        page.getByRole("link", { name: "Upload a CSV file" })
+      ).toHaveAttribute("href", `${base}/migration/${step}?from=setup`);
+      await expect(
+        page.getByRole("link", { name: "Download the CSV template" })
+      ).toHaveAttribute("href", `${base}/migration/templates/${step}.csv`);
+    }
   }
+
+  await page.goto(`${base}/migration/dwellings?from=setup&lang=en`);
+  await page
+    .getByLabel("Or paste the cells here")
+    .fill("Dwelling number,Area (m²)\nSetup-check,45.5");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(
+    page.getByRole("table", { name: "Column mapping" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Back to setup" })
+  ).toHaveAttribute("href", `${base}/setup/dwellings`);
 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`${base}/setup/organization?lang=en`);

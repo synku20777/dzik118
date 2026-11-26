@@ -21,10 +21,7 @@ import {
 } from "../../src/domain/organizations/dwelling-range";
 import { applyChargePresets } from "../../src/domain/onboarding/presets";
 import { getSetupProgress } from "../../src/domain/onboarding/progress";
-import {
-  importOpeningReadingsCsv,
-  recordOpeningReadings,
-} from "../../src/domain/periods/opening-readings";
+import { recordOpeningReadings } from "../../src/domain/periods/opening-readings";
 import {
   addDwellingToPeriod,
   createPeriod,
@@ -278,31 +275,11 @@ describe("guided setup", () => {
     await cleanupOrganization(db, org.id);
   });
 
-  it("imports last month's readings from CSV, creating missing meters", async () => {
-    const org = await newOrg("IT-Setup CSV");
-    const other = await newOrg("IT-Setup CSV Other");
-    await createDwelling(db, org.id, { number: "7", areaM2: "30" }, adminId);
+  it("refuses to record an opening reading on another organization's meter", async () => {
+    const org = await newOrg("IT-Setup readings");
+    const other = await newOrg("IT-Setup readings Other");
     await createPeriod(db, org.id, october, adminId);
 
-    const bad =
-      "dwelling_number,meter_type,serial_number,unit,reading\n99,COLD_WATER,,m3,10\n";
-    await expect(
-      importOpeningReadingsCsv(db, org.id, bad, adminId)
-    ).rejects.toThrow("Fix the rows");
-
-    const good =
-      'dwelling_number,meter_type,serial_number,unit,reading\n7,COLD_WATER,CW-7,m3,"88,5"\n7,HOT_WATER,HW-7,m3,40\n';
-    expect(await importOpeningReadingsCsv(db, org.id, good, adminId)).toEqual({
-      createdMeters: 2,
-      written: 2,
-    });
-    // A second import updates the same meters, it does not duplicate them.
-    expect(await importOpeningReadingsCsv(db, org.id, good, adminId)).toEqual({
-      createdMeters: 0,
-      written: 2,
-    });
-
-    // Another organization's meter id is refused.
     const otherDwelling = await createDwelling(
       db,
       other.id,

@@ -70,6 +70,12 @@ const settingsGroups: Array<{ label: string; items: SettingsCardData[] }> = [
     label: "Administration tools",
     items: [
       {
+        href: `${base}/setup`,
+        icon: "circle-check",
+        label: "Setup wizard",
+        desc: "Set up your organization",
+      },
+      {
         href: `${base}/audit`,
         icon: "clock",
         label: "Audit history",

@@ -84,7 +84,6 @@ export function dwellingsTemplateCsv(): string {
   const example = DWELLING_FIELDS.map((f) => sample[f.key] ?? "");
   return Papa.unparse([headers, example], {
     escapeFormulae: true,
-    delimiter: ";",
   });
 }
 
@@ -104,37 +103,28 @@ export function balanceReportCsv(
     l.balanceNow,
     "",
   ]);
-  return Papa.unparse(
+  return Papa.unparse([
     [
-      [
-        translate("Dwelling number"),
-        translate("Type"),
-        translate("Amount"),
-        translate("Balance now"),
-        translate("Message"),
-      ],
-      ...lines,
-      // Rows left out, with the reason, so nothing disappears from the report.
-      ...report.skippedLines.map((s) => [
-        escapeFormula(s.number),
-        translate("Left unchanged"),
-        "",
-        "",
-        translate(s.reason),
-      ]),
-      [translate("Total debt in the file"), "", report.fileDebit, "", ""],
-      [translate("Total debt in the ledger"), "", report.ledgerDebit, "", ""],
-      [translate("Total credit in the file"), "", report.fileCredit, "", ""],
-      [
-        translate("Total credit in the ledger"),
-        "",
-        report.ledgerCredit,
-        "",
-        "",
-      ],
+      translate("Dwelling number"),
+      translate("Type"),
+      translate("Amount"),
+      translate("Balance now"),
+      translate("Message"),
     ],
-    { delimiter: ";" }
-  );
+    ...lines,
+    // Rows left out, with the reason, so nothing disappears from the report.
+    ...report.skippedLines.map((s) => [
+      escapeFormula(s.number),
+      translate("Left unchanged"),
+      "",
+      "",
+      translate(s.reason),
+    ]),
+    [translate("Total debt in the file"), "", report.fileDebit, "", ""],
+    [translate("Total debt in the ledger"), "", report.ledgerDebit, "", ""],
+    [translate("Total credit in the file"), "", report.fileCredit, "", ""],
+    [translate("Total credit in the ledger"), "", report.ledgerCredit, "", ""],
+  ]);
 }
 
 function escapeFormula(value: string): string {
@@ -143,30 +133,22 @@ function escapeFormula(value: string): string {
 
 // Example for the meter readings file: one row per meter.
 export function metersTemplateCsv(): string {
-  return Papa.unparse(
-    [
-      METER_FIELDS.map((f) => f.label),
-      // A decimal comma, as in a file saved by Excel with ";" between cells.
-      ["12", "Cold water", "123456", "m3", "245,123", "30.09.2026"],
-      ["12", "Hot water", "654321", "m3", "118,450", "30.09.2026"],
-    ],
-    // Fixed example text, like the other templates.
-    { delimiter: ";" }
-  );
+  return Papa.unparse([
+    METER_FIELDS.map((f) => f.label),
+    ["12", "Cold water", "123456", "m3", "245.123", "30.09.2026"],
+    ["12", "Hot water", "654321", "m3", "118.450", "30.09.2026"],
+  ]);
 }
 
 // Example for the opening balance file: one signed balance per dwelling,
 // positive = the resident owes.
 export function balancesTemplateCsv(): string {
-  return Papa.unparse(
-    [
-      ["Dwelling number", "Balance", "Debt due date"],
-      ["12", "120.50", "31.08.2026"],
-      ["13", "-15.00", ""],
-    ],
-    // Fixed example text; escapeFormulae would turn "-15.00" into "'-15.00".
-    { delimiter: ";" }
-  );
+  // Fixed example text. Formula escaping would prefix the negative amount.
+  return Papa.unparse([
+    ["Dwelling number", "Balance", "Debt due date"],
+    ["12", "120.50", "31.08.2026"],
+    ["13", "-15.00", ""],
+  ]);
 }
 
 // The same for both kinds: rows with errors or warnings, for the admin to fix
@@ -204,6 +186,5 @@ export function issuesCsv(
     ]);
   return Papa.unparse([header, ...data], {
     escapeFormulae: true,
-    delimiter: ";",
   });
 }

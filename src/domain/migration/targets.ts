@@ -12,6 +12,7 @@ export interface TargetField {
   // English label, shown through t() on the mapping page.
   label: string;
   required: boolean;
+  exactHeader?: true;
   // Column shapes that can hold this field. A column of another shape is not
   // proposed for it.
   expects: PatternClass[];
@@ -262,6 +263,24 @@ export const DWELLING_FIELDS: TargetField[] = [
       "заметки",
     ],
     description: "Free notes about the premises.",
+  },
+  {
+    key: "cold_water_meter_serial",
+    label: "Cold water meter serial",
+    required: false,
+    exactHeader: true,
+    expects: [...TEXT, "decimal", "date"],
+    aliases: ["cold water meter serial"],
+    description: "The cold water meter serial number for a new dwelling.",
+  },
+  {
+    key: "hot_water_meter_serial",
+    label: "Hot water meter serial",
+    required: false,
+    exactHeader: true,
+    expects: [...TEXT, "decimal", "date"],
+    aliases: ["hot water meter serial"],
+    description: "The hot water meter serial number for a new dwelling.",
   },
 ];
 

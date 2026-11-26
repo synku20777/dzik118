@@ -260,6 +260,38 @@ describe("migration: meters and latest readings", () => {
     await cleanupOrganization(db, org.id);
   });
 
+  it.each([
+    {
+      name: "preserves decimal commas in the previous setup template",
+      csv: [
+        "dwelling_number,meter_type,serial_number,unit,reading",
+        '1,COLD_WATER,CW-1,m3,"245,123"',
+        "1,HOT_WATER,HW-1,m3,118.450",
+      ],
+      values: ["118.450", "245.123"],
+    },
+    {
+      name: "preserves thousands commas in dated readings",
+      csv: [
+        "dwelling_number,meter_type,serial_number,unit,reading,reading_date",
+        '1,COLD_WATER,CW-1,m3,"1,234",2026-09-30',
+        "1,HOT_WATER,HW-1,m3,5000.25,2026-09-30",
+      ],
+      values: ["1234.000", "5000.250"],
+    },
+  ])("$name", async ({ csv, values }) => {
+    const { org } = await newOrg("IT-Met Setup CSV");
+    try {
+      await dwelling(org.id, "1");
+      await period(org.id);
+      await run(org.id, csv.join("\n"));
+      const readings = await listOpeningReadings(db, org.id);
+      expect(readings.map((r) => r.value).sort()).toEqual(values);
+    } finally {
+      await cleanupOrganization(db, org.id);
+    }
+  });
+
   it("needs a first billing period", async () => {
     const { org } = await newOrg("IT-Met NoPeriod");
     await dwelling(org.id, "1");

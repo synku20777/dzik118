@@ -41,7 +41,7 @@ export interface DwellingImportRow {
   errors: string[];
 }
 
-const REQUIRED_HEADERS = [
+export const DWELLING_CSV_HEADERS = [
   "number",
   "type",
   "display_name",
@@ -74,9 +74,6 @@ async function contentScopeId(text: string): Promise<string> {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
-// The exact header row the import requires, for the downloadable template.
-export const DWELLINGS_CSV_TEMPLATE = REQUIRED_HEADERS.join(",") + "\n";
-
 // Parses and validates in one pass; returns rows classified CREATE/UPDATE/
 // ERROR without writing anything (spec Section 26 UX: "preview" before
 // "confirm", same principle as bank CSV's "never write immediately").
@@ -99,7 +96,9 @@ export async function validateDwellingsCsv(
   });
 
   const headers = parsed.meta.fields ?? [];
-  const missingHeaders = REQUIRED_HEADERS.filter((h) => !headers.includes(h));
+  const missingHeaders = DWELLING_CSV_HEADERS.filter(
+    (h) => !headers.includes(h)
+  );
   if (missingHeaders.length > 0) {
     return {
       rows: [],
@@ -422,7 +421,7 @@ export async function exportDwellingsCsv(
   // hand-rolled tab prefix, which didn't cover a value already starting
   // with a tab or carriage return.
   return Papa.unparse(
-    { fields: REQUIRED_HEADERS, data: csvRows },
+    { fields: DWELLING_CSV_HEADERS, data: csvRows },
     { escapeFormulae: true }
   );
 }

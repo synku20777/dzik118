@@ -55,6 +55,7 @@ const stepList = [
   },
 ];
 const nextStep = stepList.find((step) => !step.done);
+const imported = Astro.url.searchParams.get("imported");
 
 const generationBlockers: { count: number; label: string; href: string }[] = [];
 if (progress.blockers.NO_READING) {
@@ -117,6 +118,16 @@ const readyToPrepareAndSend =
     current="review"
     steps={progress.steps}
   >
+    {(imported === "done" || imported === "none") && (
+      <p class="notice" role="status">
+        {t(
+          imported === "done"
+            ? "Import done"
+            : "The file changed nothing. All rows already exist."
+        )}
+      </p>
+    )}
+
     <section class="setup-next box" aria-labelledby="setup-next-title">
       <div class="space-y-2">
         <p class="text-body-sm text-muted">

@@ -13,6 +13,7 @@ import { isUniqueViolation } from "../../lib/db-errors";
 import { sha256Hex } from "../../lib/hash";
 import { recordAuditEvent, recordAuditEvents } from "../../lib/logging/audit";
 import { ConflictError, ValidationError } from "../errors";
+import { createMetersBulk } from "../periods/opening-readings";
 import { syncCasesForDwellings } from "../periods/periods";
 import { parseTable } from "./files";
 import { cell } from "./limits";
@@ -86,6 +87,7 @@ export interface MigrationDwellingRow {
   rowNumber: number;
   number: string;
   patch: DwellingPatch;
+  waterMeters: { type: "COLD_WATER" | "HOT_WATER"; serialNumber: string }[];
   status: "CREATE" | "UPDATE" | "SKIP" | "ERROR";
   errors: string[];
   warnings: string[];
@@ -224,6 +226,18 @@ export async function validateDwellings(
     }
 
     const found = number !== "" ? existing.get(number) : undefined;
+    const waterMeters: MigrationDwellingRow["waterMeters"] = [];
+    if (!found) {
+      // A dwelling export can carry water meter serials for new dwellings.
+      for (const [field, type] of [
+        ["cold_water_meter_serial", "COLD_WATER"],
+        ["hot_water_meter_serial", "HOT_WATER"],
+      ] as const) {
+        const serialNumber = get(field);
+        if (serialNumber.length > 100) errors.push(ROW_TEXT_LENGTH_ERROR);
+        else if (serialNumber) waterMeters.push({ type, serialNumber });
+      }
+    }
     let status: MigrationDwellingRow["status"];
     let skipReason: string | undefined;
     if (errors.length > 0) {
@@ -251,6 +265,7 @@ export async function validateDwellings(
       rowNumber: i + 1,
       number,
       patch,
+      waterMeters,
       status,
       errors,
       warnings,
@@ -426,6 +441,17 @@ export async function importDwellings(
         }
       }
 
+      const createdRows = new Map(toCreate.map((r) => [r.number, r]));
+      const waterMeters = created.flatMap(({ id, number }) =>
+        (createdRows.get(number)?.waterMeters ?? []).map((meter) => ({
+          ...meter,
+          dwellingId: id,
+          unit: "m3",
+        }))
+      );
+      if (waterMeters.length > 0) {
+        await createMetersBulk(tx, organizationId, waterMeters, actorUserId);
+      }
       await syncCasesForDwellings(
         tx,
         organizationId,
@@ -450,7 +476,6 @@ export async function importDwellings(
         })
         .returning({ id: migrationImports.id });
 
-      const patchByNumber = new Map(toCreate.map((r) => [r.number, r.patch]));
       await recordAuditEvents(tx, [
         ...created.map((d) => ({
           organizationId,
@@ -460,7 +485,7 @@ export async function importDwellings(
           entityId: d.id,
           afterData: {
             number: d.number,
-            ...patchByNumber.get(d.number),
+            ...createdRows.get(d.number)?.patch,
             migrationImportId: importRow.id,
           },
         })),

@@ -3,7 +3,7 @@ import { translate, uiLocale } from "../../../../../lib/ui/i18n";
 const locale = uiLocale(Astro.cookies, Astro.url);
 const t = (text: string) => translate(locale, text);
 // Migration Center, dwellings flow (ADR 0013). Four steps on one page, each a
-// POST: upload -> map -> review -> import, then a redirect to the history.
+// POST: upload -> map -> review -> import, then back to setup or history.
 // The hidden fields are untrusted: every step re-parses the raw text and
 // re-checks the mapping, and the import validates everything again inside its
 // own transaction. Nothing is stored until the last step.
@@ -76,6 +76,10 @@ const balances = kindParam === "balances";
 const metersKind = kindParam === "meters";
 const kind = balances ? "BALANCES" : metersKind ? "METERS" : "DWELLINGS";
 const targetFields = TARGETS[kind];
+const orgBase = `/admin/o/${organizationId}`;
+const base = `${orgBase}/migration`;
+const fromSetup = !balances && Astro.url.searchParams.get("from") === "setup";
+const setupStep = fromSetup ? `${orgBase}/setup/${kindParam}` : null;
 try {
   requireActiveOrganization(Astro.locals.auth, organizationId);
 } catch (err) {
@@ -316,10 +320,17 @@ if (Astro.request.method === "POST" && !needsPeriod) {
             );
             return { importId: r.importId, report: false };
           });
+          if (fromSetup) {
+            return Astro.redirect(
+              `${orgBase}/setup?imported=${done.importId ? "done" : "none"}`,
+              303
+            );
+          }
           return Astro.redirect(
             done.importId && done.report
-              ? `/admin/o/${organizationId}/migration/report/${done.importId}`
-              : `/admin/o/${organizationId}/migration?imported=${done.importId ?? "none"}`
+              ? `${base}/report/${done.importId}`
+              : `${base}?imported=${done.importId ?? "none"}`,
+            303
           );
         } catch (err) {
           if (!(err instanceof ValidationError || err instanceof ConflictError))
@@ -337,7 +348,6 @@ if (Astro.request.method === "POST" && !needsPeriod) {
   }
 }
 
-const base = `/admin/o/${organizationId}/migration`;
 const fieldOf = (i: number) =>
   step === "map" ? proposals[i]?.field : fields[i];
 const issueRows =
@@ -395,11 +405,18 @@ const badge = (source: MappingSource, field: string | null) =>
   organizationId={organizationId}
   organizationName={organization.name}
   breadcrumbs={[
-    { label: t("Settings"), href: `/admin/o/${organizationId}/settings` },
-    {
-      label: t("Migration Center"),
-      href: `/admin/o/${organizationId}/migration`,
-    },
+    ...(setupStep
+      ? [
+          { label: t("Setup"), href: `${orgBase}/setup` },
+          {
+            label: t(metersKind ? "Meters and starting readings" : "Dwellings"),
+            href: setupStep,
+          },
+        ]
+      : [
+          { label: t("Settings"), href: `${orgBase}/settings` },
+          { label: t("Migration Center"), href: base },
+        ]),
     {
       label: balances
         ? t("Import opening balances")
@@ -418,7 +435,13 @@ const badge = (source: MappingSource, field: string | null) =>
             ? t("Import meter readings")
             : t("Import dwellings")
       }
-    />
+    >
+      {setupStep && (
+        <a href={setupStep} class="btn-secondary">
+          {t("Back to setup")}
+        </a>
+      )}
+    </PageHeader>
 
     {needsPeriod && (
       <div class="notice max-w-2xl space-y-2">
@@ -675,7 +698,7 @@ const badge = (source: MappingSource, field: string | null) =>
           </div>
         )}
         <div class="flex flex-wrap gap-3">
-          <a href={`${base}/${kindParam}`} class="btn-secondary">
+          <a href={Astro.url.pathname + Astro.url.search} class="btn-secondary">
             {t("Back")}
           </a>
           <button type="submit" class="btn-primary">

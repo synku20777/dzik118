@@ -7,7 +7,6 @@
 // billing month like any earlier reading.
 //
 // Callers must call requireActiveOrganization() first.
-import Papa from "papaparse";
 import { and, asc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import type { Db, DbOrTx, Tx } from "../../db/client";
 import { billingPeriods, meterReadings } from "../../db/schema/billing";
@@ -15,7 +14,6 @@ import { dwellings, meterTypeEnum, meters } from "../../db/schema/dwellings";
 import { DECIMAL3_PATTERN } from "../../lib/decimal3";
 import { recordAuditEvent, recordAuditEvents } from "../../lib/logging/audit";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
-import { ImportHeaderError } from "../organizations/csv-import";
 import { recalculateCaseReadinessForDwellings } from "./case-readiness";
 import { getFirstBillingPeriod } from "./periods";
 
@@ -26,8 +24,6 @@ export const OPENING_MONTH_TAKEN_MESSAGE =
   "The month before the first billing period is already a billing period";
 
 const MAX_ROWS = 5_000;
-const MAX_CSV_BYTES = 2_000_000;
-const METER_TYPES = new Set<string>(meterTypeEnum.enumValues);
 
 export function monthBefore(year: number, month: number) {
   return month === 1
@@ -415,208 +411,4 @@ export async function listMetersWithOpeningReading(
     ...r,
     openingValue: opening.get(r.meterId) ?? null,
   }));
-}
-
-// ---- CSV import of last month's readings from the old system.
-
-export const OPENING_READINGS_HEADERS = [
-  "dwelling_number",
-  "meter_type",
-  "serial_number",
-  "unit",
-  "reading",
-];
-
-export interface OpeningReadingCsvRow {
-  rowNumber: number;
-  dwellingNumber: string;
-  meterType: string;
-  serialNumber: string;
-  unit: string;
-  reading: string;
-  // USE: an existing meter; CREATE: the import adds the meter.
-  status: "USE" | "CREATE" | "ERROR";
-  meterId: string | null;
-  dwellingId: string | null;
-  errors: string[];
-}
-
-function cell(row: Record<string, unknown>, key: string): string {
-  const value = row[key];
-  return typeof value === "string" ? value.trim() : "";
-}
-
-export async function validateOpeningReadingsCsv(
-  db: DbOrTx,
-  organizationId: string,
-  csvText: string
-): Promise<{ rows: OpeningReadingCsvRow[]; headerError: string | null }> {
-  if (new TextEncoder().encode(csvText).length > MAX_CSV_BYTES) {
-    return { rows: [], headerError: "The CSV file is too large (up to 2 MB)." };
-  }
-  const parsed = Papa.parse<Record<string, unknown>>(csvText, {
-    header: true,
-    skipEmptyLines: true,
-  });
-  const headers = parsed.meta.fields ?? [];
-  const missing = OPENING_READINGS_HEADERS.filter((h) => !headers.includes(h));
-  if (missing.length > 0) {
-    return {
-      rows: [],
-      headerError: `Missing required column(s): ${missing.join(", ")}`,
-    };
-  }
-  if (parsed.errors.length > 0) {
-    const first = parsed.errors[0];
-    return {
-      rows: [],
-      headerError: `Could not parse the file (row ${(first.row ?? 0) + 1}: ${first.message}). Check the file is a valid CSV and try again.`,
-    };
-  }
-  if (parsed.data.length > MAX_ROWS) {
-    return {
-      rows: [],
-      headerError: "The CSV file has too many rows (up to 5,000).",
-    };
-  }
-
-  const orgDwellings = await db
-    .select({ id: dwellings.id, number: dwellings.number })
-    .from(dwellings)
-    .where(
-      and(
-        eq(dwellings.organizationId, organizationId),
-        isNull(dwellings.archivedAt)
-      )
-    );
-  const dwellingByNumber = new Map(orgDwellings.map((d) => [d.number, d.id]));
-  const orgMeters = await db
-    .select()
-    .from(meters)
-    .where(
-      and(eq(meters.organizationId, organizationId), isNull(meters.archivedAt))
-    );
-  const seenMeters = new Set<string>();
-
-  const rows = parsed.data.map((raw, index): OpeningReadingCsvRow => {
-    const errors: string[] = [];
-    const dwellingNumber = cell(raw, "dwelling_number");
-    const meterType = cell(raw, "meter_type").toUpperCase();
-    const serialNumber = cell(raw, "serial_number");
-    const unit = cell(raw, "unit") || "m3";
-    const reading = cell(raw, "reading").replace(",", ".");
-
-    const dwellingId = dwellingByNumber.get(dwellingNumber) ?? null;
-    if (!dwellingNumber) errors.push("dwelling_number is required");
-    else if (!dwellingId) {
-      errors.push(`dwelling "${dwellingNumber}" does not exist`);
-    }
-    if (!METER_TYPES.has(meterType)) {
-      errors.push(
-        `meter_type "${meterType}" is not one of ${[...METER_TYPES].join(", ")}`
-      );
-    }
-    if (!DECIMAL3_PATTERN.test(reading)) {
-      errors.push(
-        "reading must be a non-negative number with at most 3 decimal places"
-      );
-    }
-    if (serialNumber.length > 100) {
-      errors.push("serial_number exceeds 100 characters");
-    }
-    if (unit.length > 20) errors.push("unit exceeds 20 characters");
-
-    // The meter: by serial when given, else the one active meter of that
-    // type in the dwelling. None: the import creates it.
-    let meterId: string | null = null;
-    if (dwellingId && errors.length === 0) {
-      const match = matchMeter(orgMeters, dwellingId, meterType, serialNumber);
-      if (match.ambiguous) {
-        errors.push(
-          "the dwelling has more than one meter of this type; add serial_number"
-        );
-      } else if (match.meter) {
-        meterId = match.meter.id;
-        if (seenMeters.has(meterId)) {
-          errors.push("this meter appears more than once in the file");
-        }
-        seenMeters.add(meterId);
-      }
-    }
-
-    return {
-      rowNumber: index + 1,
-      dwellingNumber,
-      meterType,
-      serialNumber,
-      unit,
-      reading,
-      status: errors.length > 0 ? "ERROR" : meterId ? "USE" : "CREATE",
-      meterId,
-      dwellingId,
-      errors,
-    };
-  });
-
-  // Two rows that would create the same new meter.
-  const newKeys = new Set<string>();
-  for (const row of rows) {
-    if (row.status !== "CREATE") continue;
-    const key = `${row.dwellingId}|${row.meterType}|${row.serialNumber}`;
-    if (newKeys.has(key)) {
-      row.status = "ERROR";
-      row.errors.push("this meter appears more than once in the file");
-    }
-    newKeys.add(key);
-  }
-  return { rows, headerError: null };
-}
-
-// Re-validates from the raw text, like importDwellingsCsv. All or nothing:
-// a file with any error row writes nothing. The opening period is locked
-// first and the file is validated inside the same transaction, so two
-// imports at the same time cannot both create the same missing meter.
-export async function importOpeningReadingsCsv(
-  db: Db,
-  organizationId: string,
-  csvText: string,
-  actorUserId: string
-) {
-  return db.transaction(async (tx) => {
-    await lockOpeningPeriod(tx, organizationId, actorUserId);
-    const { rows, headerError } = await validateOpeningReadingsCsv(
-      tx,
-      organizationId,
-      csvText
-    );
-    if (headerError) throw new ImportHeaderError(headerError);
-    if (rows.length === 0) {
-      throw new ValidationError("Enter at least one starting reading");
-    }
-    if (rows.some((r) => r.status === "ERROR")) {
-      throw new ValidationError("Fix the rows with errors, then import again");
-    }
-
-    const missing = rows.filter((r) => !r.meterId);
-    const created = await createMetersBulk(
-      tx,
-      organizationId,
-      missing.map((r) => ({
-        dwellingId: r.dwellingId!,
-        type: r.meterType as (typeof meterTypeEnum.enumValues)[number],
-        serialNumber: r.serialNumber || null,
-        unit: r.unit,
-      })),
-      actorUserId
-    );
-    // `created` comes back in the order of `missing`.
-    const newIds = new Map(missing.map((r, i) => [r, created[i].id]));
-    const inputs: OpeningReadingInput[] = rows.map((row) => ({
-      meterId: row.meterId ?? newIds.get(row)!,
-      value: row.reading,
-    }));
-    validateRows(inputs);
-    await writeOpeningReadings(tx, organizationId, inputs, actorUserId);
-    return { createdMeters: created.length, written: inputs.length };
-  });
 }

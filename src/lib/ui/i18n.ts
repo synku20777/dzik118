@@ -2452,6 +2452,10 @@ const lv: Record<string, string> = {
   "Complete the setup steps to send your first invoices.":
     "Pabeidziet iestatīšanas soļus, lai nosūtītu pirmos rēķinus.",
   "Continue setup": "Turpināt iestatīšanu",
+  "Back to setup": "Atgriezties pie iestatīšanas",
+  "Setup wizard": "Iestatīšanas vednis",
+  "Cold water meter serial": "Aukstā ūdens skaitītāja sērijas numurs",
+  "Hot water meter serial": "Karstā ūdens skaitītāja sērijas numurs",
   "The guided setup covers your organization details, dwellings, first billing period, charges, and meters.":
     "Sākotnējā iestatīšana aptver organizācijas datus, īpašumus, pirmo norēķinu periodu, maksas un skaitītājus.",
   "Open the setup": "Atvērt iestatīšanu",
@@ -5103,6 +5107,10 @@ const ru: Record<string, string> = {
   "Complete the setup steps to send your first invoices.":
     "Выполните шаги настройки, чтобы отправить первые счета.",
   "Continue setup": "Продолжить настройку",
+  "Back to setup": "Вернуться к настройке",
+  "Setup wizard": "Мастер настройки",
+  "Cold water meter serial": "Серийный номер счётчика холодной воды",
+  "Hot water meter serial": "Серийный номер счётчика горячей воды",
   "The guided setup covers your organization details, dwellings, first billing period, charges, and meters.":
     "Пошаговая настройка охватывает данные организации, помещения, первый расчётный период, начисления и счётчики.",
   "Open the setup": "Открыть настройку",
