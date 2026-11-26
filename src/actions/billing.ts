@@ -29,6 +29,11 @@ const UNIT_PRICE_MESSAGE =
 const VAT_RATE_MESSAGE =
   "Enter a valid VAT percentage, for example 21 or 21.5.";
 
+// Parse a value instead of Astro's checkbox-presence convention.
+const ruleEnabled = z
+  .enum(["true", "false"])
+  .transform((value) => value === "true");
+
 const billingCaseStatus = z.enum([
   "MISSING_DATA",
   "READY",
@@ -76,7 +81,7 @@ export const billing = {
       applicationScope: z.enum(billingRuleScopeEnum.enumValues).optional(),
       dwellingIds: z.array(z.uuid()).max(200).optional(),
       sortOrder: z.coerce.number().int().optional(),
-      enabled: z.coerce.boolean().optional(),
+      enabled: ruleEnabled.optional(),
     }),
     handler: async ({ organizationId, ...input }, { locals }) => {
       return withDb((db) =>
@@ -119,7 +124,7 @@ export const billing = {
       applicationScope: z.enum(billingRuleScopeEnum.enumValues).optional(),
       dwellingIds: z.array(z.uuid()).max(200).optional(),
       sortOrder: z.coerce.number().int().optional(),
-      enabled: z.coerce.boolean().optional(),
+      enabled: ruleEnabled.optional(),
     }),
     handler: async ({ organizationId, ruleId, ...input }, { locals }) => {
       return withDb((db) =>
@@ -133,7 +138,7 @@ export const billing = {
     input: z.object({
       organizationId: z.uuid(),
       ruleId: z.uuid(),
-      enabled: z.coerce.boolean(),
+      enabled: ruleEnabled,
     }),
     handler: async ({ organizationId, ruleId, enabled }, { locals }) => {
       return withDb((db) =>

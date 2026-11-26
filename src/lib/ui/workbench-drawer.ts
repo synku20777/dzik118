@@ -803,9 +803,9 @@ export function initWorkbenchDrawer(
 
   function renderBillingBody(data: DrawerData, focus?: string) {
     const dwelling = data.dwelling;
-    const recipientIncomplete =
-      !(dwelling.billingName || dwelling.occupantName) ||
-      !dwelling.billingAddress;
+    const recipientNameMissing =
+      !dwelling.billingName?.trim() && !dwelling.occupantName?.trim();
+    const billingAddressMissing = !dwelling.billingAddress?.trim();
     const billingEmailMissing = !dwelling.billingEmail;
 
     function blockerBadge(tone: string, text: string): HTMLSpanElement {
@@ -820,7 +820,7 @@ export function initWorkbenchDrawer(
     }
 
     const nodes: HTMLElement[] = [];
-    if (recipientIncomplete || billingEmailMissing) {
+    if (recipientNameMissing || billingAddressMissing || billingEmailMissing) {
       const banner = document.createElement("div");
       banner.className = "notice notice-warning drawer-info-banner";
       const bannerIcon = document.createElement("span");
@@ -833,9 +833,12 @@ export function initWorkbenchDrawer(
       bannerTitle.textContent = s("billingBlockersBanner");
       const blockers = document.createElement("div");
       blockers.className = "drawer-blockers";
-      if (recipientIncomplete) {
+      if (recipientNameMissing) {
+        blockers.appendChild(blockerBadge("danger", s("recipientNameMissing")));
+      }
+      if (billingAddressMissing) {
         blockers.appendChild(
-          blockerBadge("danger", s("recipientDetailsIncomplete"))
+          blockerBadge("danger", s("billingAddressMissing"))
         );
       }
       if (billingEmailMissing) {
@@ -912,6 +915,7 @@ export function initWorkbenchDrawer(
         name: "billingAddress",
         labelKey: "billingAddress",
         placeholderKey: "billingAddressPlaceholder",
+        required: true,
         multiline: true,
         focusKey: "recipient",
       },

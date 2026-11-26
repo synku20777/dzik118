@@ -28,7 +28,8 @@ export async function renderPdf(
     // setContent, not goto(): the HTML is already fully inline (spec
     // Section 22: "do not render arbitrary user-provided remote URLs"),
     // so there is no URL to navigate to and nothing external to fetch.
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.setContent(html, { waitUntil: "load" });
+    await page.waitForNetworkIdle();
     const pdf = await page.pdf({ format: "a4", printBackground: true });
     return pdf;
   } finally {

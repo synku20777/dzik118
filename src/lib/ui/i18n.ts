@@ -754,6 +754,10 @@ const lv: Record<string, string> = {
   "Required readings complete": "Obligātie rādījumi ievadīti",
   "Billing email ready": "Norēķinu e-pasts norādīts",
   "Billing email missing": "Trūkst norēķinu e-pasta",
+  "Billing address missing": "Trūkst norēķinu adreses",
+  "Recipient name missing": "Trūkst saņēmēja vārda vai nosaukuma",
+  "Add billing address": "Pievienot norēķinu adresi",
+  "Add recipient name": "Pievienot saņēmēja vārdu vai nosaukumu",
   "Recipient details incomplete": "Saņēmēja dati nav pilnīgi",
   "Issuer or payment details incomplete":
     "Izrakstītāja vai maksājuma dati nav pilnīgi",
@@ -763,6 +767,11 @@ const lv: Record<string, string> = {
   "Add billing email": "Pievienot norēķinu e-pastu",
   "Send invoice": "Nosūtīt rēķinu",
   "Regenerate invoice": "Pārrēķināt rēķinu",
+  "Billing details updated. Regenerate this draft to use them.":
+    "Norēķinu dati ir atjaunināti. Pārrēķiniet melnrakstu, lai tos izmantotu.",
+  "Back to invoice": "Atpakaļ uz rēķinu",
+  "After correcting the details, return here and regenerate the draft.":
+    "Pēc datu labošanas atgriezieties šeit un pārrēķiniet melnrakstu.",
   "No dwellings are missing required billing data.":
     "Nevienam īpašumam netrūkst obligāto norēķinu datu.",
   "No billing cases match these filters.":
@@ -3399,6 +3408,10 @@ const ru: Record<string, string> = {
   "Required readings complete": "Обязательные показания внесены",
   "Billing email ready": "Эл. почта для счетов указана",
   "Billing email missing": "Не указана эл. почта для счетов",
+  "Billing address missing": "Не указан адрес для счетов",
+  "Recipient name missing": "Не указано имя получателя",
+  "Add billing address": "Добавить адрес для счетов",
+  "Add recipient name": "Добавить имя получателя",
   "Recipient details incomplete": "Данные получателя заполнены не полностью",
   "Issuer or payment details incomplete":
     "Данные организации или платёжные реквизиты заполнены не полностью",
@@ -3408,6 +3421,11 @@ const ru: Record<string, string> = {
   "Add billing email": "Добавить эл. почту для счетов",
   "Send invoice": "Отправить счёт",
   "Regenerate invoice": "Пересчитать счёт",
+  "Billing details updated. Regenerate this draft to use them.":
+    "Реквизиты обновлены. Пересчитайте черновик, чтобы применить их.",
+  "Back to invoice": "Назад к счёту",
+  "After correcting the details, return here and regenerate the draft.":
+    "После исправления реквизитов вернитесь сюда и пересчитайте черновик.",
   "No dwellings are missing required billing data.":
     "Во всех помещениях заполнены обязательные данные для счетов.",
   "No billing cases match these filters.":

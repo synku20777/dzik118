@@ -12,9 +12,9 @@ import Icon from "../../../../../../../components/ui/Icon.astro";
 import StatusBadge from "../../../../../../../components/ui/StatusBadge.astro";
 import { renderInvoicePreview } from "../../../../../../../domain/billing/invoice-html";
 import {
+  draftBillingDetails,
   invoiceDelivery,
   readInvoiceSnapshots,
-  type InvoiceSnapshots,
 } from "../../../../../../../domain/billing/invoice-snapshots";
 import {
   translate,
@@ -30,7 +30,12 @@ const t = (text: string) => translate(locale, text);
 import AdminLayout from "../../../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
 import { getOrganization } from "../../../../../../../domain/organizations/organizations";
+import { getDwelling } from "../../../../../../../domain/organizations/dwellings";
 import { getPeriod } from "../../../../../../../domain/periods/periods";
+import {
+  invoiceBlockerMessage,
+  resolveInvoiceEligibility,
+} from "../../../../../../../domain/periods/case-readiness";
 import { getInvoice } from "../../../../../../../domain/billing/generation";
 import { listDeliveries } from "../../../../../../../domain/billing/sending";
 import { getLatestSendAttempt } from "../../../../../../../domain/billing/send-attempts";
@@ -46,6 +51,7 @@ const periodId = Astro.params.periodId!;
 const invoiceId = Astro.params.invoiceId!;
 
 const prepareResult = Astro.getActionResult(actions.billing.prepare);
+const generateResult = Astro.getActionResult(actions.billing.generate);
 const adjustLateFeeResult = Astro.getActionResult(
   actions.accounts.adjustLateFee
 );
@@ -65,7 +71,16 @@ const markDeliveredResult = Astro.getActionResult(
   actions.invoices.markDelivered
 );
 
-let organization, period, invoice, lines, caseStatus, deliveries, latestAttempt;
+let organization,
+  period,
+  invoice,
+  lines,
+  caseStatus,
+  deliveries,
+  latestAttempt,
+  canRegenerate,
+  details,
+  regenerationBlockers;
 try {
   ({
     organization,
@@ -75,18 +90,52 @@ try {
     caseStatus,
     deliveries,
     latestAttempt,
+    canRegenerate,
+    details,
+    regenerationBlockers,
   } = await withRequestDb(async (db) => {
     const { invoice, lines, caseStatus } = await getInvoice(
       db,
       organizationId,
       invoiceId
     );
+    const organization = await getOrganization(db, organizationId);
+    const period = await getPeriod(db, organizationId, periodId);
+    const canRegenerate =
+      !organization.archivedAt &&
+      period.status === "OPEN" &&
+      invoice.periodId === period.id &&
+      caseStatus === "DRAFT" &&
+      !invoice.sentAt &&
+      !invoice.paidAt;
+    const details = draftBillingDetails(
+      readInvoiceSnapshots(invoice),
+      canRegenerate
+        ? {
+            organization,
+            dwelling: await getDwelling(db, organizationId, invoice.dwellingId),
+          }
+        : undefined
+    );
     return {
-      organization: await getOrganization(db, organizationId),
-      period: await getPeriod(db, organizationId, periodId),
+      organization,
+      period,
       invoice,
       lines,
       caseStatus,
+      canRegenerate,
+      details,
+      regenerationBlockers: details.needsRegeneration
+        ? (
+            await resolveInvoiceEligibility(
+              db,
+              organizationId,
+              invoice.dwellingId,
+              periodId,
+              period
+            )
+          ).blockers
+        : [],
       deliveries: await listDeliveries(db, organizationId, invoiceId),
       latestAttempt: await getLatestSendAttempt(db, organizationId, invoiceId),
     };
@@ -96,21 +145,24 @@ try {
   return Astro.redirect(`/admin/o/${organizationId}/periods/${periodId}`);
 }
 
-// A damaged snapshot reads as empty here, so the rest of the page still
-// works. The preview below stops and says why.
-const { issuer, recipient, payment }: InvoiceSnapshots = readInvoiceSnapshots(
-  invoice
-) ?? { issuer: {}, recipient: {}, payment: {} };
-const recipientIncomplete =
-  (!recipient.billingName && !recipient.occupantName) ||
-  !recipient.billingAddress;
-const organizationIncomplete =
-  !issuer.name || !issuer.addressLine1 || !payment.iban || !payment.bankName;
+const {
+  recipientIncomplete,
+  recipientNameMissing,
+  recipientAddressMissing,
+  organizationIncomplete,
+  snapshotIncomplete,
+} = details;
+const recipientProblem = recipientNameMissing
+  ? "Recipient name missing"
+  : "Billing address missing";
+const regenerationBlocked = regenerationBlockers.length > 0;
+const regenerateDraft = details.needsRegeneration && !regenerationBlocked;
+const workbenchPath = `/admin/o/${organizationId}/periods/${periodId}`;
 
-const { invoiceByEmail, invoiceByPaper } = invoiceDelivery(
+const { invoiceByEmail, invoiceByPaper, billingEmail } = invoiceDelivery(
   invoice.recipientSnapshot
 );
-const hasValidEmail = !!recipient.billingEmail;
+const hasValidEmail = !!billingEmail;
 // A verified initial paper dispatch is one explicitly confirmed through the
 // "Record paper dispatch" action -- NEVER inferred from an old, possibly
 // auto-generated legacy row (issue: legacy PAPER rows must not masquerade
@@ -235,27 +287,48 @@ const overrideStatuses: string[] = [
               {t("Download PDF")}
             </a>
           )}
-          {caseStatus === "DRAFT" && (
-            <form method="POST" action={actions.billing.prepare}>
+          {regenerateDraft ? (
+            <form method="POST" action={actions.billing.generate}>
               <input
                 type="hidden"
                 name="organizationId"
                 value={organizationId}
               />
-              <input type="hidden" name="invoiceId" value={invoice.id} />
-              <button
-                type="submit"
-                disabled={recipientIncomplete || organizationIncomplete}
-                aria-describedby={
-                  recipientIncomplete || organizationIncomplete
-                    ? "invoice-validation"
-                    : undefined
-                }
-                class="btn-primary"
-              >
-                {t("Prepare")}
+              <input type="hidden" name="periodId" value={periodId} />
+              <input
+                type="hidden"
+                name="dwellingId"
+                value={invoice.dwellingId}
+              />
+              <button type="submit" class="btn-primary">
+                {t("Regenerate invoice")}
               </button>
             </form>
+          ) : regenerationBlocked ? (
+            <a href={workbenchPath} class="btn-primary">
+              {t("Open period")}
+            </a>
+          ) : (
+            caseStatus === "DRAFT" && (
+              <form method="POST" action={actions.billing.prepare}>
+                <input
+                  type="hidden"
+                  name="organizationId"
+                  value={organizationId}
+                />
+                <input type="hidden" name="invoiceId" value={invoice.id} />
+                <button
+                  type="submit"
+                  disabled={snapshotIncomplete}
+                  aria-describedby={
+                    snapshotIncomplete ? "invoice-validation" : undefined
+                  }
+                  class="btn-primary"
+                >
+                  {t("Prepare")}
+                </button>
+              </form>
+            )
           )}
           {caseStatus !== "DRAFT" && invoiceByEmail && (
             <>
@@ -381,6 +454,17 @@ const overrideStatuses: string[] = [
         )}
       </div>
     </header>
+    {generateResult?.error ? (
+      <p class="notice notice-danger" role="alert">
+        {friendlyActionErrorMessage(generateResult.error, locale)}
+      </p>
+    ) : (
+      generateResult?.data && (
+        <p class="notice" role="status">
+          {t("Invoice regenerated")}
+        </p>
+      )
+    )}
     {(prepareResult?.error ||
       sendResult?.error ||
       resendResult?.error ||
@@ -457,6 +541,16 @@ const overrideStatuses: string[] = [
       </p>
     ) : null}
 
+    {regenerateDraft && (
+      <p class="notice" role="status">
+        {t("Billing details updated. Regenerate this draft to use them.")}
+      </p>
+    )}
+    {regenerationBlocked && (
+      <p class="notice notice-warning">
+        {t(invoiceBlockerMessage(regenerationBlockers))}
+      </p>
+    )}
     {caseStatus === "DRAFT" &&
       (recipientIncomplete || organizationIncomplete) && (
         <section
@@ -467,7 +561,9 @@ const overrideStatuses: string[] = [
           {recipientIncomplete && (
             <p>
               {t(
-                "Recipient information is incomplete. Add a billing name or occupant name and billing address."
+                recipientNameMissing && recipientAddressMissing
+                  ? "Recipient information is incomplete. Add a billing name or occupant name and billing address."
+                  : recipientProblem
               )}{" "}
               <a
                 class="link link-underlined font-semibold text-inherit"
@@ -475,10 +571,15 @@ const overrideStatuses: string[] = [
                   "/admin/o/" +
                   organizationId +
                   "/dwellings/" +
-                  invoice.dwellingId
+                  invoice.dwellingId +
+                  `?edit=basic&billingInvoice=${invoice.id}`
                 }
               >
-                {t("Fix dwelling details")}
+                {t(
+                  recipientNameMissing
+                    ? "Add recipient name"
+                    : "Add billing address"
+                )}
               </a>
             </p>
           )}
@@ -489,17 +590,19 @@ const overrideStatuses: string[] = [
               )}{" "}
               <a
                 class="link link-underlined font-semibold text-inherit"
-                href={"/admin/o/" + organizationId + "/settings/organization"}
+                href={`/admin/o/${organizationId}/settings/organization?billingPeriod=${invoice.periodId}&billingInvoice=${invoice.id}`}
               >
                 {t("Fix organization details")}
               </a>
             </p>
           )}
-          <p class="mt-2">
-            {t(
-              "After correcting the details, regenerate this draft in the workbench to refresh its snapshot."
-            )}
-          </p>
+          {canRegenerate && (
+            <p class="mt-2">
+              {t(
+                "After correcting the details, return here and regenerate the draft."
+              )}
+            </p>
+          )}
         </section>
       )}
     {caseStatus !== "DRAFT" &&
@@ -567,7 +670,7 @@ const overrideStatuses: string[] = [
           </p>
         </div>
       )}
-    {caseStatus === "DRAFT" && (
+    {caseStatus === "DRAFT" && !details.needsRegeneration && (
       <section class="panel p-4" aria-labelledby="preparation-checks">
         <>
           <h2 id="preparation-checks" class="section-title">
@@ -582,7 +685,7 @@ const overrideStatuses: string[] = [
                 />
                 {t(
                   recipientIncomplete
-                    ? "Recipient details incomplete"
+                    ? recipientProblem
                     : "Recipient details complete"
                 )}
               </li>

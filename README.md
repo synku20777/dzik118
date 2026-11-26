@@ -67,7 +67,7 @@ this.
 
 ## Prerequisites
 
-- Node.js 22.12 or later
+- Node.js 22.22.3+ (22.x), 24.16.0+ (24.x), or 26.3.0+
 - Docker (the local Supabase stack runs in Docker containers)
 - The [Supabase CLI](https://supabase.com/docs/guides/cli) (`npx supabase --version` also works without a separate install)
 

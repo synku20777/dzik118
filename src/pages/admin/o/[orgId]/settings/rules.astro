@@ -1323,7 +1323,7 @@ const drawerStrings = {
         (form.elements.namedItem("organizationId") as HTMLInputElement).value
       );
       fd.set("ruleId", ruleId);
-      fd.set("enabled", enabled ? "1" : "");
+      fd.set("enabled", String(enabled));
       let saved = false;
       try {
         const { error } = await actions.billing.setRuleEnabled(fd);
@@ -1436,17 +1436,11 @@ const drawerStrings = {
             fd.append("dwellingIds", dwellingSingleSelect.value);
           }
         }
-        // A checkbox omits itself from FormData entirely when unchecked --
-        // z.coerce.boolean().optional() needs a present-but-empty value to
-        // actually coerce to false; an absent key parses as undefined,
-        // which updateRule then reads as "don't touch this column" (the
-        // usual .optional() convention), silently failing to re-enable a
-        // disabled rule's toggle.
         fd.set(
           "enabled",
-          form.querySelector<HTMLInputElement>("#tariff-enabled")!.checked
-            ? "1"
-            : ""
+          String(
+            form.querySelector<HTMLInputElement>("#tariff-enabled")!.checked
+          )
         );
 
         for (const key of ["unitPrice", "vatRate"]) {

@@ -278,6 +278,10 @@ const failedEditor = updateResult?.error
           ? "meter"
           : null;
 const requestedEditor = Astro.url.searchParams.get("edit");
+const billingInvoiceId = Astro.url.searchParams.get("billingInvoice");
+const billingInvoice =
+  billingInvoiceId &&
+  caseHistory.find((item) => item.invoiceId === billingInvoiceId);
 const openEditor =
   failedEditor ?? (editorTab(requestedEditor) ? requestedEditor : null);
 const requestedTab = Astro.url.searchParams.get("tab");
@@ -373,6 +377,15 @@ function meterCaption(
         {subtitle && <p class="page-description">{subtitle}</p>}
       </div>
       <div class="page-actions">
+        {billingInvoice && (
+          <a
+            href={`${base}/periods/${billingInvoice.periodId}/invoices/${billingInvoice.invoiceId}`}
+            data-astro-reload
+            class="btn-secondary"
+          >
+            {t("Back to invoice")}
+          </a>
+        )}
         <details class="more-menu more-menu-wide" data-dismiss>
           <summary class="btn-secondary">
             <Icon name="dots" size="sm" />
@@ -496,7 +509,11 @@ function meterCaption(
           )}
           <form
             method="POST"
-            action={actions.dwellings.update}
+            action={
+              billingInvoice
+                ? `${actions.dwellings.update}&billingInvoice=${billingInvoice.invoiceId}`
+                : actions.dwellings.update
+            }
             id="basic-info-form"
             class="editor-stack"
             data-saving-label={t("Saving…")}

@@ -24,11 +24,16 @@ import {
   listDwellingsWithoutCase,
   listPeriods,
 } from "../../../../../../domain/periods/periods";
-import { invoiceDelivery } from "../../../../../../domain/billing/invoice-snapshots";
+import {
+  draftBillingDetails,
+  invoiceDelivery,
+  readInvoiceSnapshots,
+} from "../../../../../../domain/billing/invoice-snapshots";
 import {
   listActiveMeterTypesForPeriod,
   listCasesForPeriod,
 } from "../../../../../../domain/periods/cases";
+import { resolveInvoiceEligibilityForDwellings } from "../../../../../../domain/periods/case-readiness";
 import { listSuppressedEmails } from "../../../../../../domain/email/suppression";
 import { invoiceStatusBadge } from "../../../../../../lib/ui/invoice-status";
 import { getDashboardSummary } from "../../../../../../domain/periods/dashboard";
@@ -48,7 +53,6 @@ import {
 } from "../../../../../../lib/ui/i18n";
 
 type CaseStatus = (typeof billingCaseStatusEnum.enumValues)[number];
-type Snapshot = Record<string, string | null>;
 
 const organizationId = Astro.params.orgId!;
 const periodId = Astro.params.periodId!;
@@ -95,7 +99,10 @@ const statusFilter =
       : undefined;
 
 let organization, period, cases, allPeriods, summary, rules, assignmentsByRule;
-let dwellingsWithoutCase, suppressed, meterTypesByDwelling;
+let dwellingsWithoutCase,
+  suppressed,
+  meterTypesByDwelling,
+  regenerationEligibility;
 try {
   ({
     dwellingsWithoutCase,
@@ -108,36 +115,76 @@ try {
     assignmentsByRule,
     suppressed,
     meterTypesByDwelling,
-  } = await withRequestDb(async (db) => ({
-    suppressed: new Set(
-      (await listSuppressedEmails(db, organizationId)).map((row) =>
-        row.email.toLowerCase()
-      )
-    ),
-    meterTypesByDwelling: await listActiveMeterTypesForPeriod(
-      db,
-      organizationId,
-      await getPeriod(db, organizationId, periodId)
-    ),
-    dwellingsWithoutCase: await listDwellingsWithoutCase(
-      db,
-      organizationId,
-      periodId
-    ),
-    rules: await listRules(db, organizationId, { includeArchived: true }),
-    assignmentsByRule: await listRuleAssignmentsWithDwellingNumbers(
-      db,
-      organizationId
-    ),
-    organization: await getOrganization(db, organizationId),
-    period: await getPeriod(db, organizationId, periodId),
-    cases: await listCasesForPeriod(db, organizationId, periodId, {
-      search,
-      statusFilter,
-    }),
-    allPeriods: await listPeriods(db, organizationId),
-    summary: await getDashboardSummary(db, organizationId, periodId),
-  })));
+    regenerationEligibility,
+  } = await withRequestDb(async (db) => {
+    const organization = await getOrganization(db, organizationId);
+    const period = await getPeriod(db, organizationId, periodId);
+    const cases = (
+      await listCasesForPeriod(db, organizationId, periodId, {
+        search,
+        statusFilter,
+      })
+    ).map((billingCase) => {
+      const canRegenerate =
+        !organization.archivedAt &&
+        period.status === "OPEN" &&
+        billingCase.status === "DRAFT" &&
+        !!billingCase.invoiceId &&
+        !billingCase.invoiceSentAt &&
+        !billingCase.invoicePaidAt;
+      const details = billingCase.invoiceId
+        ? draftBillingDetails(
+            readInvoiceSnapshots({
+              issuerSnapshot: billingCase.invoiceIssuerSnapshot,
+              recipientSnapshot: billingCase.invoiceRecipientSnapshot,
+              paymentSnapshot: billingCase.invoicePaymentSnapshot,
+            }),
+            canRegenerate ? { organization, dwelling: billingCase } : undefined
+          )
+        : null;
+      return { ...billingCase, canRegenerate, details };
+    });
+    const regenerationIds = cases
+      .filter((billingCase) => billingCase.details?.needsRegeneration)
+      .map((billingCase) => billingCase.dwellingId);
+    const regenerationEligibility = regenerationIds.length
+      ? await resolveInvoiceEligibilityForDwellings(
+          db,
+          organizationId,
+          regenerationIds,
+          periodId,
+          period
+        )
+      : null;
+    return {
+      suppressed: new Set(
+        (await listSuppressedEmails(db, organizationId)).map((row) =>
+          row.email.toLowerCase()
+        )
+      ),
+      meterTypesByDwelling: await listActiveMeterTypesForPeriod(
+        db,
+        organizationId,
+        period
+      ),
+      dwellingsWithoutCase: await listDwellingsWithoutCase(
+        db,
+        organizationId,
+        periodId
+      ),
+      rules: await listRules(db, organizationId, { includeArchived: true }),
+      assignmentsByRule: await listRuleAssignmentsWithDwellingNumbers(
+        db,
+        organizationId
+      ),
+      organization,
+      period,
+      cases,
+      regenerationEligibility,
+      allPeriods: await listPeriods(db, organizationId),
+      summary: await getDashboardSummary(db, organizationId, periodId),
+    };
+  }));
 } catch (err) {
   rethrowUnexpected(err);
   return Astro.redirect(`/admin/o/${organizationId}/periods`);
@@ -229,6 +276,7 @@ const previousPeriod =
 const nextPeriod = currentIndex > 0 ? navPeriods[currentIndex - 1] : null;
 const periodName = formatPeriod(period.year, period.month, locale);
 const workbenchPath = `/admin/o/${organizationId}/periods/${periodId}`;
+const organizationDetailsHref = `/admin/o/${organizationId}/settings/organization?billingPeriod=${period.id}`;
 const totalCases = Object.values(summary.caseStatusCounts).reduce(
   (total, count) => total + count,
   0
@@ -577,7 +625,9 @@ const dayMonth = (value: string) =>
           </thead>
           <tbody role="rowgroup">
             {cases.map((billingCase) => {
-              const missing = billingCase.missingData as (
+              const missing = (regenerationEligibility?.get(
+                billingCase.dwellingId
+              )?.blockers ?? billingCase.missingData) as (
                 | {
                     label: string | null;
                     meterType: string;
@@ -602,35 +652,23 @@ const dayMonth = (value: string) =>
                 typeof item === "object" &&
                 (item.reason === "NO_APPLICABLE_RULES" ||
                   item.reason === "NO_ACTIVE_METER_FOR_RULE");
-              const issuer = (billingCase.invoiceIssuerSnapshot ??
-                {}) as Snapshot;
-              const recipient = (billingCase.invoiceRecipientSnapshot ??
-                {}) as Snapshot & {
-                invoiceByEmail?: boolean;
-                invoiceByPaper?: boolean;
-              };
-              const payment = (billingCase.invoicePaymentSnapshot ??
-                {}) as Snapshot;
-              const recipientIncomplete =
-                Boolean(billingCase.invoiceId) &&
-                ((!recipient.billingName && !recipient.occupantName) ||
-                  !recipient.billingAddress);
-              const organizationIncomplete =
-                Boolean(billingCase.invoiceId) &&
-                (!issuer.name ||
-                  !issuer.addressLine1 ||
-                  !payment.iban ||
-                  !payment.bankName);
-              const billingEmail = billingCase.invoiceId
-                ? recipient.billingEmail
-                : billingCase.billingEmail;
-              const { invoiceByEmail, invoiceByPaper } = billingCase.invoiceId
-                ? invoiceDelivery(billingCase.invoiceRecipientSnapshot)
-                : billingCase;
+              const { details } = billingCase;
+              const canRegenerate =
+                billingCase.canRegenerate && missing.length === 0;
+              const {
+                recipientIncomplete,
+                recipientNameMissing,
+                recipientAddressMissing,
+                organizationIncomplete,
+              } = details ?? {};
+              const { invoiceByEmail, invoiceByPaper, billingEmail } =
+                billingCase.invoiceId
+                  ? invoiceDelivery(billingCase.invoiceRecipientSnapshot)
+                  : billingCase;
               const prepareEligible =
                 billingCase.status === "DRAFT" &&
-                !recipientIncomplete &&
-                !organizationIncomplete;
+                details?.snapshotIncomplete === false &&
+                !details.needsRegeneration;
               // Send here is email only; paper goes through the invoice page.
               const paperOnly = Boolean(invoiceByPaper && !invoiceByEmail);
               // Facts that make an email send fail or repeat: a suppressed
@@ -649,21 +687,23 @@ const dayMonth = (value: string) =>
                 !deliveryUnknown;
               // The invoice froze the dwelling's details when it was made: an
               // email added to the dwelling since then is not on it.
-              // Only an invoice that can still be regenerated: an open month,
-              // never sent or paid (a status set back by hand does not count,
-              // generation.ts refuses those), and a draft or prepared case.
+              // A prepared invoice must return to Draft before its snapshot
+              // can be refreshed.
               const emailAddedSince = Boolean(
+                !organization.archivedAt &&
                 period.status === "OPEN" &&
-                missing.length === 0 &&
                 billingCase.invoiceSentAt === null &&
                 billingCase.invoicePaidAt === null &&
                 (billingCase.status === "DRAFT" ||
-                  billingCase.status === "PREPARED") &&
+                  (billingCase.status === "PREPARED" &&
+                    missing.length === 0)) &&
                 billingCase.invoiceId &&
                 invoiceByEmail &&
                 !billingEmail &&
                 billingCase.billingEmail
               );
+              const regenerateDraft =
+                canRegenerate && details?.needsRegeneration;
               const unsentPaid =
                 billingCase.status === "PAID" &&
                 Boolean(billingCase.invoiceId) &&
@@ -682,11 +722,10 @@ const dayMonth = (value: string) =>
                   typeof item === "object" &&
                   item.reason === "NO_APPLICABLE_RULES"
               );
-              // Before an invoice exists the blockers decide the action; after,
-              // the invoice's own stage does.
-              const blockedBeforeInvoice =
+              const needsBillingInputs =
                 missing.length > 0 &&
                 (!billingCase.invoiceId ||
+                  details?.needsRegeneration ||
                   billingCase.status === "MISSING_DATA" ||
                   billingCase.status === "READY");
               // Problems and delivery notes sit under the status. A case with
@@ -770,16 +809,24 @@ const dayMonth = (value: string) =>
                   });
                 }
               }
-              if (emailAddedSince && invoiceHref)
+              if (regenerateDraft)
+                problems.push({
+                  text: t(
+                    "Billing details updated. Regenerate this draft to use them."
+                  ),
+                  tone: "warning",
+                });
+              else if (emailAddedSince && invoiceHref)
                 problems.push({
                   text: t("New email not on this invoice"),
                   tone: "warning",
                   href: invoiceHref,
-                  detail: t(
-                    billingCase.status === "DRAFT"
-                      ? "Saved to the dwelling. Regenerate this draft to use the new details."
-                      : "Saved to the dwelling. This invoice keeps its old details: return it to Draft and regenerate it."
-                  ),
+                  detail:
+                    billingCase.status === "PREPARED"
+                      ? t(
+                          "Saved to the dwelling. This invoice keeps its old details: return it to Draft and regenerate it."
+                        )
+                      : undefined,
                 });
               else if (invoiceByEmail && !billingEmail)
                 problems.push({
@@ -788,9 +835,16 @@ const dayMonth = (value: string) =>
                   drawer: "billing-details",
                   focus: "billing-email",
                 });
-              if (recipientIncomplete)
+              if (recipientNameMissing)
                 problems.push({
-                  text: t("Recipient details incomplete"),
+                  text: t("Recipient name missing"),
+                  tone: "danger",
+                  drawer: "billing-details",
+                  focus: "occupant",
+                });
+              if (recipientAddressMissing)
+                problems.push({
+                  text: t("Billing address missing"),
                   tone: "danger",
                   drawer: "billing-details",
                   focus: "recipient",
@@ -799,7 +853,7 @@ const dayMonth = (value: string) =>
                 problems.push({
                   text: t("Issuer or payment details incomplete"),
                   tone: "danger",
-                  href: `/admin/o/${organizationId}/settings/organization`,
+                  href: organizationDetailsHref,
                 });
               // Configuration blockers first: the readings drawer cannot fix
               // them. The rest are behind "+N", whose menu links each one.
@@ -944,14 +998,14 @@ const dayMonth = (value: string) =>
                       >
                         {t(invoiceHref ? "View invoice" : "View readings")}
                       </a>
-                    ) : blockedBeforeInvoice && configOnly ? (
+                    ) : needsBillingInputs && configOnly ? (
                       <a
                         class="btn-secondary btn-sm"
                         href={noRule ? "#period-tariffs" : dwellingHref}
                       >
                         {t(noRule ? "Check tariffs" : "View dwelling")}
                       </a>
-                    ) : blockedBeforeInvoice ? (
+                    ) : needsBillingInputs ? (
                       <button
                         type="button"
                         class="btn-secondary btn-sm"
@@ -960,7 +1014,8 @@ const dayMonth = (value: string) =>
                       >
                         {t("Enter readings")}
                       </button>
-                    ) : !billingCase.invoiceId ||
+                    ) : regenerateDraft ||
+                      !billingCase.invoiceId ||
                       billingCase.status === "MISSING_DATA" ||
                       billingCase.status === "READY" ? (
                       <form method="POST" action={actions.billing.generate}>
@@ -976,7 +1031,11 @@ const dayMonth = (value: string) =>
                           value={billingCase.dwellingId}
                         />
                         <button type="submit" class="btn-secondary btn-sm">
-                          {t("Generate invoice")}
+                          {t(
+                            regenerateDraft
+                              ? "Regenerate invoice"
+                              : "Generate invoice"
+                          )}
                         </button>
                       </form>
                     ) : billingCase.status === "DRAFT" &&
@@ -986,14 +1045,21 @@ const dayMonth = (value: string) =>
                         class="btn-secondary btn-sm"
                         data-open-drawer="billing-details"
                         data-dwelling-id={billingCase.dwellingId}
+                        data-focus={
+                          recipientNameMissing ? "occupant" : "recipient"
+                        }
                       >
-                        {t("Fix dwelling details")}
+                        {t(
+                          recipientNameMissing
+                            ? "Add recipient name"
+                            : "Add billing address"
+                        )}
                       </button>
                     ) : billingCase.status === "DRAFT" &&
                       organizationIncomplete ? (
                       <a
                         class="btn-secondary btn-sm"
-                        href={`/admin/o/${organizationId}/settings/organization`}
+                        href={organizationDetailsHref}
                       >
                         {t("Fix organization details")}
                       </a>
@@ -1075,30 +1141,28 @@ const dayMonth = (value: string) =>
                       {invoiceHref && (
                         <a href={invoiceHref}>{t("View invoice")}</a>
                       )}
-                      {period.status === "OPEN" &&
-                        missing.length === 0 &&
-                        billingCase.status === "DRAFT" && (
-                          <form method="POST" action={actions.billing.generate}>
-                            <input
-                              type="hidden"
-                              name="organizationId"
-                              value={organizationId}
-                            />
-                            <input
-                              type="hidden"
-                              name="periodId"
-                              value={periodId}
-                            />
-                            <input
-                              type="hidden"
-                              name="dwellingId"
-                              value={billingCase.dwellingId}
-                            />
-                            <button type="submit">
-                              {t("Regenerate invoice")}
-                            </button>
-                          </form>
-                        )}
+                      {canRegenerate && !regenerateDraft && (
+                        <form method="POST" action={actions.billing.generate}>
+                          <input
+                            type="hidden"
+                            name="organizationId"
+                            value={organizationId}
+                          />
+                          <input
+                            type="hidden"
+                            name="periodId"
+                            value={periodId}
+                          />
+                          <input
+                            type="hidden"
+                            name="dwellingId"
+                            value={billingCase.dwellingId}
+                          />
+                          <button type="submit">
+                            {t("Regenerate invoice")}
+                          </button>
+                        </form>
+                      )}
                     </div>
                   </td>
                 </tr>

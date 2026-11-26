@@ -87,24 +87,109 @@ export function invoiceDelivery(recipientSnapshot: unknown) {
   };
 }
 
+function billingDetailIssues({ issuer, recipient, payment }: InvoiceSnapshots) {
+  const recipientNameMissing =
+    !recipient.billingName?.trim() && !recipient.occupantName?.trim();
+  const recipientAddressMissing = !recipient.billingAddress?.trim();
+  return {
+    issuerIncomplete: !issuer.name || !issuer.addressLine1,
+    recipientNameMissing,
+    recipientAddressMissing,
+    recipientIncomplete: recipientNameMissing || recipientAddressMissing,
+    paymentIncomplete: !payment.iban || !payment.bankName,
+  };
+}
+
+// Current settings tell the admin what to fix or refresh. Preparation still
+// validates the invoice's saved snapshot.
+export function draftBillingDetails(
+  snapshots: InvoiceSnapshots | null,
+  current?: {
+    organization: InvoiceSnapshots["issuer"] & InvoiceSnapshots["payment"];
+    dwelling: InvoiceSnapshots["recipient"];
+  }
+) {
+  const saved = billingDetailIssues(
+    snapshots ?? { issuer: {}, recipient: {}, payment: {} }
+  );
+  const snapshotIncomplete =
+    saved.recipientIncomplete ||
+    saved.issuerIncomplete ||
+    saved.paymentIncomplete;
+  const live =
+    current &&
+    billingDetailIssues({
+      issuer: current.organization,
+      payment: current.organization,
+      recipient: current.dwelling,
+    });
+  const details = (snapshotIncomplete && live) || saved;
+  const savedRecipient = snapshots && invoiceDelivery(snapshots.recipient);
+  const updated =
+    snapshots &&
+    current &&
+    savedRecipient &&
+    ((
+      [
+        "name",
+        "registrationNumber",
+        "vatNumber",
+        "addressLine1",
+        "addressLine2",
+        "city",
+        "postalCode",
+      ] as const
+    ).some(
+      (field) =>
+        (snapshots.issuer[field] ?? "") !== (current.organization[field] ?? "")
+    ) ||
+      (["bankName", "iban", "bic"] as const).some(
+        (field) =>
+          (snapshots.payment[field] ?? "") !==
+          (current.organization[field] ?? "")
+      ) ||
+      (snapshots.recipient.billingName || snapshots.recipient.occupantName) !==
+        (current.dwelling.billingName || current.dwelling.occupantName) ||
+      snapshots.recipient.billingAddress !== current.dwelling.billingAddress ||
+      savedRecipient.invoiceByEmail !==
+        (current.dwelling.invoiceByEmail ?? true) ||
+      savedRecipient.invoiceByPaper !==
+        (current.dwelling.invoiceByPaper ?? false) ||
+      (savedRecipient.invoiceByEmail &&
+        savedRecipient.billingEmail !==
+          (current.dwelling.billingEmail ?? null)));
+  return {
+    snapshotIncomplete,
+    recipientIncomplete: details.recipientIncomplete,
+    recipientNameMissing: details.recipientNameMissing,
+    recipientAddressMissing: details.recipientAddressMissing,
+    organizationIncomplete:
+      details.issuerIncomplete || details.paymentIncomplete,
+    needsRegeneration: Boolean(
+      live &&
+      !live.recipientIncomplete &&
+      !live.issuerIncomplete &&
+      !live.paymentIncomplete &&
+      (snapshotIncomplete || updated)
+    ),
+  };
+}
+
 // Why this invoice cannot be prepared for sending, or null when it can. The
 // dashboard counts the same answer, so "Needs attention" and prepareInvoice
 // cannot disagree.
-export function missingBillingDetails({
-  issuer,
-  recipient,
-  payment,
-}: InvoiceSnapshots): string | null {
-  if (!issuer.name || !issuer.addressLine1) {
+export function missingBillingDetails(
+  snapshots: InvoiceSnapshots
+): string | null {
+  const { issuerIncomplete, recipientIncomplete, paymentIncomplete } =
+    billingDetailIssues(snapshots);
+  if (issuerIncomplete) {
     return "Issuer details are incomplete; update organization settings before preparing";
   }
-  if (
-    (!recipient.billingName && !recipient.occupantName) ||
-    !recipient.billingAddress
-  ) {
+  if (recipientIncomplete) {
     return "This dwelling is missing a billing/occupant name or a billing address";
   }
-  if (!payment.iban || !payment.bankName) {
+  if (paymentIncomplete) {
     return "Organization payment details are incomplete (both bank name and IBAN are required)";
   }
   return null;

@@ -4,6 +4,7 @@ import {
   renderInvoicePreview,
 } from "../../src/domain/billing/invoice-html";
 import {
+  draftBillingDetails,
   missingBillingDetails,
   readInvoiceSnapshots,
 } from "../../src/domain/billing/invoice-snapshots";
@@ -111,6 +112,93 @@ describe("invoice snapshots", () => {
     expect(
       readInvoiceSnapshots(makeInvoice({ issuerSnapshot: [] }))
     ).toBeNull();
+  });
+
+  it("offers regeneration when live details can repair an incomplete draft", () => {
+    const saved = {
+      issuer: { name: "Org", addressLine1: "1 Main St" },
+      recipient: { billingName: "Jane" },
+      payment: { bankName: "Bank" },
+    };
+    const organization = {
+      ...saved.issuer,
+      ...saved.payment,
+      iban: "LV00TEST",
+    };
+    const dwelling = { ...saved.recipient, billingAddress: "2 Side St" };
+    expect(
+      draftBillingDetails(saved, { organization, dwelling: saved.recipient })
+    ).toEqual({
+      snapshotIncomplete: true,
+      recipientIncomplete: true,
+      recipientNameMissing: false,
+      recipientAddressMissing: true,
+      organizationIncomplete: false,
+      needsRegeneration: false,
+    });
+    expect(draftBillingDetails(saved, { organization, dwelling })).toEqual({
+      snapshotIncomplete: true,
+      recipientIncomplete: false,
+      recipientNameMissing: false,
+      recipientAddressMissing: false,
+      organizationIncomplete: false,
+      needsRegeneration: true,
+    });
+    expect(draftBillingDetails(saved).needsRegeneration).toBe(false);
+    expect(missingBillingDetails(saved)).not.toBeNull();
+    expect(
+      draftBillingDetails(saved, {
+        organization,
+        dwelling: {
+          occupantName: " ",
+          billingAddress: dwelling.billingAddress,
+        },
+      })
+    ).toMatchObject({
+      recipientNameMissing: true,
+      recipientAddressMissing: false,
+      needsRegeneration: false,
+    });
+  });
+
+  it("refreshes a newly added email only when current billing details are complete", () => {
+    const saved = {
+      issuer: { name: "Org", addressLine1: "1 Main St" },
+      recipient: { billingName: "Jane", billingAddress: "2 Side St" },
+      payment: { bankName: "Bank", iban: "LV00TEST" },
+    };
+    const dwelling = { ...saved.recipient, billingEmail: "jane@example.com" };
+    const organization = { ...saved.issuer, ...saved.payment };
+    expect(
+      draftBillingDetails(saved, { organization, dwelling }).needsRegeneration
+    ).toBe(true);
+    expect(
+      draftBillingDetails(saved, {
+        organization: { ...organization, iban: null },
+        dwelling,
+      }).needsRegeneration
+    ).toBe(false);
+    expect(
+      draftBillingDetails(
+        {
+          ...saved,
+          recipient: { ...saved.recipient, invoiceByEmail: false },
+        },
+        {
+          organization,
+          dwelling: { ...dwelling, invoiceByEmail: false },
+        }
+      ).needsRegeneration
+    ).toBe(false);
+    expect(
+      draftBillingDetails(
+        {
+          ...saved,
+          recipient: { ...saved.recipient, billingEmail: "typo@example.com" },
+        },
+        { organization, dwelling }
+      ).needsRegeneration
+    ).toBe(true);
   });
 });
 

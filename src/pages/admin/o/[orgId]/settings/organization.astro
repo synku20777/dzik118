@@ -9,6 +9,7 @@ import FieldError from "../../../../../components/ui/FieldError.astro";
 import Icon from "../../../../../components/ui/Icon.astro";
 import AdminLayout from "../../../../../layouts/AdminLayout.astro";
 import { actions } from "astro:actions";
+import { z } from "astro/zod";
 import { getOrganization } from "../../../../../domain/organizations/organizations";
 import { friendlyActionErrorMessage } from "../../../../../lib/ui/i18n";
 import { withRequestDb } from "../../../../../lib/db-request";
@@ -26,6 +27,22 @@ const organization = await withRequestDb((db) =>
 
 const base = `/admin/o/${organizationId}`;
 const settingsHref = `${base}/settings`;
+const billingPeriod = z
+  .uuid()
+  .safeParse(Astro.url.searchParams.get("billingPeriod"));
+const billingInvoice = z
+  .uuid()
+  .safeParse(Astro.url.searchParams.get("billingInvoice"));
+const billingHref = billingPeriod.success
+  ? `${base}/periods/${billingPeriod.data}` +
+    (billingInvoice.success ? `/invoices/${billingInvoice.data}` : "")
+  : null;
+const updateAction = new URL(String(actions.organizations.update), Astro.url);
+if (billingPeriod.success) {
+  updateAction.searchParams.set("billingPeriod", billingPeriod.data);
+  if (billingInvoice.success)
+    updateAction.searchParams.set("billingInvoice", billingInvoice.data);
+}
 const cityLine = [organization.city, organization.postalCode]
   .filter(Boolean)
   .join(", ");
@@ -49,6 +66,11 @@ const cityLine = [organization.city, organization.postalCode]
       )}
       display
     >
+      {billingHref && (
+        <a href={billingHref} data-astro-reload class="btn-secondary">
+          {t(billingInvoice.success ? "Back to invoice" : "Back to the period")}
+        </a>
+      )}
       <a href={`${base}/guide`} class="btn-secondary">
         <Icon name="help-circle" size="sm" />
         {t("Need help?")}
@@ -69,7 +91,7 @@ const cityLine = [organization.city, organization.postalCode]
     <div class="org-settings-split">
       <form
         method="POST"
-        action={actions.organizations.update}
+        action={updateAction.search}
         class="org-settings-form box"
       >
         <input type="hidden" name="organizationId" value={organizationId} />

@@ -30,7 +30,7 @@
       "head_sampling_rate": 1,
       "persist": true,
     },
-    "issue_detection": { "enabled": false },
+    "issues": { "enabled": false },
   },
   // Cloudflare Browser Rendering for invoice PDF generation (spec Section
   // 3.4/3.5/22). Unlike Hyperdrive, this has no localConnectionString-style
